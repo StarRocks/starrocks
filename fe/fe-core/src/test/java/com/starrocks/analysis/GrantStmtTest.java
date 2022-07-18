@@ -21,20 +21,16 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
-import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 public class GrantStmtTest {
     private Analyzer analyzer;
@@ -81,43 +77,35 @@ public class GrantStmtTest {
     }
 
     @Test
-    public void testNormal() throws AnalysisException, UserException {
-        GrantStmt stmt;
+    public void testNormal() throws Exception {
+        String grantSql = "GRANT ALL ON testDb TO testUser";
+        GrantStmt stmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
 
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.ALL);
-        stmt = new GrantStmt(new UserIdentity("testUser", "%"), null, new TablePattern("testDb", "*"), privileges);
-        stmt.analyze(analyzer);
         Assert.assertEquals("default_cluster:testUser", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("default_cluster:testDb", stmt.getTblPattern().getQuolifiedDb());
 
-        privileges = Lists.newArrayList(AccessPrivilege.READ_ONLY, AccessPrivilege.ALL);
-        stmt = new GrantStmt(new UserIdentity("testUser", "%"), null, new TablePattern("testDb", "*"), privileges);
-        stmt.analyze(analyzer);
+        grantSql = "GRANT READ_ONLY ON testDb TO testUser";
+        UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
     }
 
     @Test
-    public void testResourceNormal() throws UserException {
+    public void testResourceNormal() throws Exception {
         String resourceName = "spark0";
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
-        GrantStmt stmt =
-                new GrantStmt(new UserIdentity("testUser", "%"), null, new ResourcePattern(resourceName), privileges);
-        stmt.analyze(analyzer);
+        String grantSql = String.format("GRANT USAGE_PRIV ON RESOURCE '%s' TO testUser", resourceName);
+        GrantStmt stmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         Assert.assertEquals(resourceName, stmt.getResourcePattern().getResourceName());
         Assert.assertEquals(Auth.PrivLevel.RESOURCE, stmt.getResourcePattern().getPrivLevel());
 
-        stmt = new GrantStmt(new UserIdentity("testUser", "%"), null, new ResourcePattern("*"), privileges);
-        stmt.analyze(analyzer);
+        grantSql = "GRANT Usage_priv ON RESOURCE '*' TO 'testUser'";
+        stmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         Assert.assertEquals(Auth.PrivLevel.GLOBAL, stmt.getResourcePattern().getPrivLevel());
         Assert.assertEquals("GRANT Usage_priv ON RESOURCE '*' TO 'default_cluster:testUser'@'%'", stmt.toSql());
     }
 
     @Test(expected = AnalysisException.class)
-    public void testUserFail() throws AnalysisException, UserException {
-        GrantStmt stmt;
-
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.ALL);
-        stmt = new GrantStmt(new UserIdentity("", "%"), null, new TablePattern("testDb", "*"), privileges);
-        stmt.analyze(analyzer);
+    public void testUserFail() throws Exception {
+        String grantSql = "GRANT ALL ON testDb TO ''";
+        UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         Assert.fail("No exeception throws.");
     }
 }

@@ -24,18 +24,16 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.FeNameFormat;
-import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth.PrivLevel;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -116,35 +114,16 @@ public class GrantStmt extends DdlStmt {
         return role;
     }
 
+    public void setQualifiedRole(String role) {
+        this.role = role;
+    }
+
     public List<Privilege> getPrivileges() {
         return privileges;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (userIdent != null) {
-            userIdent.analyze();
-        } else {
-            FeNameFormat.checkRoleName(role, false /* can not be admin */, "Can not grant to role");
-            role = ClusterNamespace.getFullName(role);
-        }
-
-        if (tblPattern != null) {
-            tblPattern.analyze();
-        } else {
-            resourcePattern.analyze();
-        }
-
-        if (privileges == null || privileges.isEmpty()) {
-            throw new AnalysisException("No privileges in grant statement.");
-        }
-
-        if (tblPattern != null) {
-            checkPrivileges(analyzer, privileges, role, tblPattern);
-        } else {
-            checkPrivileges(analyzer, privileges, role, resourcePattern);
-        }
+    public boolean hasPrivileges() {
+        return !(privileges == null || privileges.isEmpty());
     }
 
     /*
@@ -253,5 +232,15 @@ public class GrantStmt extends DdlStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitGrantPrivilegeStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

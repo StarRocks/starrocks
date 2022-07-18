@@ -340,13 +340,12 @@ public class AuthTest {
          */
 
         // 9. grant for cmy@'%'
-        TablePattern tablePattern = new TablePattern("*", "*");
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.CREATE_PRIV, AccessPrivilege.DROP_PRIV);
-        GrantStmt grantStmt = new GrantStmt(new UserIdentity("cmy", "%"), null, tablePattern, privileges);
+        String grantSql = "GRANT CREATE_PRIV, DROP_PRIV ON * TO 'cmy'";
+        GrantStmt grantStmt = null;
 
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -375,13 +374,10 @@ public class AuthTest {
                 PrivPredicate.CREATE));
 
         // 10. grant auth for non exist user
-        tablePattern = new TablePattern("*", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.CREATE_PRIV, AccessPrivilege.DROP_PRIV);
-        grantStmt = new GrantStmt(new UserIdentity("nouser", "%"), null, tablePattern, privileges);
-
+        grantSql = "GRANT CREATE_PRIV, DROP_PRIV ON * TO 'nouser'";
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -396,13 +392,11 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 11. grant auth for user with non exist host
-        tablePattern = new TablePattern("*", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV, AccessPrivilege.DROP_PRIV);
-        grantStmt = new GrantStmt(new UserIdentity("zhangsan", "%"), null, tablePattern, privileges);
+        grantSql = "GRANT CREATE_PRIV, DROP_PRIV ON * TO 'zhangsan'";
 
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -417,13 +411,11 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 12. grant db auth to exist user
-        tablePattern = new TablePattern("db1", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV, AccessPrivilege.DROP_PRIV);
-        grantStmt = new GrantStmt(new UserIdentity("zhangsan", "192.%"), null, tablePattern, privileges);
+        grantSql = "GRANT SELECT_PRIV, DROP_PRIV ON db1 TO 'zhangsan'@'192.%'";
 
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -446,13 +438,11 @@ public class AuthTest {
                 "tbl1", PrivPredicate.SELECT));
 
         // 13. grant tbl auth to exist user
-        tablePattern = new TablePattern("db2", "tbl2");
-        privileges = Lists.newArrayList(AccessPrivilege.ALTER_PRIV, AccessPrivilege.DROP_PRIV);
-        grantStmt = new GrantStmt(new UserIdentity("zhangsan", "192.%"), null, tablePattern, privileges);
+        grantSql = "GRANT ALTER_PRIV, DROP_PRIV ON db2.tbl2 TO 'zhangsan'@'192.%'";
 
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -474,14 +464,11 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 14. grant db auth to zhangsan@['starrocks.domain1']
-        tablePattern = new TablePattern("db3", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.ALTER_PRIV, AccessPrivilege.DROP_PRIV);
-        grantStmt =
-                new GrantStmt(new UserIdentity("zhangsan", "starrocks.domain1", true), null, tablePattern, privileges);
+        grantSql = "GRANT ALTER_PRIV, DROP_PRIV ON db3 TO 'zhangsan'@['starrocks.domain1']";
 
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -499,14 +486,11 @@ public class AuthTest {
         Assert.assertTrue(auth.checkDbPriv(currentUser2.get(0), SystemInfoService.DEFAULT_CLUSTER + ":db3",
                 PrivPredicate.ALTER));
         // 15. grant new auth to exist priv entry (exist ALTER/DROP, add SELECT)
-        tablePattern = new TablePattern("db3", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
-        grantStmt =
-                new GrantStmt(new UserIdentity("zhangsan", "starrocks.domain1", true), null, tablePattern, privileges);
+        grantSql = "GRANT SELECT_PRIV ON db3 TO 'zhangsan'@['starrocks.domain1']";
 
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -549,8 +533,8 @@ public class AuthTest {
          */
 
         // 16. revoke privs from non exist user
-        tablePattern = new TablePattern("*", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
+        TablePattern tablePattern = new TablePattern("*", "*");
+        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
         RevokeStmt revokeStmt = new RevokeStmt(new UserIdentity("nouser", "%"), null, tablePattern, privileges);
 
         try {
@@ -798,11 +782,10 @@ public class AuthTest {
         }
 
         // 25. grant auth to non exist role, will create this new role
-        privileges = Lists.newArrayList(AccessPrivilege.DROP_PRIV, AccessPrivilege.SELECT_PRIV);
-        grantStmt = new GrantStmt(null, "role2", new TablePattern("*", "*"), privileges);
+        grantSql = "GRANT DROP_PRIV, SELECT_PRIV ON * TO ROLE 'role2'";
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -815,11 +798,10 @@ public class AuthTest {
         }
 
         // 26. grant auth to role
-        privileges = Lists.newArrayList(AccessPrivilege.DROP_PRIV, AccessPrivilege.SELECT_PRIV);
-        grantStmt = new GrantStmt(null, "role1", new TablePattern("*", "*"), privileges);
+        grantSql = "GRANT DROP_PRIV, SELECT_PRIV ON * TO ROLE 'role1'";
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1116,10 +1098,10 @@ public class AuthTest {
             Assert.fail();
         }
 
-        grantStmt = new GrantStmt(userIdentity, null, tablePattern, privileges);
+        grantSql = "GRANT NODE_PRIV ON * TO 'zhaoliu'";
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1154,10 +1136,10 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
 
         // 38.3 grant node_priv to role
-        grantStmt = new GrantStmt(null, "role3", tablePattern, privileges);
+        grantSql = "GRANT NODE_PRIV ON * TO ROLE 'role3'";
         try {
-            grantStmt.analyze(analyzer);
-        } catch (UserException e1) {
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1234,10 +1216,8 @@ public class AuthTest {
         Assert.assertEquals(true, auth.doesRoleExist(createRoleStmt.getQualifiedRole()));
 
         // 3. grant select privilege to role
-        TablePattern tablePattern = new TablePattern("db1", "*");
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
-        GrantStmt grantStmt = new GrantStmt(null, selectRoleName, tablePattern, privileges);
-        grantStmt.analyze(analyzer);
+        String grantSql = String.format("GRANT SELECT_PRIV ON db1 TO ROLE '%s'", selectRoleName);
+        GrantStmt grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         auth.grant(grantStmt);
 
         // 4. grant role to user
@@ -1258,16 +1238,13 @@ public class AuthTest {
         auth.createRole(createRoleStmt);
 
         // 6. grant load privilege to role
-        privileges = Lists.newArrayList(AccessPrivilege.LOAD_PRIV);
-        grantStmt = new GrantStmt(null, loadRoleName, tablePattern, privileges);
-        grantStmt.analyze(analyzer);
+        grantSql = String.format("GRANT LOAD_PRIV ON db1 TO ROLE '%s'", loadRoleName);
+        grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         auth.grant(grantStmt);
 
         // 8. grant resource to role
-        privileges = Lists.newArrayList(AccessPrivilege.USAGE_PRIV);
-        ResourcePattern resourcePattern = new ResourcePattern(resouceName);
-        grantStmt = new GrantStmt(null, loadRoleName, resourcePattern, privileges);
-        grantStmt.analyze(analyzer);
+        grantSql = String.format("GRANT USAGE_PRIV ON RESOURCE '%s' TO ROLE '%s'", resouceName, loadRoleName);
+        grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         auth.grant(grantStmt);
 
         // 7. grant role to user
@@ -1316,11 +1293,12 @@ public class AuthTest {
         }
 
         // 2. grant usage_priv on resource 'spark0' to 'testUser'@'%'
-        GrantStmt grantStmt = new GrantStmt(userIdentity, null, resourcePattern, usagePrivileges);
+        String grantSql = "grant usage_priv on resource 'spark0' to 'testUser'";
+        GrantStmt grantStmt = null;
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1361,11 +1339,11 @@ public class AuthTest {
             Assert.fail();
         }
         // grant usage_priv on resource 'spark0' to role 'role0'
-        grantStmt = new GrantStmt(null, role, resourcePattern, usagePrivileges);
+        grantSql = "grant usage_priv on resource 'spark0' to role 'role0'";
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1469,11 +1447,11 @@ public class AuthTest {
             Assert.fail();
         }
         // grant usage_priv on resource '*' to role 'role0'
-        grantStmt = new GrantStmt(null, role, anyResourcePattern, usagePrivileges);
+        grantSql = "grant usage_priv on resource '*' to role 'role0'";
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt  = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1533,26 +1511,24 @@ public class AuthTest {
         }
 
         // 1. grant db table priv to resource
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
-        grantStmt = new GrantStmt(userIdentity, null, resourcePattern, privileges);
+        grantSql = "GRANT SELECT_PRIV ON RESOURCE db1 to 'testUser'";
         hasException = false;
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             hasException = true;
         }
         Assert.assertTrue(hasException);
 
         // 2. grant resource priv to db table
-        TablePattern tablePattern = new TablePattern("db1", "*");
-        grantStmt = new GrantStmt(userIdentity, null, tablePattern, usagePrivileges);
+        grantSql = "grant usage_priv on db1 to 'testUser'";
         hasException = false;
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             hasException = true;
         }
@@ -1569,12 +1545,12 @@ public class AuthTest {
 
         // ------ grant|revoke node_priv to|from role ------
         // 1. grant node_priv on resource '*' to role 'role0'
+        grantSql = "grant node_priv on resource '*' to role 'role0'";
         List<AccessPrivilege> nodePrivileges = Lists.newArrayList(AccessPrivilege.NODE_PRIV);
-        grantStmt = new GrantStmt(null, role, anyResourcePattern, nodePrivileges);
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
             Assert.fail();
         }
@@ -1604,11 +1580,11 @@ public class AuthTest {
 
         // ------ error case ------
         hasException = false;
-        grantStmt = new GrantStmt(null, role, resourcePattern, nodePrivileges);
+        grantSql = "grant node_priv on resource 'spark0' to role 'role0'";
         try {
-            grantStmt.analyze(analyzer);
+            grantStmt = (GrantStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
             auth.grant(grantStmt);
-        } catch (UserException e1) {
+        } catch (Exception e1) {
             e1.printStackTrace();
             hasException = true;
         }

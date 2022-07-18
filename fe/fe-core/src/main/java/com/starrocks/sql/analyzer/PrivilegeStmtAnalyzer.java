@@ -3,7 +3,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -38,14 +41,7 @@ public class PrivilegeStmtAnalyzer {
          */
         private void analyseUserAndCheckExist(UserIdentity userIdent, ConnectContext session) {
             // validate user
-            try {
-                userIdent.analyze();
-            } catch (AnalysisException e) {
-                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                // Remove it after all old methods migrate to the new framework
-                throw new SemanticException(e.getMessage());
-            }
+            analyseUser(userIdent);
 
             // check if user exists
             if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
@@ -54,22 +50,66 @@ public class PrivilegeStmtAnalyzer {
         }
 
         /**
-         * check if role name valid and get full role name
+         *  analyse user identity
          */
-        private String analyseRoleName(String roleName, ConnectContext session) {
+        private void analyseUser(UserIdentity userIdent) {
+            // validate user
             try {
-                FeNameFormat.checkRoleName(roleName, true /* can be admin */, "Can not granted/revoke role to user");
+                userIdent.analyze();
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            String qualifiedRole = ClusterNamespace.getFullName(roleName);
+        }
+
+        /**
+         * check if role name valid and get full role name
+         */
+        private String analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
+            String qualifiedRole = validRoleName(roleName, canBeAdmin, errMsg);
             if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
                 throw new SemanticException("role " + qualifiedRole + " not exist!");
             }
             return qualifiedRole;
+        }
+
+        /**
+         * check if role name valid and get full role name
+         */
+        private String validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
+            try {
+                FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
+            } catch (AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
+            return ClusterNamespace.getFullName(roleName);
+        }
+
+        private void analyseTablePattern(TablePattern tablePattern, ConnectContext session) {
+            try {
+                tablePattern.analyze();
+            } catch (AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private void analyseResourcePattern(ResourcePattern resourcePattern) {
+            try {
+                resourcePattern.analyze();
+            } catch (AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         /**
@@ -79,7 +119,8 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             analyseUserAndCheckExist(stmt.getUserIdent(), session);
-            stmt.setQualifiedRole(analyseRoleName(stmt.getRole(), session));
+            stmt.setQualifiedRole(
+                    analyseRoleName(stmt.getRole(), session, true, "Can not granted/revoke role to user"));
             return null;
         }
 
@@ -178,6 +219,27 @@ public class PrivilegeStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPlugin());
                 }
             }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantPrivilegeStatement(GrantStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() != null) {
+                analyseUser(stmt.getUserIdent());
+            } else {
+                stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not grant to role"));
+            }
+
+            if (stmt.getTblPattern() != null) {
+                analyseTablePattern(stmt.getTblPattern(), session);
+            } else {
+                analyseResourcePattern(stmt.getResourcePattern());
+            }
+
+            if (!stmt.hasPrivileges()) {
+                throw new SemanticException("No privileges in grant statement.");
+            }
+
             return null;
         }
     }
