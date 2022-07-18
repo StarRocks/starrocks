@@ -132,7 +132,6 @@ public class ReplayFromDumpTest {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
-        queryDumpInfo.getSessionVariable().setCboCteReuse(false);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
@@ -160,7 +159,6 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)"));
         Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)"));
     }
@@ -175,7 +173,6 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |----24:EXCHANGE\n" +
                 "  |       cardinality: 65744\n" +
                 "  |    \n" +
@@ -209,6 +206,27 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  14:OlapScanNode\n" +
                 "     table: customer, rollup: customer"));
+    }
+
+    @Test
+    public void testTPCDS23_1() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 51\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 72\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  39:Project\n" +
+                "  |  <slot 171> : 171: c_customer_sk\n" +
+                "  |  \n" +
+                "  38:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
     @Test
@@ -483,6 +501,5 @@ public class ReplayFromDumpTest {
         // check without exception
         Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
-        System.out.println(replayPair.second);
     }
 }

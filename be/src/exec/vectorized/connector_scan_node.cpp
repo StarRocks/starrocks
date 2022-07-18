@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "common/config.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -131,7 +132,8 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     size_t dop = context->dop_of_source_operator(id());
-    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop);
+    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+            context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
@@ -531,6 +533,10 @@ bool ConnectorScanNode::accept_empty_scan_ranges() const {
 void ConnectorScanNode::_init_counter() {
     _profile.scanner_queue_timer = ADD_TIMER(_runtime_profile, "ScannerQueueTime");
     _profile.scanner_queue_counter = ADD_COUNTER(_runtime_profile, "ScannerQueueCounter", TUnit::UNIT);
+}
+
+int ConnectorScanNode::io_tasks_per_scan_operator() const {
+    return config::connector_io_tasks_per_scan_operator;
 }
 
 } // namespace starrocks::vectorized

@@ -580,10 +580,6 @@ public class DatabaseTransactionMgr {
                         return false;
                     }
 
-                    if (partition.isUseStarOS()) {
-                        continue;
-                    }
-
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
                     int quorumNum = partitionInfo.getQuorumNum(partitionId);
                     int replicaNum = partitionInfo.getReplicationNum(partitionId);
@@ -799,6 +795,7 @@ public class DatabaseTransactionMgr {
                 transactionState.clearErrorMsg();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 unprotectUpsertTransactionState(transactionState, false);
+                transactionState.notifyVisible();
                 txnOperated = true;
                 // TODO(cmy): We found a very strange problem. When delete-related transactions are processed here,
                 // subsequent `updateCatalogAfterVisible()` is called, but it does not seem to be executed here

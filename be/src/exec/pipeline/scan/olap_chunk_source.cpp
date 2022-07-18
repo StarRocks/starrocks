@@ -355,11 +355,12 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     _scan_bytes = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 
-    // Update local countesr
+    // Update local counters.
     _local_sum_row_bytes += chunk->memory_usage();
     _local_num_rows += chunk->num_rows();
+    _local_max_chunk_rows = std::max(_local_max_chunk_rows, chunk->num_rows());
     if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
-        _scan_ctx->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
+        _chunk_buffer.limiter()->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows, _local_max_chunk_rows);
         _local_sum_row_bytes = 0;
         _local_num_rows = 0;
     }

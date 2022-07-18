@@ -25,7 +25,7 @@ public class BasicStatsMeta implements Writable {
     private long tableId;
 
     @SerializedName("type")
-    private Constants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
@@ -37,7 +37,7 @@ public class BasicStatsMeta implements Writable {
     private long updateRows;
 
     public BasicStatsMeta(long dbId, long tableId,
-                          Constants.AnalyzeType type,
+                          StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
                           Map<String, String> properties) {
         this.dbId = dbId;
@@ -67,7 +67,7 @@ public class BasicStatsMeta implements Writable {
         return tableId;
     }
 
-    public Constants.AnalyzeType getType() {
+    public StatsConstants.AnalyzeType getType() {
         return type;
     }
 

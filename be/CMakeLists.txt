@@ -196,7 +196,7 @@ add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
-set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
+set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
@@ -402,9 +402,6 @@ if (WITH_GCOV)
     # To generate flags to code coverage
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
-
-# to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
-set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
@@ -695,7 +692,7 @@ ENDFUNCTION()
 # Add a benchmark to BE
 FUNCTION(ADD_BE_BENCH TEST_NAME)
 
-    if (${WITH_BENCH} STREQUAL "OFF")
+    if (WITH_BENCH STREQUAL "OFF")
         return()
     endif()
 
@@ -745,6 +742,7 @@ install(FILES
     ${BASE_DIR}/../conf/be.conf
     ${BASE_DIR}/../conf/cn.conf
     ${BASE_DIR}/../conf/hadoop_env.sh
+    ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
 
 install(DIRECTORY

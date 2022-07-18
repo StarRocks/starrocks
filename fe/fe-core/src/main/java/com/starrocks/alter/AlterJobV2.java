@@ -207,7 +207,7 @@ public abstract class AlterJobV2 implements Writable {
             }
 
             isStable = tbl.isStable(GlobalStateMgr.getCurrentSystemInfo(),
-                    GlobalStateMgr.getCurrentState().getTabletScheduler(), db.getClusterName());
+                    GlobalStateMgr.getCurrentState().getTabletScheduler());
         } finally {
             db.readUnlock();
         }

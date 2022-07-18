@@ -617,6 +617,6 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
         String plan = getFragmentPlan(sql);
         assertContains(plan,
-                "PREDICATES: 14: ss_sales_price >= 50, 14: ss_sales_price <= 200, 23: ss_net_profit >= 50, 23: ss_net_profit <= 300");
+                "PREDICATES: 14: ss_sales_price >= 50.00, 14: ss_sales_price <= 200.00, 23: ss_net_profit >= 50, 23: ss_net_profit <= 300");
     }
 }

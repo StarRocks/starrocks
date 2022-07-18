@@ -11,6 +11,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
@@ -562,7 +563,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts<true>(&conjunct_ctxs, state);
+    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {
@@ -639,7 +640,7 @@ StatusOr<TabletSharedPtr> OlapScanNode::get_tablet(const TInternalScanRange* sca
     return tablet;
 }
 
-int OlapScanNode::max_scan_concurrency() const {
+int OlapScanNode::estimated_max_concurrent_chunks() const {
     int64_t query_limit = runtime_state()->query_mem_tracker_ptr()->limit();
 
     // We temporarily assume that the memory tried in the storage layer
@@ -715,7 +716,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 }
 
 size_t OlapScanNode::_scanner_concurrency() const {
-    int concurrency = max_scan_concurrency();
+    int concurrency = estimated_max_concurrent_chunks();
     // limit concurrency not greater than scanner numbers
     concurrency = std::min<int>(concurrency, _num_scanners);
     concurrency = std::min<int>(concurrency, kMaxConcurrency);
@@ -758,13 +759,22 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
     size_t dop = context->dop_of_source_operator(id());
-    auto scan_ctx = std::make_shared<pipeline::OlapScanContext>(this, dop, _enable_shared_scan);
+
+    size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+    size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, estimated_max_concurrent_chunks());
+    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+            max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+
+    auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(this, dop, _enable_shared_scan,
+                                                                               std::move(buffer_limiter));
+
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     // scan_prepare_op.
-    auto scan_prepare_op =
-            std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(), scan_ctx);
-    scan_prepare_op->set_degree_of_parallelism(1);
+    auto scan_prepare_op = std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(),
+                                                                                      this, scan_ctx_factory);
+    scan_prepare_op->set_degree_of_parallelism(_enable_shared_scan ? 1 : dop);
     this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
 
     auto scan_prepare_pipeline = pipeline::OpFactories{
@@ -774,8 +784,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     context->add_pipeline(scan_prepare_pipeline);
 
     // scan_op.
-    auto scan_op =
-            std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this, std::move(scan_ctx));
+    auto scan_op = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       std::move(scan_ctx_factory));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);

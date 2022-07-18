@@ -174,7 +174,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private State state;
     private TabletStatus tabletStatus;
 
-    private String cluster;
     private long dbId;
     private long tblId;
     private long partitionId;
@@ -217,10 +216,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private Replica decommissionedReplica;
     private ReplicaState decommissionedReplicaPreviousState;
 
-    public TabletSchedCtx(Type type, String cluster, long dbId, long tblId, long partId,
+    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
                           long idxId, long tabletId, long createTime) {
         this.type = type;
-        this.cluster = cluster;
         this.dbId = dbId;
         this.tblId = tblId;
         this.partitionId = partId;
@@ -232,10 +230,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     @VisibleForTesting
-    public TabletSchedCtx(Type type, String cluster, long dbId, long tblId, long partId,
+    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
                           long idxId, long tabletId, long createTime, SystemInfoService infoService) {
         this.type = type;
-        this.cluster = cluster;
         this.dbId = dbId;
         this.tblId = tblId;
         this.partitionId = partId;
@@ -341,10 +338,6 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public TStorageMedium getStorageMedium() {
         return storageMedium;
-    }
-
-    public String getCluster() {
-        return cluster;
     }
 
     public long getCreateTime() {
@@ -983,7 +976,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                                         short replicationNum) throws SchedException {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
-                infoService, db.getClusterName(), visibleVersion, replicationNum,
+                infoService, visibleVersion, replicationNum,
                 aliveBeIdsInCluster);
         if (pair.first == TabletStatus.HEALTHY) {
             throw new SchedException(Status.FINISHED, "tablet is healthy");

@@ -64,6 +64,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -72,6 +73,11 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -134,7 +140,7 @@ public class Alter {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start to create materialized view after insert overwrite");
             }
-            olapTable.checkStableAndNormal(db.getClusterName());
+            olapTable.checkStableAndNormal();
 
             ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,
                     olapTable);
@@ -214,10 +220,9 @@ public class Alter {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-
+        MaterializedView materializedView = null;
         db.writeLock();
         try {
-            MaterializedView materializedView = null;
             final Table table = db.getTable(oldMvName);
             if (table instanceof MaterializedView) {
                 materializedView = (MaterializedView) table;
@@ -237,7 +242,7 @@ public class Alter {
                 processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
             } else if (refreshSchemeDesc != null) {
                 //change refresh scheme
-                processChangeRefreshScheme(refreshSchemeDesc, materializedView);
+                processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName);
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
@@ -246,7 +251,8 @@ public class Alter {
         }
     }
 
-    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView) {
+    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
+                                            String dbName) throws DdlException {
         final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
@@ -261,6 +267,32 @@ public class Alter {
         final String refreshType = refreshSchemeDesc.getType().name();
         final MaterializedView.RefreshType newRefreshType = MaterializedView.RefreshType.valueOf(refreshType);
         refreshScheme.setType(newRefreshType);
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        if (oldRefreshType == MaterializedView.RefreshType.ASYNC) {
+            //drop task
+            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            if (refreshTask != null) {
+                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
+            }
+        }
+
+        if (newRefreshType == MaterializedView.RefreshType.ASYNC) {
+            // create task
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                    materializedView.getRefreshScheme().getAsyncRefreshContext();
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                long startTime = asyncRefreshContext.getStartTime();
+                TaskSchedule taskSchedule = new TaskSchedule(startTime, asyncRefreshContext.getStep(),
+                        TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                task.setSchedule(taskSchedule);
+                task.setType(Constants.TaskType.PERIODICAL);
+            }
+            taskManager.createTask(task, false);
+            // run task
+            taskManager.executeTask(task.getName());
+        }
 
         final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);

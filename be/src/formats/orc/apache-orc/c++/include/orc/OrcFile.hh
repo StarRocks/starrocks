@@ -39,10 +39,13 @@ namespace orc {
    */
 class InputStream {
 public:
+    struct IORange {
+        uint64_t offset;
+        uint64_t size;
+    };
     enum class PrepareCacheScope {
         READ_FULL_FILE,
         READ_FULL_STRIPE,
-        READ_ROW_GROUP_INDEX,
     };
 
     virtual ~InputStream();
@@ -79,6 +82,10 @@ public:
     virtual const std::string& getName() const = 0;
 
     virtual void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length);
+
+    virtual bool isIORangesEnabled() const;
+    virtual void clearIORanges();
+    virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges);
 };
 
 /**

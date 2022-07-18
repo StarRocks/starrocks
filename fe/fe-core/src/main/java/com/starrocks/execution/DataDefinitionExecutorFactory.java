@@ -16,7 +16,6 @@ import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
@@ -35,7 +34,6 @@ import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFileStmt;
 import com.starrocks.analysis.DropFunctionStmt;
@@ -45,7 +43,6 @@ import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.LoadStmt;
@@ -66,11 +63,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.GrantImpersonateStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -94,6 +95,7 @@ public class DataDefinitionExecutorFactory {
                     .put(DropMaterializedViewStmt.class, new DropMaterializedViewExecutor())
                     .put(AlterMaterializedViewStatement.class, new AlterMaterializedViewExecutor())
                     .put(RefreshMaterializedViewStatement.class, new RefreshMaterializedViewExecutor())
+                    .put(CancelRefreshMaterializedViewStatement.class, new CancelRefreshMaterializedViewExecutor())
                     .put(AlterTableStmt.class, new AlterTableExecutor())
                     .put(AlterViewStmt.class, new AlterViewExecutor())
                     .put(CancelAlterTableStmt.class, new CancelAlterTableExecutor())
@@ -147,9 +149,9 @@ public class DataDefinitionExecutorFactory {
                     .put(CreateAnalyzeJobStmt.class, new CreateAnalyzeJobExecutor())
                     .put(DropAnalyzeJobStmt.class, new DropAnalyzeJobExecutor())
                     .put(RefreshTableStmt.class, new RefreshTableExecutor())
-                    .put(CreateWorkGroupStmt.class, new CreateWorkGroupExecutor())
-                    .put(DropWorkGroupStmt.class, new DropWorkGroupExecutor())
-                    .put(AlterWorkGroupStmt.class, new AlterWorkGroupExecutor())
+                    .put(CreateResourceGroupStmt.class, new CreateResourceGroupExecutor())
+                    .put(DropResourceGroupStmt.class, new DropResourceGroupExecutor())
+                    .put(AlterResourceGroupStmt.class, new AlterResourceGroupExecutor())
                     .put(CreateCatalogStmt.class, new CreateCatalogExecutor())
                     .put(DropCatalogStmt.class, new DropCatalogExecutor())
                     .put(SubmitTaskStmt.class, new SubmitTaskExecutor())

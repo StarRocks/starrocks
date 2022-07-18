@@ -119,10 +119,6 @@ std::string Rowset::segment_del_file_path(const std::string& dir, const RowsetId
     return strings::Substitute("$0/$1_$2.del", dir, rowset_id.to_string(), segment_id);
 }
 
-std::string Rowset::segment_srcrssid_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
-    return strings::Substitute("$0/$1_$2.rssid", dir, rowset_id.to_string(), segment_id);
-}
-
 Status Rowset::init() {
     return Status::OK();
 }
@@ -232,12 +228,6 @@ Status Rowset::remove() {
         VLOG(1) << "Deleting " << path;
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
-        merge_status(st);
-    }
-    for (int i = 0, sz = num_segments(); i < sz; ++i) {
-        std::string path = segment_srcrssid_file_path(_rowset_path, rowset_id(), i);
-        auto st = fs->delete_file(path);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
     return result;
