@@ -119,6 +119,10 @@ public:
     static Status TransactionNotExists(const Slice& msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }
     static Status LabelAlreadyExists(const Slice& msg) { return Status(TStatusCode::LABEL_ALREADY_EXISTS, msg); }
 
+    static Status ShutdownTabletOccupied(const Slice& msg) {
+        return Status(TStatusCode::SHUTDOWN_TABLET_OCCUPIED, msg);
+    }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }

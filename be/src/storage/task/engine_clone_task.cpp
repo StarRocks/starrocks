@@ -209,6 +209,13 @@ Status EngineCloneTask::_do_clone_primary_tablet(Tablet* tablet) {
     vector<int64_t> missing_version_ranges;
     st = tablet->updates()->get_missing_version_ranges(missing_version_ranges);
     if (st.ok()) {
+        // Probably no missing version in this case, we just return FE the clone success to avoid wasted work.
+        // If there is indeed missing version, FE will schedule clone again.
+        if (missing_version_ranges.size() == 1 && _clone_req.committed_version < missing_version_ranges.back()) {
+            LOG(INFO) << "Cloning existing tablet skipped, no missing version. tablet:" << tablet->tablet_id()
+                      << " type:" << KeysType_Name(tablet->keys_type()) << " version:" << _clone_req.committed_version;
+            return st;
+        }
         LOG(INFO) << "Cloning existing tablet. "
                   << " tablet:" << _clone_req.tablet_id << " type:" << KeysType_Name(tablet->keys_type())
                   << " missing_version_ranges=" << version_range_list_to_string(missing_version_ranges);
