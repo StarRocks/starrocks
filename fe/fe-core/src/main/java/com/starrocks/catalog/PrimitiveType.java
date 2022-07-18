@@ -67,7 +67,10 @@ public enum PrimitiveType {
     JSON("JSON", 16, TPrimitiveType.JSON),
 
     // Unsupported scalar types.
-    BINARY("BINARY", -1, TPrimitiveType.BINARY);
+    BINARY("BINARY", -1, TPrimitiveType.BINARY),
+
+    // Convert failed types
+    CONVERT_FAILED("CONVERT_FAILED", 0, TPrimitiveType.CONVERT_FAILED);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;
@@ -246,6 +249,8 @@ public enum PrimitiveType {
                 return BINARY;
             case JSON:
                 return JSON;
+            case CONVERT_FAILED:
+                return CONVERT_FAILED;
             default:
                 return INVALID_TYPE;
         }
@@ -352,6 +357,7 @@ public enum PrimitiveType {
         switch (this) {
             case INVALID_TYPE:
             case BINARY:
+            case CONVERT_FAILED:
                 break;
             case NULL_TYPE:
             case BOOLEAN:

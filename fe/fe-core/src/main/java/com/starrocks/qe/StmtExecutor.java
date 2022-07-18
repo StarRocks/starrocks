@@ -50,6 +50,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -214,7 +215,8 @@ public class StmtExecutor {
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
             if (context.getResourceGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
+                        .append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -708,6 +710,13 @@ public class StmtExecutor {
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
+        int colId = 0;
+        for (Expr expr : outputExprs) {
+            if (expr.getType().getPrimitiveType().equals(PrimitiveType.CONVERT_FAILED)) {
+                throw new SemanticException("Column " + colNames.get(colId) + " convert failed!");
+            }
+            colId++;
+        }
 
         coord = new Coordinator(context, fragments, scanNodes, descTable);
 
@@ -799,12 +808,14 @@ public class StmtExecutor {
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
             analyzeStatus = statisticExecutor.collectStatistics(
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
+                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                            analyzeStmt.getProperties()));
         } else {
             analyzeStatus = statisticExecutor.collectStatistics(
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                                    StatsConstants.AnalyzeType.FULL,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
         }
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -1057,7 +1068,8 @@ public class StmtExecutor {
      * Below function is added by new analyzer
      */
     private boolean isStatisticsOrAnalyzer(StatementBase statement, ConnectContext context) {
-        return (statement instanceof InsertStmt && context.getDatabase().equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME))
+        return (statement instanceof InsertStmt &&
+                context.getDatabase().equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME))
                 || statement instanceof AnalyzeStmt
                 || statement instanceof CreateAnalyzeJobStmt;
     }
