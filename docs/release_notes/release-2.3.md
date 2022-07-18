@@ -6,11 +6,11 @@
 
 - The Primary Key model supports the full DELETE WHERE syntax. For more information, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-and-primary-key-model).
 
-- The primary key model supports persistent primary key indexes to prevent excessive memory consumption. For more information, see [Primary Key model](../table_design/Data_model.md#how-to-use-it-3).
+- The Primary Key model supports the persistent primary key index. You can choose to persist and use the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key model](../table_design/Data_model.md#how-to-use-it-3).
 
-- When a Routine Load job is executed, and a global dictionary is built to optimize queries on low-cardinality columns, the global dictionary can be updated, thus improving query performance.
+- A global dictionary supports updates during real-time data ingestion，thus optimizing query performance and doubling query performance of string data.
 
-- Stream Load provides a transaction interface that supports splitting the execution of "sending data" and "submitting transaction", enabling two-phase commit of transactions that stream data by using external systems such as Apache Flink® or Apache Kafka® and improve loading performance in highly concurrent scenarios. For example, when data stream into StarRocks by using Flink, the transaction interface allows for simultaneous data reception and data sending, and your transaction can be submitted at a proper time to complete a batch load. This way, the client side does not need to cache each batch of data. This reduces the memory usage on the client side and provides guarantees for the exactly-once commits of transactions. In addition, the transaction interface also supports the loading of multiple small files as a single batch. For more information, see [Load data by using Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md).
+- [Preview] Stream Load provides a transaction interface that supports splitting the execution of "sending data" and "submitting transaction", enabling two-phase commit of transactions that stream data by using external systems such as Apache Flink® or Apache Kafka® and improve loading performance in highly concurrent scenarios. For example, when data stream into StarRocks by using Flink, the transaction interface allows for simultaneous data reception and data sending, and your transaction can be submitted at a proper time to complete a batch load. This way, the client side does not need to cache each batch of data. This reduces the memory usage on the client side and provides guarantees for the exactly-once commits of transactions. In addition, the transaction interface also supports the loading of multiple small files as a single batch. For more information, see [Load data by using Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md).
 
 - The CREATE TABLE AS SELECT statement can be executed asynchronously and write results to a new table. For more information, see [CREATE TABLE AS SELECT](sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md#create-table-as-select).
 
@@ -18,9 +18,9 @@
   - Monitor resource groups: You can use the audit log to view a query in which resource group  and call API operations to obtain the monitoring metrics about specific resource groups. For more information, see [Monitor and Alerting](../administration/Monitor_and_Alert.md#monitor-and-alerting).
   - Limit the consumption of large queries on CPU, memory, or I/O resources: You can route queries to resource groups by matching classifiers or configure session variables to directly specify resource groups for queries. For more information, see [Resource group](../administration/resource_group.md).
 
-- StarRocks provides JDBC external tables to query Oracle, PostgreSQL, MySQL, SQLServer, Clickhouse, and other databases. StarRocks also supports predicate pushdown when performing queries. For more information, see [External table for databases that support JDBC drivers](../using_starrocks/External_table.md#external-table-for-databases-that-support-jdbc-drivers).
+- StarRocks provides JDBC external tables to conveniently query Oracle, PostgreSQL, MySQL, SQLServer, Clickhouse, and other databases. StarRocks also supports predicate pushdown, thus improving query performance. For more information, see [External table for a JDBC-compatible database](../using_starrocks/External_table.md#external-table-for-a-JDBC-compatible-database).
 
-- [Preview] A new Data Source Connector framework is released to support user-defined external catalogs. You can use the external catalogs to directly access and analyze Hive without creating external tables. For more information, see [Use catalogs to manage internal and external data](../using_starrocks/Manage_data.md).
+- [Preview] A new Data Source Connector framework is released to support external catalogs. You can use the external catalogs to directly access and query Hive without creating external tables. For more information, see [Use catalogs to manage internal and external data](../using_starrocks/Manage_data.md).
 
 - Add the following functions:
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)

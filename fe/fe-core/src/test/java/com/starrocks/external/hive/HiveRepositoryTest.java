@@ -3,21 +3,18 @@
 package com.starrocks.external.hive;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DDLTestBase;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
@@ -26,17 +23,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-public class HiveRepositoryTest {
-    private Analyzer analyzer;
-
-    @Before
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-    }
+public class HiveRepositoryTest extends DDLTestBase {
 
     @Test
-    public void testGetClient(@Mocked GlobalStateMgr globalStateMgr,
-                              @Mocked ResourceMgr resourceMgr) throws Exception {
+    public void testGetClient() throws Exception {
         String resourceName = "hive0";
         String metastoreURIs = "thrift://127.0.0.1:9380";
         Map<String, String> properties = Maps.newHashMap();
@@ -53,15 +43,9 @@ public class HiveRepositoryTest {
             }
         };
 
-        new Expectations() {
+        ResourceMgr resourceMgr = GlobalStateMgr.getCurrentState().getResourceMgr();
+        new Expectations(resourceMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                minTimes = 0;
-
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
-
                 resourceMgr.getResource("hive0");
                 result = resource;
             }
