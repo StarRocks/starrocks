@@ -339,6 +339,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
     }
 
+
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
@@ -353,5 +354,8 @@ public class StatisticsMetaManager extends MasterDaemon {
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
     }
 }

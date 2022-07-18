@@ -12,6 +12,12 @@
 
 namespace starrocks::vectorized {
 
+template <PrimitiveType PT, typename = guard::Guard>
+inline constexpr PrimitiveType ImmediateHistogramResultPT = PT;
+
+template <PrimitiveType PT>
+inline constexpr PrimitiveType ImmediateHistogramResultPT<PT, BinaryPTGuard<PT>> = TYPE_DOUBLE;
+
 template <typename T>
 struct Bucket {
 public:
@@ -109,6 +115,7 @@ public:
 
         //Calculate the frequency of each value in the data
         std::vector<std::pair<T, int>> frequency_vec;
+        frequency_vec.reserve(this->data(state).data.size());
         T last_value = this->data(state).data[0];
         int count = 1;
         for (int i = 1; i < this->data(state).data.size(); ++i) {
@@ -128,7 +135,7 @@ public:
         int top_n_size = std::min((int)ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(3)),
                                   (int)frequency_vec.size());
         //Build a top-n map so that values are excluded from subsequent buckets
-        std::map<T, int> topn;
+        std::unordered_map<T, int> topn;
         for (int i = 0; i < top_n_size; ++i) {
             topn.insert(frequency_vec[i]);
         }

@@ -302,6 +302,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 nameToPartition.put(newName, partition);
             }
         }
+
+        // change ExpressionRangePartitionInfo
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            expressionRangePartitionInfo.renameTableName(newName);
+        }
     }
 
     public boolean hasMaterializedIndex(String indexName) {
@@ -1266,7 +1273,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             }
             copied.setState(OlapTableState.NORMAL);
             for (Partition partition : copied.getPartitions()) {
-                boolean useStarOS = partition.isUseStarOS();
                 // remove shadow index from partition
                 for (MaterializedIndex deleteIndex : shadowIndex) {
                     partition.deleteRollupIndex(deleteIndex.getId());
@@ -1274,7 +1280,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (useStarOS) {
+                    if (copied.isLakeTable()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {

@@ -50,9 +50,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -99,6 +99,7 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -135,6 +136,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -213,8 +215,8 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-            if (context.getWorkGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -466,6 +468,8 @@ public class StmtExecutor {
                 handleAnalyzeStmt();
             } else if (parsedStmt instanceof DropHistogramStmt) {
                 handleDropHistogramStmt();
+            } else if (parsedStmt instanceof DropStatsStmt) {
+                handleDropStatsStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -817,12 +821,26 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+    private void handleDropStatsStmt() {
+        DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropStatsStmt.getTableName());
+        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+    }
+
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
 
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -961,9 +979,10 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
-                String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
-                explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
+                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                String resourceGroupStr =
+                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
             }
         }
         explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
@@ -1027,7 +1046,7 @@ public class StmtExecutor {
                 context.getDatabase(),
                 sql,
                 context.getQualifiedUser(),
-                Optional.ofNullable(context.getWorkGroup()).map(WorkGroup::getName).orElse(""));
+                Optional.ofNullable(context.getResourceGroup()).map(ResourceGroup::getName).orElse(""));
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());

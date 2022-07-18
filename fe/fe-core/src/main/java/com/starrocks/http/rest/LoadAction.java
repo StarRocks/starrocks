@@ -61,11 +61,6 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("There is no 100-continue header");
         }
 
-        final String clusterName = ConnectContext.get().getClusterName();
-        if (Strings.isNullOrEmpty(clusterName)) {
-            throw new DdlException("No cluster selected.");
-        }
-
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
             throw new DdlException("No database selected.");

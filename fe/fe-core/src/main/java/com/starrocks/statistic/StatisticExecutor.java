@@ -54,8 +54,6 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE ";
-
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
             "SELECT DISTINCT table_id" + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE 1 = 1 ";
 
@@ -88,6 +86,21 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
+        }
+    }
+
+    public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
+        String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
         }
     }
 
@@ -210,8 +223,12 @@ public class StatisticExecutor {
                 db.getId(), table.getId(), columns,
                 statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(),
                 LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        //Only update running status without edit log, make restart job status is failed
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeStatusWithoutEditLog(analyzeStatus);
 
         try {
             statsJob.collect();
@@ -238,22 +255,6 @@ public class StatisticExecutor {
                     statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
         }
         return analyzeStatus;
-    }
-
-    public void expireStatisticSync(List<String> tableIds) {
-        StringBuilder sql = new StringBuilder(DELETE_TEMPLATE);
-        sql.append(" table_id IN (").append(StringUtils.join(tableIds, ",")).append(")");
-        LOG.debug("Expire statistic SQL: {}", sql);
-
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql.toString(), context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
-        }
     }
 
     public List<String> queryExpireTableSync(List<Long> tableIds) throws Exception {

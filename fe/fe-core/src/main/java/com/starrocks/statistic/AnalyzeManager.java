@@ -8,6 +8,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -31,8 +32,11 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
@@ -40,11 +44,8 @@ public class AnalyzeManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
 
     private final Map<Long, AnalyzeJob> analyzeJobMap;
-
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
-
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
-
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
 
     private static final ExecutorService executor =
@@ -83,52 +84,6 @@ public class AnalyzeManager implements Writable {
         return Lists.newLinkedList(analyzeJobMap.values());
     }
 
-    // expire finish job
-    public void expireAnalyzeJob() {
-        List<AnalyzeJob> expireList = Lists.newArrayList();
-
-        LocalDateTime now = LocalDateTime.now();
-        for (AnalyzeJob job : analyzeJobMap.values()) {
-            if (StatsConstants.ScheduleStatus.FINISH != job.getStatus()) {
-                continue;
-            }
-
-            if (StatsConstants.DEFAULT_ALL_ID == job.getDbId() || StatsConstants.DEFAULT_ALL_ID == job.getTableId()) {
-                // finish job must be schedule once job, must contains db and table
-                LOG.warn("expire analyze job check failed, contain default id job: " + job.getId());
-                continue;
-            }
-
-            // check db/table
-            Database db = GlobalStateMgr.getCurrentState().getDb(job.getDbId());
-            if (null == db) {
-                expireList.add(job);
-                continue;
-            }
-
-            Table table = db.getTable(job.getTableId());
-            if (null == table) {
-                expireList.add(job);
-                continue;
-            }
-
-            if (!table.isNativeTable()) {
-                expireList.add(job);
-                continue;
-            }
-
-            // keep show 1 day
-            if (job.getWorkTime().plusDays(1).isBefore(now)) {
-                expireList.add(job);
-            }
-        }
-
-        expireList.forEach(d -> analyzeJobMap.remove(d.getId()));
-        for (AnalyzeJob job : expireList) {
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
-        }
-    }
-
     public void replayAddAnalyzeJob(AnalyzeJob job) {
         executor.submit(new AnalyzeReplayTask(job));
         analyzeJobMap.put(job.getId(), job);
@@ -143,6 +98,10 @@ public class AnalyzeManager implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
     }
 
+    public void updateAnalyzeStatusWithoutEditLog(AnalyzeStatus status) {
+        analyzeStatusMap.put(status.getId(), status);
+    }
+
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
         if (status.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
             status.setStatus(StatsConstants.ScheduleStatus.FAILED);
@@ -150,8 +109,39 @@ public class AnalyzeManager implements Writable {
         analyzeStatusMap.put(status.getId(), status);
     }
 
+    public void replayRemoveAnalyzeStatus(AnalyzeStatus status) {
+        analyzeStatusMap.remove(status.getId());
+    }
+
     public Map<Long, AnalyzeStatus> getAnalyzeStatusMap() {
         return analyzeStatusMap;
+    }
+
+    public void clearExpiredAnalyzeStatus() {
+        List<AnalyzeStatus> expireList = Lists.newArrayList();
+        for (AnalyzeStatus analyzeStatus : analyzeStatusMap.values()) {
+            LocalDateTime now = LocalDateTime.now();
+            if (analyzeStatus.getStartTime().plusSeconds(Config.statistic_analyze_status_keep_second).isBefore(now)) {
+                expireList.add(analyzeStatus);
+            }
+        }
+        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        for (AnalyzeStatus status : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+        }
+    }
+
+    public void dropAnalyzeStatus(Long tableId) {
+        List<AnalyzeStatus> expireList = Lists.newArrayList();
+        for (AnalyzeStatus analyzeStatus : analyzeStatusMap.values()) {
+            if (analyzeStatus.getTableId() == tableId) {
+                expireList.add(analyzeStatus);
+            }
+        }
+        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        for (AnalyzeStatus status : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeStatus(status);
+        }
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -161,6 +151,86 @@ public class AnalyzeManager implements Writable {
 
     public void replayAddBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
+    }
+
+    public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
+        basicStatsMetaMap.remove(basicStatsMeta.getTableId());
+    }
+
+    public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
+        return basicStatsMetaMap;
+    }
+
+    public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
+        histogramStatsMetaMap.put(
+                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddHistogramStatsMeta(histogramStatsMeta);
+    }
+
+    public void replayAddHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
+        histogramStatsMetaMap.put(
+                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
+    }
+
+    public void replayRemoveHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
+        histogramStatsMetaMap.remove(new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()));
+    }
+
+    public Map<Pair<Long, String>, HistogramStatsMeta> getHistogramStatsMetaMap() {
+        return histogramStatsMetaMap;
+    }
+
+    public void clearStatisticFromDroppedTable() {
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        Set<Long> tables = new HashSet<>();
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+                continue;
+            }
+
+            db.getTables().stream().map(Table::getId).forEach(tables::add);
+        }
+
+        Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
+        tableIdHasDeleted.removeAll(tables);
+        dropBasicStatsMetaAndData(tableIdHasDeleted);
+        dropHistogramStatsMetaAndData(tableIdHasDeleted);
+    }
+
+    public void dropBasicStatsMetaAndData(Set<Long> tableIdHasDeleted) {
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        for (Long tableId : tableIdHasDeleted) {
+            BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
+            statisticExecutor.dropTableStatistics(tableId, basicStatsMeta.getType());
+
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
+            basicStatsMetaMap.remove(tableId);
+        }
+    }
+
+    public void dropHistogramStatsMetaAndData(Set<Long> tableIdHasDeleted) {
+        Map<Long, List<String>> expireHistogram = new HashMap<>();
+        for (Pair<Long, String> entry : histogramStatsMetaMap.keySet()) {
+            if (tableIdHasDeleted.contains(entry.first)) {
+                if (expireHistogram.containsKey(entry.first)) {
+                    expireHistogram.get(entry.first).add(entry.second);
+                } else {
+                    expireHistogram.put(entry.first, Lists.newArrayList(entry.second));
+                }
+            }
+        }
+
+        for (Map.Entry<Long, List<String>> histogramItem : expireHistogram.entrySet()) {
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+            statisticExecutor.dropHistogram(histogramItem.getKey(), histogramItem.getValue());
+
+            for (String histogramColumn : histogramItem.getValue()) {
+                Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
+                histogramStatsMetaMap.remove(histogramKey);
+            }
+        }
     }
 
     public void updateLoadRows(TransactionState transactionState) {
@@ -199,25 +269,6 @@ public class AnalyzeManager implements Writable {
                 basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
             }
         }
-    }
-
-    public Map<Long, BasicStatsMeta> getBasicStatsMetaMap() {
-        return basicStatsMetaMap;
-    }
-
-    public void addHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
-        histogramStatsMetaMap.put(
-                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
-        GlobalStateMgr.getCurrentState().getEditLog().logAddHistogramMeta(histogramStatsMeta);
-    }
-
-    public void replayAddHistogramStatsMeta(HistogramStatsMeta histogramStatsMeta) {
-        histogramStatsMetaMap.put(
-                new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
-    }
-
-    public Map<Pair<Long, String>, HistogramStatsMeta> getHistogramStatsMetaMap() {
-        return histogramStatsMetaMap;
     }
 
     public void readFields(DataInputStream dis) throws IOException {

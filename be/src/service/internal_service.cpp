@@ -121,9 +121,9 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
                                                           const PTransmitRuntimeFilterParams* request,
                                                           PTransmitRuntimeFilterResult* response,
                                                           google::protobuf::Closure* done) {
-    VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
-              << " query_id=" << print_id(request->query_id()) << ", is_partial=" << request->is_partial()
-              << ", filter_id=" << request->filter_id() << ", is_pipeline=" << request->is_pipeline();
+    VLOG_FILE << "transmit runtime filter: fragment_instance_id = " << print_id(request->finst_id())
+              << " query_id = " << print_id(request->query_id()) << ", is_partial = " << request->is_partial()
+              << ", filter_id = " << request->filter_id() << ", is_pipeline = " << request->is_pipeline();
     ClosureGuard closure_guard(done);
     _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;

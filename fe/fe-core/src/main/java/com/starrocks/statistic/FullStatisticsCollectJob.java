@@ -39,13 +39,19 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
 
-            List<List<String>> splitColumns = Lists.partition(columns,
-                    (int) (partition.getRowCount() * columns.size() / Config.statistic_collect_max_row_count_per_query + 1));
+            int partitionSize;
+            if (partition.getRowCount() == 0) {
+                partitionSize = columns.size();
+            } else {
+                partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
+                        / (partition.getRowCount() * columns.size()) + 1);
+            }
+
+            List<List<String>> splitColumns = Lists.partition(columns, partitionSize);
+
             for (List<String> splitColItem : splitColumns) {
-                for (String columnName : splitColItem) {
-                    String sql = buildCollectFullStatisticSQL(db, table, partition, Lists.newArrayList(columnName));
-                    collectStatisticSync(sql);
-                }
+                String sql = buildCollectFullStatisticSQL(db, table, partition, splitColItem);
+                collectStatisticSync(sql);
             }
         }
     }

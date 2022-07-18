@@ -41,7 +41,6 @@ import java.util.Set;
  * from a query string or represent a reference to a local or globalStateMgr view.
  */
 public class InlineViewRef extends TableRef {
-    private static final Logger LOG = LogManager.getLogger(InlineViewRef.class);
 
     // GlobalStateMgr or local view that is referenced.
     // Null for inline views parsed directly from a query string.

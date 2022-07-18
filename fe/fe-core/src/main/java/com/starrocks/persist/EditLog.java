@@ -692,9 +692,9 @@ public class EditLog {
                     globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
-                case OperationType.OP_WORKGROUP: {
-                    final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
-                    globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
+                case OperationType.OP_RESOURCE_GROUP: {
+                    final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.getData();
+                    globalStateMgr.getResourceGroupMgr().replayResourceGroupOp(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK: {
@@ -834,14 +834,29 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
+                case OperationType.OP_REMOVE_ANALYZE_STATUS: {
+                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeStatus(analyzeStatus);
+                    break;
+                }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
                     break;
                 }
+                case OperationType.OP_REMOVE_BASIC_STATS_META: {
+                    BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayRemoveBasicStatsMeta(basicStatsMeta);
+                    break;
+                }
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
+                case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
+                    HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayRemoveHistogramStatsMeta(histogramStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -1017,8 +1032,8 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
     }
 
-    public void logWorkGroupOp(WorkGroupOpEntry op) {
-        logEdit(OperationType.OP_WORKGROUP, op);
+    public void logResourceGroupOp(ResourceGroupOpEntry op) {
+        logEdit(OperationType.OP_RESOURCE_GROUP, op);
     }
 
     public void logCreateTask(Task info) {
@@ -1463,12 +1478,24 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
     }
 
+    public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
+        logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, status);
+    }
+
     public void logAddBasicStatsMeta(BasicStatsMeta meta) {
         logEdit(OperationType.OP_ADD_BASIC_STATS_META, meta);
     }
 
-    public void logAddHistogramMeta(HistogramStatsMeta meta) {
+    public void logRemoveBasicStatsMeta(BasicStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_BASIC_STATS_META, meta);
+    }
+
+    public void logAddHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {

@@ -11,18 +11,17 @@ import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
@@ -36,11 +35,15 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -61,6 +64,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
@@ -68,7 +72,9 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -141,6 +147,20 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session,  statement.getExistedDbName(),
+                    statement.getExistedTableName(), PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
+            }
+
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, statement.getDbName(),
+                    statement.getTableName(), PrivPredicate.CREATE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
+            }
+            return null;
+        }
+
+        @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "Alter");
@@ -158,7 +178,21 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, ConnectContext session) {
+        public Void visitCancelAlterTableStatement(CancelAlterTableStmt statement, ConnectContext session) {
+            TableName dbTableName = statement.getDbTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
+                    dbTableName.getTbl(),
+                    PrivPredicate.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "CANCEL ALTER TABLE",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        dbTableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER RESOURCE_GROUP");
             }
@@ -259,7 +293,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, ConnectContext session) {
+        public Void visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "CREATE RESOURCE_GROUP");
@@ -290,8 +324,17 @@ public class PrivilegeChecker {
             return null;
         }
 
+        public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext session) {
+            TableRef tblRef = statement.getTblRef();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblRef.getName().getDb(),
+                    tblRef.getName().getTbl(), PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
+            }
+            return null;
+        }
+
         @Override
-        public Void visitDropWorkGroupStatement(DropWorkGroupStmt statement, ConnectContext session) {
+        public Void visitDropResourceGroupStatement(DropResourceGroupStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP RESOURCE_GROUP");
             }
@@ -327,6 +370,15 @@ public class PrivilegeChecker {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStmt(ShowTabletStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SHOW TABLET");
             }
             return null;
         }
@@ -824,6 +876,17 @@ public class PrivilegeChecker {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkTblPriv(ConnectContext.get(), statement.getDbName(), statement.getTableName(),
+                            PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW PARTITIONS",
+                        context.getQualifiedUser(), context.getRemoteIP(), statement.getTableName());
             }
             return null;
         }
