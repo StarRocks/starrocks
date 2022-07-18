@@ -2,8 +2,9 @@
 
 ## Index
 
-+ [Introduction](./introduction/StarRocks_intro.md)
++ [StarRocks](/introduction/StarRocks_intro.md)
 + Quick Start
+  + [Introduction](./introduction/what_is_starrocks.md)
   + [Concepts](./quick_start/Concepts.md)
   + [Architecture](./quick_start/Architecture.md)
   + [Deploy](./quick_start/Deploy.md)
@@ -39,7 +40,7 @@
   + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
   + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [Colocate Join](./using_starrocks/Colocation_join.md)
+  + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [External tables](./using_starrocks/External_table.md)
   + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
   + [Array](./using_starrocks/Array.md)
