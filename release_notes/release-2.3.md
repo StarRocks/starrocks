@@ -8,11 +8,11 @@
 
 - 主键模型支持完整的 DELETE WHERE 语法。相关文档，请参见 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-与主键模型)。
 
-- 主键模型支持持久化主键索引，避免主键索引占用过大内存空间。相关文档，请参见[主键模型](../table_design/Data_model.md#使用说明-3)。
+- 主键模型支持持久化主键索引，基于磁盘而不是内存维护索引，大幅降低内存使用。相关文档，请参见[主键模型](../table_design/Data_model.md#使用说明-3)。
 
-- 执行 Routine Load 导入场景下，构建全局字典进行低基数字段的查询优化时，支持全局字典更新，从而提升查询性能。
+- 全局低基数字典优化支持实时数据导入，实时场景下字符串数据的查询性能提升一倍。
 
-- Stream Load 提供事务接口，支持将“发送数据”和“提交事务”拆分执行，实现跨系统的两阶段提交，提升高并发场景下的导入性能。例如从 Flink 导入至 StarRocks 时，支持同步接收上游数据和发送数据，并且在合适的时候“提交事务”以完成一个批次的导入，客户端无需缓存完整批次数据，能够减少客户端的内存使用，并且实现“精确一次 (Exactly-Once)”语义。此外，还支持小文件在一个批次中合并导入等功能。相关文档，请参见 [使用 Stream Load 事务接口导入](../loading/Use_Stream_Load_Transaction_Interface.md)。
+- 【Preview】Stream Load 提供事务接口，支持将“发送数据”和“提交事务”拆分执行，实现跨系统的两阶段提交，提升高并发场景下的导入性能。例如从 Flink 导入至 StarRocks 时，支持同步接收上游数据和发送数据，并且在合适的时候“提交事务”以完成一个批次的导入，客户端无需缓存完整批次数据，能够减少客户端的内存使用，并且实现“精确一次 (Exactly-Once)”语义。此外，还支持小文件在一个批次中合并导入等功能。相关文档，请参见 [使用 Stream Load 事务接口导入](../loading/Use_Stream_Load_Transaction_Interface.md)。
 
 - 支持以异步的方式执行 CTAS，并将结果写入新表。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md)。
 
@@ -22,9 +22,9 @@
 
   - 支持限制大查询的 CPU、内存、或 I/O 资源；可通过匹配分类器将查询路由至资源组，或者设置会话变量直接为查询指定资源组。相关文档，请参见[资源隔离](../administration/Resource_Group.md)。
 
-- 支持通过 JDBC 外表查询 Oracle、PostgreSQL、MySQL、SQL Server、ClickHouse 等数据库，查询时支持谓词下推。相关文档，请参见 [更多数据库（支持 JDBC 驱动程序）的外部表](../using_starrocks/External_table.md#更多数据库支持-jdbc-驱动程序的外部表)。
+- 支持 JDBC 外表，可以轻松访问Oracle、PostgreSQL、MySQL、SQLServer、ClickHouse 等数据库，并且查询时支持谓词下推，提高查询性能。相关文档，请参见 [更多数据库（JDBC）的外部表](../using_starrocks/External_table.md#更多数据库jdbc的外部表)。
 
-- 【Preview】发布全新数据源 Connector 框架，支持用户自定义外部数据目录（External Catalog）并接入 Apache Hive™ ，无需创建外部表，即可直接分析 Apache Hive™。相关文档，请参见[使用 Catalog 管理内部和外部数据](../using_starrocks/Manage_data.md)。
+- 【Preview】发布全新数据源 Connector 框架，支持创建外部数据目录（External Catalog），从而无需创建外部表，即可直接查询 Apache Hive™。相关文档，请参见[使用 Catalog 管理内部和外部数据](../using_starrocks/Manage_data.md)。
 
 - 新增如下函数：
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
