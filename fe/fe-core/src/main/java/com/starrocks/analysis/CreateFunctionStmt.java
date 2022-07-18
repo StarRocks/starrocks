@@ -249,7 +249,7 @@ public class CreateFunctionStmt extends DdlStmt {
     }
 
     public void analyze(ConnectContext context) throws AnalysisException {
-        analyzeCommon(context.getDatabase(), context.getDatabase());
+        analyzeCommon(context.getDatabase());
         Preconditions.checkArgument(isStarrocksJar);
         analyzeUdfClassInStarrocksJar();
         if (isAggregate) {
@@ -261,7 +261,7 @@ public class CreateFunctionStmt extends DdlStmt {
         }
     }
 
-    private void analyzeCommon(String defaultDb, String defaultCluster) throws AnalysisException {
+    private void analyzeCommon(String defaultDb) throws AnalysisException {
         // check function name
         functionName.analyze(defaultDb);
 
