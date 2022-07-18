@@ -106,7 +106,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized boolean recycleDatabase(Database db, Set<String> tableNames) {
         if (idToDatabase.containsKey(db.getId())) {
-            LOG.error("db[{}-{}] already in recycle bin.", db.getId(), db.getFullName());
+            LOG.error("db[{}-{}] already in recycle bin.", db.getId(), db.getOriginName());
             return false;
         }
 
@@ -120,7 +120,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         RecycleDatabaseInfo databaseInfo = new RecycleDatabaseInfo(db, tableNames);
         idToDatabase.put(db.getId(), databaseInfo);
         idToRecycleTime.put(db.getId(), System.currentTimeMillis());
-        LOG.info("recycle db[{}-{}]", db.getId(), db.getFullName());
+        LOG.info("recycle db[{}-{}]", db.getId(), db.getOriginName());
         return true;
     }
 
@@ -282,7 +282,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
                 GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
-                LOG.info("erase db[{}-{}] finished", db.getId(), db.getFullName());
+                LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
