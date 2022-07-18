@@ -52,6 +52,7 @@ import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FrontendClause;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
@@ -345,6 +346,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowRolesStatement(ShowRolesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitGrantPrivilegeStatement(GrantStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -70,6 +70,7 @@ import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
+import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
@@ -105,6 +106,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -131,6 +133,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -139,6 +142,7 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
+import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
@@ -1859,6 +1863,68 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowRoles(StarRocksParser.ShowRolesContext context) {
         return new ShowRolesStmt();
+    }
+
+    @Override
+    public ParseNode visitGrantPrivilege(StarRocksParser.GrantPrivilegeContext context) {
+        // visit privileges
+        List<String> parts = visit(context.identifier(), Identifier.class).stream()
+                .map(Identifier::getValue)
+                .collect(Collectors.toList());
+        List<AccessPrivilege> privileges = new ArrayList<>(parts.size());
+        for (String name : parts) {
+            AccessPrivilege accessPrivilege = AccessPrivilege.fromName(name);
+            if (accessPrivilege == null) {
+                throw new ParsingException("Unknown privilege type " + name);
+            }
+            privileges.add(accessPrivilege);
+        }
+
+        boolean onTable = context.RESOURCE() == null;
+        TablePattern tblPattern = null;
+        ResourcePattern resourcePattern = null;
+        if (onTable) {
+            // visit table pattern
+            String db;
+            if (context.tablePattern().identifier(0) != null) {
+                db = ((Identifier) visit(context.tablePattern().identifier(0))).getValue();
+            } else {
+                db = "*";
+            }
+            String tbl;
+            if (context.tablePattern().identifier(1) != null) {
+                tbl = ((Identifier) visit(context.tablePattern().identifier(1))).getValue();
+            } else {
+                tbl = "*";
+            }
+            tblPattern = new TablePattern(db, tbl);
+        } else {
+            // visit resource pattern
+            String resource;
+            if (context.resourcePattern().ASTERISK_SYMBOL() == null) {
+                resource = ((StringLiteral) visit(context.resourcePattern().string())).getStringValue();
+            } else {
+                resource = "*";
+            }
+            resourcePattern = new ResourcePattern(resource);
+        }
+
+        boolean toUser = context.ROLE() == null;
+        UserIdentity userId;
+        String role;
+        if (toUser) {
+            userId = ((UserIdentifier) visit(context.user())).getUserIdentity();
+            if (onTable) {
+                return new GrantStmt(userId, null, tblPattern, privileges);
+            }
+            return new GrantStmt(userId, null, resourcePattern, privileges);
+        } else {
+            role = ((StringLiteral) visit(context.string())).getStringValue();
+            if (onTable) {
+                return new GrantStmt(null, role, tblPattern, privileges);
+            }
+            return new GrantStmt(null, role, resourcePattern, privileges);
+        }
     }
 
     @Override

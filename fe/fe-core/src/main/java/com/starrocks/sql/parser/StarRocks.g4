@@ -112,6 +112,8 @@ statement
     | CREATE ROLE identifierOrString                                                        #createRole
     | DROP ROLE identifierOrString                                                          #dropRole
     | SHOW ROLES                                                                            #showRoles
+    | GRANT identifier (',' identifier)* ON (tablePattern | RESOURCE resourcePattern)
+        TO (user | ROLE string)                                                             #grantPrivilege
 
     // procedure
     | showProcedureStatment                                                                 #showProcedure
@@ -1092,8 +1094,16 @@ authOption
     | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
     ;
 
+tablePattern
+    : (identifier | ASTERISK_SYMBOL) ('.' (identifier | ASTERISK_SYMBOL))?
+    ;
+
+resourcePattern
+    : string | ASTERISK_SYMBOL
+    ;
+
 nonReserved
-    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    : AFTER | AGGREGATE | ALL | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG

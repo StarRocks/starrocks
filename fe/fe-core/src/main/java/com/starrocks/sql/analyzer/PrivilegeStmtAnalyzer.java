@@ -7,7 +7,10 @@ import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
+import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -58,6 +61,28 @@ public class PrivilegeStmtAnalyzer {
             // validate user
             try {
                 userIdent.analyze(session.getClusterName());
+            } catch (AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private void analyseTablePattern(TablePattern tablePattern, ConnectContext session) {
+            try {
+                tablePattern.analyze(session.getClusterName());
+            } catch (AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        private void analyseResourcePattern(ResourcePattern resourcePattern) {
+            try {
+                resourcePattern.analyze();
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
@@ -248,6 +273,27 @@ public class PrivilegeStmtAnalyzer {
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
             stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not drop role"));
+            return null;
+        }
+
+        @Override
+        public Void visitGrantPrivilegeStatement(GrantStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() != null) {
+                analyseUser(stmt.getUserIdent(), session);
+            } else {
+                stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not grant to role"));
+            }
+
+            if (stmt.getTblPattern() != null) {
+                analyseTablePattern(stmt.getTblPattern(), session);
+            } else {
+                analyseResourcePattern(stmt.getResourcePattern());
+            }
+
+            if (!stmt.hasPrivileges()) {
+                throw new SemanticException("No privileges in grant statement.");
+            }
+
             return null;
         }
     }

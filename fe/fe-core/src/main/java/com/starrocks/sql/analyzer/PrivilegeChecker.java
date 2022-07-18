@@ -28,9 +28,11 @@ import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropWorkGroupStmt;
+import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
@@ -40,6 +42,7 @@ import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -398,6 +401,101 @@ public class PrivilegeChecker {
         public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        /*
+         * Rules:
+         * 1. NODE_PRIV can only be granted/revoked on GLOBAL level
+         * 2. ADMIN_PRIV can only be granted/revoked on GLOBAL level
+         * 3. Privileges can not be granted/revoked to/from ADMIN and OPERATOR role
+         * 4. Only user with GLOBAL level's GRANT_PRIV can grant/revoke privileges to/from roles.
+         * 5.1 User should has GLOBAL level GRANT_PRIV
+         * 5.2 or user has DATABASE/TABLE level GRANT_PRIV if grant/revoke to/from certain database or table.
+         * 5.3 or user should has 'resource' GRANT_PRIV if grant/revoke to/from certain 'resource'
+         */
+        private void checkPrivileges(List<Privilege> privileges, String role, TablePattern tblPattern) {
+            // Rule 1
+            if (tblPattern.getPrivLevel() != Auth.PrivLevel.GLOBAL && privileges.contains(Privilege.NODE_PRIV)) {
+                throw new SemanticException("NODE_PRIV privilege can only be granted on *.*");
+            }
+
+            // Rule 2
+            if (tblPattern.getPrivLevel() != Auth.PrivLevel.GLOBAL && privileges.contains(Privilege.ADMIN_PRIV)) {
+                throw new SemanticException("ADMIN_PRIV privilege can only be granted on *.*");
+            }
+
+            if (role != null) {
+                // Rule 3 and 4
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
+            } else {
+                // Rule 5.1 and 5.2
+                if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                    }
+                } else if (tblPattern.getPrivLevel() == Auth.PrivLevel.DATABASE) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkDbPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), PrivPredicate.GRANT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                    }
+                } else {
+                    // table level
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkTblPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), tblPattern.getTbl(),
+                                    PrivPredicate.GRANT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                    }
+                }
+            }
+        }
+
+        private void checkPrivileges(List<Privilege> privileges, String role, ResourcePattern resourcePattern) {
+            // Rule 1
+            if (resourcePattern.getPrivLevel() != Auth.PrivLevel.GLOBAL && privileges.contains(Privilege.NODE_PRIV)) {
+                throw new SemanticException("NODE_PRIV privilege can only be granted on resource *");
+            }
+
+            // Rule 2
+            if (resourcePattern.getPrivLevel() != Auth.PrivLevel.GLOBAL && privileges.contains(Privilege.ADMIN_PRIV)) {
+                throw new SemanticException("ADMIN_PRIV privilege can only be granted on resource *");
+            }
+
+            if (role != null) {
+                // Rule 3 and 4
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
+            } else {
+                // Rule 5.1 and 5.3
+                if (resourcePattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                    }
+                } else {
+                    if (!GlobalStateMgr.getCurrentState().getAuth()
+                            .checkResourcePriv(ConnectContext.get(), resourcePattern.getResourceName(),
+                                    PrivPredicate.GRANT)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                    }
+                }
+            }
+        }
+
+        @Override
+        public Void visitGrantPrivilegeStatement(GrantStmt statement, ConnectContext session) {
+            if (statement.getTblPattern() != null) {
+                checkPrivileges(statement.getPrivileges(), statement.getQualifiedRole(), statement.getTblPattern());
+            } else {
+                checkPrivileges(statement.getPrivileges(), statement.getQualifiedRole(),
+                        statement.getResourcePattern());
             }
             return null;
         }
