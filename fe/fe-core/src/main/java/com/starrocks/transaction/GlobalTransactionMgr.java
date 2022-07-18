@@ -509,7 +509,7 @@ public class GlobalTransactionMgr implements Writable {
             if (db == null) {
                 continue;
             }
-            info.add(db.getFullName());
+            info.add(db.getOriginName());
             infos.add(info);
         }
         return infos;
