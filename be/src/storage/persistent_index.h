@@ -317,10 +317,6 @@ public:
     Status try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
-    size_t mutable_index_size();
-
-    size_t mutable_index_capacity();
-
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
 
 private:
