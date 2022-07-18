@@ -47,6 +47,7 @@ public class StateChangeExecutor extends Daemon {
             typeTransferQueue.put(newType);
         } catch (InterruptedException e) {
             LOG.error("failed to put new FE type: {}, {}.", newType, e);
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -58,6 +59,7 @@ public class StateChangeExecutor extends Daemon {
                 newType = typeTransferQueue.take();
             } catch (InterruptedException e) {
                 LOG.error("got exception when take FE type from queue", e);
+                Thread.currentThread().interrupt();
                 Util.stdoutWithTime("got exception when take FE type from queue. " + e.getMessage());
                 System.exit(-1);
             }
