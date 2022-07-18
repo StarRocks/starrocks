@@ -3,6 +3,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 
 #include "column/chunk.h"
+#include "column/column_pool.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -84,6 +85,8 @@ void ScanOperator::close(RuntimeState* state) {
 
     do_close(state);
     Operator::close(state);
+
+    vectorized::release_large_columns<vectorized::BinaryColumn>(state->chunk_size() * 512);
 }
 
 bool ScanOperator::has_output() const {
