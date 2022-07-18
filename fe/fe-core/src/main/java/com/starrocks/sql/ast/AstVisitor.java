@@ -80,6 +80,7 @@ import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -298,6 +299,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowVariablesStmt(ShowVariablesStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitShowProcesslistStmt(ShowProcesslistStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitShowColumnStmt(ShowColumnStmt statement, C context) {
