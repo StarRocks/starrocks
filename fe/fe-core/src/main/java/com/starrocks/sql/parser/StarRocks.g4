@@ -179,6 +179,7 @@ statement
     // Backup Restore Satement
     | backupStatement
     | showBackupStatement
+    | restoreStatement
 
     // Other statement
     | killStatement
@@ -1274,6 +1275,13 @@ showBackupStatement
     : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1483,6 +1491,10 @@ frameBound
 
 tableDesc
     : qualifiedName partitionNames?
+    ;
+
+restoreTableDesc
+    : qualifiedName partitionNames? (AS identifier)?
     ;
 
 explainDesc

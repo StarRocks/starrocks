@@ -17,6 +17,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
@@ -575,13 +576,19 @@ public class Analyzer {
 
         @Override
         public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
-            BackupStmtAnalyzer.analyze(statement, context);
+            BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStmt(RestoreStmt statement, ConnectContext context) {
+            BackupRestoreAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
         public Void visitShowBackupStmt(ShowBackupStmt statement, ConnectContext context) {
-            BackupStmtAnalyzer.analyze(statement, context);
+            BackupRestoreAnalyzer.analyze(statement, context);
             return null;
         }
     }

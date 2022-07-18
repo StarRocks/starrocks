@@ -44,6 +44,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
@@ -433,6 +434,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitBackupStmt(BackupStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitRestoreStmt(RestoreStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
