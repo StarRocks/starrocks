@@ -196,6 +196,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
         _chunk_request->set_be_number(_parent->_be_number);
         if (_parent->_is_pipeline_level_shuffle) {
             _chunk_request->set_is_pipeline_level_shuffle(true);
+            DCHECK(_chunk_request->has_is_pipeline_level_shuffle() && _chunk_request->is_pipeline_level_shuffle());
+        } else {
+            DCHECK(!_chunk_request->has_is_pipeline_level_shuffle() && !_chunk_request->is_pipeline_level_shuffle());
         }
     }
 
@@ -434,6 +437,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
     if (_part_type == TPartitionType::UNPARTITIONED || _num_shuffles == 1) {
         if (_chunk_request == nullptr) {
+            DCHECK(!_is_pipeline_level_shuffle);
             _chunk_request = std::make_shared<PTransmitChunkParams>();
         }
 
@@ -463,6 +467,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                 int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
                 for (auto idx : _channel_indices) {
                     if (!_channels[idx]->use_pass_through()) {
+                        DCHECK(!_is_pipeline_level_shuffle);
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
                         RETURN_IF_ERROR(
                                 _channels[idx]->send_chunk_request(copy, attachment, attachment_physical_bytes));
@@ -580,6 +585,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
+            DCHECK(!_is_pipeline_level_shuffle);
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
             channel->send_chunk_request(copy, attachment, attachment_physical_bytes);
         }
