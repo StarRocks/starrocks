@@ -51,7 +51,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -575,19 +574,19 @@ public class PrivilegeChecker {
                 for (Long dbId : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                     if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            ClusterNamespace.getNameFromFullName(db.getFullName()),
+                            db.getOriginName(),
                             PrivPredicate.SELECT)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SELECT",
                                 session.getQualifiedUser(), session.getRemoteIP(),
-                                ClusterNamespace.getNameFromFullName(db.getFullName()));
+                                db.getOriginName());
                     }
 
                     if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            ClusterNamespace.getNameFromFullName(db.getFullName()),
+                            db.getOriginName(),
                             PrivPredicate.LOAD)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "LOAD",
                                 session.getQualifiedUser(), session.getRemoteIP(),
-                                ClusterNamespace.getNameFromFullName(db.getFullName()));
+                                db.getOriginName());
                     }
                 }
             } else if (StatsConstants.DEFAULT_ALL_ID == statement.getTableId()
