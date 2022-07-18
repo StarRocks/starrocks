@@ -46,6 +46,7 @@ statement
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -328,6 +329,10 @@ showPartitionsStatement
     : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+recoverPartitionStatement
+    : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
