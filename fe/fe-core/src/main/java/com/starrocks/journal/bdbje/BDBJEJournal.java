@@ -98,15 +98,16 @@ public class BDBJEJournal implements Journal {
         }
 
         String currentDbName = currentJournalDB.getDb().getDatabaseName();
+        String currentIdStr = currentDbName;
         if (!prefix.isEmpty()) { // remove prefix
-            currentDbName = currentDbName.substring(prefix.length());
+            currentIdStr = currentDbName.substring(prefix.length());
         }
-        long currentName = Long.parseLong(currentDbName);
+        long currentName = Long.parseLong(currentIdStr);
         long newNameVerify = currentName + currentJournalDB.getDb().count();
         if (newName == newNameVerify) {
-            String dbName = getFullDatabaseName(newName);
-            LOG.info("roll edit log. new db name is {}", dbName);
-            currentJournalDB = bdbEnvironment.openDatabase(dbName);
+            String newDbName = getFullDatabaseName(newName);
+            LOG.info("roll edit log. new db name is {}", newDbName);
+            currentJournalDB = bdbEnvironment.openDatabase(newDbName);
         } else {
             String msg = String.format("roll journal error! journalId and db journal numbers is not match. "
                             + "journal id: %d, current db: %s, expected db count: %d",
