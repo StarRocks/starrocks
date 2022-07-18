@@ -34,7 +34,6 @@ import java.util.Arrays;
 public class ShowPartitionsStmtTest {
 
     private ConnectContext ctx;
-
     private static StarRocksAssert starRocksAssert;
 
     @Before

@@ -22,7 +22,6 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -200,10 +199,6 @@ public class ColocateMetaService {
         @Override
         public void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
-            final String clusterName = ConnectContext.get().getClusterName();
-            if (Strings.isNullOrEmpty(clusterName)) {
-                throw new DdlException("No cluster selected.");
-            }
             GroupId groupId = checkAndGetGroupId(request);
 
             String meta = request.getContent();
