@@ -21,6 +21,7 @@
 
 package com.starrocks.journal.bdbje;
 
+import com.google.common.base.Strings;
 import com.google.common.net.HostAndPort;
 import com.sleepycat.je.DatabaseConfig;
 import com.sleepycat.je.DatabaseException;
@@ -583,7 +584,7 @@ public class BDBEnvironment {
                 continue;
             }
 
-            if (prefix.isEmpty()) { // default GlobalStateMgr db
+            if (Strings.isNullOrEmpty(prefix)) { // default GlobalStateMgr db
                 if (StringUtils.isNumeric(name)) {
                     long db = Long.parseLong(name);
                     ret.add(db);

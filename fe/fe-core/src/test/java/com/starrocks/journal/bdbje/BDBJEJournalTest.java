@@ -759,20 +759,37 @@ public class BDBJEJournalTest {
      }
 
     @Test
-    public void testJournalWithPrefix(@Mocked BDBEnvironment environment) throws Exception {
-        new Expectations(environment) {
-            {
-                environment.getDatabaseNamesWithPrefix("aaa_");
-                times = 1;
-                result = Arrays.asList(3L, 13L);
+    public void testJournalWithPrefix() throws Exception {
+        String data = "petals on a wet black bough";
+        Writable writable = new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, data);
             }
         };
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        writable.write(buffer);
 
-        BDBJEJournal journal = new BDBJEJournal(environment, "aaa_" /* prefix */);
+        BDBEnvironment environment = initBDBEnv("testJournalWithPrefix");
+        BDBJEJournal journal = new BDBJEJournal(environment, "aaa_");
         Assert.assertEquals("aaa_", journal.getPrefix());
+
+        journal.open();
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(1, buffer);
+        journal.batchWriteAppend(2, buffer);
+        journal.batchWriteCommit();
+
+        journal.rollJournal(3);
+        journal.open();
+        journal.batchWriteBegin();
+        journal.batchWriteAppend(3, buffer);
+        journal.batchWriteAppend(4, buffer);
+        journal.batchWriteCommit();
+
         List<Long> l = journal.getDatabaseNames();
         Assert.assertEquals(2, l.size());
-        Assert.assertEquals((Long) 3L, l.get(0));
-        Assert.assertEquals((Long) 13L, l.get(1));
+        Assert.assertEquals((Long) 1L, l.get(0));
+        Assert.assertEquals((Long) 3L, l.get(1));
     }
 }
