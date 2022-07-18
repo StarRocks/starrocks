@@ -23,7 +23,6 @@ statement
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -47,7 +46,6 @@ statement
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -108,7 +106,6 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
-    | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
@@ -124,14 +121,8 @@ statement
     // procedure
     | showProcedureStatement                                                                 #showProcedure
 
-    //  Backup Store Satement
-    | restoreStatement                                                                      #restore
-
     // proc
     | showProcStatement                                                                      #showProc
-
-    // Backup Store Satement
-    | restoreStatement                                                                       #restore
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -166,11 +157,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -342,10 +328,6 @@ showPartitionsStatement
     : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
-    ;
-
-recoverPartitionStatement
-    : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -602,11 +584,6 @@ showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-showProcesslistStatement
-    : SHOW FULL? PROCESSLIST
-    ;
-
-
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
     ;
@@ -793,14 +770,6 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
-    ;
-
-// ---------------------------------------- Backup Store Statement -----------------------------------------------------
-restoreStatement
-    : RESTORE SNAPSHOT qualifiedName
-    FROM identifier
-    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
-    (PROPERTIES propertyList)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
@@ -1003,10 +972,6 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
-
-restoreTableDesc
-    : qualifiedName partitionNames? (AS identifier)?
-    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
@@ -1231,8 +1196,8 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | STATS | SUBMIT | SYNC
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
