@@ -25,6 +25,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -39,6 +40,14 @@ public class SetUserPropertyStmt extends DdlStmt {
 
     public String getUser() {
         return user;
+    }
+
+    public void setUser(String user) {
+        this.user = user;
+    }
+
+    public List<SetVar> getPropertyList() {
+        return this.propertyList;
     }
 
     // using List because we need retain the origin property order
@@ -73,6 +82,16 @@ public class SetUserPropertyStmt extends DdlStmt {
         for (SetVar var : propertyList) {
             ((SetUserPropertyVar) var).analyze(isSelf);
         }
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitSetUserPropertyStmt(this, context);
     }
 
     @Override

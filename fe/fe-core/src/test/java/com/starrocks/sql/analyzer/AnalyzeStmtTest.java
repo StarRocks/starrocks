@@ -4,6 +4,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -61,11 +63,25 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testShowUserProperty(){
+        String sql = "SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'";
+        ShowUserPropertyStmt showUserPropertyStmt = (ShowUserPropertyStmt)analyzeSuccess(sql);
+        Assert.assertEquals("default_cluster:jack", showUserPropertyStmt.getUser());
+    }
+
+    @Test
+    public void testSetUserProperty(){
+        String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
+        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt)analyzeSuccess(sql);
+        Assert.assertEquals("default_cluster:tom", setUserPropertyStmt.getUser());
+    }
+
+    @Test
     public void testSelectedColumns() {
         String sql = "analyze table db.tbl (kk1, kk2)";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
 
-        Assert.assertTrue(analyzeStmt.isSample());
+        Assert.assertTrue(!analyzeStmt.isSample());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
     }
 
@@ -96,7 +112,7 @@ public class AnalyzeStmtTest {
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, {}, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, Test Failed]",
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00, {}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
 
         sql = "show stats meta";

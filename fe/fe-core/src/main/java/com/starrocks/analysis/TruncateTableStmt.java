@@ -21,13 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 // TRUNCATE TABLE tbl [PARTITION(p1, p2, ...)]
 public class TruncateTableStmt extends DdlStmt {
@@ -42,31 +36,26 @@ public class TruncateTableStmt extends DdlStmt {
         return tblRef;
     }
 
+    public String getDbName() {
+        return tblRef.getName().getDb();
+    }
+
+    public void setDbName(String dbName) {
+        this.tblRef.getName().setDb(dbName);
+    }
+
+    public String getTblName() {
+        return tblRef.getName().getTbl();
+    }
+
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        tblRef.getName().analyze(analyzer);
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitTruncateTableStatement(this, context);
+    }
 
-        if (tblRef.hasExplicitAlias()) {
-            throw new AnalysisException("Not support truncate table with alias");
-        }
-
-        // check access
-        // it requires LOAD privilege, because we consider this operation as 'delete data', which is also a
-        // 'load' operation.
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tblRef.getName().getDb(),
-                tblRef.getName().getTbl(), PrivPredicate.LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
-        }
-
-        // check partition if specified. do not support truncate temp partitions
-        PartitionNames partitionNames = tblRef.getPartitionNames();
-        if (partitionNames != null) {
-            partitionNames.analyze(analyzer);
-            if (partitionNames.isTemp()) {
-                throw new AnalysisException("Not support truncate temp partitions");
-            }
-        }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

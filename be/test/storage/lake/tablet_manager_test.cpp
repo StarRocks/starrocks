@@ -18,8 +18,10 @@
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/options.h"
+#include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "util/filesystem_util.h"
+#include "util/lru_cache.h"
 
 namespace starrocks {
 

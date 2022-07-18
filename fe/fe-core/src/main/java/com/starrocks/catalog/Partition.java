@@ -195,11 +195,6 @@ public class Partition extends MetaObject implements Writable {
         return distributionInfo;
     }
 
-    // TODO: Remove this after LakeTable is merged.
-    public boolean isUseStarOS() {
-        return false;
-    }
-
     public void createRollupIndex(MaterializedIndex mIndex) {
         if (mIndex.getState().isVisible()) {
             this.idToVisibleRollupIndex.put(mIndex.getId(), mIndex);

@@ -13,7 +13,6 @@ DIAGNOSTIC_POP
 
 #include <chrono>
 #include <cstdint>
-#include <shared_mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -30,6 +29,7 @@ DIAGNOSTIC_POP
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
+#include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
@@ -97,9 +97,11 @@ private:
             if (status.ok() || _response == nullptr) {
                 return;
             }
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_response_lock);
             if (_response->status().status_code() == TStatusCode::OK) {
-                status.to_protobuf(_response->mutable_status());
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg);
             }
         }
 
@@ -165,7 +167,6 @@ private:
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
     OlapTableSchemaParam* _schema = nullptr;
-    TupleDescriptor* _tuple_desc = nullptr;
     RowDescriptor* _row_desc = nullptr;
 
     // next sequence we expect
@@ -216,8 +217,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     _index_id = params.index_id();
     _schema = new OlapTableSchemaParam();
     RETURN_IF_ERROR(_schema->init(params.schema()));
-    _tuple_desc = _schema->tuple_desc();
-    _row_desc = new RowDescriptor(_tuple_desc, false);
+    _row_desc = new RowDescriptor(_schema->tuple_desc(), false);
 
     _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     _senders = std::vector<Sender>(params.num_senders());
@@ -468,11 +468,9 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         vectorized::DeltaWriterOptions options;
         options.tablet_id = tablet.tablet_id();
         options.schema_hash = schema_hash;
-        options.write_type = vectorized::WriteType::LOAD;
         options.txn_id = _txn_id;
         options.partition_id = tablet.partition_id();
         options.load_id = params.id();
-        options.tuple_desc = _tuple_desc;
         options.slots = index_slots;
         options.global_dicts = &_global_dicts;
         options.parent_span = _load_channel->get_span();

@@ -34,13 +34,16 @@ import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.*;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
@@ -48,9 +51,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
-import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
 
@@ -208,28 +211,28 @@ public class StarRocksAssert {
         return this;
     }
 
-    public void executeWorkGroupDdlSql(String sql) throws Exception {
+    public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
 
-        Assert.assertTrue(statement.getClass().getSimpleName().contains("WorkGroupStmt"));
+        Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
 
     }
 
-    public List<List<String>> executeWorkGroupShowSql(String sql) throws Exception {
+    public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
 
         StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
 
-        Assert.assertTrue(statement instanceof ShowWorkGroupStmt);
-        return GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup((ShowWorkGroupStmt) statement);
+        Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
+        return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
     }
 
     private void checkAlterJob() throws InterruptedException {

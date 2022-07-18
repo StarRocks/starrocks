@@ -54,7 +54,6 @@ import org.apache.logging.log4j.Logger;
  *      not only create the specified user, but also grant all privs of the specified role to the user.
  */
 public class CreateUserStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateUserStmt.class);
 
     private boolean ifNotExist;
     private UserIdentity userIdent;
@@ -127,7 +126,7 @@ public class CreateUserStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
-        userIdent.analyze(analyzer.getClusterName());
+        userIdent.analyze();
 
         /*
          * IDENTIFIED BY

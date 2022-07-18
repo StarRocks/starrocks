@@ -33,6 +33,11 @@ public class LowCardinalityTest extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE table_int (id_int INT, id_bigint BIGINT) " +
+                "DUPLICATE KEY(`id_int`) " +
+                "DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
         starRocksAssert.withTable("CREATE TABLE part_v2  ( P_PARTKEY     INTEGER NOT NULL,\n" +
                 "                          P_NAME        VARCHAR(55) NOT NULL,\n" +
                 "                          P_MFGR        VARCHAR(25) NOT NULL,\n" +
@@ -679,7 +684,8 @@ public class LowCardinalityTest extends PlanTestBase {
         // test worth for rewrite
         sql = "select concat(S_ADDRESS, S_COMMENT) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  |  9 <-> concat[([3: S_ADDRESS, VARCHAR, false], [7: S_COMMENT, VARCHAR, false]); args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "  |  9 <-> concat[([3: S_ADDRESS, VARCHAR, false], [7: S_COMMENT, VARCHAR, false]); args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]"));
         // Test common expression reuse 1
         // couldn't reuse case
         // DictExpr return varchar and int
@@ -702,7 +708,8 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("Decode"));
 
         // common expression reuse 3
-        sql = "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
+        sql =
+                "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  |  output columns:\n" +
                 "  |  9 <-> if[(DictExpr(11: S_ADDRESS,[<place-holder> = 'kks']), [13: expr, VARCHAR, true], DictExpr(12: S_COMMENT,[<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
@@ -818,6 +825,10 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("Decode"));
         sql =
                 "select count(*) from supplier l join [broadcast] (select max(S_ADDRESS) as S_ADDRESS from supplier) r on l.S_ADDRESS = r.S_ADDRESS;";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
+        sql =  "select count(*) from supplier l join [broadcast] (select max(id_int) as id_int from table_int) r on l.S_ADDRESS = r.id_int where l.S_ADDRESS not like '%key%'";
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("Decode"));
 

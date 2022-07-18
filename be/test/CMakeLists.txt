@@ -155,6 +155,7 @@ set(EXEC_FILES
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
+        ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
@@ -238,6 +239,8 @@ set(EXEC_FILES
         ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./runtime/memory_scratch_sink_test_issue_8676.cpp
+        ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./simd/simd_test.cpp

@@ -94,7 +94,11 @@ public:
     size_t current_chunk_size() const;
     void update_input_rows(int64_t increment) { _input_rows += increment; }
     bool has_output() const { return _output_chunk_index < _input_chunks.size(); }
-    bool is_current_chunk_finished_eval() { return _window_result_position >= current_chunk_size(); }
+    // This method will be used frequently, so it is better to get chunk_size through "current_chunk_size"
+    // outside the method, because "current_chunk_size" contains a virtual function call which cannot be optimized out
+    bool is_current_chunk_finished_eval(const int64_t current_chunk_size) {
+        return _window_result_position >= current_chunk_size;
+    }
     int64_t window_result_position() const { return _window_result_position; }
     void set_window_result_position(int64_t window_result_position) {
         _window_result_position = window_result_position;
@@ -121,13 +125,12 @@ public:
     const std::vector<ExprContext*>& order_ctxs() { return _order_ctxs; }
     const vectorized::Columns& order_columns() { return _order_columns; }
 
-    RuntimeProfile::Counter* compute_timer() { return _compute_timer; }
-
     FrameRange get_sliding_frame_range();
 
     Status add_chunk(const vectorized::ChunkPtr& chunk);
 
     void update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start, int64_t frame_end);
+    void update_window_batch_removable_cumulatively();
     void reset_window_state();
     void get_window_function_result(size_t frame_start, size_t frame_end);
 
@@ -144,6 +147,10 @@ public:
     void remove_unused_buffer_values(RuntimeState* state);
 
     bool need_partition_materializing() const { return _need_partition_materializing; }
+
+    bool support_cumulative_algo() const { return _support_cumulative_algo; }
+
+    std::string debug_string() const;
 
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
@@ -172,14 +179,12 @@ private:
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
-    RuntimeProfile::Counter* _compute_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
 
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
-    bool _is_range_with_start = false;
 
     vectorized::Columns _result_window_columns;
     std::vector<vectorized::ChunkPtr> _input_chunks;
@@ -222,6 +227,9 @@ private:
     int64_t _rows_start_offset = 0;
     int64_t _rows_end_offset = 0;
 
+    bool _is_unbounded_preceding = false;
+    bool _is_unbounded_following = false;
+
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;
     // The total size of the row for the window function state.
@@ -251,6 +259,8 @@ private:
     // Some window functions, eg. NTILE, need the boundary of partition to calculate its value.
     // For these functions, we must wait util the partition finished.
     bool _need_partition_materializing = false;
+
+    bool _support_cumulative_algo = false;
 
 private:
     void _append_column(size_t chunk_size, vectorized::Column* dst_column, vectorized::ColumnPtr& src_column);

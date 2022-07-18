@@ -28,10 +28,10 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -403,7 +403,7 @@ public class Table extends MetaObject implements Writable {
      * 5. PRIMARY_KEYS table does not support local balance.
      */
     public boolean needSchedule(boolean isLocalBalance) {
-        if (type != TableType.OLAP) {
+        if (!isLocalTable()) {
             return false;
         }
 

@@ -79,7 +79,6 @@ public class RestBaseAction extends BaseAction {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCluster(authInfo.cluster);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }

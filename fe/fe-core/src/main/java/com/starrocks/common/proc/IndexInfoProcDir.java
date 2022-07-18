@@ -63,7 +63,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
         result.setNames(TITLE_NAMES);
         db.readLock();
         try {
-            if (table.getType() == TableType.OLAP) {
+            if (table.isNativeTable()) {
                 OlapTable olapTable = (OlapTable) table;
 
                 // indices order

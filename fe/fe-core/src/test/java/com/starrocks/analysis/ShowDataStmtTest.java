@@ -68,10 +68,6 @@ public class ShowDataStmtTest {
 
         new Expectations() {
             {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = SystemInfoService.DEFAULT_CLUSTER;
-
                 analyzer.getDefaultDb();
                 minTimes = 0;
                 result = "testCluster:testDb";
