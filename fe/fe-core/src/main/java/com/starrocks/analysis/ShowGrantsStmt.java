@@ -74,7 +74,7 @@ public class ShowGrantsStmt extends ShowStmt {
             if (isAll) {
                 throw new AnalysisException("Can not specified keyword ALL when specified user");
             }
-            userIdent.analyze(analyzer.getClusterName());
+            userIdent.analyze();
             if (!GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
                 throw new AnalysisException("user " + userIdent + " not exist!");
             }

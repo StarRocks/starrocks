@@ -6,7 +6,7 @@ TPC-H can be used to build models based on real production environments to simul
 ## 1. Test Conclusion
 
 We perform a test on 22 queries against a TPC-H 100 GB dataset. The following figure shows the test result.
-![comparison](/assets/7.2-1.png)
+![comparison](../assets/7.2-1.png)
 StarRocks native storage and StarRocks Hive external tables are used for queries. We use StarRocks Hive external tables and Trino to query the same copy of data that is stored in the ORC format and compressed in the ZLIB format.
 StarRocks native storage has a query response time of 21s, that for StarRocks Hive external tables is 92s, and for Trino is as long as 307s.
 

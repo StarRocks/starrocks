@@ -21,157 +21,88 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.FakeGlobalStateMgr;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.catalog.ListPartitionInfo;
-import mockit.Expectations;
-import mockit.Mocked;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 
 import java.util.Arrays;
 
 public class ShowPartitionsStmtTest {
-    @Mocked
-    private Analyzer analyzer;
-    private GlobalStateMgr globalStateMgr;
 
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
+    private ConnectContext ctx;
+    private static StarRocksAssert starRocksAssert;
 
     @Before
-    public void setUp() {
-        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
-        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        Auth auth = AccessTestUtil.fetchAdminAccess();
-
-        ListPartitionInfo partitionInfo = new ListPartitionInfo();
-        new Expectations(partitionInfo) {
-            {
-                partitionInfo.getType();
-                minTimes = 0;
-                result = PartitionType.LIST;
-            }
-        };
-
-        OlapTable table = new OlapTable();
-        new Expectations(table) {
-            {
-                table.getPartitionInfo();
-                minTimes = 0;
-                result = partitionInfo;
-            }
-        };
-
-        Database db = new Database();
-        new Expectations(db) {
-            {
-                db.getTable(anyString);
-                minTimes = 0;
-                result = table;
-
-                db.getTable(0);
-                minTimes = 0;
-                result = table;
-            }
-        };
-
-        new Expectations() {
-            {
-                analyzer.getDefaultDb();
-                minTimes = 0;
-                result = "testDb";
-
-                analyzer.getCatalog();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "default_cluster";
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
-                globalStateMgr.getDb(anyString);
-                minTimes = 0;
-                result = db;
-
-                globalStateMgr.getDb(0);
-                minTimes = 0;
-                result = db;
-            }
-        };
-
+    public void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ctx = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert();
+        starRocksAssert.withDatabase("testDb").useDatabase("testTbl");
+        starRocksAssert.withTable("create table testDb.testTable(" +
+                "id int, name string) DISTRIBUTED BY HASH(id) BUCKETS 10 " +
+                "PROPERTIES(\"replication_num\" = \"1\")");
     }
 
     @Test
-    public void testNormal() throws UserException {
+    public void testNormal() {
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, null, null, false);
-        stmt.analyzeImpl(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable`", stmt.toString());
     }
 
     @Test
-    public void testShowPartitionsStmtWithBinaryPredicate() throws UserException {
+    public void testShowPartitionsStmtWithBinaryPredicate() {
         SlotRef slotRef = new SlotRef(null, "LastConsistencyCheckTime");
         StringLiteral stringLiteral = new StringLiteral("2019-12-22 10:22:11");
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, slotRef, stringLiteral);
         ShowPartitionsStmt stmt =
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), binaryPredicate, null, null, false);
-        stmt.analyzeImpl(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(
                 "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'",
                 stmt.toString());
     }
 
     @Test
-    public void testShowPartitionsStmtWithLikePredicate() throws UserException {
+    public void testShowPartitionsStmtWithLikePredicate() {
         SlotRef slotRef = new SlotRef(null, "PartitionName");
         StringLiteral stringLiteral = new StringLiteral("%p2019%");
         LikePredicate likePredicate = new LikePredicate(LikePredicate.Operator.LIKE, slotRef, stringLiteral);
         ShowPartitionsStmt stmt =
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), likePredicate, null, null, false);
-        stmt.analyzeImpl(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(
                 "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` LIKE '%p2019%'",
                 stmt.toString());
     }
 
     @Test
-    public void testShowParitionsStmtOrderByAndLimit() throws UserException {
+    public void testShowParitionsStmtOrderByAndLimit() {
         SlotRef slotRef = new SlotRef(null, "PartitionId");
         OrderByElement orderByElement = new OrderByElement(slotRef, true, true);
         LimitElement limitElement = new LimitElement(10);
         ShowPartitionsStmt stmt =
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, Arrays.asList(orderByElement),
                         limitElement, false);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` ORDER BY `PartitionId` ASC LIMIT 10",
                 stmt.toString());
     }
 
-    @Test
-    public void testUnsupportFilter() throws UserException {
+    @Test(expected = SemanticException.class)
+    public void testUnsupportFilter() {
         SlotRef slotRef = new SlotRef(null, "DataSize");
         StringLiteral stringLiteral = new StringLiteral("3.2 GB");
         BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef, stringLiteral);
         ShowPartitionsStmt stmt =
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), binaryPredicate, null, null, false);
-        expectedEx.expect(AnalysisException.class);
-        expectedEx.expectMessage("Only the columns of PartitionId/PartitionName/" +
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.fail("Only the columns of PartitionId/PartitionName/" +
                 "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
-        stmt.analyzeImpl(analyzer);
     }
 
 }

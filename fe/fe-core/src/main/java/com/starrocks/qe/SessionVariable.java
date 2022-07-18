@@ -159,7 +159,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
-    public static final String WORKGROUP_ID = "workgroup_id";
+    public static final String RESOURCE_GROUP_ID = "workgroup_id";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -232,6 +232,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
+    public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
@@ -277,6 +278,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
+
+    @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
+    private boolean runtimeFilterOnExchangeNode = false;
 
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
@@ -435,8 +439,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
-    @VariableMgr.VarAttr(name = WORKGROUP_ID, flag = VariableMgr.INVISIBLE)
-    private int workgroupId = 0;
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, flag = VariableMgr.INVISIBLE)
+    private int resourceGroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -914,8 +918,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableSharedScan;
     }
 
-    public int getWorkGroupId() {
-        return workgroupId;
+    public int getResourceGroupId() {
+        return resourceGroupId;
     }
 
     public int getPipelineProfileLevel() {
@@ -1015,6 +1019,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
+    }
+
+    public boolean isRuntimeFilterOnExchangeNode() {
+        return runtimeFilterOnExchangeNode;
     }
 
     // Serialize to thrift object

@@ -212,6 +212,7 @@ public class ExpressionStatisticCalculator {
             double minValue = columnStatistic.getMinValue();
             double maxValue = columnStatistic.getMaxValue();
             double distinctValue = Math.min(rowCount, columnStatistic.getDistinctValuesCount());
+            final boolean minMaxValueInfinite = Double.isInfinite(minValue) || Double.isInfinite(maxValue);
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.SIGN:
                     minValue = -1;
@@ -303,12 +304,18 @@ public class ExpressionStatisticCalculator {
                     distinctValue = 60;
                     break;
                 case FunctionSet.TO_DATE:
+                    if (minMaxValueInfinite) {
+                        break;
+                    }
                     minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate()
                             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     maxValue = Utils.getDatetimeFromLong((long) maxValue).toLocalDate()
                             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     break;
                 case FunctionSet.TO_DAYS:
+                    if (minMaxValueInfinite) {
+                        break;
+                    }
                     minValue =
                             Utils.getDatetimeFromLong((long) minValue).toLocalDate().toEpochDay() + DAYS_FROM_0_TO_1970;
                     maxValue =

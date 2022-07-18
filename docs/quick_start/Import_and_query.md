@@ -34,7 +34,7 @@ The overall ecological diagram of StarRocks data import is as follows.
 
 ![starrocks_ecology](../assets/2.5-1.png)
 
-Please refer to [Data Loading](/loading/Loading_intro.md) for details on the specific import method. Here is an example of stream load using the HTTP protocol.
+Please refer to [Data Loading](../loading/Loading_intro.md) for details on the specific import method. Here is an example of stream load using the HTTP protocol.
 
 * **Example 1**: Import local file `tabel 1\_data` as `table 1`, label with `table1\_20170707`.
 * Create the data file `table1\_data` locally, use comma to separate data, as follows:

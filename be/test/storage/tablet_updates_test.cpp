@@ -1100,10 +1100,6 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
     test_compaction_score_enough_normal(false);
 }
 
-TEST_F(TabletUpdatesTest, compaction_score_enough_normal_persistent_index) {
-    test_compaction_score_enough_normal(true);
-}
-
 // NOLINTNEXTLINE
 void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;

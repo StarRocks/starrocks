@@ -59,7 +59,6 @@ import java.util.Set;
 //          [PROPERTIES("key"="value")]
 //          WITH BROKER 'broker_name' [( $broker_attrs)]
 public class ExportStmt extends StatementBase {
-    private static final Logger LOG = LogManager.getLogger(ExportStmt.class);
 
     private static final String INCLUDE_QUERY_ID_PROP = "include_query_id";
 

@@ -5,15 +5,8 @@
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
+
 class ExecEnv;
-class Status;
-} // namespace starrocks
-
-namespace starrocks {
-
-namespace lake {
-class Tablet;
-}
 
 class LakeServiceImpl : public ::starrocks::lake::LakeService {
 public:
@@ -31,6 +24,9 @@ public:
 
     void drop_tablet(::google::protobuf::RpcController* controller, const ::starrocks::lake::DropTabletRequest* request,
                      ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) override;
+
+    void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* rquest,
+                 ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
     ExecEnv* _env;

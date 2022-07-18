@@ -25,6 +25,7 @@ DIAGNOSTIC_POP
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
+#include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
@@ -76,9 +77,11 @@ private:
             if (status.ok()) {
                 return;
             }
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
-                status.to_protobuf(_response->mutable_status());
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg);
             }
         }
 

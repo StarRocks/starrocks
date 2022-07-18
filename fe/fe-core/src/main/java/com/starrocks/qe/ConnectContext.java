@@ -25,7 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -37,6 +37,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -97,8 +98,6 @@ public class ConnectContext {
     // Db
     protected String currentDb = "";
 
-    // cluster name
-    protected String clusterName = "";
     // username@host of current login user
     protected String qualifiedUser;
     // username@host combination for the StarRocks account
@@ -150,7 +149,7 @@ public class ConnectContext {
 
     protected PlannerProfile plannerProfile;
 
-    protected WorkGroup workGroup;
+    protected ResourceGroup resourceGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -422,14 +421,6 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setCluster(String clusterName) {
-        this.clusterName = clusterName;
-    }
-
     public byte[] getAuthDataSalt() {
         return authDataSalt;
     }
@@ -474,12 +465,12 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public WorkGroup getWorkGroup() {
-        return workGroup;
+    public ResourceGroup getResourceGroup() {
+        return resourceGroup;
     }
 
-    public void setWorkGroup(WorkGroup workGroup) {
-        this.workGroup = workGroup;
+    public void setResourceGroup(ResourceGroup resourceGroup) {
+        this.resourceGroup = resourceGroup;
     }
 
     public String getCurrentCatalog() {
@@ -552,7 +543,7 @@ public class ConnectContext {
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());
-            row.add(clusterName);
+            row.add(SystemInfoService.DEFAULT_CLUSTER);
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());

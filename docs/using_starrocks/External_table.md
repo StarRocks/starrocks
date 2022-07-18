@@ -336,7 +336,7 @@ The required parameters in `properties` are as follows:
 
 * `table`：the target table name in the database.
 
-For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](./External_table.md#Data type mapping).
+For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](External_table.md#Data type mapping).
 
 > Note:
 >

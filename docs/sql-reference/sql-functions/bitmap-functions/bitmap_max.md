@@ -12,7 +12,7 @@ bitmap_max(bitmap)
 
 ## Parameters
 
-`bitmap`: the bitmap whose maximum value you want to obtain. Only the BITMAP data type is supported. You can specify a bitmap that you construct by using functions such as [bitmap_from_string](/sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md).
+`bitmap`: the bitmap whose maximum value you want to obtain. Only the BITMAP data type is supported. You can specify a bitmap that you construct by using functions such as [bitmap_from_string](bitmap_from_string.md).
 
 ## Return value
 

@@ -1,0 +1,450 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+package com.starrocks.catalog;
+
+import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.thrift.TWorkGroupOp;
+import com.starrocks.thrift.TWorkGroupOpType;
+import com.starrocks.thrift.TWorkGroupType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+
+// WorkGroupMgr is employed by GlobalStateMgr to manage WorkGroup in FE.
+public class ResourceGroupMgr implements Writable {
+    private static final Logger LOG = LogManager.getLogger(ResourceGroupMgr.class);
+
+    private final GlobalStateMgr globalStateMgr;
+    private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
+    private final Map<Long, ResourceGroup> id2ResourceGroupMap = new HashMap<>();
+    private final Map<Long, ResourceGroupClassifier> classifierMap = new HashMap<>();
+    private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
+    private final Map<Long, Map<Long, TWorkGroup>> activeResourceGroupsPerBe = new HashMap<>();
+    private final Map<Long, Long> minVersionPerBe = new HashMap<>();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    public ResourceGroupMgr(GlobalStateMgr globalStateMgr) {
+        this.globalStateMgr = globalStateMgr;
+    }
+
+    private void readLock() {
+        lock.readLock().lock();
+    }
+
+    private void readUnlock() {
+        lock.readLock().unlock();
+    }
+
+    private void writeLock() {
+        lock.writeLock().lock();
+    }
+
+    private void writeUnlock() {
+        lock.writeLock().unlock();
+    }
+
+    public void createResourceGroup(CreateResourceGroupStmt stmt) throws DdlException {
+        writeLock();
+        try {
+            ResourceGroup wg = stmt.getResourceGroup();
+            if (resourceGroupMap.containsKey(wg.getName())) {
+                // create resource_group or replace <name> ...
+                if (stmt.isReplaceIfExists()) {
+                    dropResourceGroupUnlocked(wg.getName());
+                } else if (!stmt.isIfNotExists()) {
+                    throw new DdlException(String.format("RESOURCE_GROUP(%s) already exists", wg.getName()));
+                } else {
+                    return;
+                }
+            }
+            wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
+                classifier.setResourceGroupId(wg.getId());
+                classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
+                classifierMap.put(classifier.getId(), classifier);
+            }
+            resourceGroupMap.put(wg.getName(), wg);
+            id2ResourceGroupMap.put(wg.getId(), wg);
+            wg.setVersion(wg.getId());
+            ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
+            GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+            resourceGroupOps.add(workGroupOp.toThrift());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public List<List<String>> showResourceGroup(ShowResourceGroupStmt stmt) throws AnalysisException {
+        if (stmt.getName() != null && !resourceGroupMap.containsKey(stmt.getName())) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERROR_NO_WG_ERROR, stmt.getName());
+        }
+
+        List<List<String>> rows;
+        if (stmt.getName() != null) {
+            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showOneResourceGroup(stmt.getName());
+        } else {
+            rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+                    .showAllResourceGroups(ConnectContext.get(), stmt.isListAll());
+        }
+        return rows;
+    }
+
+    private String getUnqualifiedUser(ConnectContext ctx) {
+        Preconditions.checkArgument(ctx != null);
+        String qualifiedUser = ctx.getQualifiedUser();
+        //default_cluster:test
+        String[] userParts = qualifiedUser.split(":");
+        return userParts[userParts.length - 1];
+    }
+
+    private String getUnqualifiedRole(ConnectContext ctx) {
+        Preconditions.checkArgument(ctx != null);
+        String roleName = null;
+        String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
+                .getRoleName(ctx.getCurrentUserIdentity());
+        if (qualifiedRoleName != null) {
+            //default_cluster:role
+            String[] roleParts = qualifiedRoleName.split(":");
+            roleName = roleParts[roleParts.length - 1];
+        }
+        return roleName;
+    }
+
+    public List<List<String>> showAllResourceGroups(ConnectContext ctx, Boolean isListAll) {
+        readLock();
+        try {
+            List<ResourceGroup> resourceGroupList = new ArrayList<>(resourceGroupMap.values());
+            if (isListAll || ConnectContext.get() == null) {
+                resourceGroupList.sort(Comparator.comparing(ResourceGroup::getName));
+                return resourceGroupList.stream().map(ResourceGroup::show)
+                        .flatMap(Collection::stream).collect(Collectors.toList());
+            } else {
+                String user = getUnqualifiedUser(ctx);
+                String role = getUnqualifiedRole(ctx);
+                String remoteIp = ctx.getRemoteIP();
+                return resourceGroupList.stream().map(w -> w.showVisible(user, role, remoteIp))
+                        .flatMap(Collection::stream).collect(Collectors.toList());
+            }
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public List<List<String>> showOneResourceGroup(String name) {
+        readLock();
+        try {
+            if (!resourceGroupMap.containsKey(name)) {
+                return Collections.emptyList();
+            } else {
+                return resourceGroupMap.get(name).show();
+            }
+        } finally {
+            readUnlock();
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        List<ResourceGroup> resourceGroups = resourceGroupMap.values().stream().collect(Collectors.toList());
+        SerializeData data = new SerializeData();
+        data.resourceGroups = resourceGroups;
+
+        String s = GsonUtils.GSON.toJson(data);
+        Text.writeString(out, s);
+    }
+
+    public void readFields(DataInputStream dis) throws IOException {
+        String s = Text.readString(dis);
+        SerializeData data = GsonUtils.GSON.fromJson(s, SerializeData.class);
+        if (null != data && null != data.resourceGroups) {
+            data.resourceGroups.sort(Comparator.comparing(ResourceGroup::getVersion));
+            for (ResourceGroup workgroup : data.resourceGroups) {
+                replayAddResourceGroup(workgroup);
+            }
+        }
+    }
+
+    public long loadResourceGroups(DataInputStream dis, long checksum) throws IOException {
+        try {
+            readFields(dis);
+            LOG.info("finished replaying ResourceGroups from image");
+        } catch (EOFException e) {
+            LOG.info("no ResourceGroups to replay.");
+        }
+        return checksum;
+    }
+
+    public long saveResourceGroups(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
+    private void replayAddResourceGroup(ResourceGroup workgroup) {
+        addResourceGroupInternal(workgroup);
+        ResourceGroupOpEntry op = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, workgroup);
+        resourceGroupOps.add(op.toThrift());
+    }
+
+    public ResourceGroup getResourceGroup(String name) {
+        readLock();
+        try {
+            if (resourceGroupMap.containsKey(name)) {
+                return resourceGroupMap.get(name);
+            } else {
+                return null;
+            }
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public void alterResourceGroup(AlterResourceGroupStmt stmt) throws DdlException {
+        writeLock();
+        try {
+            String name = stmt.getName();
+            if (!resourceGroupMap.containsKey(name)) {
+                throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
+            }
+            ResourceGroup wg = resourceGroupMap.get(name);
+            AlterResourceGroupStmt.SubCommand cmd = stmt.getCmd();
+            if (cmd instanceof AlterResourceGroupStmt.AddClassifiers) {
+                List<ResourceGroupClassifier> newAddedClassifiers = stmt.getNewAddedClassifiers();
+                for (ResourceGroupClassifier classifier : newAddedClassifiers) {
+                    classifier.setResourceGroupId(wg.getId());
+                    classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
+                    classifierMap.put(classifier.getId(), classifier);
+                }
+                wg.getClassifiers().addAll(newAddedClassifiers);
+            } else if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
+                ResourceGroup changedProperties = stmt.getChangedProperties();
+                Integer cpuCoreLimit = changedProperties.getCpuCoreLimit();
+                if (cpuCoreLimit != null) {
+                    wg.setCpuCoreLimit(cpuCoreLimit);
+                }
+                Double memLimit = changedProperties.getMemLimit();
+                if (memLimit != null) {
+                    wg.setMemLimit(memLimit);
+                }
+
+                Long bigQueryMemLimit = changedProperties.getBigQueryMemLimit();
+                if (bigQueryMemLimit != null) {
+                    wg.setBigQueryMemLimit(bigQueryMemLimit);
+                }
+
+                Long bigQueryScanRowsLimit = changedProperties.getBigQueryScanRowsLimit();
+                if (bigQueryScanRowsLimit != null) {
+                    wg.setBigQueryScanRowsLimit(bigQueryScanRowsLimit);
+                }
+
+                Long bigQueryCpuCoreSecondLimit = changedProperties.getBigQueryCpuSecondLimit();
+                if (bigQueryCpuCoreSecondLimit != null) {
+                    wg.setBigQueryCpuSecondLimit(bigQueryCpuCoreSecondLimit);
+                }
+
+                Integer concurrentLimit = changedProperties.getConcurrencyLimit();
+                if (concurrentLimit != null) {
+                    wg.setConcurrencyLimit(concurrentLimit);
+                }
+                TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
+                if (workGroupType != null) {
+                    wg.setResourceGroupType(workGroupType);
+                }
+            } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
+                Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
+                Iterator<ResourceGroupClassifier> classifierIterator = wg.getClassifiers().iterator();
+                while (classifierIterator.hasNext()) {
+                    if (classifierToDrop.contains(classifierIterator.next().getId())) {
+                        classifierIterator.remove();
+                    }
+                }
+                for (Long classifierId : classifierToDrop) {
+                    classifierMap.remove(classifierId);
+                }
+            } else if (cmd instanceof AlterResourceGroupStmt.DropAllClassifiers) {
+                List<ResourceGroupClassifier> classifierList = wg.getClassifiers();
+                for (ResourceGroupClassifier classifier : classifierList) {
+                    classifierMap.remove(classifier.getId());
+                }
+                classifierList.clear();
+            }
+            // only when changing properties, version is required to update. because changing classifiers needs not
+            // propagate to BE.
+            if (cmd instanceof AlterResourceGroupStmt.AlterProperties) {
+                wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+            }
+            ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_ALTER, wg);
+            GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+            resourceGroupOps.add(workGroupOp.toThrift());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void dropResourceGroup(DropResourceGroupStmt stmt) throws DdlException {
+        writeLock();
+        try {
+            String name = stmt.getName();
+            if (!resourceGroupMap.containsKey(name)) {
+                throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
+            }
+            dropResourceGroupUnlocked(name);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void dropResourceGroupUnlocked(String name) {
+        ResourceGroup wg = resourceGroupMap.get(name);
+        removeResourceGroupInternal(name);
+        wg.setVersion(GlobalStateMgr.getCurrentState().getNextId());
+        ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_DELETE, wg);
+        GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
+        resourceGroupOps.add(workGroupOp.toThrift());
+    }
+
+    public void replayResourceGroupOp(ResourceGroupOpEntry entry) {
+        writeLock();
+        try {
+            ResourceGroup workgroup = entry.getResourceGroup();
+            TWorkGroupOpType opType = entry.getOpType();
+            switch (opType) {
+                case WORKGROUP_OP_CREATE:
+                    addResourceGroupInternal(workgroup);
+                    break;
+                case WORKGROUP_OP_DELETE:
+                    removeResourceGroupInternal(workgroup.getName());
+                    break;
+                case WORKGROUP_OP_ALTER:
+                    removeResourceGroupInternal(workgroup.getName());
+                    addResourceGroupInternal(workgroup);
+                    break;
+            }
+            resourceGroupOps.add(entry.toThrift());
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void removeResourceGroupInternal(String name) {
+        ResourceGroup wg = resourceGroupMap.remove(name);
+        id2ResourceGroupMap.remove(wg.getId());
+        for (ResourceGroupClassifier classifier : wg.classifiers) {
+            classifierMap.remove(classifier.getId());
+        }
+    }
+
+    private void addResourceGroupInternal(ResourceGroup wg) {
+        resourceGroupMap.put(wg.getName(), wg);
+        id2ResourceGroupMap.put(wg.getId(), wg);
+        for (ResourceGroupClassifier classifier : wg.classifiers) {
+            classifierMap.put(classifier.getId(), classifier);
+        }
+    }
+
+    public List<TWorkGroupOp> getResourceGroupsNeedToDeliver(Long beId) {
+        readLock();
+        try {
+            List<TWorkGroupOp> currentResourceGroupOps = new ArrayList<>();
+            if (!activeResourceGroupsPerBe.containsKey(beId)) {
+                currentResourceGroupOps.addAll(resourceGroupOps);
+                return currentResourceGroupOps;
+            }
+            Long minVersion = minVersionPerBe.get(beId);
+            Map<Long, TWorkGroup> activeResourceGroup = activeResourceGroupsPerBe.get(beId);
+            for (TWorkGroupOp op : resourceGroupOps) {
+                TWorkGroup twg = op.getWorkgroup();
+                if (twg.getVersion() < minVersion) {
+                    continue;
+                }
+                boolean active = activeResourceGroup.containsKey(twg.getId());
+                if ((!active && id2ResourceGroupMap.containsKey(twg.getId())) ||
+                        (active && twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion())) {
+                    currentResourceGroupOps.add(op);
+                }
+            }
+            return currentResourceGroupOps;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public void saveActiveResourceGroupsForBe(Long beId, List<TWorkGroup> workGroups) {
+        writeLock();
+        try {
+            Map<Long, TWorkGroup> workGroupOnBe = new HashMap<>();
+            Long minVersion = Long.MAX_VALUE;
+            for (TWorkGroup workgroup : workGroups) {
+                workGroupOnBe.put(workgroup.getId(), workgroup);
+                if (workgroup.getVersion() < minVersion) {
+                    minVersion = workgroup.getVersion();
+                }
+            }
+            activeResourceGroupsPerBe.put(beId, workGroupOnBe);
+            minVersionPerBe.put(beId, minVersion == Long.MAX_VALUE ? Long.MIN_VALUE : minVersion);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public ResourceGroup chooseResourceGroupByName(String wgName) {
+        readLock();
+        try {
+            return resourceGroupMap.get(wgName);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public ResourceGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
+                                             Set<Long> databases) {
+        String user = getUnqualifiedUser(ctx);
+        String role = getUnqualifiedRole(ctx);
+        String remoteIp = ctx.getRemoteIP();
+        List<ResourceGroupClassifier> classifierList = classifierMap.values().stream()
+                .filter(f -> f.isSatisfied(user, role, queryType, remoteIp, databases))
+                .sorted(Comparator.comparingDouble(ResourceGroupClassifier::weight))
+                .collect(Collectors.toList());
+        if (classifierList.isEmpty()) {
+            return null;
+        } else {
+            return id2ResourceGroupMap.get(classifierList.get(classifierList.size() - 1).getResourceGroupId());
+        }
+    }
+
+    private static class SerializeData {
+        @SerializedName("WorkGroups")
+        public List<ResourceGroup> resourceGroups;
+    }
+}

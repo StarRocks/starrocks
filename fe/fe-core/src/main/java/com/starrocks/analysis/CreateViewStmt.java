@@ -42,7 +42,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class CreateViewStmt extends BaseViewStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateViewStmt.class);
 
     private final boolean ifNotExists;
     private final String comment;

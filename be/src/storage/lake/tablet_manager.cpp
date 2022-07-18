@@ -10,6 +10,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
+#include "storage/lake/compaction_policy.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
@@ -125,6 +126,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb.set_id(req.tablet_id);
     tablet_metadata_pb.set_version(1);
     tablet_metadata_pb.set_next_rowset_id(1);
+    tablet_metadata_pb.set_cumulative_point(0);
 
     // schema
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
@@ -394,7 +396,7 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     // 1. All input rowsets must exist in |metadata->rowsets()|
     // 2. Position of the input rowsets must be adjacent.
     auto pre_input_pos = first_input_pos;
-    for (int i = 1, sz = metadata->rowsets_size(); i < sz; i++) {
+    for (int i = 1, sz = op_compaction.input_rowsets_size(); i < sz; i++) {
         input_id = op_compaction.input_rowsets(i);
         auto it = std::find_if(pre_input_pos + 1, metadata->rowsets().end(), Finder{input_id});
         if (it == metadata->rowsets().end()) {
@@ -406,9 +408,9 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
         }
     }
 
+    auto first_idx = static_cast<uint32_t>(first_input_pos - metadata->rowsets().begin());
     if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
         // Replace the first input rowset with output rowset
-        auto first_idx = static_cast<int>(first_input_pos - metadata->rowsets().begin());
         auto output_rowset = metadata->mutable_rowsets(first_idx);
         output_rowset->CopyFrom(op_compaction.output_rowset());
         output_rowset->set_id(metadata->next_rowset_id());
@@ -418,6 +420,24 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     // Erase input rowsets from metadata
     auto end_input_pos = pre_input_pos + 1;
     metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
+
+    // Set new cumulative point
+    uint32_t new_cumulative_point = 0;
+    if (first_idx >= metadata->cumulative_point()) {
+        // cumulative compaction
+        new_cumulative_point = first_idx;
+    } else {
+        // base compaction
+        new_cumulative_point = first_idx - op_compaction.input_rowsets_size();
+    }
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
+        ++new_cumulative_point;
+    }
+    if (new_cumulative_point > metadata->rowsets_size()) {
+        return Status::InternalError(fmt::format("new cumulative point: {} exceeds rowset size: {}",
+                                                 new_cumulative_point, metadata->rowsets_size()));
+    }
+    metadata->set_cumulative_point(new_cumulative_point);
     return Status::OK();
 }
 
@@ -493,14 +513,9 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
 // TODO: better input rowsets select policy.
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    ASSIGN_OR_RETURN(auto metadata, tablet.get_metadata(version));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
-    std::vector<RowsetPtr> input_rowsets;
-    input_rowsets.reserve(metadata->rowsets_size());
-    for (const auto& rowset : metadata->rowsets()) {
-        auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
-        input_rowsets.emplace_back(std::make_shared<Rowset>(tablet_ptr.get(), std::move(metadata_ptr)));
-    }
+    ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
+    ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
     return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
 }
 

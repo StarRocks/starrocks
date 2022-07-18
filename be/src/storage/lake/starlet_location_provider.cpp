@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/lake/starlet_location_provider.h"
-
 #ifdef USE_STAROS
+
+#include "storage/lake/starlet_location_provider.h"
 
 #include <fmt/format.h>
 

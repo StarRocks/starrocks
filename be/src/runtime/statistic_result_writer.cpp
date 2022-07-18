@@ -133,11 +133,10 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
     BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
-    auto& rowCounts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[5])->get_data();
-    auto& dataSizes = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[6])->get_data();
-
-    auto& countDistincts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[7])->get_data();
-    auto& nullCounts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[8])->get_data();
+    Int64Column* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    Int64Column* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    Int64Column* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
+    Int64Column* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
     BinaryColumn* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
     BinaryColumn* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
 
@@ -150,10 +149,10 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
         data_list[i].__set_dbId(dbIds[i]);
         data_list[i].__set_tableId(tableIds[i]);
         data_list[i].__set_columnName(nameColumn->get_slice(i).to_string());
-        data_list[i].__set_rowCount(rowCounts[i]);
-        data_list[i].__set_dataSize(dataSizes[i]);
-        data_list[i].__set_countDistinct(countDistincts[i]);
-        data_list[i].__set_nullCount(nullCounts[i]);
+        data_list[i].__set_rowCount(rowCounts->get(i).get_int64());
+        data_list[i].__set_dataSize(dataSizes->get(i).get_int64());
+        data_list[i].__set_countDistinct(countDistincts->get(i).get_int64());
+        data_list[i].__set_nullCount(nullCounts->get(i).get_int64());
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
         data_list[i].__set_min(minColumn->get_slice(i).to_string());
     }

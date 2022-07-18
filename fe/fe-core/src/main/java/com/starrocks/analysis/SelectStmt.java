@@ -52,7 +52,6 @@ import java.util.UUID;
  * clauses.
  */
 public class SelectStmt extends QueryStmt {
-    private static final Logger LOG = LogManager.getLogger(SelectStmt.class);
     private UUID id = UUIDUtil.genUUID();
 
     // ///////////////////////////////////////

@@ -347,6 +347,11 @@ public class Column implements Writable {
                 throw new DdlException("Cannot shorten string length");
             }
         }
+        if (getPrimitiveType().isJsonType() && other.getPrimitiveType().isCharFamily()) {
+            if (other.getStrLen() <= getPrimitiveType().getTypeSize()) {
+                throw new DdlException("JSON needs minimum length of " + getPrimitiveType().getTypeSize());
+            }
+        }
     }
 
     private boolean isSameDefaultValue(Column other) {

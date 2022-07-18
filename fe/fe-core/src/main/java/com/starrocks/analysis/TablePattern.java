@@ -44,7 +44,7 @@ public class TablePattern implements Writable {
     static {
         ALL = new TablePattern("*", "*");
         try {
-            ALL.analyze("");
+            ALL.analyze();
         } catch (AnalysisException e) {
             // will not happen
         }
@@ -78,7 +78,7 @@ public class TablePattern implements Writable {
         }
     }
 
-    public void analyze(String clusterName) throws AnalysisException {
+    public void analyze() throws AnalysisException {
         if (isAnalyzed) {
             return;
         }

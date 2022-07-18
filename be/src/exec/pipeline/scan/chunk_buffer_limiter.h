@@ -31,7 +31,7 @@ public:
     // Update the chunk memory usage statistics.
     // `added_sum_row_bytes` is the bytes of the new reading rows.
     // `added_num_rows` is the number of the new read rows.
-    virtual void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) = 0;
+    virtual void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows, size_t max_chunk_rows) {}
 
     // Pin a position in the buffer and return a token.
     // When desctructing the token, the position will be unpinned.
@@ -66,8 +66,6 @@ public:
 
 public:
     ~UnlimitedChunkBufferLimiter() override = default;
-
-    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) override {}
 
     ChunkBufferTokenPtr pin(int num_chunks) override {
         _pinned_chunks_counter.fetch_add(num_chunks);
@@ -109,7 +107,7 @@ public:
               _chunk_size(chunk_size) {}
     ~DynamicChunkBufferLimiter() override = default;
 
-    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) override;
+    void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows, size_t max_chunk_rows) override;
 
     ChunkBufferTokenPtr pin(int num_chunks) override;
 

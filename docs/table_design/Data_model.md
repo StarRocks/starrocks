@@ -98,7 +98,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
 ### What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](/loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
 > Note: When you load data into a table that uses the Duplicate Key model, you can only append data to the table. You cannot modify the existing data in the table.
 
@@ -184,7 +184,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 8;
 
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
 
-- For information about the aggregate functions that are supported by the Aggregate Key model, see [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md).
+- For information about the aggregate functions that are supported by the Aggregate Key model, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md).
 
 - When queries are run, sort key columns are filtered before the aggregation of multiple data versions, whereas metric columns are filtered after the aggregation of multiple data versions. Therefore, we recommend that you identify the columns that are frequently used as filter conditions and define these columns as the sort key. This way, data filtering can start before the aggregation of multiple data versions to improve query performance.
 
@@ -192,7 +192,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 8;
 
 ### What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](/loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
 > Note: When you load data into a table that uses the Aggregate Key model, you can only update all columns of the table. For example, when you update the preceding `example_db.aggregate_tbl` table, you must update all its columns, which are `site_id`, `date`, `city_code`, and `pv`.
 
@@ -267,7 +267,7 @@ DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 
 ### What to do next
 
-After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](/loading/Loading_intro.md).
+After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
 > - When you load data into a table that uses the Unique Key model, you can only update all columns of the table. For example, when you update the preceding `orders` table, you must update all its columns, which are `create_time`, `order_id`, `order_state`, and `total_price`.
 > - When you query data from a table that uses the Unique Key model, StarRocks needs to aggregate records of multiple data versions. In this situation, a large number of data versions decreases query performance. Therefore, we recommend that you specify a proper frequency at which data is loaded into the table to meet meet your requirements for real-time data analytics while preventing a large number of data versions. If you require minute-level data, you can specify a loading frequency of 1 minute instead of a loading frequency of 1 second.
@@ -279,7 +279,7 @@ StarRocks has started to support the Primary Key model since v1.19. When you cre
 ### Scenarios
 
 - The Primary Key model is suitable for the following scenarios in which data needs to be frequently updated in real time:
-  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key model. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key model is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](/loading/Flink-connector-starrocks.md).
+  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key model. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key model is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
   - **Join multiple streams by performing update operations on individual columns**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key model is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
 
@@ -293,13 +293,13 @@ StarRocks has started to support the Primary Key model since v1.19. When you cre
 
     As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
 
-    ![Primary index -1](/assets/3.2-1.png)
+    ![Primary index -1](../assets/3.2-1.png)
 
   - The table is a flat table that is composed of hundreds or thousands of columns. The primary key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
 
     As shown in the following figure, the table contains only a few rows, and the primary key of the table comprises only a small portion of the table.
 
-    ![Primary index -2](/assets/3.2.4-2.png)
+    ![Primary index -2](../assets/3.2.4-2.png)
 
 ### Principes
 
@@ -423,8 +423,8 @@ PROPERTIES("replication_num" = "3");
 
 - The Primary Key model does not support materialized views.
 
-- You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
 
 ### What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Data load into tables of Primary Key model](/loading/Load_to_Primary_Key_tables.md).
+You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Data load into tables of Primary Key model](../loading/Load_to_Primary_Key_tables.md).

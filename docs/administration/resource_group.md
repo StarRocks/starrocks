@@ -264,6 +264,6 @@ Metrics you can monitor regarding resource groups include:
 
 After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
 
-- [Memory management](/administration/Memory_management.md)
+- [Memory management](../administration/Memory_management.md)
 
-- [Query management](/administration/Query_management.md)
+- [Query management](../administration/Query_management.md)

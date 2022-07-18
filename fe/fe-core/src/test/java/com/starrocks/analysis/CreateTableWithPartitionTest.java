@@ -138,7 +138,7 @@ public class CreateTableWithPartitionTest {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"dynamic_partition.prefix\" = \"p_\"\n" +
                 ");";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
         Assert.assertTrue(
                 partitionDesc.toSql().contains("PARTITION p_20140101 VALUES [('2014-01-01'), ('2014-01-02'))"));

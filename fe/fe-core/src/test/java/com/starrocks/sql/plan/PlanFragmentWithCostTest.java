@@ -1041,6 +1041,29 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testToDateToDays() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+        new Expectations(ss) {
+            {
+                ss.getColumnStatistic(t0, "id_datetime");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 4, 3);
+            }
+        };
+        String sql = "select to_date(id_datetime) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 11> : to_date(8: id_datetime)");
+
+
+        sql = "select to_days(id_datetime) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:Project\n" +
+                "  |  <slot 11> : to_days(CAST(8: id_datetime AS DATE))");
+    }
+
+    @Test
     public void testMultiJoinColumnPruneShuffleColumnsAndGRF() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");

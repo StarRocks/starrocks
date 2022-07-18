@@ -23,7 +23,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class ExprId extends Id<ExprId> {
-    private static final Logger LOG = LogManager.getLogger(ExprId.class);
 
     // Construction only allowed via an IdGenerator.
     public ExprId(int id) {

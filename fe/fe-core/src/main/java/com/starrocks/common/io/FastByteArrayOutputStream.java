@@ -23,6 +23,7 @@ package com.starrocks.common.io;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * ByteArrayOutputStream implementation that doesn't synchronize methods
@@ -95,4 +96,12 @@ public class FastByteArrayOutputStream extends OutputStream {
         return new FastByteArrayInputStream(buf, size);
     }
 
+    @Override
+    public String toString() {
+        if (buf == null || size == 0) {
+            return "";
+        } else {
+            return new String(buf, 0, size, StandardCharsets.UTF_8);
+        }
+    }
 }

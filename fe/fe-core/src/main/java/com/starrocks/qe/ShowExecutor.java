@@ -76,7 +76,6 @@ import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
@@ -103,7 +102,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -125,6 +123,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -144,6 +143,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -279,8 +279,8 @@ public class ShowExecutor {
             handleShowBasicStatsMeta();
         } else if (stmt instanceof ShowHistogramStatsMetaStmt) {
             handleShowHistogramStatsMeta();
-        } else if (stmt instanceof ShowWorkGroupStmt) {
-            handleShowWorkGroup();
+        } else if (stmt instanceof ShowResourceGroupStmt) {
+            handleShowResourceGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
         } else if (stmt instanceof ShowCatalogsStmt) {
@@ -1615,10 +1615,10 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowWorkGroup() throws AnalysisException {
-        ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
-        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
+    private void handleShowResourceGroup() throws AnalysisException {
+        ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
+        resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 
     private void handleShowCatalogs() {

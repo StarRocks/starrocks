@@ -47,7 +47,6 @@ import java.util.Set;
 // syntax:
 //      SHOW LOAD [FROM db] [LIKE mask]
 public class ShowLoadStmt extends ShowStmt {
-    private static final Logger LOG = LogManager.getLogger(ShowLoadStmt.class);
 
     private String dbName;
     private Expr whereClause;

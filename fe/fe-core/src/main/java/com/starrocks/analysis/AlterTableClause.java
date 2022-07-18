@@ -32,4 +32,5 @@ public abstract class AlterTableClause extends AlterClause {
     public boolean isNeedTableStable() {
         return needTableStable;
     }
+
 }

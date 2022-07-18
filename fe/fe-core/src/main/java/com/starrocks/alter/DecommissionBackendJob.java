@@ -86,19 +86,6 @@ public class DecommissionBackendJob extends AlterJob {
         decommissionType = DecommissionType.SystemDecommission;
     }
 
-    public DecommissionBackendJob(long jobId, Map<String, Map<Long, Backend>> backendIds) {
-        super(JobType.DECOMMISSION_BACKEND, -1L, jobId, null);
-
-        clusterBackendsMap = backendIds;
-        allClusterBackendIds = Sets.newHashSet();
-        for (Map<Long, Backend> backends : clusterBackendsMap.values()) {
-            allClusterBackendIds.addAll(backends.keySet());
-        }
-
-        finishedBackendIds = Sets.newHashSet();
-        decommissionType = DecommissionType.SystemDecommission;
-    }
-
     /**
      * in Multi-Tenancy example "clusterA:1,2,3;clusterB:4,5,6"
      *
@@ -116,18 +103,6 @@ public class DecommissionBackendJob extends AlterJob {
         }
         String res = JOINER.join(clusterBackendsSet);
         return res;
-    }
-
-    public Set<Long> getBackendIds(String name) {
-        return clusterBackendsMap.get(name).keySet();
-    }
-
-    public DecommissionType getDecommissionType() {
-        return decommissionType;
-    }
-
-    public void setDecommissionType(DecommissionType decommissionType) {
-        this.decommissionType = decommissionType;
     }
 
     @Override
@@ -227,7 +202,7 @@ public class DecommissionBackendJob extends AlterJob {
                 if (decommissionType == DecommissionType.ClusterDecommission) {
                     for (String clusterName : clusterBackendsMap.keySet()) {
                         final Map<Long, Backend> idToBackend = clusterBackendsMap.get(clusterName);
-                        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
+                        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
                         List<Long> backendList = Lists.newArrayList();
                         for (long id : idToBackend.keySet()) {
                             final Backend backend = idToBackend.get(id);

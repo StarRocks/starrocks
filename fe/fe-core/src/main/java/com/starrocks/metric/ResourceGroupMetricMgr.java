@@ -5,7 +5,7 @@ package com.starrocks.metric;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Snapshot;
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import org.apache.logging.log4j.LogManager;
@@ -91,8 +91,8 @@ public class ResourceGroupMetricMgr {
         if (!sessionVariable.isEnableResourceGroup() || !sessionVariable.isEnablePipelineEngine()) {
             return null;
         }
-        WorkGroup workGroup = ctx.getWorkGroup();
-        return workGroup == null ? "default_wg" : workGroup.getName();
+        ResourceGroup resourceGroup = ctx.getResourceGroup();
+        return resourceGroup == null ? "default_wg" : resourceGroup.getName();
     }
 
     private static QueryResourceGroupLatencyMetrics createQueryResourceGroupLatencyMetrics(ConnectContext ctx) {

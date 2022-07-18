@@ -4,7 +4,6 @@ package com.starrocks.persist;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.journal.JournalEntity;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -17,9 +16,9 @@ public class ImpersonatePrivInfoTest {
     @Test
     public void testSerialized() throws Exception {
         UserIdentity harry = new UserIdentity("Harry", "%");
-        harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        harry.analyze();
         UserIdentity gregory = new UserIdentity("Gregory", "%");
-        gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        gregory.analyze();
 
         ImpersonatePrivInfo info = new ImpersonatePrivInfo(harry, gregory);
         // 1.2 dump to file

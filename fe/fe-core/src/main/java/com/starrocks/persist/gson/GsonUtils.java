@@ -76,7 +76,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTablet;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.qe.SqlModeHelper;

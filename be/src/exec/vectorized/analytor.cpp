@@ -227,14 +227,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
-    _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
-    SCOPED_TIMER(_compute_timer);
     for (const auto& ctx : _agg_expr_ctxs) {
         Expr::prepare(ctx, state);
     }
@@ -374,7 +372,8 @@ FrameRange Analytor::get_sliding_frame_range() {
 
 void Analytor::update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) {
-    SCOPED_TIMER(_compute_timer);
+    // DO NOT put timer here because this function will be used frequently,
+    // timer will cause a sharp drop in performance
     if (_has_lead_lag_function) {
         _update_window_batch_lead_lag(peer_group_start, peer_group_end, frame_start, frame_end);
     } else {
@@ -383,7 +382,8 @@ void Analytor::update_window_batch(int64_t peer_group_start, int64_t peer_group_
 }
 
 void Analytor::reset_window_state() {
-    SCOPED_TIMER(_compute_timer);
+    // DO NOT put timer here because this function will be used frequently,
+    // timer will cause a sharp drop in performance
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->reset(_agg_fn_ctxs[i], _agg_intput_columns[i],
                                  _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
@@ -391,8 +391,9 @@ void Analytor::reset_window_state() {
 }
 
 void Analytor::get_window_function_result(size_t frame_start, size_t frame_end) {
+    // DO NOT put timer here because this function will be used frequently,
+    // timer will cause a sharp drop in performance
     DCHECK_GT(frame_end, frame_start);
-    SCOPED_TIMER(_compute_timer);
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         vectorized::Column* agg_column = _result_window_columns[i].get();
         _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i],

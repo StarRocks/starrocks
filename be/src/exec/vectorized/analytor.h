@@ -94,7 +94,11 @@ public:
     size_t current_chunk_size() const;
     void update_input_rows(int64_t increment) { _input_rows += increment; }
     bool has_output() const { return _output_chunk_index < _input_chunks.size(); }
-    bool is_current_chunk_finished_eval() { return _window_result_position >= current_chunk_size(); }
+    // This method will be used frequently, so it is better to get chunk_size through "current_chunk_size"
+    // outside the method, because "current_chunk_size" contains a virtual function call which cannot be optimized out
+    bool is_current_chunk_finished_eval(const int64_t current_chunk_size) {
+        return _window_result_position >= current_chunk_size;
+    }
     int64_t window_result_position() const { return _window_result_position; }
     void set_window_result_position(int64_t window_result_position) {
         _window_result_position = window_result_position;
@@ -120,8 +124,6 @@ public:
 
     const std::vector<ExprContext*>& order_ctxs() { return _order_ctxs; }
     const vectorized::Columns& order_columns() { return _order_columns; }
-
-    RuntimeProfile::Counter* compute_timer() { return _compute_timer; }
 
     FrameRange get_sliding_frame_range();
 
@@ -177,7 +179,6 @@ private:
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
-    RuntimeProfile::Counter* _compute_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
 

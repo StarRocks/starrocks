@@ -238,4 +238,11 @@ public class AnalyzeCreateTableTest {
         String sql = "create table table1 (col1 char(10) not null) engine=olap duplicate key(col1)";
         analyzeFail(sql);
     }
+
+    @Test
+    public void testExternalTable() {
+        analyzeSuccess("create external table table1 (col1 char(10) not null) engine=olap distributed by hash(col1) buckets 10");
+        analyzeFail("create external table table1 (col1 char(10) not null) engine=olap duplicate key(col1)",
+                "Create olap table should contain distribution desc");
+    }
 }

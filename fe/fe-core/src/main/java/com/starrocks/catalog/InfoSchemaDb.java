@@ -83,7 +83,7 @@ public class InfoSchemaDb extends Database {
         return super.getTable(name.toLowerCase());
     }
 
-    public static String getFullInfoSchemaDbName(String cluster) {
+    public static String getFullInfoSchemaDbName() {
         return ClusterNamespace.getFullName(DATABASE_NAME);
     }
 

@@ -722,10 +722,6 @@ public class Analyzer {
         return globalState.context.getCurrentCatalog();
     }
 
-    public String getClusterName() {
-        return globalState.context.getClusterName();
-    }
-
     public String getQualifiedUser() {
         return globalState.context.getQualifiedUser();
     }

@@ -10,7 +10,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.lake.LakeTable;
+import com.starrocks.lake.LakeTable;
 
 import java.util.List;
 import java.util.Optional;

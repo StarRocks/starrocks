@@ -88,6 +88,12 @@ public:
     void submit_task(const TAgentTaskRequest& task);
     void submit_tasks(std::vector<TAgentTaskRequest>* task);
 
+    AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
+                                TTabletInfo* tablet_info);
+    void remove_task_info(TTaskType::type task_type, int64_t signature);
+
+    size_t num_queued_tasks() const;
+
     TaskWorkerPool(const TaskWorkerPool&) = delete;
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
 
@@ -114,7 +120,6 @@ private:
     static void* _update_tablet_meta_worker_thread_callback(void* arg_this);
 
     bool _register_task_info(TTaskType::type task_type, int64_t signature);
-    void _remove_task_info(TTaskType::type task_type, int64_t signature);
     void _spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func);
 
     using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
@@ -126,9 +131,6 @@ private:
     void _alter_tablet(TaskWorkerPool* worker_pool_this, const TAgentTaskRequest& alter_tablet_request,
                        int64_t signature, TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
 
-    AgentStatus _get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
-                                 TTabletInfo* tablet_info);
-
     AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
                           bool overwrite, std::vector<std::string>* error_msgs);
 
@@ -136,7 +138,7 @@ private:
     ExecEnv* _env;
 
     // Protect task queue
-    std::mutex _worker_thread_lock;
+    mutable std::mutex _worker_thread_lock;
     std::condition_variable* _worker_thread_condition_variable;
     std::deque<TAgentTaskRequestPtr> _tasks;
 

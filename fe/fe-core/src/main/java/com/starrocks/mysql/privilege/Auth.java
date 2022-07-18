@@ -41,7 +41,6 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.InfoSchemaDb;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -633,13 +632,13 @@ public class Auth implements Writable {
             }
 
             // other user properties
-            propertyMgr.addUserResource(userIdent.getQualifiedUser(), false /* not system user */);
+            propertyMgr.addUserResource(userIdent.getQualifiedUser()  /* not system user */);
 
             if (!userIdent.getQualifiedUser().equals(ROOT_USER) && !userIdent.getQualifiedUser().equals(ADMIN_USER)) {
                 // grant read privs to database information_schema
                 TablePattern tblPattern = new TablePattern(InfoSchemaDb.DATABASE_NAME, "*");
                 try {
-                    tblPattern.analyze(ClusterNamespace.getClusterNameFromFullName(userIdent.getQualifiedUser()));
+                    tblPattern.analyze();
                 } catch (AnalysisException e) {
                     LOG.warn("should not happen", e);
                 }

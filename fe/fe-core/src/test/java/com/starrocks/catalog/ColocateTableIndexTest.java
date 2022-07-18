@@ -35,7 +35,7 @@ public class ColocateTableIndexTest {
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         List<List<String>> infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         // group1->table1_1
@@ -51,7 +51,7 @@ public class ColocateTableIndexTest {
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
-        createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         // group1 -> table1_1, table1_2
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
@@ -71,7 +71,7 @@ public class ColocateTableIndexTest {
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group2\", \"replication_num\" = \"1\");\n";
-        createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         // group1 -> table1_1, table1_2
         // group2 -> table2_l

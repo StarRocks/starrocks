@@ -91,7 +91,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() 
             return Status::OK();
         }
 
-        auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
+        const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
         _analytor->create_agg_result_columns(chunk_size);
 
         bool is_new_partition = _analytor->is_new_partition();
@@ -102,7 +102,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() 
         (this->*_process_by_partition)(chunk_size, is_new_partition);
 
         // Chunk may contains multiply partitions, so the chunk need to be reprocessed
-        if (_analytor->is_current_chunk_finished_eval()) {
+        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
             vectorized::ChunkPtr chunk;
             RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
             _analytor->offer_chunk_to_buffer(chunk);
@@ -126,7 +126,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
         _analytor->reset_window_state();
     }
 
-    auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
+    const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
     _analytor->create_agg_result_columns(chunk_size);
 
     do {
@@ -148,7 +148,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
         if (_analytor->found_partition_end().first) {
             _analytor->reset_state_for_next_partition();
         }
-    } while (!_analytor->is_current_chunk_finished_eval());
+    } while (!_analytor->is_current_chunk_finished_eval(chunk_size));
 
     vectorized::ChunkPtr chunk;
     RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
@@ -184,7 +184,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
                                            _analytor->peer_group_start(), _analytor->peer_group_end());
         }
         while (_analytor->current_row_position() < _analytor->peer_group_end()) {
-            auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
+            const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
 
             _analytor->create_agg_result_columns(chunk_size);
 
@@ -205,7 +205,7 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
             _analytor->get_window_function_result(peer_group_start_offset, peer_group_end_offset);
             _analytor->update_current_row_position(peer_group_end_offset - peer_group_start_offset);
 
-            if (_analytor->is_current_chunk_finished_eval()) {
+            if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
                 vectorized::ChunkPtr chunk;
                 RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
                 _analytor->offer_chunk_to_buffer(chunk);
@@ -246,7 +246,7 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_frame(size_t chun
 void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_frame_materializing(
         size_t chunk_size, bool is_new_partition) {
     while (_analytor->current_row_position() < _analytor->partition_end() &&
-           !_analytor->is_current_chunk_finished_eval()) {
+           !_analytor->is_current_chunk_finished_eval(chunk_size)) {
         _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(),
                                        _analytor->current_row_position(), _analytor->current_row_position() + 1);
 
@@ -263,7 +263,7 @@ void AnalyticSinkOperator::_process_by_partition_for_unbounded_preceding_rows_fr
 void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition) {
     if (_analytor->support_cumulative_algo()) {
         while (_analytor->current_row_position() < _analytor->partition_end() &&
-               !_analytor->is_current_chunk_finished_eval()) {
+               !_analytor->is_current_chunk_finished_eval(chunk_size)) {
             _analytor->update_window_batch_removable_cumulatively();
 
             _analytor->update_window_result_position(1);
@@ -274,7 +274,7 @@ void AnalyticSinkOperator::_process_by_partition_for_sliding_frame(size_t chunk_
         }
     } else {
         while (_analytor->current_row_position() < _analytor->partition_end() &&
-               !_analytor->is_current_chunk_finished_eval()) {
+               !_analytor->is_current_chunk_finished_eval(chunk_size)) {
             _analytor->reset_window_state();
             FrameRange range = _analytor->get_sliding_frame_range();
             _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(), range.start,

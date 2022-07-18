@@ -31,7 +31,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.SystemInfoService;
 
 public class SetPassVar extends SetVar {
     private UserIdentity userIdent;
@@ -67,7 +66,7 @@ public class SetPassVar extends SetVar {
             isSelf = true;
         } else {
             try {
-                userIdent.analyze(SystemInfoService.DEFAULT_CLUSTER);
+                userIdent.analyze();
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }

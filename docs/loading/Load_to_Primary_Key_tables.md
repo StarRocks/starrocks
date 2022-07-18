@@ -137,7 +137,7 @@ If you perform both UPSERT and DELETE operations on a file, you must use the `__
 
     In the job, column `3` is specified as the `__op` column.
 
-For more information about stream load and broker load, see [Stream Load](/loading/StreamLoad.md) and [Broker Load](/loading/BrokerLoad.md).
+For more information about stream load and broker load, see [Stream Load](./StreamLoad.md) and [Broker Load](./BrokerLoad.md).
 
 ## Update data by running a routine load job
 
@@ -301,7 +301,7 @@ mysql > select * from demo_db.demo_tbl2;
 +------+------+
 ~~~
 
-For more information about routine loads, see [Routine Load](/loading/RoutineLoad.md).
+For more information about routine loads, see [Routine Load](./RoutineLoad.md).
 
 ## [Preview] Update partial data
 
@@ -345,7 +345,7 @@ Execute the following statements to update the data:
         -T demo.csv http://localhost:8030/api/demo/demo/_stream_load
     ~~~
 
-    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `"columns:id,name"` format. For more information about the parameter settings for a stream load job, see [Stream Load](/loading/StreamLoad.md).
+    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `"columns:id,name"` format. For more information about the parameter settings for a stream load job, see [Stream Load](./StreamLoad.md).
 
 - If you want to run a broker load job, execute the following statement:
 
@@ -363,7 +363,7 @@ Execute the following statements to update the data:
     );
     ~~~
 
-    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting in the `properties` class. Additionally, you must specify the columns that you want to update. For example, if you want to update two columns, `c1` and `c2`, specify the `set (id=c1, name=c2)` setting in the preceding statement. For more information about the parameter settings for a stream load job, see [Broker Load](/loading/BrokerLoad.md).
+    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting in the `properties` class. Additionally, you must specify the columns that you want to update. For example, if you want to update two columns, `c1` and `c2`, specify the `set (id=c1, name=c2)` setting in the preceding statement. For more information about the parameter settings for a stream load job, see [Broker Load](./BrokerLoad.md).
 
 - If you want to run a routine load job, execute the following statement:
 
@@ -381,8 +381,8 @@ Execute the following statements to update the data:
     );
     ~~~
 
-    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `COLUMNS (id, name)` format. For more information about the parameter settings for a stream load job, see [Routine Load](/loading/RoutineLoad.md).
+    > Note: In the preceding statement, you must specify the `-H "partial_update:true"` setting, and specify the columns that you want to update in the `COLUMNS (id, name)` format. For more information about the parameter settings for a stream load job, see [Routine Load](./RoutineLoad.md).
 
 ## References
 
-For more information about the usage of the DELETE statement in the Primary Key model, see [DELETE](/sql-reference/sql-statements/data-manipulation/DELETE.md).
+For more information about the usage of the DELETE statement in the Primary Key model, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md).

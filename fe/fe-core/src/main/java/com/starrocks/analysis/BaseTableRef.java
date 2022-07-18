@@ -27,7 +27,6 @@ import org.apache.logging.log4j.Logger;
  * BaseTableRef.
  */
 public class BaseTableRef extends TableRef {
-    private static final Logger LOG = LogManager.getLogger(BaseTableRef.class);
 
     private Table table;
 

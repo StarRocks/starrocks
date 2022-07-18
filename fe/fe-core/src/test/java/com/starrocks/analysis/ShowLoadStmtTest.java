@@ -61,10 +61,6 @@ public class ShowLoadStmtTest {
                 minTimes = 0;
                 result = "testCluster:testUser";
 
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
-
                 analyzer.getCatalog();
                 minTimes = 0;
                 result = globalStateMgr;
@@ -86,10 +82,6 @@ public class ShowLoadStmtTest {
                 analyzer.getDefaultDb();
                 minTimes = 0;
                 result = "";
-
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
             }
         };
 

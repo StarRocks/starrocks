@@ -31,13 +31,6 @@ public class ShowGrantsStmtTest {
     @Before
     public void setUp() {
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
-        new Expectations(analyzer) {
-            {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "test_cluster";
-            }
-        };
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();

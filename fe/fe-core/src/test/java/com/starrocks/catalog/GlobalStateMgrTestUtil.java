@@ -218,7 +218,6 @@ public class GlobalStateMgrTestUtil {
         // db
         Database db = new Database(dbId, testDb1);
         db.createTable(table);
-        db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         // add a es table to globalStateMgr
         try {

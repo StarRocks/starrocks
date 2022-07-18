@@ -117,6 +117,24 @@ public class ColumnTest {
     }
 
     @Test
+    public void testSchemaChangeNotAllow() throws DdlException {
+        Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.JSON), false, null, false,
+                NULL_DEFAULT_VALUE, "");
+        Column newColumn = new Column("user", ScalarType.createVarcharType(1), true, null, false,
+                NULL_DEFAULT_VALUE, "");
+        try {
+            oldColumn.checkSchemaChangeAllowed(newColumn);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("JSON needs minimum length of "));
+        }
+
+        Column largeColumn = new Column("user", ScalarType.createVarcharType(1025), true, null, false,
+                NULL_DEFAULT_VALUE, "");
+        oldColumn.checkSchemaChangeAllowed(largeColumn);
+    }
+
+    @Test
     public void testSchemaChangeAllowNormal() throws DdlException {
         Column oldColumn = new Column("user", ScalarType.createType(PrimitiveType.INT), true, null, false,
                 NULL_DEFAULT_VALUE, "");

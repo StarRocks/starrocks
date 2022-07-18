@@ -145,4 +145,38 @@ public class PropertyAnalyzerTest {
         DateLiteral dateLiteral = new DateLiteral(tomorrowTimeStr, Type.DATETIME);
         Assert.assertEquals(dateLiteral.unixTimestamp(TimeUtils.getTimeZone()), dataProperty.getCooldownTimeMs());
     }
+
+    @Test
+    public void testCoolDownTime() throws AnalysisException {
+        Map<String, String> properties1 = Maps.newHashMap();
+        properties1.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
+        DataProperty dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties1, new DataProperty(TStorageMedium.SSD));
+        // Cooldown is disabled(with maximum cooldown timestamp) by default
+        Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
+
+        Config.storage_cooldown_second = -2;
+        Map<String, String> properties2 = Maps.newHashMap();
+        properties2.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties2, new DataProperty(TStorageMedium.SSD));
+        Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
+
+        Config.storage_cooldown_second = 253402271999L;
+        Map<String, String> properties3 = Maps.newHashMap();
+        properties3.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties3, new DataProperty(TStorageMedium.SSD));
+        Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, dataProperty.getCooldownTimeMs());
+
+        Map<String, String> properties4 = Maps.newHashMap();
+        properties4.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, "SSD");
+        Config.storage_cooldown_second = 600;
+        long start = System.currentTimeMillis();
+        dataProperty =
+                PropertyAnalyzer.analyzeDataProperty(properties4, new DataProperty(TStorageMedium.SSD));
+        long end = System.currentTimeMillis();
+        Assert.assertTrue(dataProperty.getCooldownTimeMs() >= start + 600 * 1000L &&
+                dataProperty.getCooldownTimeMs() <= end + 600 * 1000L);
+    }
 }

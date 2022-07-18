@@ -26,12 +26,12 @@ import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.StarOSAgent;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -101,7 +101,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getCluster(anyString);
+                globalStateMgr.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
 

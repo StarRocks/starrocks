@@ -115,7 +115,7 @@ public class UserIdentity implements Writable {
         this.isAnalyzed = true;
     }
 
-    public void analyze(String clusterName) throws AnalysisException {
+    public void analyze() throws AnalysisException {
         if (isAnalyzed) {
             return;
         }

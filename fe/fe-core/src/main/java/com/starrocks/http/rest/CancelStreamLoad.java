@@ -30,7 +30,6 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -50,11 +49,6 @@ public class CancelStreamLoad extends RestBaseAction {
 
         if (redirectToMaster(request, response)) {
             return;
-        }
-
-        final String clusterName = ConnectContext.get().getClusterName();
-        if (Strings.isNullOrEmpty(clusterName)) {
-            throw new DdlException("No cluster selected.");
         }
 
         String dbName = request.getSingleParameter(DB_KEY);

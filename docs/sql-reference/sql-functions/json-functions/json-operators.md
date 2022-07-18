@@ -4,7 +4,7 @@ StarRocks supports the following operators: `<`, `<=`, `>`, `>=`, `=`, and `!=`.
 
 - > The operands of an operator must both be JSON values.
 
-- > If one operand of an operator is a JSON value while the other is not, the operand that is not a JSON value is converted to a JSON value during the arithmetic operation. For more information about the conversion rules, see [CAST](/sql-reference/sql-functions/json-functions/json-query-and-processing-functions/cast.md).
+- > If one operand of an operator is a JSON value while the other is not, the operand that is not a JSON value is converted to a JSON value during the arithmetic operation. For more information about the conversion rules, see [CAST](./json-query-and-processing-functions/cast.md).
 
 ## Arithmetic rules
 

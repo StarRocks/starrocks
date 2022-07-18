@@ -67,10 +67,6 @@ public class ShowFunctionsStmtTest {
                 analyzer.getCatalog();
                 minTimes = 0;
                 result = globalStateMgr;
-
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "testCluster";
             }
         };
     }

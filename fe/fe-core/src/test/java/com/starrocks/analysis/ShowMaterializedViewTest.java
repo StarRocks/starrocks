@@ -39,7 +39,6 @@ public class ShowMaterializedViewTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");

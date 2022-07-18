@@ -124,14 +124,14 @@ public class GrantStmt extends DdlStmt {
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
         if (userIdent != null) {
-            userIdent.analyze(analyzer.getClusterName());
+            userIdent.analyze();
         } else {
             FeNameFormat.checkRoleName(role, false /* can not be admin */, "Can not grant to role");
             role = ClusterNamespace.getFullName(role);
         }
 
         if (tblPattern != null) {
-            tblPattern.analyze(analyzer.getClusterName());
+            tblPattern.analyze();
         } else {
             resourcePattern.analyze();
         }

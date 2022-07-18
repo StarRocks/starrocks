@@ -44,13 +44,12 @@ public class UserPropertyMgr implements Writable {
 
     protected Map<String, UserProperty> propertyMap = Maps.newHashMap();
     public static final String ROOT_USER = "root";
-    public static final String SYSTEM_RESOURCE_USER = "system";
     private AtomicLong resourceVersion = new AtomicLong(0);
 
     public UserPropertyMgr() {
     }
 
-    public void addUserResource(String qualifiedUser, boolean isSystemUser) {
+    public void addUserResource(String qualifiedUser) {
         UserProperty property = propertyMap.get(qualifiedUser);
         if (property != null) {
             return;

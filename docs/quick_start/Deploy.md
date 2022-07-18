@@ -180,7 +180,7 @@ During the **first deployment** of the cluster, you can re-deploy the FE node af
 
 #### Deploy FE node with high availability
 
-StarRocks FE nodes support High Availability deployment. For detailed information, see [FE High Availability Deployment](/administration/Deployment.md)。
+StarRocks FE nodes support High Availability deployment. For detailed information, see [FE High Availability Deployment](../administration/Deployment.md)。
 
 #### Stop FE node
 

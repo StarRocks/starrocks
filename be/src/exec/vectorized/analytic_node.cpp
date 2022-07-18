@@ -119,7 +119,6 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
             return Status::OK();
         }
         DCHECK(_analytor->has_output());
-        SCOPED_TIMER(_analytor->compute_timer());
 
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
@@ -145,7 +144,7 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
         _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
         _analytor->update_current_row_position(_analytor->window_result_position() - frame_start);
 
-        if (_analytor->is_current_chunk_finished_eval()) {
+        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
             return _analytor->output_result_chunk(chunk);
         }
     }
@@ -160,18 +159,16 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
             return Status::OK();
         }
 
-        SCOPED_TIMER(_analytor->compute_timer());
-
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
             _analytor->reset_state_for_cur_partition();
         }
 
-        size_t chunk_size = _analytor->current_chunk_size();
+        const size_t chunk_size = _analytor->current_chunk_size();
         _analytor->create_agg_result_columns(chunk_size);
 
         while (_analytor->current_row_position() < _analytor->partition_end() &&
-               !_analytor->is_current_chunk_finished_eval()) {
+               !_analytor->is_current_chunk_finished_eval(chunk_size)) {
             if (_analytor->current_row_position() >= _analytor->peer_group_end()) {
                 // The condition `partition_start <= current_row_position < partition_end` is satisfied
                 // so `partition_end` must point at the genuine partition boundary, and found_partition_end must equals
@@ -198,7 +195,7 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
             _analytor->update_current_row_position(_analytor->window_result_position() - frame_start);
         }
 
-        if (_analytor->is_current_chunk_finished_eval()) {
+        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
             return _analytor->output_result_chunk(chunk);
         }
     }
@@ -212,18 +209,17 @@ Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* 
             *eos = true;
             return Status::OK();
         }
-        SCOPED_TIMER(_analytor->compute_timer());
 
         bool is_new_partition = _analytor->is_new_partition();
         if (is_new_partition) {
             _analytor->reset_state_for_cur_partition();
         }
 
-        size_t chunk_size = _analytor->current_chunk_size();
+        const size_t chunk_size = _analytor->current_chunk_size();
         _analytor->create_agg_result_columns(chunk_size);
 
         while (_analytor->current_row_position() < _analytor->partition_end() &&
-               !_analytor->is_current_chunk_finished_eval()) {
+               !_analytor->is_current_chunk_finished_eval(chunk_size)) {
             _analytor->reset_window_state();
             FrameRange range = _analytor->get_sliding_frame_range();
             _analytor->update_window_batch(_analytor->partition_start(), _analytor->partition_end(), range.start,
@@ -236,7 +232,7 @@ Status AnalyticNode::_get_next_for_sliding_frame(RuntimeState* state, ChunkPtr* 
             _analytor->update_current_row_position(1);
         }
 
-        if (_analytor->is_current_chunk_finished_eval()) {
+        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
             return _analytor->output_result_chunk(chunk);
         }
     }
@@ -251,14 +247,12 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
         return Status::OK();
     }
 
-    ScopedTimer<MonotonicStopWatch> compute_timer(_analytor->compute_timer());
-
     // reset state for the first partition
     if (_analytor->current_row_position() == 0) {
         _analytor->reset_window_state();
     }
 
-    auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
+    const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
     _analytor->create_agg_result_columns(chunk_size);
 
     do {
@@ -280,7 +274,7 @@ Status AnalyticNode::_get_next_for_rows_between_unbounded_preceding_and_current_
         if (_analytor->found_partition_end().first) {
             _analytor->reset_state_for_next_partition();
         }
-    } while (!_analytor->is_current_chunk_finished_eval());
+    } while (!_analytor->is_current_chunk_finished_eval(chunk_size));
 
     return _analytor->output_result_chunk(chunk);
 }
@@ -301,7 +295,6 @@ Status AnalyticNode::_fetch_next_chunk(RuntimeState* state) {
     do {
         RETURN_IF_ERROR(_children[0]->get_next(state, &child_chunk, &_analytor->input_eos()));
     } while (!_analytor->input_eos() && child_chunk->is_empty());
-    SCOPED_TIMER(_analytor->compute_timer());
     if (_analytor->input_eos()) {
         return Status::OK();
     }

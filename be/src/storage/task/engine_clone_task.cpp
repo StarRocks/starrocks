@@ -27,8 +27,10 @@
 #include <filesystem>
 #include <set>
 
+#include "agent/finish_task.h"
 #include "agent/master_info.h"
 #include "common/status.h"
+#include "engine_storage_migration_task.h"
 #include "fs/fs.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_constants.h"
@@ -39,6 +41,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "service/backend_options.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/snapshot_manager.h"
@@ -59,6 +62,77 @@ const std::string HTTP_REQUEST_PREFIX = "/api/_tablet/_download";
 const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
+
+void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorkerPool* clone_task_worker_pool) {
+    const TCloneReq& clone_req = agent_task_req->clone_req;
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    // Return result to fe
+    TStatus task_status;
+    TFinishTaskRequest finish_task_request;
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    std::vector<TTabletInfo> tablet_infos;
+    if (clone_req.__isset.is_local && clone_req.is_local) {
+        DataDir* dest_store = StorageEngine::instance()->get_store(clone_req.dest_path_hash);
+        if (dest_store == nullptr) {
+            LOG(WARNING) << "fail to get dest store. path_hash:" << clone_req.dest_path_hash;
+            status_code = TStatusCode::RUNTIME_ERROR;
+        } else {
+            EngineStorageMigrationTask engine_task(clone_req.tablet_id, clone_req.schema_hash, dest_store);
+            Status res = ExecEnv::GetInstance()->storage_engine()->execute_task(&engine_task);
+            if (!res.ok()) {
+                status_code = TStatusCode::RUNTIME_ERROR;
+                LOG(WARNING) << "storage migrate failed. status:" << res << ", signature:" << agent_task_req->signature;
+                error_msgs.emplace_back("storage migrate failed.");
+            } else {
+                LOG(INFO) << "storage migrate success. status:" << res << ", signature:" << agent_task_req->signature;
+
+                TTabletInfo tablet_info;
+                AgentStatus status = clone_task_worker_pool->get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
+                                                                             agent_task_req->signature, &tablet_info);
+                if (status != STARROCKS_SUCCESS) {
+                    LOG(WARNING) << "storage migrate success, but get tablet info failed"
+                                 << ". status:" << status << ", signature:" << agent_task_req->signature;
+                } else {
+                    tablet_infos.push_back(tablet_info);
+                }
+                finish_task_request.__set_finish_tablet_infos(tablet_infos);
+            }
+        }
+    } else {
+        EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
+                                    &error_msgs, &tablet_infos, &status);
+        Status res = ExecEnv::GetInstance()->storage_engine()->execute_task(&engine_task);
+        if (!res.ok()) {
+            status_code = TStatusCode::RUNTIME_ERROR;
+            LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
+            error_msgs.emplace_back("clone failed.");
+        } else {
+            if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
+                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+                status_code = TStatusCode::RUNTIME_ERROR;
+                LOG(WARNING) << "clone failed. signature: " << agent_task_req->signature;
+                error_msgs.emplace_back("clone failed.");
+            } else {
+                LOG(INFO) << "clone success, set tablet infos. status:" << status
+                          << ", signature:" << agent_task_req->signature;
+                finish_task_request.__set_finish_tablet_infos(tablet_infos);
+            }
+        }
+    }
+
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+    finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    clone_task_worker_pool->remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+}
 
 EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, int64_t signature,
                                  std::vector<string>* error_msgs, std::vector<TTabletInfo>* tablet_infos,

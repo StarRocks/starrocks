@@ -130,7 +130,6 @@ public class UtFrameUtils {
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() throws IOException {
         ConnectContext ctx = new ConnectContext(null);
-        ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

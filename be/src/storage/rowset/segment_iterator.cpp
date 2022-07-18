@@ -733,7 +733,6 @@ Status SegmentIterator::_read_columns(const Schema& schema, Chunk* chunk, size_t
 inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size_t n) {
     size_t read_num = 0;
     SparseRange range;
-    size_t cur_rowid = _cur_rowid;
 
     if (_cur_rowid != _range_iter.begin() || _cur_rowid == 0) {
         _cur_rowid = _range_iter.begin();
@@ -762,7 +761,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         }
     }
 
-    _cur_rowid = cur_rowid;
+    _cur_rowid = range.end();
     _opts.stats->raw_rows_read += read_num;
     chunk->check_or_die();
     return Status::OK();
