@@ -146,9 +146,9 @@ void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const vectoriz
     });
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
-    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id = " << filter_id
-              << ", filter_size = " << rf->size();
     auto& wait_list = it->second;
+    VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(local). filter_id = " << filter_id
+              << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_runtime_filter(rf);
     }
@@ -753,6 +753,7 @@ void RuntimeFilterWorker::execute() {
             if (it != _mergers.end()) {
                 _mergers.erase(it);
             }
+            _exec_env->runtime_filter_cache()->remove(ev.query_id);
             break;
         }
 
