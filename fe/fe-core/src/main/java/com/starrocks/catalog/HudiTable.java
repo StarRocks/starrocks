@@ -420,6 +420,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             if (!srType.isVarchar()) {
                 valid = false;
             }
+        } else if (srType.isDecimalOfAnyVersion()) {
+            // for decimal type, we check convertType whether is decimal, skip precision
+            if (!convertType.isDecimalOfAnyVersion()) {
+                valid = false;
+            }
         } else {
             // now, the complex types have been reduced to the simple primitive type
             // we can compare two types by two types' toSql() here
