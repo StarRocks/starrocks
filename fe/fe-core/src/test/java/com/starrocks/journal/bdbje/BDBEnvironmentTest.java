@@ -41,6 +41,10 @@ public class BDBEnvironmentTest {
         // give master time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
+        // set timeout to a really long time so that ut can pass even when IO load is very high
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
     }
 
     @After
