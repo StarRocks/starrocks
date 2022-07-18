@@ -59,7 +59,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 
 > 注意：确认恢复节点角色后，您需要基于当前 FE 节点进行恢复。我们建议您优先选择 FOLLOWER 节点进行恢复。
 
-如果恢复的节点的 role 为 FOLLOWER，请参考[基于 FOLLOWER 节点恢复](#基于-FOLLOWER-节点恢复)，如果恢复的节点的role为 OBSERVER，请参考[基于 OBSERVER 节点恢复](#基于-OBSERVER-节点恢复)。
+如果恢复的节点的 role 为 FOLLOWER，请参考[基于 FOLLOWER 节点恢复](/#基于-FOLLOWER-节点恢复)，如果恢复的节点的role为 OBSERVER，请参考[基于 OBSERVER 节点恢复](/#基于-OBSERVER-节点恢复)。
 
 ## 基于 FOLLOWER 节点恢复
 
@@ -149,7 +149,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 
     ![8-4](../assets/8-4.png)
 
-12. 确认当前新的 FOLLOWER 可以正常工作之后，跳转至第四步骤，用这个新的 FOLLOWER 的元数据，重新执行[基于 FOLLOWER 节点恢复](#基于-FOLLOWER-节点恢复)操作。以上步骤目的即为人为地制造出一个 FOLLOWER 节点的元数据，然后用该元数据重新开始故障恢复，从而避免了从 OBSERVER 恢复元数据导致的不一致的问题。
+12. 确认当前新的 FOLLOWER 可以正常工作之后，跳转至第四步骤，用这个新的 FOLLOWER 的元数据，重新执行[基于 FOLLOWER 节点恢复](/#基于-FOLLOWER-节点恢复)操作。以上步骤目的即为人为地制造出一个 FOLLOWER 节点的元数据，然后用该元数据重新开始故障恢复，从而避免了从 OBSERVER 恢复元数据导致的不一致的问题。
 
 ## 重新部署 FE 集群
 
