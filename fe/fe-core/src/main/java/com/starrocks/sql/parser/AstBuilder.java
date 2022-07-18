@@ -117,6 +117,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -271,7 +272,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -295,7 +295,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowCreateDbStmt(dbName);
     }
 
-
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
@@ -318,6 +317,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowDataStmt(null, null);
         }
+    }
+
+    @Override
+    public ParseNode visitShowDynamicPartitionStatement(StarRocksParser.ShowDynamicPartitionStatementContext context) {
+
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        return new ShowDynamicPartitionStmt(dbName == null ? null : dbName.toString());
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------

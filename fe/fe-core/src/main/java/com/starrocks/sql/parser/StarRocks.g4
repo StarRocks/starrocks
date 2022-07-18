@@ -23,6 +23,7 @@ statement
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -157,6 +158,11 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
