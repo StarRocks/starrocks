@@ -24,6 +24,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
@@ -353,6 +354,12 @@ public class Analyzer {
 
         public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
             TruncateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
+            RecoverPartitionAnalyzer.analyze(statement, context);
             return null;
         }
 
