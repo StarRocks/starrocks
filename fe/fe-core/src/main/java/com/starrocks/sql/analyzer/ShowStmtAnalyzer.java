@@ -18,6 +18,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -151,6 +152,14 @@ public class ShowStmtAnalyzer {
             String dbName = node.getDbName();
             dbName = getFullDatabaseName(dbName, context);
             node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDb(dbName);
             return null;
         }
 

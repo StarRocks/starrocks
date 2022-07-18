@@ -76,6 +76,7 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowProcStmt;
@@ -341,6 +342,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
