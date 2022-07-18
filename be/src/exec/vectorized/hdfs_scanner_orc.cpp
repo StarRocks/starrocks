@@ -213,7 +213,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
-    TupleDescriptor* min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {

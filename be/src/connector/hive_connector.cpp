@@ -82,7 +82,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
 
-    _decompose_conjunct_ctxs();
+    RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
     return Status::OK();
 }
 
@@ -145,9 +145,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
 }
 
-void HiveDataSource::_decompose_conjunct_ctxs() {
+Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     if (_conjunct_ctxs.empty()) {
-        return;
+        return Status::OK();
     }
 
     std::unordered_map<SlotId, SlotDescriptor*> slot_by_id;
@@ -155,7 +155,10 @@ void HiveDataSource::_decompose_conjunct_ctxs() {
         slot_by_id[slot->id()] = slot;
     }
 
-    for (ExprContext* ctx : _conjunct_ctxs) {
+    std::vector<ExprContext*> cloned_conjunct_ctxs;
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(_conjunct_ctxs, state, &cloned_conjunct_ctxs));
+
+    for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
         std::vector<SlotId> slot_ids;
         if (root_expr->get_slot_ids(&slot_ids) != 1) {
@@ -171,6 +174,7 @@ void HiveDataSource::_decompose_conjunct_ctxs() {
             _conjunct_ctxs_by_slot[slot_id].emplace_back(ctx);
         }
     }
+    return Status::OK();
 }
 
 void HiveDataSource::_init_counter(RuntimeState* state) {
@@ -272,6 +276,10 @@ void HiveDataSource::close(RuntimeState* state) {
     }
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
+    Expr::close(_scanner_conjunct_ctxs, state);
+    for (auto& it : _conjunct_ctxs_by_slot) {
+        Expr::close(it.second, state);
+    }
 }
 
 Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
