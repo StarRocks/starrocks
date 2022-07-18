@@ -7,9 +7,10 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
+import java.util.stream.Collectors;
 
 public class CompoundPredicateOperator extends PredicateOperator {
     private final CompoundType type;
@@ -65,6 +66,10 @@ public class CompoundPredicateOperator extends PredicateOperator {
         }
     }
 
+    private List<ScalarOperator> normalizeChildren() {
+        return getChildren().stream().sorted(Comparator.comparingInt(ScalarOperator::hashCode)).collect(Collectors.toList());
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -78,9 +83,9 @@ public class CompoundPredicateOperator extends PredicateOperator {
             return false;
         }
         if (type.equals(CompoundType.OR) || type.equals(CompoundType.AND)) {
-            Set<ScalarOperator> thisArgs = Sets.newHashSet(this.getChildren());
-            Set<ScalarOperator> thatArgs = Sets.newHashSet(that.getChildren());
-            return thisArgs.equals(thatArgs);
+            List<ScalarOperator> thisArgs = this.normalizeChildren();
+            List<ScalarOperator> thatArgs = that.normalizeChildren();
+            return Objects.equals(thisArgs, thatArgs);
         } else {
             return Objects.equals(this.getChildren(), that.getChildren());
         }
