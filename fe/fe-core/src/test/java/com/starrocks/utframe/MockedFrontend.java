@@ -244,7 +244,13 @@ public class MockedFrontend {
                 };
 
                 GlobalStateMgr.getCurrentState().initialize(args);
-                GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
+                StateChangeExecutor.getInstance().setMetaContext(
+                        GlobalStateMgr.getCurrentState().getMetaContext());
+                StateChangeExecutor.getInstance().registerStateChangeExecution(
+                    GlobalStateMgr.getCurrentState().getStateChangeExecution());
+                StateChangeExecutor.getInstance().start();
+                StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
+
                 GlobalStateMgr.getCurrentState().waitForReady();
 
                 while (true) {
