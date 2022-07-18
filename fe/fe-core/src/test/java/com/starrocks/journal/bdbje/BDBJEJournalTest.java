@@ -771,25 +771,50 @@ public class BDBJEJournalTest {
         writable.write(buffer);
 
         BDBEnvironment environment = initBDBEnv("testJournalWithPrefix");
-        BDBJEJournal journal = new BDBJEJournal(environment, "aaa_");
-        Assert.assertEquals("aaa_", journal.getPrefix());
 
-        journal.open();
-        journal.batchWriteBegin();
-        journal.batchWriteAppend(1, buffer);
-        journal.batchWriteAppend(2, buffer);
-        journal.batchWriteCommit();
+        // test journal with prefix works fine
+        {
+            BDBJEJournal journalWithPrefix = new BDBJEJournal(environment, "aaa_");
+            Assert.assertEquals("aaa_", journalWithPrefix.getPrefix());
+            journalWithPrefix.open();
+            journalWithPrefix.batchWriteBegin();
+            journalWithPrefix.batchWriteAppend(1, buffer);
+            journalWithPrefix.batchWriteAppend(2, buffer);
+            journalWithPrefix.batchWriteCommit();
 
-        journal.rollJournal(3);
-        journal.open();
-        journal.batchWriteBegin();
-        journal.batchWriteAppend(3, buffer);
-        journal.batchWriteAppend(4, buffer);
-        journal.batchWriteCommit();
+            journalWithPrefix.rollJournal(3);
+            journalWithPrefix.open();
+            journalWithPrefix.batchWriteBegin();
+            journalWithPrefix.batchWriteAppend(3, buffer);
+            journalWithPrefix.batchWriteAppend(4, buffer);
+            journalWithPrefix.batchWriteCommit();
 
-        List<Long> l = journal.getDatabaseNames();
-        Assert.assertEquals(2, l.size());
-        Assert.assertEquals((Long) 1L, l.get(0));
-        Assert.assertEquals((Long) 3L, l.get(1));
+            List<Long> l = journalWithPrefix.getDatabaseNames();
+            Assert.assertEquals(2, l.size());
+            Assert.assertEquals((Long) 1L, l.get(0));
+            Assert.assertEquals((Long) 3L, l.get(1));
+        }
+
+        // test journal without prefix works fine at the same time
+        {
+            BDBJEJournal journalWithoutPrefix = new BDBJEJournal(environment);
+            journalWithoutPrefix.open();
+            journalWithoutPrefix.batchWriteBegin();
+            journalWithoutPrefix.batchWriteAppend(1, buffer);
+            journalWithoutPrefix.batchWriteAppend(2, buffer);
+            journalWithoutPrefix.batchWriteCommit();
+
+            journalWithoutPrefix.rollJournal(3);
+            journalWithoutPrefix.open();
+            journalWithoutPrefix.batchWriteBegin();
+            journalWithoutPrefix.batchWriteAppend(3, buffer);
+            journalWithoutPrefix.batchWriteAppend(4, buffer);
+            journalWithoutPrefix.batchWriteCommit();
+
+            List<Long> l = journalWithoutPrefix.getDatabaseNames();
+            Assert.assertEquals(2, l.size());
+            Assert.assertEquals((Long) 1L, l.get(0));
+            Assert.assertEquals((Long) 3L, l.get(1));
+        }
     }
 }
