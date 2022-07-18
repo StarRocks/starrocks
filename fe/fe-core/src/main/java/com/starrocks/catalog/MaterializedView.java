@@ -27,7 +27,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -432,7 +431,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
         // analyze expression, because it converts to sql for serialize
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(Auth.ROOT_USER);

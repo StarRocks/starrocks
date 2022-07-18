@@ -74,9 +74,6 @@ public class DropFileStmt extends DdlStmt {
         if (dbName == null) {
             dbName = analyzer.getDefaultDb();
         } else {
-            if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
-            }
             dbName = ClusterNamespace.getFullName(dbName);
         }
 

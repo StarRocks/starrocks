@@ -126,7 +126,7 @@ public class CreateUserStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
-        userIdent.analyze(analyzer.getClusterName());
+        userIdent.analyze();
 
         /*
          * IDENTIFIED BY
