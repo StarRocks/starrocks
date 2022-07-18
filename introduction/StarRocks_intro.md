@@ -42,7 +42,7 @@
 
 - [数据导入概览](/loading/Loading_intro)
 - [从本地或网络导入](/loading/StreamLoad)
-- [从 Apache HDFS 或对象存储导入](/loading/BrokerLoad)
+- [从 HDFS 或对象存储导入](/loading/BrokerLoad)
 - [从 Apache Kafka® 导入](/loading/RoutineLoad)
 - [利用 Apache Spark™ 导入](/loading/SparkLoad)
 - [从 MySQL 实时导入](/loading/Flink_cdc_load)
