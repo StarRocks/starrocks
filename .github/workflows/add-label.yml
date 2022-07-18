@@ -1,4 +1,4 @@
-name: Add Labels
+name: Labels
 
 on:
   pull_request_target:
@@ -7,7 +7,7 @@ on:
       - 'conf/**'
 
 jobs:
-  add_labels:
+  add-pr-label:
     runs-on: ubuntu-latest
     steps:  
       - name: add document label
