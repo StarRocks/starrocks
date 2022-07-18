@@ -69,6 +69,7 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -295,6 +296,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowVariablesStmt(ShowVariablesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowBrokerStmt(ShowBrokerStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

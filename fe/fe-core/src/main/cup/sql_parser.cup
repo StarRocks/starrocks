@@ -2384,10 +2384,6 @@ show_param ::=
     {:
         RESULT = new ShowRestoreStmt(db, parser.where);
     :}
-    | KW_BROKER
-    {:
-        RESULT = new ShowBrokerStmt();
-    :}
     | KW_RESOURCES
     {:
         RESULT = new ShowResourcesStmt();
