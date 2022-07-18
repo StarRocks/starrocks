@@ -27,9 +27,16 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 
+import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /*
   Show routine load progress by routine load name
@@ -119,13 +126,23 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         return includeHistory;
     }
 
-    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider() {
+    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) throws AnalysisException {
+        if (null == functionalExprProvider) {
+            functionalExprProvider = new RoutineLoadFunctionalExprProvider();
+        }
+        functionalExprProvider.analyze(context, whereClause, orderElements, limitElement);
+        return functionalExprProvider;
+    }
+
+    @Deprecated
+    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider(){
         if (null == functionalExprProvider) {
             functionalExprProvider = new RoutineLoadFunctionalExprProvider();
         }
         return functionalExprProvider;
     }
 
+    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
@@ -133,6 +150,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         getFunctionalExprProvider().analyze(analyzer, whereClause, orderElements, limitElement);
     }
 
+    @Deprecated
     private void checkLabelName(Analyzer analyzer) throws AnalysisException {
         String dbName = labelName == null ? null : labelName.getDbName();
         if (Strings.isNullOrEmpty(dbName)) {
@@ -150,6 +168,37 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         return TITLE_NAMES;
     }
 
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SHOW");
+        if (includeHistory) {
+            sb.append(" ALL");
+        }
+        sb.append(" ROUTINE LOAD");
+        if (!Strings.isNullOrEmpty(labelName.getLabelName())) {
+            sb.append(" FOR ").append(labelName.toString());
+        }
+        if (whereClause != null) {
+            sb.append(" WHERE ").append(whereClause.toSql());
+        }
+        if (orderElements != null) {
+            sb.append(" ORDER BY ");
+            String order = orderElements.stream().map(e -> e.toSql()).collect(Collectors.joining(","));
+            sb.append(order);
+        }
+        if (limitElement !=null) {
+            sb.append(limitElement.toSql());
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
@@ -163,5 +212,19 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    public void setDb(String db) {
+        this.dbFullName = db;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
