@@ -3,7 +3,8 @@ name: Add Labels
 on:
   pull_request_target:
 #    types: - opened
-    paths: - 'conf/**'
+    paths: 
+      - 'conf/**'
 
 jobs:
   add_labels:
