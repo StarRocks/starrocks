@@ -1191,15 +1191,6 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                 for (size_t j = 0; j < num_rows; ++j) {
                     if (nulls[j]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
-                        std::stringstream ss;
-                        ss << "NULL value in non-nullable column '" << desc->col_name() << "'";
-#if BE_TEST
-                        LOG(INFO) << ss.str();
-#else
-                        if (!state->has_reached_max_error_msg_num()) {
-                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
-                        }
-#endif
                     }
                 }
             }

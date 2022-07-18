@@ -86,6 +86,33 @@ void FileDataSource::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
 }
 
+void FileDataSource::_validate_nullable_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    size_t num_rows = chunk->num_rows();
+
+    for (int i = 0; i < _tuple_desc->slots().size(); ++i) {
+        SlotDescriptor* desc = _tuple_desc->slots()[i];
+        const ColumnPtr& col = chunk->get_column_by_slot_id(desc->id());
+
+        if (!desc->is_nullable() && col->is_nullable()) {
+            vectorized::NullableColumn* nullable = down_cast<vectorized::NullableColumn*>(col.get());
+            // Non-nullable column shouldn't have null value,
+            // If there is null value, which means expr compute has a error.
+            if (nullable->has_null()) {
+                vectorized::NullData& nulls = nullable->null_column_data();
+                for (size_t j = 0; j < num_rows; ++j) {
+                    if (nulls[j]) {
+                        std::stringstream ss;
+                        ss << "NULL value in non-nullable column '" << desc->col_name() << "'";
+                        if (!state->has_reached_max_error_msg_num()) {
+                            state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     DCHECK(state != nullptr && chunk != nullptr);
     RETURN_IF_CANCELLED(state);
@@ -112,6 +139,10 @@ Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         _counter.num_rows_read += (*chunk)->num_rows();
         _counter.num_rows_unselected += (before - (*chunk)->num_rows());
         _counter.num_bytes_read += (*chunk)->bytes_usage();
+
+        // Validate chunk after conjuncts is evaluated.
+        // To fix https://github.com/StarRocks/starrocks/issues/8785
+        _validate_nullable_chunk(state, *chunk);
 
         // Row batch has been filled, return this
         if ((*chunk)->num_rows() > 0) {
