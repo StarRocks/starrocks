@@ -109,7 +109,7 @@ public class ShowFunctionsStmt extends ShowStmt {
             sb.append("`").append(dbName).append("` ");
         }
         if (wild != null) {
-            sb.append("LIKE ").append("`").append(wild).append("`");
+            sb.append("LIKE ").append("'").append(wild).append("'");
         }
         return sb.toString();
     }

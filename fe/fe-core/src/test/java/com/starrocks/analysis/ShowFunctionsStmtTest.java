@@ -36,11 +36,11 @@ public class ShowFunctionsStmtTest extends DDLTestBase {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
-    public void testNormal() throws UserException {
-        ShowFunctionsStmt stmt = new ShowFunctionsStmt(null, true, true, "%year%", null);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("SHOW FULL BUILTIN FUNCTIONS FROM `default_cluster:testDb1` LIKE `%year%`",
-                stmt.toString());
+    public void testNormal() throws Exception {
+        String originSql = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(originSql, ctx);
+        Assert.assertEquals(originSql, stmt.toSql());
+
     }
 
     @Test

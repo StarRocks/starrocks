@@ -449,6 +449,7 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV, Privilege.SELECT_PRIV), true);
         PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
 
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         sql = "create view db1.v as select * from db1.tbl1";
         StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
