@@ -419,6 +419,7 @@ alterClause
     | dropPartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
+    | modifyPartitionClause
     ;
 
 addPartitionClause
@@ -480,6 +481,10 @@ addComputeNodeClause
 dropComputeNodeClause
    : DROP COMPUTE NODE string (',' string)*
    ;
+
+modifyPartitionClause
+    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
