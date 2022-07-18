@@ -44,7 +44,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -371,7 +370,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
 
         // Create a backup job
         BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(),
-                ClusterNamespace.getNameFromFullName(db.getFullName()),
+                db.getOriginName(),
                 tblRefs, stmt.getTimeoutMs(),
                 globalStateMgr, repository.getId());
         // write log

@@ -398,7 +398,7 @@ public class DatabaseTransactionMgr {
         }
 
         Span txnSpan = transactionState.getTxnSpan();
-        txnSpan.setAttribute("db", db.getFullName());
+        txnSpan.setAttribute("db", db.getOriginName());
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 

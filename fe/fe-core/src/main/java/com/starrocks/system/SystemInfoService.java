@@ -335,8 +335,8 @@ public class SystemInfoService {
                                                 " please change the replication_num of [%s.%s] to three." +
                                                 " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
                                                 " can be used to forcibly drop the backend. ",
-                                        db.getFullName(), table.getName(), droppedBackend.getHost(),
-                                        droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
+                                        db.getOriginName(), table.getName(), droppedBackend.getHost(),
+                                        droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
 
                                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                                         .forEach(rollupIdx -> {
