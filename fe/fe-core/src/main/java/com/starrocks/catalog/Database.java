@@ -193,6 +193,10 @@ public class Database extends MetaObject implements Writable {
         return id;
     }
 
+    public String getOriginName() {
+        return ClusterNamespace.getNameFromFullName(fullQualifiedName);
+    }
+
     public String getFullName() {
         return fullQualifiedName;
     }
@@ -406,7 +410,7 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(),
                 table.getId());
         return batchTaskMap;
     }

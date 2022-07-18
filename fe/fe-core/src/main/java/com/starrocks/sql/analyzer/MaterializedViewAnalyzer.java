@@ -110,7 +110,7 @@ public class MaterializedViewAnalyzer {
                 if (db.getTable(table.getId()) == null) {
                     throw new SemanticException(
                             "Materialized view do not support table: " + table.getName() +
-                                    " do not exist in database: " + db.getFullName());
+                                    " do not exist in database: " + db.getOriginName());
                 }
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException(
