@@ -1644,4 +1644,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String jaeger_grpc_endpoint = "";
+
+    @ConfField
+    public static long experimental_lake_compaction_max_version_count = 10;
+
+    @ConfField
+    public static long experimental_lake_compaction_min_version_count = 3;
+
+    @ConfField
+    public static long experimental_lake_compaction_max_interval_seconds = 300;
 }

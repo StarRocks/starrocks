@@ -164,6 +164,8 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.compaction.CompactionDispatchDaemon;
+import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -413,6 +415,11 @@ public class GlobalStateMgr {
 
     private StateChangeExecution execution;
 
+    // For LakeTable
+    private CompactionManager compactionManager;
+    // For LakeTable
+    private CompactionDispatchDaemon compactionDispatchDaemon;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -469,6 +476,10 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getLocalMetastore() {
         return localMetastore;
+    }
+
+    public CompactionManager getCompactionManager() {
+        return compactionManager;
     }
 
     private static class SingletonHolder {
@@ -585,6 +596,10 @@ public class GlobalStateMgr {
                 gsm.transferToNonLeader(newType);
             }
         };
+        if (Config.use_staros) {
+            this.compactionManager = new CompactionManager();
+            this.compactionDispatchDaemon = new CompactionDispatchDaemon();
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -1040,7 +1055,11 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        shardManager.getShardDeleter().start();
+
+        if (Config.use_staros) {
+            shardManager.getShardDeleter().start();
+            compactionDispatchDaemon.start();
+        }
     }
 
     // start threads that should running on all FE
