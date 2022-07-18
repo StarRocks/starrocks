@@ -1247,7 +1247,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
-            throw new DdlException(e.getMessage());
+            throw e;
         }
     }
 

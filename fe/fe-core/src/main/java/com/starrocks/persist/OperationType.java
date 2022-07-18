@@ -248,6 +248,7 @@ public class OperationType {
     public static final short OP_ADD_UNUSED_SHARD = 10221;
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
 
-    // new operator for add partition 10321 ~ 10340
-    public static final short OP_ADD_PARTITION_V2 = 10321;
+    // new operator for add partition 10241 ~ 10260
+    // only used in list partition currently
+    public static final short OP_ADD_PARTITION_V2 = 10241;
 }

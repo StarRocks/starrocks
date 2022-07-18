@@ -162,20 +162,23 @@ public class ListPartitionInfo extends PartitionInfo {
      */
     public static PartitionInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        ListPartitionInfo partitionInfo = GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
+        return GsonUtils.GSON.fromJson(json, ListPartitionInfo.class);
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
         try {
-            Map<Long, List<String>> idToValuesMap = partitionInfo.getIdToValues();
+            Map<Long, List<String>> idToValuesMap = this.getIdToValues();
             for (Map.Entry<Long, List<String>> entry : idToValuesMap.entrySet()) {
-                partitionInfo.setLiteralExprValues(entry.getKey(), entry.getValue());
+                this.setLiteralExprValues(entry.getKey(), entry.getValue());
             }
-            Map<Long, List<List<String>>> idToMultiValuesMap = partitionInfo.getIdToMultiValues();
+            Map<Long, List<List<String>>> idToMultiValuesMap = this.getIdToMultiValues();
             for (Map.Entry<Long, List<List<String>>> entry : idToMultiValuesMap.entrySet()) {
-                partitionInfo.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
+                this.setMultiLiteralExprValues(entry.getKey(), entry.getValue());
             }
         } catch (AnalysisException e) {
             LOG.error("deserialize PartitionInfo error", e);
         }
-        return partitionInfo;
     }
 
     @Override
