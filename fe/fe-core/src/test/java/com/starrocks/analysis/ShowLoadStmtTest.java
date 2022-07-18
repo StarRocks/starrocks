@@ -22,9 +22,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.analysis.BinaryPredicate.Operator;
+import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
@@ -32,10 +34,21 @@ import org.junit.Test;
 
 public class ShowLoadStmtTest {
     private Analyzer analyzer;
+    private GlobalStateMgr globalStateMgr;
+
+    private SystemInfoService systemInfoService;
+
+    FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Before
     public void setUp() {
-        UtFrameUtils.createMinStarRocksCluster();
+        fakeGlobalStateMgr = new FakeGlobalStateMgr();
+
+        systemInfoService = AccessTestUtil.fetchSystemInfoService();
+        FakeGlobalStateMgr.setSystemInfo(systemInfoService);
+
+        globalStateMgr = AccessTestUtil.fetchAdminCatalog();
+        FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
 
         analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         new Expectations(analyzer) {
@@ -47,6 +60,10 @@ public class ShowLoadStmtTest {
                 analyzer.getQualifiedUser();
                 minTimes = 0;
                 result = "testCluster:testUser";
+
+                analyzer.getCatalog();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
     }
