@@ -2,23 +2,23 @@
 
 ## 功能
 
-用于计算一段时间内的用户留存情况。该函数接收一组条件，从第一个条件开始判断事件是否满足条件，如果条件满足则输出1， 不满足则输出0，最终返回0和1的数组。通过统计结果为1的数据，计算用户留存率。
+用于计算一段时间内的用户留存情况。该函数接收1到31个条件，从第一个条件开始判断事件是否满足条件，如果条件满足则输出1，不满足则输出0，最终返回0和1的数组。通过统计结果为1的数据，计算用户留存率。
 
 ## 语法
 
 ```Haskell
-retention([cond1, cond2, ..., cond31])
+retention(array)
 ```
 
 ## 参数说明
 
-`cond`：条件表达式，最多支持传入31个条件。
+`array`：一系列条件表达式组成的数组，类型为 ARRAY。数组内最多支持传入31个条件，多个条件用逗号隔开。
 
 ## 返回值说明
 
-返回包含0和1的数组。数组里0和1的个数，与传入的条件数一致。
+返回包含0和1的数组。数组里0和1的个数与传入的条件数一致。
 
-从第一个条件`cond1`开始依次判断：
+从数组里第一个条件开始依次判断：
 
 - 如果事件满足当前条件，则输出1。
 
@@ -28,7 +28,7 @@ retention([cond1, cond2, ..., cond31])
 
 1. 创建表`test`并插入数据。
 
-    ```Plain Text
+    ```SQL
     CREATE TABLE test(
         id TINYINT,
         action STRING,
@@ -51,7 +51,7 @@ retention([cond1, cond2, ..., cond31])
     (5,'buy','2022-01-02 20:00:50');
     ```
 
-2. 查询`test`表数据。
+2. 查询`test`表中数据。
 
     ```Plain Text
     MySQL > select * from test order by id;
@@ -76,8 +76,13 @@ retention([cond1, cond2, ..., cond31])
 
     示例一：计算2022年1月1日浏览过商品页（action='pv'），并且在2022年1月2日下单（action='buy'）的情况。
 
-    ```SQL
-    MySQL > select id, retention([action='pv' and to_date(time)='2022-01-01', action='buy' and to_date(time)='2022-01-02']) as retention from test group by id order by id;
+    ```Plain Text
+    MySQL > select id, retention([action='pv' and to_date(time)='2022-01-01',
+                                  action='buy' and to_date(time)='2022-01-02']) as retention 
+    from test 
+    group by id
+    order by id;
+    
     +------+-----------+
     | id   | retention |
     +------+-----------+
@@ -102,8 +107,14 @@ retention([cond1, cond2, ..., cond31])
 
     示例二：计算2022年1月1日浏览过商品页（action='pv'），并且在2022年1月2日下单（action='buy'）的用户比例。
 
-    ```undefined
-    MySQL > select sum(r[1]),sum(r[2])/sum(r[1]) from (select id, retention([action='pv' and to_date(time)='2022-01-01', action='buy' and to_date(time)='2022-01-02']) as r from test group by id order by id) t;
+    ```Plain Text
+    MySQL > select sum(r[1]),sum(r[2])/sum(r[1])
+    from (select id, retention([action='pv' and to_date(time)='2022-01-01',
+                                action='buy' and to_date(time)='2022-01-02']) as r 
+    from test 
+    group by id 
+    order by id) t;
+    
     +-----------+---------------------------+
     | sum(r[1]) | (sum(r[2])) / (sum(r[1])) |
     +-----------+---------------------------+
