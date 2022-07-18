@@ -126,6 +126,9 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    //  Backup Store Satement
+    | restoreStatement                                                                       #restore
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -789,6 +792,14 @@ showProcStatement
     : SHOW PROC path=string
     ;
 
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+restoreStatement
+    : RESTORE SNAPSHOT qualifiedName
+    FROM identifier
+    ON '(' restoreTableDesc (',' restoreTableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -989,6 +1000,10 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+restoreTableDesc
+    : qualifiedName partitionNames? (AS identifier)?
+    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?

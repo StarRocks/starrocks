@@ -26,6 +26,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
@@ -404,6 +405,12 @@ public class Analyzer {
         @Override
         public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStmt(RestoreStmt statement, ConnectContext context) {
+            RestoreStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }
