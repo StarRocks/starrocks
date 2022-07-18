@@ -422,16 +422,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -455,16 +450,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -488,16 +478,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -671,16 +656,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
@@ -904,18 +884,12 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
             param->min_max_conjunct_ctxs.push_back(ctx);
         }
 
-        for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-            ctx->prepare(_runtime_state);
-            ctx->open(_runtime_state);
-        }
+        Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+        Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
         EXPECT_TRUE(status.ok());
-
-        for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-            ctx->close(_runtime_state);
-        }
 
         scanner->disable_use_orc_sargs();
         status = scanner->open(_runtime_state);
@@ -1131,16 +1105,12 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
 
     param->min_max_tuple_desc = min_max_tuple_desc;
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
+
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(!status.ok());
     scanner->close(_runtime_state);
