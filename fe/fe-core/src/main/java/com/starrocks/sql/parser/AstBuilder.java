@@ -2280,6 +2280,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new RestoreStmt(labelName, repoName, tblRefs, properties);
     }
 
+    @Override
+    public ParseNode visitRestoreStatement(StarRocksParser.RestoreStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        LabelName labelName = qualifiedNameToLabelName(qualifiedName);
+        StarRocksParser.IdentifierContext repo = context.identifier();
+
+        List<TableRef> tblRefs = new ArrayList<>();
+        for (StarRocksParser.RestoreTableDescContext tableDescContext : context.restoreTableDesc()) {
+            StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
+            qualifiedName = getQualifiedName(qualifiedNameContext);
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (tableDescContext.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+            }
+            StarRocksParser.IdentifierContext alias = tableDescContext.identifier();
+            TableRef tableRef =
+                    new TableRef(tableName, Optional.ofNullable(alias).map(RuleContext::getText).orElse(null),
+                            partitionNames);
+            tblRefs.add(tableRef);
+        }
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        String repoName = repo.getText();
+        if (repoName != null && repoName.startsWith("`") && repoName.endsWith("`")) {
+            repoName = repoName.substring(1, repoName.length() - 1);
+        }
+        return new RestoreStmt(labelName, repoName, tblRefs, properties);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -3433,6 +3470,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcStatement(StarRocksParser.ShowProcStatementContext context) {
         StringLiteral stringLiteral = (StringLiteral) visit(context.path);
         return new ShowProcStmt(stringLiteral.getValue());
+    }
+
+    private LabelName qualifiedNameToLabelName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 2) {
+            return new LabelName(parts.get(0), parts.get(1));
+        } else if (parts.size() == 2) {
+            return new LabelName(null, parts.get(0));
+        } else {
+            throw new ParsingException("error table name ");
+        }
     }
 
     private LabelName qualifiedNameToLabelName(QualifiedName qualifiedName) {
