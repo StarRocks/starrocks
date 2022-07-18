@@ -10,6 +10,8 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 public class StateChangeExecutor extends Daemon {
@@ -17,6 +19,7 @@ public class StateChangeExecutor extends Daemon {
     private static final Logger LOG = LogManager.getLogger(StateChangeExecutor.class);
 
     private BlockingQueue<FrontendNodeType> typeTransferQueue;
+    private List<StateChangeExecution> executions;
 
     private static class SingletonHolder {
         private static final StateChangeExecutor INSTANCE = new StateChangeExecutor();
@@ -29,6 +32,11 @@ public class StateChangeExecutor extends Daemon {
     public StateChangeExecutor() {
         super("stateChangeExecutor", STATE_CHANGE_CHECK_INTERVAL_MS);
         typeTransferQueue = Queues.newLinkedBlockingDeque();
+        executions = new ArrayList<>();
+    }
+
+    public void registerStateChangeExecution(StateChangeExecution execution) {
+        executions.add(execution);
     }
 
     public void notifyNewFETypeTransfer(FrontendNodeType newType) {
@@ -72,12 +80,16 @@ public class StateChangeExecutor extends Daemon {
                 case INIT: {
                     switch (newType) {
                         case MASTER: {
-                            GlobalStateMgr.getCurrentState().transferToMaster(feType);
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToMaster(newType);
+                            }
                             break;
                         }
                         case FOLLOWER:
                         case OBSERVER: {
-                            GlobalStateMgr.getCurrentState().transferToNonMaster(newType);
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToNonMaster(newType);
+                            }
                             break;
                         }
                         case UNKNOWN:
@@ -90,12 +102,16 @@ public class StateChangeExecutor extends Daemon {
                 case UNKNOWN: {
                     switch (newType) {
                         case MASTER: {
-                            GlobalStateMgr.getCurrentState().transferToMaster(feType);
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToMaster(newType);
+                            }
                             break;
                         }
                         case FOLLOWER:
                         case OBSERVER: {
-                            GlobalStateMgr.getCurrentState().transferToNonMaster(newType);
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToNonMaster(newType);
+                            }
                             break;
                         }
                         default:
@@ -106,11 +122,15 @@ public class StateChangeExecutor extends Daemon {
                 case FOLLOWER: {
                     switch (newType) {
                         case MASTER: {
-                            GlobalStateMgr.getCurrentState().transferToMaster(feType);
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToMaster(newType);
+                            }
                             break;
                         }
                         case UNKNOWN: {
-                            GlobalStateMgr.getCurrentState().transferToNonMaster(newType);
+                            for (StateChangeExecution execution : executions) {
+                                execution.transferToNonMaster(newType);
+                            }
                             break;
                         }
                         default:
@@ -120,7 +140,9 @@ public class StateChangeExecutor extends Daemon {
                 }
                 case OBSERVER: {
                     if (newType == FrontendNodeType.UNKNOWN) {
-                        GlobalStateMgr.getCurrentState().transferToNonMaster(newType);
+                        for (StateChangeExecution execution : executions) {
+                            execution.transferToNonMaster(newType);
+                        }
                     }
                     break;
                 }

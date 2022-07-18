@@ -153,6 +153,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.ha.StateChangeExecutor;
+import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -830,9 +831,6 @@ public class GlobalStateMgr {
 
         // 6. start task cleaner thread
         createTaskCleaner();
-
-        // 7. set meta context to state change executor
-        StateChangeExecutor.getInstance().setMetaContext(metaContext);
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -873,7 +871,8 @@ public class GlobalStateMgr {
         }
     }
 
-    public void transferToLeader(FrontendNodeType oldType) {
+    public void transferToLeader(FrontendNodeType newType) {
+        FrontendNodeType oldType = feType;
         // stop replayer
         if (replayer != null) {
             replayer.exit();
@@ -3077,5 +3076,24 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("task manager clean expire task runs history failed", t);
         }
+    }
+
+    public StateChangeExecution getStateChangeExecution() {
+        StateChangeExecution execution = new StateChangeExecution() {
+            @Override
+            public void transferToMaster(FrontendNodeType newType) {
+                transferToMaster(newType);
+            }
+
+            @Override
+            public void transferToNonMaster(FrontendNodeType newType) {
+                transferToNonMaster(newType);
+            }
+        };
+        return execution;
+    }
+
+    public MetaContext getMetaContext() {
+        return metaContext;
     }
 }

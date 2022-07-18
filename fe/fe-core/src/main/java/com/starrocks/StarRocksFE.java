@@ -112,6 +112,12 @@ public class StarRocksFE {
             // init globalStateMgr
             GlobalStateMgr.getCurrentState().initialize(args);
 
+            StateChangeExecutor.getInstance().setMetaContext(
+                    GlobalStateMgr.getCurrentState().getMetaContext());
+
+            StateChangeExecutor.getInstance().registerStateChangeExecution(
+                    GlobalStateMgr.getCurrentState().getStateChangeExecution());
+            // start state change executor
             StateChangeExecutor.getInstance().start();
 
             // wait globalStateMgr to be ready
