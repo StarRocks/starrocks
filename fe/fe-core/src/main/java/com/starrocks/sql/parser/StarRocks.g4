@@ -76,6 +76,9 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    //Routine Statement
+    | showRoutineLoadStatement                                                              #showRoutineLoad
+
     // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
@@ -566,6 +569,13 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+showRoutineLoadStatement
+    : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Analyze Statement -------------------------------------------------------

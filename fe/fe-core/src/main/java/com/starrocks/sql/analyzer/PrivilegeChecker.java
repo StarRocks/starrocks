@@ -41,6 +41,7 @@ import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;

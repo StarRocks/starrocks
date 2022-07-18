@@ -94,6 +94,7 @@ import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -356,6 +357,10 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

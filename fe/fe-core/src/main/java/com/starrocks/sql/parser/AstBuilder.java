@@ -147,6 +147,7 @@ import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -1411,6 +1412,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
         return ret;
+    }
+    // ------------------------------------------- Routine Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitShowRoutineLoadStatement(StarRocksParser.ShowRoutineLoadStatementContext context) {
+        boolean isVerbose = context.ALL() != null;
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowRoutineLoadStmt(new LabelName(database, name), isVerbose, where, orderByElements, limitElement);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
