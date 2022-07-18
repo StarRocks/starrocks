@@ -21,6 +21,8 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -54,8 +56,14 @@ public class ShowOpenTableStmtTest {
 
     @Test
     public void testNormal() throws Exception {
-        ShowOpenTableStmt stmt = new ShowOpenTableStmt();
-        stmt.analyze(analyzer);
+        ShowOpenTableStmt stmt = (ShowOpenTableStmt) UtFrameUtils.parseStmtWithNewParser("SHOW OPEN TABLES", ctx);
         Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
+        ShowResultSetMetaData metaData = stmt.getMetaData();
+        Assert.assertNotNull(metaData);
+        Assert.assertEquals(4, metaData.getColumnCount());
+        Assert.assertEquals("Database", metaData.getColumn(0).getName());
+        Assert.assertEquals("Table", metaData.getColumn(1).getName());
+        Assert.assertEquals("In_use", metaData.getColumn(2).getName());
+        Assert.assertEquals("Name_locked", metaData.getColumn(3).getName());
     }
 }
