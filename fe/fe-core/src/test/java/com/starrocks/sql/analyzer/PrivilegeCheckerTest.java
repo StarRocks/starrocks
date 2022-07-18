@@ -983,7 +983,7 @@ public class PrivilegeCheckerTest {
     public void testShowPartitions() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
