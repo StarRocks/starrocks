@@ -30,13 +30,6 @@ public class LabelNameTest {
 
     @Before
     public void setUp() {
-        new Expectations() {
-            {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "default_cluster";
-            }
-        };
     }
 
     @Test

@@ -31,7 +31,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,8 +59,6 @@ public class MysqlProto {
         // check cluster, user name may contains cluster name or cluster id.
         // eg:
         // user_name@cluster_name
-        String clusterName = SystemInfoService.DEFAULT_CLUSTER;
-        context.setCluster(clusterName);
 
         String qualifiedUser = ClusterNamespace.getFullName(tmpUser);
         String remoteIp = context.getMysqlChannel().getRemoteIp();
@@ -220,7 +217,6 @@ public class MysqlProto {
         // save previous user login info
         UserIdentity priviousUserIdentity = context.getCurrentUserIdentity();
         String priviousQualifiedUser = context.getQualifiedUser();
-        String priviousClusterName = context.getClusterName();
         String priviousResourceGroup = context.getSessionVariable().getResourceGroup();
         // do authenticate again
         if (!authenticate(context, changeUserPacket.getAuthResponse(), context.getAuthDataSalt(),
@@ -231,7 +227,6 @@ public class MysqlProto {
             // reconstruct serializer with context capability
             context.getSerializer().setCapability(context.getCapability());
             // recover from privious user login info
-            context.setCluster(priviousClusterName);
             context.getSessionVariable().setResourceGroup(priviousResourceGroup);
             return false;
         }
@@ -247,7 +242,6 @@ public class MysqlProto {
                 // reconstruct serializer with context capability
                 context.getSerializer().setCapability(context.getCapability());
                 // recover from privious user login info
-                context.setCluster(priviousClusterName);
                 context.getSessionVariable().setResourceGroup(priviousResourceGroup);
                 context.setCurrentUserIdentity(priviousUserIdentity);
                 context.setQualifiedUser(priviousQualifiedUser);
