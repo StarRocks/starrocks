@@ -32,6 +32,7 @@
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/result_sink.h"
 #include "util/pretty_printer.h"
+#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {
@@ -84,6 +85,10 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
 }
 
 /// FragmentExecutor.
+FragmentExecutor::FragmentExecutor() {
+    _fragment_start_time = MonotonicNanos();
+}
+
 Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
@@ -492,6 +497,11 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
     prepare_success = true;
+
+    if (_wg) {
+        int64_t elapsed = MonotonicNanos() - _fragment_start_time;
+        _wg->increment_real_runtime_ns(elapsed);
+    }
 
     auto* executor =
             _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
