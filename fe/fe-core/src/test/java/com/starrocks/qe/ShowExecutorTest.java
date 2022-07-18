@@ -503,7 +503,7 @@ public class ShowExecutorTest {
         Assert.fail("No Exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testShowCreateTableEmptyTbl() throws AnalysisException, DdlException {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("default_cluster:testDb", "emptyTable"),
                 ShowCreateTableStmt.CreateTableType.TABLE);

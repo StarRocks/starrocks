@@ -74,9 +74,6 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
-import com.starrocks.utframe.MockedFrontend.FeStartException;
-import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.File;
@@ -204,8 +201,7 @@ public class UtFrameUtils {
         return statementBases;
     }
 
-    private static void startFEServer(String runningDir, boolean startBDB) throws EnvVarNotSetException, IOException,
-            FeStartException, NotInitException {
+    private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
