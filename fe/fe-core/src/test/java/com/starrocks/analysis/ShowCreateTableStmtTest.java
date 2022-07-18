@@ -34,7 +34,6 @@ public class ShowCreateTableStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
         ShowCreateTableStmt stmt =
                 new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);

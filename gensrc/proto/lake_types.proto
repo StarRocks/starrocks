@@ -34,6 +34,8 @@ message TabletMetadataPB {
     repeated RowsetMetadataPB rowsets = 5;
     optional PrimaryIndexMetadataPB primary_index = 6;
     optional uint32 next_rowset_id = 7;
+    // cumulative point rowset index
+    optional uint32 cumulative_point = 8;
 }
 
 message TxnLogPB {

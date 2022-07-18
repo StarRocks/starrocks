@@ -12,7 +12,6 @@ import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
-import com.starrocks.analysis.AlterWorkGroupStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
@@ -23,6 +22,7 @@ import com.starrocks.analysis.BackendClause;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
@@ -35,7 +35,6 @@ import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
-import com.starrocks.analysis.CreateWorkGroupStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
@@ -45,7 +44,6 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.DropWorkGroupStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FrontendClause;
@@ -62,6 +60,8 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
+import com.starrocks.analysis.ModifyPartitionClause;
+import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RecoverDbStmt;
@@ -77,14 +77,15 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowOpenTableStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
@@ -92,6 +93,7 @@ import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 
 public abstract class AstVisitor<R, C> {
@@ -125,11 +127,15 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCancelAlterTableStatement(CancelAlterTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitAlterViewStatement(AlterViewStmt statement, C context) {
         return visitBaseViewStatement(statement, context);
     }
 
-    public R visitAlterWorkGroupStatement(AlterWorkGroupStmt statement, C context) {
+    public R visitAlterResourceGroupStatement(AlterResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -218,11 +224,11 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitCreateWorkGroupStatement(CreateWorkGroupStmt statement, C context) {
+    public R visitCreateResourceGroupStatement(CreateResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitDropWorkGroupStatement(DropWorkGroupStmt statement, C context) {
+    public R visitDropResourceGroupStatement(DropResourceGroupStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -254,6 +260,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitShowTabletStmt(ShowTabletStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowCreateTableStmt(ShowCreateTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -270,15 +280,15 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitTruncateTableStatement(TruncateTableStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
     public R visitShowDatabasesStmt(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
-    public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitShowWorkGroupStmt(ShowWorkGroupStmt statement, C context) {
+    public R visitShowResourceGroupStmt(ShowResourceGroupStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 
@@ -353,6 +363,14 @@ public abstract class AstVisitor<R, C> {
 
     public R visitKillStatement(KillStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitShowPartitionsStmt(ShowPartitionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+    
+    public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
@@ -437,7 +455,15 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     public R visitDropPartitionClause(DropPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 

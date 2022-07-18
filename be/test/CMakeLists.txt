@@ -155,6 +155,7 @@ set(EXEC_FILES
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
+        ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
