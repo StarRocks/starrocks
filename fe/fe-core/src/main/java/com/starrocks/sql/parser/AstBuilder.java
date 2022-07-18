@@ -121,6 +121,7 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -853,6 +854,29 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return ModifyPartitionClause.createStarClause(properties);
         }
         return null;
+    }
+
+    @Override
+    public ParseNode visitShowPartitionsStatement(StarRocksParser.ShowPartitionsStatementContext context) {
+        boolean temp = context.TEMPORARY() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.ORDER() != null) {
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
