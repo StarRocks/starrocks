@@ -129,6 +129,9 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    // Backup Store Satement
+    | restoreStatement                                                                       #restore
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
