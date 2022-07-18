@@ -11,7 +11,6 @@ public class QueryDetailTest {
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "default_cluster:testDb", "select * from table1 limit 1",
                 "root", "");
-        queryDetail.setExplain("aaaaa");
         queryDetail.setProfile("bbbbb");
         queryDetail.setErrorMessage("cancelled");
 

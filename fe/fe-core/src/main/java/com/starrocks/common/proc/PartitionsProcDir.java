@@ -45,12 +45,12 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.monitor.unit.ByteSizeValue;
 
 import java.util.ArrayList;
@@ -91,15 +91,13 @@ public class PartitionsProcDir implements ProcDirInterface {
             builder.add("Range");
         }
 
-        builder.add("DistributionKey")
-                .add("Buckets").add("ReplicationNum").add("StorageMedium").add("CooldownTime")
-                .add("LastConsistencyCheckTime").add("DataSize").add("IsInMemory");
-
-        if (Config.use_staros) {
-            builder.add("UseStarOS");
+        builder.add("DistributionKey").add("Buckets").add("ReplicationNum");
+        if (olapTable.isLakeTable()) {
+            builder.add("EnableStorageCache").add("StorageCacheTtlSecond").add("DataSize").add("RowCount");
+        } else {
+            builder.add("StorageMedium").add("CooldownTime").add("LastConsistencyCheckTime").add("DataSize")
+                    .add("IsInMemory").add("RowCount");
         }
-
-        builder.add("RowCount");
         this.titleNames = builder.build();
     }
 
@@ -187,7 +185,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
 
         // order by
-        if (orderByPairs != null) {
+        if (orderByPairs != null && !orderByPairs.isEmpty()) {
             ListComparator<List<Comparable>> comparator;
             OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
             comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
@@ -285,20 +283,23 @@ public class PartitionsProcDir implements ProcDirInterface {
                 short replicationNum = tblPartitionInfo.getReplicationNum(partitionId);
                 partitionInfo.add(String.valueOf(replicationNum));
 
-                DataProperty dataProperty = tblPartitionInfo.getDataProperty(partitionId);
-                partitionInfo.add(dataProperty.getStorageMedium().name());
-                partitionInfo.add(TimeUtils.longToTimeString(dataProperty.getCooldownTimeMs()));
-
-                partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
-
                 long dataSize = partition.getDataSize();
                 ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
-                partitionInfo.add(byteSizeValue);
-                partitionInfo.add(tblPartitionInfo.getIsInMemory(partitionId));
-                if (Config.use_staros) {
-                    partitionInfo.add(partition.isUseStarOS());
+                if (olapTable.isLakeTable()) {
+                    StorageInfo storageInfo = tblPartitionInfo.getStorageInfo(partitionId);
+                    partitionInfo.add(storageInfo.isEnableStorageCache());
+                    partitionInfo.add(storageInfo.getStorageCacheTtlS());
+                    partitionInfo.add(byteSizeValue);
+                    partitionInfo.add(partition.getRowCount());
+                } else {
+                    DataProperty dataProperty = tblPartitionInfo.getDataProperty(partitionId);
+                    partitionInfo.add(dataProperty.getStorageMedium().name());
+                    partitionInfo.add(TimeUtils.longToTimeString(dataProperty.getCooldownTimeMs()));
+                    partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
+                    partitionInfo.add(byteSizeValue);
+                    partitionInfo.add(tblPartitionInfo.getIsInMemory(partitionId));
+                    partitionInfo.add(partition.getRowCount());
                 }
-                partitionInfo.add(partition.getRowCount());
 
                 partitionInfos.add(partitionInfo);
             }
@@ -363,13 +364,13 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
     }
 
-    public int analyzeColumn(String columnName) throws AnalysisException {
+    public int analyzeColumn(String columnName) {
         for (int i = 0; i < this.titleNames.size(); ++i) {
             if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
                 return i;
             }
         }
-        ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         return -1;
     }
 }

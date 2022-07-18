@@ -42,6 +42,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
@@ -72,9 +73,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Database database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         MaterializedView materializedView = (MaterializedView) database.getTable(mvId);
         if (!materializedView.isActive()) {
-            LOG.warn("Materialized view: {} is not active, " +
-                    "skip sync partition and data with base tables", mvId);
-            return;
+            String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
+                    "skip sync partition and data with base tables", materializedView.getName(), mvId);
+            LOG.warn(errorMsg);
+            throw new DmlException(errorMsg);
         }
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
@@ -146,9 +148,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             }
             // check with no partition expression related table
             OlapTable olapTable = olapTables.get(baseTableId);
-            if (checkNeedRefreshPartitions(materializedView, olapTable)) {
+            if (checkNoPartitionRefTablePartitions(materializedView, olapTable)) {
                 refreshAllPartitions = true;
             }
+        }
+        if (materializedView.getPartitions().isEmpty()) {
+            return;
         }
         // if all partition need refresh
         if (needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
@@ -249,14 +254,25 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private boolean checkNeedRefreshPartitions(MaterializedView materializedView, OlapTable olapTable) {
+    private boolean checkNoPartitionRefTablePartitions(MaterializedView materializedView, OlapTable olapTable) {
         boolean refreshAllPartitions = false;
         long baseTableId = olapTable.getId();
         Collection<Partition> basePartitions = olapTable.getPartitions();
         for (Partition basePartition : basePartitions) {
-            if (materializedView.needRefreshPartition(baseTableId, basePartition)) {
+            if (materializedView.needAddBasePartition(baseTableId, basePartition)) {
                 refreshAllPartitions = true;
-                materializedView.updateBasePartition(baseTableId, basePartition);
+                materializedView.addBasePartition(baseTableId, basePartition);
+            }
+        }
+        Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
+        for (String syncedPartitionName : syncedPartitionNames) {
+            Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
+            if (baseTablePartition == null) {
+                refreshAllPartitions = true;
+                materializedView.removeBasePartition(baseTableId, syncedPartitionName);
+            } else if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
+                refreshAllPartitions = true;
+                materializedView.updateBasePartition(baseTableId, baseTablePartition);
             }
         }
         return refreshAllPartitions;
@@ -327,10 +343,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
-        String insertIntoSql = "insert overwrite " +
-                materializedView.getName() + " " +
-                context.getDefinition();
-        execInsertStmt(insertIntoSql, context, materializedView);
+        execInsertStmt(context.getDefinition(), context, materializedView);
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView, OlapTable olapTable,

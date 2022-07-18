@@ -66,16 +66,16 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
-            String clusterName, ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+            ClusterLoadStatistic clusterStat, TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets;
         String balanceType = "";
         do {
             // balance cluster
             if (!isClusterDiskBalanced(clusterStat, medium)) {
-                alternativeTablets = balanceClusterDisk(clusterName, clusterStat, medium);
+                alternativeTablets = balanceClusterDisk(clusterStat, medium);
                 balanceType = "cluster disk";
             } else {
-                alternativeTablets = balanceClusterTablet(clusterName, clusterStat, medium);
+                alternativeTablets = balanceClusterTablet(clusterStat, medium);
                 balanceType = "cluster tablet distribution";
             }
             if (!alternativeTablets.isEmpty()) {
@@ -84,10 +84,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             // balance backend
             if (!isBackendDiskBalanced(clusterStat, medium)) {
-                alternativeTablets = balanceBackendDisk(clusterName, clusterStat, medium);
+                alternativeTablets = balanceBackendDisk(clusterStat, medium);
                 balanceType = "backend disk";
             } else {
-                alternativeTablets = balanceBackendTablet(clusterName, clusterStat, medium);
+                alternativeTablets = balanceBackendTablet(clusterStat, medium);
                 balanceType = "backend tablet distribution";
             }
         } while (false);
@@ -104,7 +104,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     public void completeSchedCtx(TabletSchedCtx tabletCtx, Map<Long, TabletScheduler.PathSlot> backendsWorkingSlots)
             throws SchedException {
         TStorageMedium medium = tabletCtx.getStorageMedium();
-        ClusterLoadStatistic clusterStat = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic clusterStat = loadStatistic;
         if (clusterStat == null) {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -372,7 +372,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * <p>
      * we prefer to choose tablets in partition that numOfTablet(srcBE) is more than numOfTablet(destBE)
      */
-    private List<TabletSchedCtx> balanceClusterDisk(String clusterName, ClusterLoadStatistic clusterStat,
+    private List<TabletSchedCtx> balanceClusterDisk(ClusterLoadStatistic clusterStat,
                                                     TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
 
@@ -505,7 +505,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 Long destPathHash = destBEPaths.get(destBEPathsIndex);
                 destBEPathsIndex = (destBEPathsIndex + 1) % destBEPaths.size();
 
-                TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, clusterName,
+                TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                         tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
                         tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -547,7 +547,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * <p>
      * we prefer to choose tablets in partition that numOfTablet(srcPath) is more than numOfTablet(destPath)
      */
-    private List<TabletSchedCtx> balanceBackendDisk(String clusterName, ClusterLoadStatistic clusterStat,
+    private List<TabletSchedCtx> balanceBackendDisk(ClusterLoadStatistic clusterStat,
                                                     TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
 
@@ -594,7 +594,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     "get backend path stats for backend disk balance. medium: {}, be id: {}, avgUsedPercent: {}, path stats: {}",
                     medium, beId, avgUsedPercent, pathStats);
 
-            balanceBackendDisk(clusterName, medium, avgUsedPercent, pathStats, beId, beStats.size(),
+            balanceBackendDisk(medium, avgUsedPercent, pathStats, beId, beStats.size(),
                     alternativeTablets);
             if (alternativeTablets.size() >= Config.max_balancing_tablets) {
                 break;
@@ -603,7 +603,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         return alternativeTablets;
     }
 
-    private void balanceBackendDisk(String clusterName, TStorageMedium medium, double avgUsedPercent,
+    private void balanceBackendDisk(TStorageMedium medium, double avgUsedPercent,
                                     List<RootPathLoadStatistic> pathStats, long beId, int beNum,
                                     List<TabletSchedCtx> alternativeTablets) {
         Preconditions.checkArgument(pathStats != null && pathStats.size() > 1 && beId > -1 && beNum > 0);
@@ -703,7 +703,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 });
 
                 TabletSchedCtx schedCtx =
-                        new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, clusterName, tabletMeta.getDbId(),
+                        new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, tabletMeta.getDbId(),
                                 tabletMeta.getTableId(), tabletMeta.getPartitionId(),
                                 tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -847,7 +847,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            if (tabletMeta.isUseStarOS()) {
+            if (tabletMeta.isLakeTablet()) {
                 // replicas are managed by StarOS and cloud storage.
                 continue;
             }
@@ -923,7 +923,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * 4. try to copy one tablet from maxTabletsNum be to other be, minTabletsNum be first
      * 5. repeat 3 and 4, until no tablet can copy
      */
-    private List<TabletSchedCtx> balanceClusterTablet(String clusterName, ClusterLoadStatistic clusterStat,
+    private List<TabletSchedCtx> balanceClusterTablet(ClusterLoadStatistic clusterStat,
                                                       TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
         List<BackendLoadStatistic> beStats = getValidBeStats(clusterStat, medium);
@@ -946,7 +946,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         LOG.debug("get backend stats for cluster tablet distribution balance. medium: {}, be stats: {}, be disks: {}",
                 medium, beStats, beDisks);
 
-        balanceTablet(clusterName, medium, alternativeTablets, false, beStats, beDisks, null, -1);
+        balanceTablet(medium, alternativeTablets, false, beStats, beDisks, null, -1);
         return alternativeTablets;
     }
 
@@ -959,7 +959,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * 4. try to copy one tablet from maxTabletsNum path to other path, minTabletsNum path first
      * 5. repeat 3 and 4, until no tablet can copy
      */
-    private List<TabletSchedCtx> balanceBackendTablet(String clusterName, ClusterLoadStatistic clusterStat,
+    private List<TabletSchedCtx> balanceBackendTablet(ClusterLoadStatistic clusterStat,
                                                       TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
         for (BackendLoadStatistic beStat : getValidBeStats(clusterStat, medium)) {
@@ -976,7 +976,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            balanceTablet(clusterName, medium, alternativeTablets, true, null, null, pathStats, beId);
+            balanceTablet(medium, alternativeTablets, true, null, null, pathStats, beId);
             if (alternativeTablets.size() >= Config.max_balancing_tablets) {
                 break;
             }
@@ -989,7 +989,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * cluster balance args: beStats, beDisks, isLocalBalance is false.
      * backend balance args: pathStats, beId, isLocalBalance is true.
      */
-    private void balanceTablet(String clusterName, TStorageMedium medium,
+    private void balanceTablet(TStorageMedium medium,
                                List<TabletSchedCtx> alternativeTablets, boolean isLocalBalance,
                                List<BackendLoadStatistic> beStats, Map<Long, Pair<List<Long>, Integer>> beDisks,
                                List<RootPathLoadStatistic> pathStats, long beId) {
@@ -1086,11 +1086,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         if (destBackend == null) {
                             continue;
                         }
-                        schedCtx = tryToBalanceTablet(clusterName, srcTablets, destTablets, diskBalanceChecker,
+                        schedCtx = tryToBalanceTablet(srcTablets, destTablets, diskBalanceChecker,
                                 selectedTablets, aliveBeIds, isLocalBalance,
                                 hostGroups.get(destBackend.getHost()), -1);
                     } else {
-                        schedCtx = tryToBalanceTablet(clusterName, srcTablets, destTablets, diskBalanceChecker,
+                        schedCtx = tryToBalanceTablet(srcTablets, destTablets, diskBalanceChecker,
                                 selectedTablets, aliveBeIds, isLocalBalance,
                                 null, beId);
                     }
@@ -1133,7 +1133,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * beId
      * isLocalBalance: true
      */
-    private TabletSchedCtx tryToBalanceTablet(String clusterName, Pair<Long, Set<Long>> srcTablets,
+    private TabletSchedCtx tryToBalanceTablet(Pair<Long, Set<Long>> srcTablets,
                                               Pair<Long, Set<Long>> destTablets,
                                               DiskBalanceChecker diskBalanceChecker, Set<Long> selectedTablets,
                                               List<Long> aliveBeIds,
@@ -1174,7 +1174,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, clusterName,
+            TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                     tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
                     tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
             schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -1215,13 +1215,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (table == null) {
                 return result;
             }
+            if (table.isLakeTable()) {
+                // replicas are managed by StarOS and cloud storage.
+                return result;
+            }
 
             Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(table, partitionId);
             if (partition == null) {
-                return result;
-            }
-            if (partition.isUseStarOS()) {
-                // replicas are managed by StarOS and cloud storage.
                 return result;
             }
 
@@ -1318,7 +1318,6 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             Pair<LocalTablet.TabletStatus, TabletSchedCtx.Priority> statusPair =
                     tablet.getHealthStatusWithPriority(infoService,
-                            db.getClusterName(),
                             partition.getVisibleVersion(),
                             replicaNum,
                             aliveBeIds);
@@ -1387,14 +1386,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     if (!table.needSchedule(isLocalBalance)) {
                         continue;
                     }
+                    if (table.isLakeTable()) {
+                        // replicas are managed by StarOS and cloud storage.
+                        continue;
+                    }
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
-                        if (partition.isUseStarOS()) {
-                            // replicas are managed by StarOS and cloud storage.
-                            continue;
-                        }
-
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.

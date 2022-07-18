@@ -1044,8 +1044,8 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
     return itr->second;
 }
 
-Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms) {
-    std::unique_lock<std::mutex> ul(_lock);
+Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms,
+                                        std::unique_lock<std::mutex>& ul) {
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when _wait_for_version tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -1089,7 +1089,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     return Status::OK();
 }
 
-Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply) {
+Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
     auto info = (*pinfo).get();
@@ -1148,10 +1148,9 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, boo
     // 4. commit compaction
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
-    if (wait_apply) {
-        // already committed, so we can only ignore timeout error
-        _wait_for_version(version, 120000);
-    }
+    // already committed, so we can ignore timeout error here
+    std::unique_lock<std::mutex> ul(_lock);
+    _wait_for_version(version, 120000, ul);
     return Status::OK();
 }
 
@@ -1319,14 +1318,13 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
-    for (size_t i = 0; i < _compaction_state->segment_states.size(); i++) {
-        auto& sstate = _compaction_state->segment_states[i];
-        total_rows += sstate.src_rssids.size();
+    for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
+        auto& pk_col = _compaction_state->pk_cols[i];
+        total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *sstate.pkeys, *std::max_element(info->inputs.begin(), info->inputs.end()),
-                          &tmp_deletes);
+        index.try_replace(rssid, 0, *pk_col, *std::max_element(info->inputs.begin(), info->inputs.end()), &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);
@@ -1336,8 +1334,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
         delvecs.emplace_back(rssid, dv);
         // release memory early
-        sstate.pkeys.reset();
-        sstate.src_rssids.clear();
+        pk_col.reset();
     }
     // release memory
     _compaction_state.reset();
@@ -1742,7 +1739,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, true);
+    Status st = _do_compaction(&info);
     if (!st.ok()) {
         _last_compaction_failure_millis = UnixMillis();
     } else {
@@ -1816,7 +1813,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info, true);
+    Status st = _do_compaction(&info);
     if (!st.ok()) {
         _last_compaction_failure_millis = UnixMillis();
     } else {
@@ -2030,7 +2027,7 @@ std::string TabletUpdates::_debug_string(bool lock, bool abbr) const {
     // num_version can be 0, if clear_meta is called after deleting this Tablet
     if (num_version == 0) {
         if (lock) _lock.unlock();
-        return Substitute("tablet:$0 <deleted>");
+        return Substitute("tablet:$0 <deleted>", _tablet.tablet_id());
     }
     apply_idx = _apply_version_idx;
     first_version = _edit_version_infos[0]->version;
@@ -2061,7 +2058,7 @@ std::string TabletUpdates::_debug_version_info(bool lock) const {
     // num_version can be 0, if clear_meta is called after deleting this Tablet
     if (num_version == 0) {
         if (lock) _lock.unlock();
-        return Substitute("tablet:$0 <deleted>");
+        return Substitute("tablet:$0 <deleted>", _tablet.tablet_id());
     }
     apply_idx = _apply_version_idx;
     first_version = _edit_version_infos[0]->version;
@@ -2168,9 +2165,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                 Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                            _tablet.tablet_id(), _error_msg));
     }
-    // TODO(cbl): optimize: following code lock _lock twice, should make it just lock once
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000));
-    std::lock_guard rl(_lock);
+    std::unique_lock<std::mutex> ul(_lock);
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000, ul));
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;

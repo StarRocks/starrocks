@@ -338,7 +338,7 @@ public class DatabaseTransactionMgr {
             Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
             String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " "
                     + quotaUnitPair.second;
-            throw new AnalysisException("Database[" + db.getFullName()
+            throw new AnalysisException("Database[" + db.getOriginName()
                     + "] data size exceeds quota[" + readableQuota + "]");
         }
     }
@@ -485,7 +485,7 @@ public class DatabaseTransactionMgr {
             case VISIBLE:
                 break;
             default:
-                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getFullName(), transactionId);
+                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getOriginName(), transactionId);
                 throw new TransactionCommitFailedException("transaction commit failed");
         }
 
@@ -578,10 +578,6 @@ public class DatabaseTransactionMgr {
 
                     if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
-                    }
-
-                    if (partition.isUseStarOS()) {
-                        continue;
                     }
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
@@ -799,6 +795,7 @@ public class DatabaseTransactionMgr {
                 transactionState.clearErrorMsg();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 unprotectUpsertTransactionState(transactionState, false);
+                transactionState.notifyVisible();
                 txnOperated = true;
                 // TODO(cmy): We found a very strange problem. When delete-related transactions are processed here,
                 // subsequent `updateCatalogAfterVisible()` is called, but it does not seem to be executed here

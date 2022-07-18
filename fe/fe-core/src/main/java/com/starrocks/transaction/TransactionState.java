@@ -188,7 +188,7 @@ public class TransactionState implements Writable {
     private List<Long> tableIdList;
     private long transactionId;
     private String label;
-    // requestId is used to judge whether a begin request is a internal retry request.
+    // requestId is used to judge whether a begin request is an internal retry request.
     // no need to persist it.
     private TUniqueId requestId;
     private Map<Long, TableCommitInfo> idToTableCommitInfos;
@@ -204,7 +204,7 @@ public class TransactionState implements Writable {
     private Set<Long> errorReplicas;
     private CountDownLatch latch;
 
-    // this state need not to be serialized
+    // these states need not be serialized
     private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
@@ -380,7 +380,6 @@ public class TransactionState implements Writable {
 
         // after status changed
         if (transactionStatus == TransactionStatus.VISIBLE) {
-            this.latch.countDown();
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_TXN_SUCCESS.increase(1L);
             }
@@ -394,6 +393,17 @@ public class TransactionState implements Writable {
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.COMMITTED) {
             txnSpan.addEvent("set_committed");
+        }
+    }
+
+    public void notifyVisible() {
+        // To avoid the method not having to be called repeatedly or in advance, 
+        // the following trigger conditions have been added
+        // 1. the transactionStatus status must be VISIBLE
+        // 2. this.latch.countDown(); has not been called before
+        // 3. this.latch can not be null
+        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {            
+            this.latch.countDown();
         }
     }
 

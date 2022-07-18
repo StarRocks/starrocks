@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.DataProperty;
@@ -121,8 +122,7 @@ public class TabletScheduler extends MasterDaemon {
 
     // be id -> #working slots
     private Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
-    // cluster name -> load statistic
-    private Map<String, ClusterLoadStatistic> statisticMap = Maps.newConcurrentMap();
+    private ClusterLoadStatistic loadStatistic;
     private long lastStatUpdateTime = 0;
 
     private long lastSlotAdjustTime = 0;
@@ -177,6 +177,10 @@ public class TabletScheduler extends MasterDaemon {
 
     public TabletSchedulerStat getStat() {
         return stat;
+    }
+
+    public void setLoadStatistic(ClusterLoadStatistic loadStatistic) {
+        this.loadStatistic = loadStatistic;
     }
 
     /*
@@ -338,7 +342,7 @@ public class TabletScheduler extends MasterDaemon {
 
     private void updateClusterLoadStatisticsAndPriority() {
         updateClusterLoadStatistic();
-        rebalancer.updateLoadStatistic(statisticMap);
+        rebalancer.updateLoadStatistic(loadStatistic);
 
         adjustPriorities();
 
@@ -352,18 +356,14 @@ public class TabletScheduler extends MasterDaemon {
      * because we already limit the total number of running clone jobs in cluster by 'backend slots'
      */
     private void updateClusterLoadStatistic() {
-        Map<String, ClusterLoadStatistic> newStatisticMap = Maps.newConcurrentMap();
-        String clusterName = SystemInfoService.DEFAULT_CLUSTER;
         ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
-        newStatisticMap.put(clusterName, clusterLoadStatistic);
-        LOG.info("update cluster {} load statistic:\n{}", clusterName, clusterLoadStatistic.getBrief());
-
-        this.statisticMap = newStatisticMap;
+        LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+        this.loadStatistic = clusterLoadStatistic;
     }
 
-    public Map<String, ClusterLoadStatistic> getStatisticMap() {
-        return statisticMap;
+    public ClusterLoadStatistic getLoadStatistic() {
+        return loadStatistic;
     }
 
     /**
@@ -398,6 +398,34 @@ public class TabletScheduler extends MasterDaemon {
         LOG.debug("pending tablets current count: {}\n{}", pendingTablets.size(), sb);
     }
 
+    private boolean checkIfTabletExpired(TabletSchedCtx ctx) {
+        return checkIfTabletExpired(ctx, GlobalStateMgr.getCurrentRecycleBin(), System.currentTimeMillis());
+    }
+
+    /**
+     * make sure tablet won't expired and erased soon
+     */
+    protected boolean checkIfTabletExpired(TabletSchedCtx ctx, CatalogRecycleBin recycleBin, long currentTimeMs) {
+        // check if about to erase
+        long dbId = ctx.getDbId();
+        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
+            LOG.warn("discard ctx because db {} will erase soon: {}", dbId, ctx);
+            return true;
+        }
+        long tableId = ctx.getTblId();
+        if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
+            LOG.warn("discard ctx because table {} will erase soon: {}", tableId, ctx);
+            return true;
+        }
+        long partitionId = ctx.getPartitionId();
+        if (recycleBin.getPartition(partitionId) != null
+                && !recycleBin.ensureEraseLater(partitionId, currentTimeMs)) {
+            LOG.warn("discard ctx because partition {} will erase soon: {}", partitionId, ctx);
+            return true;
+        }
+        return false;
+    }
+
     /**
      * get at most BATCH_NUM tablets from queue, and try to schedule them.
      * After handle, the tablet info should be
@@ -420,7 +448,6 @@ public class TabletScheduler extends MasterDaemon {
             try {
                 // reset errMsg for new scheduler round
                 tabletCtx.setErrMsg(null);
-
                 scheduleTablet(tabletCtx, batchTask);
             } catch (SchedException e) {
                 tabletCtx.increaseFailedSchedCounter();
@@ -529,6 +556,9 @@ public class TabletScheduler extends MasterDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
+            if (tbl.isLakeTable()) {
+                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
+            }
 
             boolean isColocateTable = colocateTableIndex.isColocateTable(tbl.getId());
 
@@ -537,9 +567,6 @@ public class TabletScheduler extends MasterDaemon {
             Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(tbl, tabletCtx.getPartitionId());
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
-            }
-            if (partition.isUseStarOS()) {
-                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
             }
 
             short replicaNum =
@@ -584,7 +611,7 @@ public class TabletScheduler extends MasterDaemon {
             } else {
                 List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
-                        infoService, tabletCtx.getCluster(),
+                        infoService,
                         partition.getVisibleVersion(),
                         replicaNum,
                         aliveBeIdsInCluster);
@@ -719,7 +746,7 @@ public class TabletScheduler extends MasterDaemon {
     private void handleReplicaVersionIncomplete(TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         stat.counterReplicaVersionMissingErr.incrementAndGet();
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -879,7 +906,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private boolean deleteReplicaOnSameHost(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
@@ -920,10 +947,6 @@ public class TabletScheduler extends MasterDaemon {
                 // this case should be handled in deleteBackendDropped()
                 return false;
             }
-            if (!be.getOwnerClusterName().equals(tabletCtx.getCluster())) {
-                deleteReplicaInternal(tabletCtx, replica, "not in cluster", force);
-                return true;
-            }
         }
         return false;
     }
@@ -942,7 +965,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private boolean deleteReplicaOnHighLoadBackend(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
@@ -1144,7 +1167,7 @@ public class TabletScheduler extends MasterDaemon {
     // choose a path on a backend which is fit for the tablet
     private RootPathLoadStatistic chooseAvailableDestPath(TabletSchedCtx tabletCtx, boolean forColocate)
             throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -1269,6 +1292,10 @@ public class TabletScheduler extends MasterDaemon {
             if (tablet == null) {
                 // no more tablets
                 break;
+            }
+            // ignore tablets that will expire and erase soon
+            if (checkIfTabletExpired(tablet)) {
+                continue;
             }
             list.add(tablet);
             count--;

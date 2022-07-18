@@ -6,7 +6,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
@@ -62,7 +61,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("tableId", table.getId());
             context.put("partitionId", partition.getId());
             context.put("columnName", name);
-            context.put("dbName", ClusterNamespace.getNameFromFullName(database.getFullName()));
+            context.put("dbName", database.getOriginName());
             context.put("tableName", table.getName());
             context.put("partitionName", partition.getName());
             context.put("dataSize", getDataSize(column, false));

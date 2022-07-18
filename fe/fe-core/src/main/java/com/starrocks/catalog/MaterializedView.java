@@ -27,7 +27,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -91,6 +90,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // partition id which in BasePartitionInfo can be used to check partition is changed
         private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
+        @SerializedName(value = "defineStartTime")
+        private boolean defineStartTime;
+
         @SerializedName(value = "starTime")
         private long startTime;
 
@@ -102,6 +104,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
             this.timeUnit = null;
@@ -117,6 +120,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         Map<String, BasePartitionInfo> getPartitionVisibleVersionMapForTable(long tableId) {
             return baseTableVisibleVersionMap.get(tableId);
+        }
+
+        public boolean isDefineStartTime() {
+            return defineStartTime;
+        }
+
+        public void setDefineStartTime(boolean defineStartTime) {
+            this.defineStartTime = defineStartTime;
         }
 
         public long getStartTime() {
@@ -420,7 +431,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
         // analyze expression, because it converts to sql for serialize
         ConnectContext connectContext = new ConnectContext();
-        connectContext.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(Auth.ROOT_USER);
@@ -489,5 +499,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         String json = Text.readString(in);
         MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
         return mv;
+    }
+
+    /**
+     * Refresh the materialized view if the following conditions are met:
+     * 1. Refresh type of materialized view is ASYNC
+     * 2. timeunit and step not set for AsyncRefreshContext
+     * @return
+     */
+    public boolean isLoadTriggeredRefresh() {
+        AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
+        return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
+                asyncRefreshContext.step == 0 &&  null == asyncRefreshContext.timeUnit;
     }
 }

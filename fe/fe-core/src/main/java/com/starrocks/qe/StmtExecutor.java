@@ -50,9 +50,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -115,7 +115,6 @@ import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
-import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
@@ -214,8 +213,8 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-            if (context.getWorkGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -411,14 +410,8 @@ public class StmtExecutor {
                         }
 
                         Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
-                        StringBuilder explainStringBuilder = new StringBuilder();
-                        // StarRocksManager depends on explainString to get sql plan
-                        if (parsedStmt.isExplain() || context.getSessionVariable().isReportSucc()) {
-                            explainStringBuilder.append(execPlan.getExplainString(parsedStmt.getExplainLevel()));
-                        }
-                        handleQueryStmt(execPlan.getFragments(), execPlan.getScanNodes(),
-                                execPlan.getDescTbl().toThrift(),
-                                execPlan.getColNames(), execPlan.getOutputExprs(), explainStringBuilder.toString());
+
+                        handleQueryStmt(execPlan);
 
                         if (context.getSessionVariable().isReportSucc()) {
                             writeProfile(beginTimeInNanoSecond);
@@ -697,19 +690,24 @@ public class StmtExecutor {
     }
 
     // Process a select statement.
-    private void handleQueryStmt(List<PlanFragment> fragments, List<ScanNode> scanNodes, TDescriptorTable descTable,
-                                 List<String> colNames, List<Expr> outputExprs, String explainString) throws Exception {
+    private void handleQueryStmt(ExecPlan execPlan) throws Exception {
         // Every time set no send flag and clean all data in buffer
         context.getMysqlChannel().reset();
-        StatementBase queryStmt = parsedStmt;
 
-        if (queryStmt.isExplain()) {
-            handleExplainStmt(explainString);
+        if (parsedStmt.isExplain()) {
+            handleExplainStmt(buildExplainString(execPlan));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(explainString);
+            context.getQueryDetail().setExplain(buildExplainString(execPlan));
         }
+
+        StatementBase queryStmt = parsedStmt;
+        List<PlanFragment> fragments = execPlan.getFragments();
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+        TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
+        List<String> colNames = execPlan.getColNames();
+        List<Expr> outputExprs = execPlan.getOutputExprs();
 
         coord = new Coordinator(context, fragments, scanNodes, descTable);
 
@@ -791,7 +789,7 @@ public class StmtExecutor {
         }
     }
 
-    private void handleAnalyzeStmt() {
+    private void handleAnalyzeStmt() throws IOException {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
         OlapTable table = (OlapTable) MetaUtils.getTable(context, analyzeStmt.getTableName());
@@ -809,12 +807,14 @@ public class StmtExecutor {
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
         }
-
-        if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
-            context.getState().setOk();
-        } else {
-            context.getState().setError(analyzeStatus.getReason());
+        ShowResultSet resultSet = analyzeStatus.toShowResult();
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
         }
+
+        sendShowResult(resultSet);
     }
 
     private void handleDropHistogramStmt() {
@@ -937,7 +937,11 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
-    private void handleExplainStmt(String result) throws IOException {
+    private void handleExplainStmt(String explainString) throws IOException {
+        if (context.getQueryDetail() != null) {
+            context.getQueryDetail().setExplain(explainString);
+        }
+
         ShowResultSetMetaData metaData =
                 ShowResultSetMetaData.builder()
                         .addColumn(new Column("Explain String", ScalarType.createVarchar(20)))
@@ -945,12 +949,26 @@ public class StmtExecutor {
         sendMetaData(metaData);
 
         // Send result set.
-        for (String item : result.split("\n")) {
+        for (String item : explainString.split("\n")) {
             serializer.reset();
             serializer.writeLenEncodedString(item);
             context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         }
         context.getState().setEof();
+    }
+
+    private String buildExplainString(ExecPlan execPlan) {
+        String explainString = "";
+        if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
+            if (context.getSessionVariable().isEnableResourceGroup()) {
+                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                String resourceGroupStr =
+                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
+            }
+        }
+        explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        return explainString;
     }
 
     private void handleDdlStmt() {
@@ -1010,7 +1028,7 @@ public class StmtExecutor {
                 context.getDatabase(),
                 sql,
                 context.getQualifiedUser(),
-                Optional.ofNullable(context.getWorkGroup()).map(WorkGroup::getName).orElse(""));
+                Optional.ofNullable(context.getResourceGroup()).map(ResourceGroup::getName).orElse(""));
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
@@ -1066,11 +1084,11 @@ public class StmtExecutor {
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
-            handleExplainStmt(execPlan.getExplainString(stmt.getExplainLevel()));
+            handleExplainStmt(buildExplainString(execPlan));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(execPlan.getExplainString(TExplainLevel.NORMAL));
+            context.getQueryDetail().setExplain(buildExplainString(execPlan));
         }
 
         // special handling for delete of non-primary key table, using old handler

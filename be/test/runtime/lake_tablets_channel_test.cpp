@@ -21,10 +21,10 @@
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/lake/test_location_provider.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
@@ -53,7 +53,7 @@ public:
         _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
         _tablet_manager->prune_metacache();
 
-        _location_provider = std::make_unique<lake::TestGroupAssigner>(kTestGroupPath);
+        _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
         _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         auto metadata = new_tablet_metadata(10086);
@@ -176,10 +176,10 @@ protected:
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(kTestGroupPath));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10086)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10087)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10088)));
-        CHECK_OK(_tablet_manager->put_tablet_metadata(kTestGroupPath, *new_tablet_metadata(10089)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10086)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10087)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10088)));
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         _load_channel = scoped_refptr<LoadChannel>(new LoadChannel(_load_channel_mgr.get(), UniqueId::gen_uid(),
@@ -242,7 +242,7 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::TabletManager* _tablet_manager;
-    std::unique_ptr<lake::TestGroupAssigner> _location_provider;
+    std::unique_ptr<lake::FixedLocationProvider> _location_provider;
     lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;

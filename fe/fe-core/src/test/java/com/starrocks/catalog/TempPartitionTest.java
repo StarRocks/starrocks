@@ -90,7 +90,7 @@ public class TempPartitionTest {
 
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
-        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
+        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
@@ -114,10 +114,26 @@ public class TempPartitionTest {
         }
     }
 
+    private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
+        try {
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
+            if (expectedException) {
+                Assert.fail("expected exception not thrown");
+            }
+        } catch (Exception e) {
+            if (expectedException) {
+                System.out.println("got exception: " + e.getMessage());
+            } else {
+                throw e;
+            }
+        }
+    }
+
     private List<List<String>> checkTablet(String tbl, String partitions, boolean isTemp, int expected)
             throws Exception {
         String showStr = "show tablet from " + tbl + (isTemp ? " temporary" : "") + " partition (" + partitions + ");";
-        ShowTabletStmt showStmt = (ShowTabletStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
+        ShowTabletStmt showStmt = (ShowTabletStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
@@ -140,7 +156,7 @@ public class TempPartitionTest {
             throws Exception {
         partNameToTabletId.clear();
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
-        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseAndAnalyzeStmt(showStr, ctx);
+        ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, (ShowStmt) showStmt);
         ShowResultSet showResultSet = executor.execute();
         List<List<String>> rows = showResultSet.getResultRows();
@@ -186,11 +202,11 @@ public class TempPartitionTest {
 
         // add temp partition
         String stmtStr = "alter table db1.tbl1 add temporary partition p1 values less than ('10');";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         // drop temp partition
         stmtStr = "alter table db1.tbl1 drop temporary partition tbl1;";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         // show temp partition
         checkShowPartitionsResultNum("db1.tbl1", true, 0);
@@ -224,26 +240,26 @@ public class TempPartitionTest {
 
         // add temp partition with duplicate name
         String stmtStr = "alter table db2.tbl2 add temporary partition p1 values less than('10');";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         // add temp partition
         stmtStr = "alter table db2.tbl2 add temporary partition tp1 values less than('10');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp2 values less than('10');";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp1 values less than('20');";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp2 values less than('20');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp3 values [('18'), ('30'));";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp3 values [('20'), ('30'));";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         Map<String, Long> tempPartitionTabletIds = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", true, tempPartitionTabletIds);
@@ -256,13 +272,13 @@ public class TempPartitionTest {
 
         // drop non exist temp partition
         stmtStr = "alter table db2.tbl2 drop temporary partition tp4;";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         stmtStr = "alter table db2.tbl2 drop temporary partition if exists tp4;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         stmtStr = "alter table db2.tbl2 drop temporary partition tp3;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         Map<String, Long> originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
@@ -277,11 +293,11 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp3 values less than('30');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
 
         stmtStr = "alter table db2.tbl2 drop partition p1;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
         checkShowPartitionsResultNum("db2.tbl2", false, 2);
 
@@ -291,7 +307,7 @@ public class TempPartitionTest {
         Assert.assertTrue(!originPartitionTabletIds2.containsKey("p1"));
 
         String recoverStr = "recover partition p1 from db2.tbl2;";
-        RecoverPartitionStmt recoverStmt = (RecoverPartitionStmt) UtFrameUtils.parseAndAnalyzeStmt(recoverStr, ctx);
+        RecoverPartitionStmt recoverStmt = (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverStr, ctx);
         GlobalStateMgr.getCurrentState().recoverPartition(recoverStmt);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
@@ -331,7 +347,7 @@ public class TempPartitionTest {
                 false);
 
         String truncateStr = "truncate table db2.tbl2 partition (p3);";
-        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(truncateStr, ctx);
+        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
         GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
@@ -341,11 +357,11 @@ public class TempPartitionTest {
         checkPartitionExist(tbl2, "tp3", true, true);
 
         stmtStr = "alter table db2.tbl2 drop partition p3;";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add partition p31 values less than('25');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add partition p32 values less than('35');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         // for now, we have 4 partitions: tp1, tp2, p31, p32, 1 temp partition: tp3
         checkShowPartitionsResultNum("db2.tbl2", false, 4);
@@ -365,11 +381,11 @@ public class TempPartitionTest {
         checkPartitionExist(tbl2, "tp3", false, true);
 
         stmtStr = "alter table db2.tbl2 add temporary partition p1 values less than('10');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add temporary partition p3 values less than('30');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db2.tbl2 replace partition(tp1, tp2) with temporary partition(p1, p2);";
         alterTable(stmtStr, false);
         checkPartitionExist(tbl2, "tp1", false, true);
@@ -392,11 +408,11 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
         stmtStr = "alter table db2.tbl2 add temporary partition tp1 values less than('10');"; // name conflict
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
         stmtStr = "alter table db2.tbl2 rename partition p3 tp3;";
         alterTable(stmtStr, false);
         stmtStr = "alter table db2.tbl2 add temporary partition p1 values less than('10');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         originPartitionTabletIds2 = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds2);
@@ -414,7 +430,7 @@ public class TempPartitionTest {
         alterTable(stmtStr, true);
 
         truncateStr = "truncate table db2.tbl2";
-        truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(truncateStr, ctx);
+        truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
         GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
@@ -423,7 +439,7 @@ public class TempPartitionTest {
         alterTable(stmtStr, false);
 
         stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20');";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
 
         // wait rollup finish
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
@@ -448,7 +464,7 @@ public class TempPartitionTest {
         }
 
         stmtStr = "alter table db2.tbl2 add temporary partition p2 values less than('20');";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         TempPartitions tempPartitions = Deencapsulation.getField(tbl2, "tempPartitions");
         testSerializeTempPartitions(tempPartitions);
@@ -470,13 +486,13 @@ public class TempPartitionTest {
         // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition. 
         stmtStr =
                 "alter table db2.tbl2 add temporary partition tp4 values less than('20') ('in_memory' = 'true') distributed by hash(k1) buckets 3";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
         stmtStr =
                 "alter table db2.tbl2 add temporary partition tp4 values less than('20') ('in_memory' = 'true', 'replication_num' = '2') distributed by hash(k2) buckets 3";
-        alterTable(stmtStr, true);
+        alterTableWithNewAnalyzer(stmtStr, true);
         stmtStr =
                 "alter table db2.tbl2 add temporary partition tp4 values less than('20') ('in_memory' = 'true', 'replication_num' = '1') distributed by hash(k2) buckets 3";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
 
         Partition p2 = tbl2.getPartition("p2");
         Assert.assertNotNull(p2);
@@ -512,38 +528,38 @@ public class TempPartitionTest {
 
         // 1. add temp ranges: [10, 15), [15, 25), [25, 30), and replace the [10, 20), [20, 30)
         String stmtStr = "alter table db3.tbl3 add temporary partition tp1 values [('10'), ('15'))";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 add temporary partition tp2 values [('15'), ('25'))";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 add temporary partition tp3 values [('25'), ('30'))";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 replace partition (p2, p3) with temporary partition(tp1, tp2, tp3)";
         alterTable(stmtStr, false);
 
         // now base range is [min, 10), [10, 15), [15, 25), [25, 30) -> p1,tp1,tp2,tp3
         stmtStr = "truncate table db3.tbl3";
-        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
+        TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
         // 2. add temp ranges: [10, 31), and replace the [10, 15), [15, 25), [25, 30)
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('31'))";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 replace partition (tp1, tp2, tp3) with temporary partition(tp4)";
         alterTable(stmtStr, true);
         // drop the tp4, and add temp partition tp4 [10,30) to to replace tp1, tp2, tp3
         stmtStr = "alter table db3.tbl3 drop temporary partition tp4";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('30'))";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 replace partition (tp1, tp2, tp3) with temporary partition(tp4)";
         alterTable(stmtStr, false);
 
         // now base range is [min, 10), [10, 30) -> p1,tp4
         stmtStr = "truncate table db3.tbl3";
-        truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
+        truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
         // 3. add temp partition tp5 [50, 60) and replace partition tp4
         stmtStr = "alter table db3.tbl3 add temporary partition tp5 values [('50'), ('60'))";
-        alterTable(stmtStr, false);
+        alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 replace partition (tp4) with temporary partition(tp5)";
         alterTable(stmtStr, true);
         stmtStr =

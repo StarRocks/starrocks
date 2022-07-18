@@ -124,8 +124,7 @@ public class RestrictOpMaterializedViewTest {
 
     }
 
-    // This test is temporarily removed because it is unstable,
-    // and it will be added back when the cause of the problem is found and fixed.
+    @Test
     public void testBrokerLoad() {
         String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {

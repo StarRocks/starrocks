@@ -20,6 +20,8 @@ class AsyncDeltaWriterCallback;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
+// TODO: this class is too similar to lake::AsyncDeltaWriter, remove this AsyncDeltaWriter and
+// keep lake::AsyncDeltaWriter.
 class AsyncDeltaWriter {
     struct private_type;
 
@@ -64,7 +66,7 @@ private:
         // If chunk == nullptr, this is a commit task
         vectorized::Chunk* chunk = nullptr;
         const uint32_t* indexes = nullptr;
-        AsyncDeltaWriterCallback* write_cb;
+        AsyncDeltaWriterCallback* write_cb = nullptr;
         uint32_t indexes_size = 0;
         bool commit_after_write = false;
     };

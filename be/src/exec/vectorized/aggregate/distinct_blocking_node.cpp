@@ -4,6 +4,7 @@
 
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -132,6 +133,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -146,7 +148,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
 
-    OpFactories operators_with_source;
+    OpFactories ops_with_source;
     auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
                                                                                             id(), aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
@@ -160,15 +162,21 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     context->add_pipeline(ops_with_sink);
 
     // Aggregator must be used by a pair of sink and source operators,
-    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
-    operators_with_source.push_back(std::move(source_operator));
+    ops_with_source.push_back(std::move(source_operator));
+
+    if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
+        ops_with_source.emplace_back(
+                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+    }
+
     if (limit() != -1) {
-        operators_with_source.emplace_back(
+        ops_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-    return operators_with_source;
+    return ops_with_source;
 }
 
 } // namespace starrocks::vectorized

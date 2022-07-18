@@ -176,7 +176,7 @@ public enum ScalarOperatorEvaluator {
             try {
                 return (ConstantOperator) method.invoke(null, invokeArgs.toArray());
             } catch (InvocationTargetException | IllegalAccessException | IllegalArgumentException e) {
-                throw new AnalysisException(e.getLocalizedMessage());
+                throw new AnalysisException(e.getLocalizedMessage(), e);
             }
         }
 
