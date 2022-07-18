@@ -343,10 +343,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
-        String insertIntoSql = "insert overwrite " +
-                materializedView.getName() + " " +
-                context.getDefinition();
-        execInsertStmt(insertIntoSql, context, materializedView);
+        execInsertStmt(context.getDefinition(), context, materializedView);
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView, OlapTable olapTable,
