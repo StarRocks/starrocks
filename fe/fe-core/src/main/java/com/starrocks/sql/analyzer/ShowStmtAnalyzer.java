@@ -172,6 +172,14 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+        public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
+        }
+
+        @Override
         public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
