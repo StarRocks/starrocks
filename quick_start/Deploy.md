@@ -295,7 +295,7 @@ ClusterDecommissioned: false
 1 row in set (0.01 sec)
 ```
 
-当 `isAlive` 为 `true` 时，当前 BE 节点正常接入集群。
+当 `Alive` 为 `true` 时，当前 BE 节点正常接入集群。
 
 如果 BE 节点没有正常接入集群，可以通过查看 **log/be.WARNING** 日志文件排查问题。
 
