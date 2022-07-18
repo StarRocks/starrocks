@@ -60,6 +60,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
@@ -462,9 +463,9 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitAlterUserStatement(AlterUserStmt statement, ConnectContext context) {
-            // check if current user has GRANT priv on GLOBAL level.
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
-                    ConnectContext.get(), PrivPredicate.GRANT)) {
+            // check if current user has GRANT priv on GLOBAL or DATABASE level.
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkHasPriv(context, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth.PrivLevel.DATABASE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
