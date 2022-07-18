@@ -77,6 +77,7 @@ import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
@@ -361,6 +362,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitKillStatement(KillStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitShowPartitionsStmt(ShowPartitionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

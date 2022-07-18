@@ -45,6 +45,7 @@ statement
     | truncateTableStatement                                                                #truncateTable
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
+    | showPartitionsStatement                                                               #showPartitions
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -321,6 +322,12 @@ truncateTableStatement
 cancelAlterTableStatement
     : CANCEL ALTER TABLE (COLUMN | ROLLUP)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
     | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
+    ;
+
+showPartitionsStatement
+    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
+    (WHERE expression)?
+    (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
