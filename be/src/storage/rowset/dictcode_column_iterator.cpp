@@ -13,15 +13,9 @@ Status GlobalDictCodeColumnIterator::decode_dict_codes(const vectorized::Column&
             down_cast<const vectorized::Int32Column*>(vectorized::ColumnHelper::get_data_column(&codes))->get_data();
     const size_t size = code_data.size();
 
-    LowCardDictColumn::Container* container = nullptr;
+    LowCardDictColumn::Container* container =
+            &down_cast<LowCardDictColumn*>(vectorized::ColumnHelper::get_data_column(words))->get_data();
     bool output_nullable = words->is_nullable();
-
-    if (output_nullable) {
-        vectorized::ColumnPtr& data_column = down_cast<vectorized::NullableColumn*>(words)->data_column();
-        container = &down_cast<LowCardDictColumn*>(data_column.get())->get_data();
-    } else {
-        container = &down_cast<LowCardDictColumn*>(words)->get_data();
-    }
 
     auto& res_data = *container;
     res_data.resize(size);
