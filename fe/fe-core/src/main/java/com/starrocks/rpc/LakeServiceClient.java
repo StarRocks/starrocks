@@ -2,6 +2,7 @@
 
 package com.starrocks.rpc;
 
+import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
 import com.starrocks.lake.proto.CompactRequest;
@@ -36,19 +37,23 @@ public class LakeServiceClient {
     }
 
     public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) throws RpcException {
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).publishVersionAsync(request));
+        RpcCallback<PublishVersionResponse> callback = new EmptyRpcCallBack<PublishVersionResponse>();
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).publishVersion(request, callback));
     }
 
     public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) throws RpcException {
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).abortTxnAsync(request));
+        RpcCallback<AbortTxnResponse> callback = new EmptyRpcCallBack<AbortTxnResponse>();
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).abortTxn(request, callback));
     }
 
     public Future<CompactResponse> compact(CompactRequest request) throws RpcException {
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compactAsync(request));
+        RpcCallback<CompactResponse> callback = new EmptyRpcCallBack<CompactResponse>();
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compact(request, callback));
     }
 
     public Future<DropTabletResponse> dropTablet(DropTabletRequest request) throws RpcException {
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).dropTabletAsync(request));
+        RpcCallback<DropTabletResponse> callback = new EmptyRpcCallBack<DropTabletResponse>();
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).dropTablet(request, callback));
     }
 
     private <T> T run(Supplier<T> function) throws RpcException {

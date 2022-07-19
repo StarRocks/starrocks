@@ -5,11 +5,15 @@ package com.starrocks.rpc;
 import com.baidu.brpc.protocol.BrpcMeta;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsRequest;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
+import com.starrocks.proto.PExecPlanFragmentRequest;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PFetchDataRequest;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 
 public interface PBackendService {

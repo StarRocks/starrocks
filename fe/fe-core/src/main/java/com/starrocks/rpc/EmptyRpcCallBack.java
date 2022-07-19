@@ -4,15 +4,13 @@ package com.starrocks.rpc;
 
 import com.baidu.brpc.client.RpcCallback;
 
+public class EmptyRpcCallBack<T> implements RpcCallback<T> {
 
-public class RpcCallBackImpl<T> implements RpcCallback<T> {
     @Override
     public void success(T response) {
-        System.out.println("success");
     }
 
     @Override
     public void fail(Throwable e) {
-        System.out.println("fail");
     }
 }

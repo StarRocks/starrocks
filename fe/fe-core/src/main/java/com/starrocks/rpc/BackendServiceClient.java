@@ -27,12 +27,16 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PExecBatchPlanFragmentsRequest;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
+import com.starrocks.proto.PExecPlanFragmentRequest;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PFetchDataRequest;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
@@ -42,6 +46,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
 
 import java.util.NoSuchElementException;
 import java.util.concurrent.Future;
@@ -60,13 +65,14 @@ public class BackendServiceClient {
             TNetworkAddress address, TExecPlanFragmentParams tRequest)
             throws TException, RpcException {
         final PExecPlanFragmentRequest pRequest = new PExecPlanFragmentRequest();
-        pRequest.setRequest(tRequest);
+        TSerializer serializer = new TSerializer();
+        byte[] serializedRequest = serializer.serialize(tRequest);
         RpcContext rpcContext = RpcContext.getContext();
         rpcContext.setReadTimeoutMillis(60000);
-        rpcContext.setRequestBinaryAttachment(pRequest.getSerializedRequest());
-        RpcCallback<PExecPlanFragmentResult> callback = new RpcCallBackImpl<PExecPlanFragmentResult>();
+        rpcContext.setRequestBinaryAttachment(serializedRequest);
+        RpcCallback<PExecPlanFragmentResult> callback = new EmptyRpcCallBack<PExecPlanFragmentResult>();
         try {
-            final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+            final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.execPlanFragment(pRequest, callback);
         } catch (NoSuchElementException e) {
             try {
@@ -76,7 +82,7 @@ public class BackendServiceClient {
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+                final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
                 return service.execPlanFragment(pRequest, callback);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Execute plan fragment retry failed, address={}:{}",
@@ -94,16 +100,17 @@ public class BackendServiceClient {
             TNetworkAddress address, TExecBatchPlanFragmentsParams tRequest)
             throws TException, RpcException {
         final PExecBatchPlanFragmentsRequest pRequest = new PExecBatchPlanFragmentsRequest();
-        pRequest.setRequest(tRequest);
+        TSerializer serializer = new TSerializer();
+        byte[] serializedRequest = serializer.serialize(tRequest);
         RpcContext rpcContext = RpcContext.getContext();
-        rpcContext.setReadTimeoutMillis(6000000);
-        rpcContext.setRequestBinaryAttachment(pRequest.getSerializedRequest());
-        RpcCallback<PExecBatchPlanFragmentsResult> callback = new RpcCallBackImpl<PExecBatchPlanFragmentsResult>();
+        rpcContext.setReadTimeoutMillis(60000);
+        rpcContext.setRequestBinaryAttachment(serializedRequest);
+        RpcCallback<PExecBatchPlanFragmentsResult> callback = new EmptyRpcCallBack<PExecBatchPlanFragmentsResult>();
 
         Future<PExecBatchPlanFragmentsResult> resultFuture = null;
         for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
             try {
-                final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+                final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
                 resultFuture = service.execBatchPlanFragments(pRequest, callback);
             } catch (NoSuchElementException e) {
                 // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
@@ -142,9 +149,9 @@ public class BackendServiceClient {
         qid.hi = queryId.hi;
         qid.lo = queryId.lo;
         pRequest.queryId = qid;
-        RpcCallback<PCancelPlanFragmentResult> callback = new RpcCallBackImpl<PCancelPlanFragmentResult>();
+        RpcCallback<PCancelPlanFragmentResult> callback = new EmptyRpcCallBack<PCancelPlanFragmentResult>();
         try {
-            final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+            final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.cancelPlanFragment(pRequest, callback);
         } catch (NoSuchElementException e) {
             // retry
@@ -154,7 +161,7 @@ public class BackendServiceClient {
                 } catch (InterruptedException interruptedException) {
                     // do nothing
                 }
-                final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+                final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
                 return service.cancelPlanFragment(pRequest, callback);
             } catch (NoSuchElementException noSuchElementException) {
                 LOG.warn("Cancel plan fragment retry failed, address={}:{}",
@@ -169,9 +176,11 @@ public class BackendServiceClient {
     }
 
     public Future<PFetchDataResult> fetchDataAsync(TNetworkAddress address, PFetchDataRequest request) throws RpcException {
-        RpcCallback<PFetchDataResult> callback = new RpcCbAttach<PFetchDataResult>(request);
+        RpcCallback<PFetchDataResult> callback = new EmptyRpcCallBack<PFetchDataResult>();
+        RpcContext rpcContext = RpcContext.getContext();
+        rpcContext.setReadTimeoutMillis(86400000);
         try {
-            PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+            PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.fetchData(request, callback);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
@@ -182,9 +191,11 @@ public class BackendServiceClient {
 
     public Future<PTriggerProfileReportResult> triggerProfileReportAsync(
             TNetworkAddress address, PTriggerProfileReportRequest request) throws RpcException {
-        RpcCallback<PTriggerProfileReportResult> callback = new RpcCallBackImpl<PTriggerProfileReportResult>();
+        RpcCallback<PTriggerProfileReportResult> callback = new EmptyRpcCallBack<PTriggerProfileReportResult>();
+        RpcContext rpcContext = RpcContext.getContext();
+        rpcContext.setReadTimeoutMillis(10000);
         try {
-            final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+            final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.triggerProfileReport(request, callback);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
@@ -194,9 +205,11 @@ public class BackendServiceClient {
     }
 
     public Future<PProxyResult> getInfo(TNetworkAddress address, PProxyRequest request) throws RpcException {
-        RpcCallback<PProxyResult> callback = new RpcCallBackImpl<PProxyResult>();
+        RpcCallback<PProxyResult> callback = new EmptyRpcCallBack<PProxyResult>();
+        RpcContext rpcContext = RpcContext.getContext();
+        rpcContext.setReadTimeoutMillis(10000);
         try {
-            final PBackendServiceAsync service = NewBrpcProxy.getInstance().getBackendService(address);
+            final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.getInfo(request, callback);
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
