@@ -21,6 +21,8 @@
 
 #include "runtime/stream_load/stream_load_executor.h"
 
+#include <fmt/format.h>
+
 #include "agent/master_info.h"
 #include "common/status.h"
 #include "common/utils.h"
@@ -188,10 +190,17 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     TNetworkAddress master_addr = get_master_address();
     TLoadTxnCommitResult result;
 #ifndef BE_TEST
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
-            config::txn_commit_rpc_timeout_ms));
+            config::txn_commit_rpc_timeout_ms);
+    if (st.is_thrift_rpc_error()) {
+        return Status::ServiceUnavailable(fmt::format(
+                "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
+                st.get_error_msg()));
+    } else {
+        return st;
+    }
 #else
     result = k_stream_load_commit_result;
 #endif
