@@ -37,8 +37,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -162,14 +162,10 @@ public class BrokerTable extends Table {
         paths = Lists.newArrayList();
         // user will write %2c and %25 instead of ',' and '%'
         // we need to decode these escape character to what they really are.
-        try {
-            for (String origPath : origPaths) {
-                origPath = origPath.trim();
-                origPath = URLDecoder.decode(origPath, "UTF-8");
-                paths.add(origPath);
-            }
-        } catch (UnsupportedEncodingException e) {
-            throw new DdlException("Encounter path encoding exception: " + e.getMessage());
+        for (String origPath : origPaths) {
+            origPath = origPath.trim();
+            origPath = URLDecoder.decode(origPath, StandardCharsets.UTF_8);
+            paths.add(origPath);
         }
 
         columnSeparator = copiedProps.get(COLUMN_SEPARATOR);
