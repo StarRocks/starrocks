@@ -9,8 +9,8 @@
 namespace starrocks {
 
 Status GlobalDictCodeColumnIterator::decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
-    const auto& code_column = down_cast<const vectorized::NullableColumn&>(codes).data_column();
-    const auto& code_data = down_cast<vectorized::Int32Column*>(code_column.get())->get_data();
+    const auto& code_data =
+            down_cast<const vectorized::Int32Column*>(vectorized::ColumnHelper::get_data_column(&codes))->get_data();
     const size_t size = code_data.size();
 
     LowCardDictColumn::Container* container = nullptr;
