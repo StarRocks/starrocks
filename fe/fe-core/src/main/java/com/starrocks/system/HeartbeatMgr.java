@@ -29,7 +29,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
@@ -63,7 +63,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
  */
-public class HeartbeatMgr extends MasterDaemon {
+public class HeartbeatMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
 
     private final ExecutorService executor;

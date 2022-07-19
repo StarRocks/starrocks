@@ -243,9 +243,7 @@ public class MockedFrontend {
                 };
 
                 GlobalStateMgr.getCurrentState().initialize(args);
-
-                GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(FrontendNodeType.MASTER);
-
+                GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
                 GlobalStateMgr.getCurrentState().waitForReady();
 
                 while (true) {

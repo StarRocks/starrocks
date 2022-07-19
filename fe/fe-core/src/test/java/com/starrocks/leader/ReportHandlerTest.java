@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 
-package com.starrocks.master;
+package com.starrocks.leader;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;

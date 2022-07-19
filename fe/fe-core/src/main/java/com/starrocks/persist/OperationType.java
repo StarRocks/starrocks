@@ -111,7 +111,7 @@ public class OperationType {
     public static final short OP_UPDATE_USER_PROPERTY = 69;
 
     public static final short OP_TIMESTAMP = 70;
-    public static final short OP_MASTER_INFO_CHANGE = 71;
+    public static final short OP_LEADER_INFO_CHANGE = 71;
     public static final short OP_META_VERSION = 72;
     @Deprecated
     // replaced by OP_GLOBAL_VARIABLE_V2
