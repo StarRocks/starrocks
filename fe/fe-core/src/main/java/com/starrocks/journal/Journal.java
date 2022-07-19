@@ -61,4 +61,6 @@ public interface Journal {
 
     // abort current batch
     public void batchWriteAbort() throws InterruptedException, JournalException;
+
+    public String getPrefix();
 }

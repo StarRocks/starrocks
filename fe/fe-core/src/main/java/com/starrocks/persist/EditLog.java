@@ -173,7 +173,7 @@ public class EditLog {
                         break;
                     }
                     LOG.info("Begin to unprotect drop table. db = "
-                            + db.getFullName() + " table = " + info.getTableId());
+                            + db.getOriginName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }

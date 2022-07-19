@@ -85,10 +85,6 @@ public class ConnectProcessor {
     // COM_INIT_DB: change current database of this session.
     private void handleInitDb() {
         String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
-        if (Strings.isNullOrEmpty(ctx.getClusterName())) {
-            ctx.getState().setError("Please enter cluster");
-            return;
-        }
         try {
             ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
         } catch (DdlException e) {
@@ -489,9 +485,6 @@ public class ConnectProcessor {
         ctx.setQualifiedUser(request.user);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.getState().reset();
-        if (request.isSetCluster()) {
-            ctx.setCluster(request.cluster);
-        }
         if (request.isSetResourceInfo()) {
             ctx.getSessionVariable().setResourceGroup(request.getResourceInfo().getGroup());
         }

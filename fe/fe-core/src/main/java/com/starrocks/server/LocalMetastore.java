@@ -365,7 +365,7 @@ public class LocalMetastore implements ConnectorMetadata {
         tryLock(true);
         try {
             unprotectCreateDb(db);
-            LOG.info("finish replay create db, name: {}, id: {}", db.getFullName(), db.getId());
+            LOG.info("finish replay create db, name: {}, id: {}", db.getOriginName(), db.getId());
         } finally {
             unlock();
         }
@@ -485,7 +485,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         try {
             if (fullNameToDb.containsKey(db.getFullName())) {
-                throw new DdlException("Database[" + db.getFullName() + "] already exist.");
+                throw new DdlException("Database[" + db.getOriginName() + "] already exist.");
                 // it's ok that we do not put db back to CatalogRecycleBin
                 // cause this db cannot recover any more
             }
@@ -572,7 +572,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // add db to globalStateMgr
         replayCreateDb(db);
 
-        LOG.info("replay recover db[{}], name: {}", dbId, db.getFullName());
+        LOG.info("replay recover db[{}], name: {}", dbId, db.getOriginName());
     }
 
     public void alterDatabaseQuota(AlterDatabaseQuotaStmt stmt) throws DdlException {
@@ -3349,7 +3349,7 @@ public class LocalMetastore implements ConnectorMetadata {
         ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
                 newDataProperty, replicationNum, isInMemory);
         editLog.logModifyPartition(info);
-        LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getFullName(), table.getName(),
+        LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getOriginName(), table.getName(),
                 partition.getName(), replicationNum);
     }
 

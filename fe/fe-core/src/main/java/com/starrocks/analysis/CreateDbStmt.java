@@ -57,9 +57,6 @@ public class CreateDbStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
-        }
         FeNameFormat.checkDbName(dbName);
         dbName = ClusterNamespace.getFullName(dbName);
 

@@ -1,66 +1,124 @@
-# Introduction
+# StarRocks
 
-## What is StarRocks
+StarRocks is a next-gen, high-performance analytical data warehouse that enables real-time, multi-dimensional, and highly concurrent data analysis.  StarRocks has an MPP architecture and it is equipped with a fully vectorized execution engine, a columnar storage engine that supports real-time updates, and is powered by a rich set of features including a fully-customized cost-based optimizer (CBO), intelligent materialized view and more. StarRocks is also compatible with MySQL protocols and can be easily connected using MySQL clients and popular BI tools. StarRocks is highly scalable, available, and easy to maintain. It is widely adopted in the industry, powering a variety of OLAP scenarios, such as real-time analytics, ad-hoc queries, data lake analytics and more.
 
-* StarRocks is a high-performance, MySQL-compatible, distributed relational columnar database. It has been tested and modernized by the industry for multiple data analysis scenarios.
+<NavBox>
+<NavBoxPart title="About StarRocks">
+<NavBoxPartItem>
 
-* StarRocks takes advantage of the relational Online Analytical Processing (OLAP) database and distributed storage system. Through architectural upgrades and functional optimization, StarRocks has developed into an enterprise-level product.
+- [Introduction](/docs/introduction/what_is_starrocks.md)
+- [Concepts](/docs/quick_start/Concepts.md)
+- [Architecture](/docs/quick_start/Architecture.md)
 
-* StarRocks is committed to accommodating multiple data analysis scenarios for enterprise users. It supports multiple data warehouse schemas(flat tables, pre-aggregations, star or snowflake schema), multiple data import methods (batch and streaming) and allows direct access to data from Hive, MySQL and Elasticsearch without importing.
+</NavBoxPartItem>
+</NavBoxPart>
 
-* StarRocks is compatible with the MySQL protocol. Users can use the MySQL client and common Business Intelligence (BI) tools to connect to StarRocks for data analysis.
+<NavBoxPart title="Get started​">
+<NavBoxPartItem>
 
-* StarRocks uses a distributed architecture to divide the table horizontally and store it in multiple replications. The clusters are highly scalable and therefore support 1) 10PB-level data analysis, 2) Massively Parallel Processing (MPP), and 3) data replication and elastic fault tolerance.
+- [Deploy StarRocks](/docs/quick_start/Deploy.md)
+- [Ingest and query data](/docs/quick_start/Import_and_query.md)
 
-* Leveraging a relational model, strong data typing, and a columnar storage engine, StarRocks reduces read-write amplification through encoding and compression techniques. Using vectorized query execution, it fully unleashes the power of parallel computing on multicore CPUs, therefore significantly improves query performance.
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-## Main features
+<NavBox>
+<NavBoxPart title="Table design ​">
+<NavBoxPartItem>
 
-The architectural design of StarRocks integrates the MPP database and the design ideas of distributed systems, and has the following advantages:
+- [Overview of table design](/docs/table_design/StarRocks_table_design)
+- [Data models](/docs/table_design/Data_model)
+- [Data distribution](/docs/table_design/Data_distribution)
+- [Sort key and prefix index](/docs/table_design/Sort_key)
 
-### Simple architecture
+</NavBoxPartItem>
+</NavBoxPart>
 
-StarRocks does not rely on any external systems. The simple architecture makes it easy to deploy, maintain and scale out.
+<NavBoxPart title="Ingestion​">
+<NavBoxPartItem>
 
-### Native vectorized SQL engine
+- [Overview of ingestion](/docs/loading/Loading_intro)
+- [Ingestion via HTTP](/docs/loading/StreamLoad)
+- [Batch ingestion from HDFS or cloud object storage](/docs/loading/BrokerLoad)
+- [Continuous ingestion from Apache Kafka®](/docs/loading/RoutineLoad)
+- [Bulk ingestion and data transformation using Apache Spark™](/docs/loading/SparkLoad)
+- [Real-time synchronization from MySQL](/docs/loading/Flink_cdc_load)
 
-StarRocks adopts vectorization technology to make full use of the parallel computing power of CPU, achieving sub-second query returns in multidimensional analyses. Administrators only need to focus on the StarRocks system itself, without having to learn and manage other external systems.
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-### Query optimization
+<NavBox>
+<NavBoxPart title="Querying​">
+<NavBoxPartItem title="Query acceleration">
 
-StarRocks can optimize complex queries through CBO (Cost Based Optimizer). With a better execution plan, the data analysis efficiency will be greatly improved.
+- [Cost-based optimizer](/docs/using_starrocks/Cost_based_optimizer)
+- [Materialized view](/docs/using_starrocks/Materialized_view)
+- [Colocate Join](/docs/using_starrocks/Colocate_join)
 
-### Query federation
+</NavBoxPartItem>
+<NavBoxPartItem title="Query semi-structured data">
 
-StarRocks allows direct access to data from Hive, MySQL and Elasticsearch without importing.
+- [JSON](/docs/sql-reference/sql-statements/data-types/JSON)
+- [ARRAY](/docs/using_starrocks/Array)
 
-### Efficiently update
+</NavBoxPartItem>
+</NavBoxPart>
 
-The updated model of StarRocks can perform upsert/delete operations according to the primary key, and achieve efficient query while concurrent updates.
+<NavBoxPart>
+<NavBoxPartItem title="Query external data sources​">
 
-### Intelligent materialized view
+- [Apache Hive™](/docs/using_starrocks/External_table#hive-external-table)
+- [Apache Hudi](/docs/using_starrocks/External_table#hudi-external-table)
+- [Apache Iceberg](/docs/using_starrocks/External_table#apache-iceberg-external-table)
+- [MySQL](/docs/using_starrocks/External_table#mysql-external-table)
+- [Elasticsearch](/docs/using_starrocks/External_table#elasticsearch-external-table)
+- [JDBC-compatible database](/docs/using_starrocks/External_table#external-table-for-a-jdbc-compatible-database)
 
-StarRocks supports intelligent materialized views. Users can create materialized views and generate pre-aggregated tables to speed up aggregate queries. StarRocks' materialized view automatically runs the aggregation when data is imported, keeping it consistent with the original table. When querying, users do not need to specify a materialized view, StarRocks can automatically select the best-materialized view to satisfy the query.
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-### Standard SQL
+<NavBox>
+<NavBoxPart title="Administration">
+<NavBoxPartItem>
 
-StarRocks supports standard SQL syntax, including aggregation, JOIN, sorting, window functions, and custom functions. Users can perform data analysis with standard SQL. In addition, StarRocks is compatible with MySQL protocol. Users can use various existing client tools and BI software to access StarRocks and perform data analysis with a simple drag-and-drop in StarRocks.
+- [Manage a cluster](/docs/administration/Cluster_administration)
+- [Scale in and out a cluster](/docs/administration/Scale_up_down)
+- [Tune query performance](/docs/administration/Query_planning)
+- [Manage workloads](/docs/administration//resource_group)
 
-### Unified batch and streaming
+</NavBoxPartItem>
+</NavBoxPart>
 
-StarRocks supports batch and streaming data import. It supports Kafka, HDFS, and local files as data sources, and ORC, Parquet, and CSV data formats. StarRocks can consume real-time Kafka data in data importing to avoid data loss or duplication. StarRocks can also import data in batches from local or remote (HDFS) data sources.
+<NavBoxPart title="References​">
+<NavBoxPartItem>
 
-### High availability, high scalability
+- [SQL reference](/docs/sql-reference/sql-statements/account-management/ALTER%20USER)
+- [Function reference](/docs/sql-reference/sql-functions/date-time-functions/convert_tz)
 
-StarRocks supports multi-replica data storage and multi-instance data deployment. The cluster has the ability of self-healing and elastic recovery.
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>
 
-StarRocks adopts a distributed architecture  which allows its storage capacity and computing power to be scaled horizontally. StarRocks clusters can be expanded to hundreds of nodes to support up to 10PB data storage.
+<NavBox>
+<NavBoxPart title="FAQ​">
+<NavBoxPartItem>
 
-## Use Case
+- [Ingestion and export](/docs/faq/loading/Loading_faq)
+- [Deployment](/docs/faq/Deploy_faq)
+- [SQL](/docs/faq/Sql_faq)
 
-StarRocks can meet a variety of analysis needs, including OLAP analysis, customized reports, real-time data analysis, ad hoc data analysis, etc. Specific business scenarios include:
+</NavBoxPartItem>
+</NavBoxPart>
 
-* OLAP analysis
-* Real time data analysis
-* High concurrency query
-* Unified analysis
+<NavBoxPart title="Benchmarks​">
+<NavBoxPartItem>
+
+- [SSB benchmark](/docs/benchmarking/SSB_Benchmarking.md)
+- [TPC-H benchmark](/docs/benchmarking/TPC-H_Benchmarking.md)
+
+</NavBoxPartItem>
+</NavBoxPart>
+</NavBox>

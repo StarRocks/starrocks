@@ -72,10 +72,11 @@ public:
 private:
     Status _append(const ByteBufferPtr& buf);
 
-    // called when `no_block_read(uint8_t* data, size_t* data_size, bool* eof)`
-    // timeout in the mid of read, we will push the read data back to the
-    // _buf_queue
-    Status _push_front(const ByteBufferPtr& buf);
+    // Called when `no_block_read(uint8_t* data, size_t* data_size, bool* eof)`
+    // timeout in the mid of read, we will push the read data back to the _buf_queue.
+    // The lock is already acquired before calling this function
+    // and there is no need to acquire the lock again in the function
+    Status _push_front_unlocked(const ByteBufferPtr& buf);
 
     // Blocking queue
     std::mutex _lock;

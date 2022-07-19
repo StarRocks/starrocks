@@ -46,10 +46,6 @@ public class GrantRevokeImpersonateStmtTest {
 
         new Expectations(ctx) {
             {
-                ctx.getClusterName();
-                minTimes = 0;
-                result = "default_cluster";
-
                 ctx.getGlobalStateMgr();
                 minTimes = 0;
                 result = globalStateMgr;

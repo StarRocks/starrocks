@@ -67,11 +67,11 @@ public class DropStmtAnalyzer {
             // Check if a view
             if (statement.isView()) {
                 if (!(table instanceof View)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getFullName(), tableName, "VIEW");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "VIEW");
                 }
             } else {
                 if (table instanceof View) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getFullName(), tableName, "TABLE");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "TABLE");
                 }
             }
             return null;

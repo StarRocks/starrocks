@@ -193,6 +193,10 @@ public class Database extends MetaObject implements Writable {
         return id;
     }
 
+    public String getOriginName() {
+        return ClusterNamespace.getNameFromFullName(fullQualifiedName);
+    }
+
     public String getFullName() {
         return fullQualifiedName;
     }
@@ -406,7 +410,19 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
+        // process related materialized views
+        if (table.isOlapTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            for (long mvId : olapTable.getRelatedMaterializedViews()) {
+                Table tmpTable = getTable(mvId);
+                if (tmpTable != null) {
+                    MaterializedView mv = (MaterializedView) tmpTable;
+                    mv.setActive(false);
+                }
+            }
+        }
+
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(),
                 table.getId());
         return batchTaskMap;
     }

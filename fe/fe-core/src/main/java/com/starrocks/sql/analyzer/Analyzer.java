@@ -24,9 +24,11 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
@@ -171,6 +173,12 @@ public class Analyzer {
 
         @Override
         public Void visitShowStatement(ShowStmt statement, ConnectContext session) {
+            ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
         }
@@ -346,6 +354,12 @@ public class Analyzer {
 
         public Void visitTruncateTableStatement(TruncateTableStmt statement, ConnectContext context) {
             TruncateTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
+            RecoverPartitionAnalyzer.analyze(statement, context);
             return null;
         }
 

@@ -54,6 +54,7 @@ public class BDBJournalCursor implements JournalCursor {
     protected int nextDbPositionIndex = -1;
     // the database of current log
     protected CloseSafeDatabase database = null;
+    private String prefix;
 
     /**
      * handle DatabaseException carefully
@@ -83,11 +84,16 @@ public class BDBJournalCursor implements JournalCursor {
         return exception;
     }
 
+    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey)
+            throws JournalException, JournalInconsistentException, InterruptedException {
+        return getJournalCursor(env, "", fromKey, toKey);
+    }
+
     /**
      * init journal cursor
      * if toKey = -1(CUROSR_END_KEY), it will automatically search the end.
      */
-    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, long fromKey, long toKey)
+    public static BDBJournalCursor getJournalCursor(BDBEnvironment env, String prefix, long fromKey, long toKey)
             throws JournalException, JournalInconsistentException, InterruptedException {
         if (fromKey < 0  // fromKey must be a positive number
                 || (toKey > 0 && toKey < fromKey)  // if toKey is a positive number, it must be smaller than fromKey
@@ -95,7 +101,7 @@ public class BDBJournalCursor implements JournalCursor {
             ) {
             throw new JournalException(String.format("Invalid key range! fromKey %s toKey %s", fromKey, toKey));
         }
-        BDBJournalCursor cursor = new BDBJournalCursor(env, fromKey, toKey);
+        BDBJournalCursor cursor = new BDBJournalCursor(env, prefix, fromKey, toKey);
         cursor.refresh();
         return cursor;
     }
@@ -121,8 +127,9 @@ public class BDBJournalCursor implements JournalCursor {
                 currentKey, database, nextDbPositionIndex);
     }
 
-    protected BDBJournalCursor(BDBEnvironment env, long fromKey, long toKey) {
+    protected BDBJournalCursor(BDBEnvironment env, String prefix, long fromKey, long toKey) {
         this.environment = env;
+        this.prefix = prefix;
         this.currentKey = fromKey;
         this.toKey = toKey;
     }
@@ -182,7 +189,8 @@ public class BDBJournalCursor implements JournalCursor {
             database.close();
             database = null;
         }
-        String dbName = Long.toString(localDBNames.get(nextDbPositionIndex));
+
+        String dbName = prefix + Long.toString(localDBNames.get(nextDbPositionIndex));
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; ++ i) {
             try {

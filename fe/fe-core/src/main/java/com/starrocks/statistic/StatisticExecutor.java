@@ -11,7 +11,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
@@ -131,7 +130,7 @@ public class StatisticExecutor {
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
-        String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+        String dbName = db.getOriginName();
         String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 

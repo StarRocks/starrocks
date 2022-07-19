@@ -78,7 +78,7 @@ public class SqlWithIdUtils {
             if (table == null) {
                 table = db.getTable(tableId);
                 if (table == null) {
-                    throw new SemanticException("Can not find table id: %s in db: %s", tableId, db.getFullName());
+                    throw new SemanticException("Can not find table id: %s in db: %s", tableId, db.getOriginName());
                 }
                 tableMap.put(tableId, table);
             }

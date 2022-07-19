@@ -23,7 +23,6 @@ package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.Text;
-import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,17 +75,6 @@ public class DbPrivTable extends PrivTable {
             DbPrivEntry dbPrivEntry = (DbPrivEntry) iter.next();
             // check priv
             if (dbPrivEntry.privSet.satisfy(wanted)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean hasClusterPriv(ConnectContext ctx, String clusterName) {
-        Iterator<PrivEntry> iter = this.getFullReadOnlyIterator();
-        while (iter.hasNext()) {
-            DbPrivEntry dbPrivEntry = (DbPrivEntry) iter.next();
-            if (dbPrivEntry.getOrigDb().startsWith(clusterName)) {
                 return true;
             }
         }
