@@ -45,17 +45,12 @@ public class ShowPartitionsStmt extends ShowStmt {
     public static final String FILTER_REPLICATION_NUM = "ReplicationNum";
     public static final String FILTER_LAST_CONSISTENCY_CHECK_TIME = "LastConsistencyCheckTime";
 
-    public static final ImmutableSet<String> FILTER_COLUMNS;
-
-    static {
-        FILTER_COLUMNS = ImmutableSet.<String>builder()
-                .add(FILTER_PARTITION_ID)
-                .add(FILTER_PARTITION_NAME)
-                .add(FILTER_STATE)
-                .add(FILTER_BUCKETS)
-                .add(FILTER_REPLICATION_NUM)
-                .add(FILTER_LAST_CONSISTENCY_CHECK_TIME).build();
-    }
+    public static final ImmutableSet<String> FILTER_COLUMNS = ImmutableSet.<String>builder().add(FILTER_PARTITION_ID)
+            .add(FILTER_PARTITION_NAME)
+            .add(FILTER_STATE)
+            .add(FILTER_BUCKETS)
+            .add(FILTER_REPLICATION_NUM)
+            .add(FILTER_LAST_CONSISTENCY_CHECK_TIME).build();
 
     private String dbName;
     private String tableName;
