@@ -4,7 +4,7 @@ package com.starrocks.rpc;
 
 import com.baidu.brpc.client.RpcCallback;
 
-public class EmptyRpcCallBack<T> implements RpcCallback<T> {
+public class EmptyRpcCallback<T> implements RpcCallback<T> {
 
     @Override
     public void success(T response) {

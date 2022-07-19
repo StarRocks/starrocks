@@ -37,22 +37,22 @@ public class LakeServiceClient {
     }
 
     public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) throws RpcException {
-        RpcCallback<PublishVersionResponse> callback = new EmptyRpcCallBack<PublishVersionResponse>();
+        RpcCallback<PublishVersionResponse> callback = new EmptyRpcCallback<PublishVersionResponse>();
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).publishVersion(request, callback));
     }
 
     public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) throws RpcException {
-        RpcCallback<AbortTxnResponse> callback = new EmptyRpcCallBack<AbortTxnResponse>();
+        RpcCallback<AbortTxnResponse> callback = new EmptyRpcCallback<AbortTxnResponse>();
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).abortTxn(request, callback));
     }
 
     public Future<CompactResponse> compact(CompactRequest request) throws RpcException {
-        RpcCallback<CompactResponse> callback = new EmptyRpcCallBack<CompactResponse>();
+        RpcCallback<CompactResponse> callback = new EmptyRpcCallback<CompactResponse>();
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compact(request, callback));
     }
 
     public Future<DropTabletResponse> dropTablet(DropTabletRequest request) throws RpcException {
-        RpcCallback<DropTabletResponse> callback = new EmptyRpcCallBack<DropTabletResponse>();
+        RpcCallback<DropTabletResponse> callback = new EmptyRpcCallback<DropTabletResponse>();
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).dropTablet(request, callback));
     }
 

@@ -3,6 +3,7 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+import com.baidu.brpc.client.RpcCallback;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
@@ -11,7 +12,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
-import com.starrocks.persist.ShardInfo;
 import com.starrocks.rpc.LakeServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;

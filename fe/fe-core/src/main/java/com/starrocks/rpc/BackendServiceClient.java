@@ -70,7 +70,7 @@ public class BackendServiceClient {
         RpcContext rpcContext = RpcContext.getContext();
         rpcContext.setReadTimeoutMillis(60000);
         rpcContext.setRequestBinaryAttachment(serializedRequest);
-        RpcCallback<PExecPlanFragmentResult> callback = new EmptyRpcCallBack<PExecPlanFragmentResult>();
+        RpcCallback<PExecPlanFragmentResult> callback = new EmptyRpcCallback<PExecPlanFragmentResult>();
         try {
             final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.execPlanFragment(pRequest, callback);
@@ -103,10 +103,9 @@ public class BackendServiceClient {
         TSerializer serializer = new TSerializer();
         byte[] serializedRequest = serializer.serialize(tRequest);
         RpcContext rpcContext = RpcContext.getContext();
-        rpcContext.setReadTimeoutMillis(60000);
+        rpcContext.setReadTimeoutMillis(600000);
         rpcContext.setRequestBinaryAttachment(serializedRequest);
-        RpcCallback<PExecBatchPlanFragmentsResult> callback = new EmptyRpcCallBack<PExecBatchPlanFragmentsResult>();
-
+        RpcCallback<PExecBatchPlanFragmentsResult> callback = new EmptyRpcCallback<PExecBatchPlanFragmentsResult>();
         Future<PExecBatchPlanFragmentsResult> resultFuture = null;
         for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
             try {
@@ -149,7 +148,7 @@ public class BackendServiceClient {
         qid.hi = queryId.hi;
         qid.lo = queryId.lo;
         pRequest.queryId = qid;
-        RpcCallback<PCancelPlanFragmentResult> callback = new EmptyRpcCallBack<PCancelPlanFragmentResult>();
+        RpcCallback<PCancelPlanFragmentResult> callback = new EmptyRpcCallback<PCancelPlanFragmentResult>();
         try {
             final PBackendServiceAsync service = BrpcProxy.getInstance().getBackendService(address);
             return service.cancelPlanFragment(pRequest, callback);
@@ -176,7 +175,7 @@ public class BackendServiceClient {
     }
 
     public Future<PFetchDataResult> fetchDataAsync(TNetworkAddress address, PFetchDataRequest request) throws RpcException {
-        RpcCallback<PFetchDataResult> callback = new EmptyRpcCallBack<PFetchDataResult>();
+        RpcCallback<PFetchDataResult> callback = new EmptyRpcCallback<PFetchDataResult>()
         RpcContext rpcContext = RpcContext.getContext();
         rpcContext.setReadTimeoutMillis(86400000);
         try {
@@ -191,7 +190,7 @@ public class BackendServiceClient {
 
     public Future<PTriggerProfileReportResult> triggerProfileReportAsync(
             TNetworkAddress address, PTriggerProfileReportRequest request) throws RpcException {
-        RpcCallback<PTriggerProfileReportResult> callback = new EmptyRpcCallBack<PTriggerProfileReportResult>();
+        RpcCallback<PTriggerProfileReportResult> callback = new EmptyRpcCallback<PTriggerProfileReportResult>();
         RpcContext rpcContext = RpcContext.getContext();
         rpcContext.setReadTimeoutMillis(10000);
         try {
@@ -205,7 +204,7 @@ public class BackendServiceClient {
     }
 
     public Future<PProxyResult> getInfo(TNetworkAddress address, PProxyRequest request) throws RpcException {
-        RpcCallback<PProxyResult> callback = new EmptyRpcCallBack<PProxyResult>();
+        RpcCallback<PProxyResult> callback = new EmptyRpcCallback<PProxyResult>();
         RpcContext rpcContext = RpcContext.getContext();
         rpcContext.setReadTimeoutMillis(10000);
         try {
