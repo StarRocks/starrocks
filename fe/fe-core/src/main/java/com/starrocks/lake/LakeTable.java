@@ -7,20 +7,25 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 
@@ -33,6 +38,8 @@ import java.util.List;
  * TODO: support table api like Iceberg
  */
 public class LakeTable extends OlapTable {
+
+    private static final Logger LOG = LogManager.getLogger(LakeTable.class);
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
@@ -80,6 +87,22 @@ public class LakeTable extends OlapTable {
         }
         tableProperty
                 .setStorageInfo(new StorageInfo(newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS)));
+    }
+
+    public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState,
+                                   MaterializedIndex.IndexExtState extState) {
+        LakeTable copied = (LakeTable) new OlapTable();
+
+        TableType type = getType();
+        if (type == TableType.LAKE) {
+            copied = DeepCopy.copyWithGson(this, LakeTable.class);
+            if (copied == null) {
+                LOG.warn("failed to copy lake table: " + getName());
+                return null;
+            }
+        }
+
+        return super.selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
     @Override
