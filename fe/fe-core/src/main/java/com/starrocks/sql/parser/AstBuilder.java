@@ -3458,7 +3458,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 2) {
             return new LabelName(parts.get(0), parts.get(1));
-        } else if (parts.size() == 2) {
+        } else if (parts.size() == 1) {
             return new LabelName(null, parts.get(0));
         } else {
             throw new ParsingException("error table name ");

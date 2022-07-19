@@ -110,7 +110,7 @@ public class RestoreStmtAnalyzer {
                             Partition partition = olapTbl.getPartition(partName);
                             if (partition == null) {
                                 throw new SemanticException(
-                                        "partition[" + partName + " does not exist  in table" + tableName.getTbl());
+                                        "partition[" + partName + "] does not exist  in table" + tableName.getTbl());
                             }
                         }
                     }
