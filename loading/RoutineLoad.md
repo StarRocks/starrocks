@@ -131,7 +131,7 @@ ReasonOfStateChanged:
 
 ~~~sql
 MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD WHERE Jobname="routine_wiki_edit_1589191587"\G;
+MySQL [load_test] > SHOW ROUTINE LOAD TASK WHERE Jobname="routine_wiki_edit_1589191587"\G;
 *************************** 1. row ***************************
               TaskId: 645da10b-0a5c-4e90-84f0-03b33ec58b68
                TxnId: 2776810
