@@ -203,16 +203,18 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
+// If request is null, there will be an error when brpc encode request.
 message PExecPlanFragmentRequest {
-    required bool pad = 1;
+    optional bool pad = 1;
 };
 
 message PExecPlanFragmentResult {
     required StatusPB status = 1;
 };
 
+// If request is null, there will be an error when brpc encode request.
 message PExecBatchPlanFragmentsRequest {
-    required bool pad = 1;
+    optional bool pad = 1;
 };
 
 message PExecBatchPlanFragmentsResult {

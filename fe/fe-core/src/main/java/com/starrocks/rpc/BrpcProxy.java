@@ -2,6 +2,7 @@
 
 package com.starrocks.rpc;
 
+import com.baidu.brpc.client.BrpcProxy;
 import com.baidu.brpc.client.RpcClient;
 import com.baidu.brpc.client.RpcClientOptions;
 import com.baidu.brpc.loadbalance.LoadBalanceStrategy;
@@ -38,7 +39,7 @@ public class BrpcProxy {
         clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
         String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
         RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        PBackendServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
+        PBackendServiceAsync service = BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
         return service;
     }
 
@@ -57,7 +58,7 @@ public class BrpcProxy {
         clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
         String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
         RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        LakeServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
+        LakeServiceAsync service = BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
         return service;
     }
 
