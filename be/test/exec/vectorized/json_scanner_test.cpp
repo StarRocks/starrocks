@@ -929,7 +929,9 @@ TEST_F(JsonScannerTest, test_illegal_input) {
             create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
 
     ASSERT_OK(scanner->open());
-    ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.status().ok());
+    ASSERT_EQ(res.value()->num_rows(), 1);
 }
 
 TEST_F(JsonScannerTest, test_multi_invalid_json) {
