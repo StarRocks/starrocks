@@ -150,9 +150,6 @@ private:
 
     typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
-#ifdef DEBUG
-    bool _is_pipeline_level_shuffle_init = false;
-#endif
     bool _is_pipeline_level_shuffle = false;
     std::vector<bool> _has_chunks_per_driver_sequence;
     serde::ProtobufChunkMeta _chunk_meta;
@@ -474,20 +471,8 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
 
-#ifdef DEBUG
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        bool prev_is_pipeline_level_shuffle = _is_pipeline_level_shuffle;
-        _is_pipeline_level_shuffle =
-                _recvr->_is_pipeline && request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
-        // _is_pipeline_level_shuffle must be stable after first assignment
-        DCHECK(!_is_pipeline_level_shuffle_init || (prev_is_pipeline_level_shuffle == _is_pipeline_level_shuffle));
-        _is_pipeline_level_shuffle_init = true;
-    }
-#else
     _is_pipeline_level_shuffle =
             _recvr->_is_pipeline && request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
-#endif
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -615,20 +600,9 @@ Status DataStreamRecvr::SenderQueue::add_chunks_and_keep_order(const PTransmitCh
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
-#ifdef DEBUG
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        bool prev_is_pipeline_level_shuffle = _is_pipeline_level_shuffle;
-        _is_pipeline_level_shuffle =
-                _recvr->_is_pipeline && request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
-        // _is_pipeline_level_shuffle must be stable after first assignment
-        DCHECK(!_is_pipeline_level_shuffle_init || (prev_is_pipeline_level_shuffle == _is_pipeline_level_shuffle));
-        _is_pipeline_level_shuffle_init = true;
-    }
-#else
+
     _is_pipeline_level_shuffle =
             _recvr->_is_pipeline && request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
-#endif
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
