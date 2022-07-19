@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
@@ -98,5 +99,15 @@ public class ShowBackupStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowBackupStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
