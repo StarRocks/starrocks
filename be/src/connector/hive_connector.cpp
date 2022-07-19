@@ -288,6 +288,12 @@ Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
+
+    // The column order of chunk is required to be invariable. In order to simplify the logic of each scanner,
+    // we force to reorder the columns of chunk, so scanner doesn't have to care about the column order anymore.
+    // The overhead of reorder is negligible because we only swap columns.
+    ChunkHelper::reorder_chunk(*_tuple_desc, chunk->get());
+
     return Status::OK();
 }
 
