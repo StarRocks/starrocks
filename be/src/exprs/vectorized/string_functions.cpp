@@ -20,8 +20,10 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/large_int_value.h"
 #include "storage/olap_define.h"
+#include "util/phmap/phmap.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
@@ -2517,16 +2519,35 @@ int StringFunctions::index_of(const char* source, int source_count, const char* 
 }
 
 struct StringFunctionsState {
+    std::string pattern;
     std::unique_ptr<re2::RE2> regex;
     std::unique_ptr<re2::RE2::Options> options;
     bool const_pattern{false};
+    phmap::flat_hash_map<int32_t, std::unique_ptr<re2::RE2>>
+            driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     StringFunctionsState() : regex(), options() {}
+
+    // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
+    re2::RE2* get_or_prepare_regex() {
+        DCHECK(const_pattern);
+        int32_t driver_id = CurrentThread::current().get_driver_id();
+        if (driver_id == 0) {
+            return regex.get();
+        }
+        auto iter = driver_regex_map.find(driver_id);
+        if (iter == driver_regex_map.end()) {
+            auto regex = std::make_unique<re2::RE2>(pattern, *options);
+            DCHECK(regex->ok());
+            iter = driver_regex_map.emplace(driver_id, std::move(regex)).first;
+        }
+        return iter->second.get();
+    }
 };
 
 Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+    if (scope != FunctionContext::THREAD_LOCAL) {
         return Status::OK();
     }
 
@@ -2546,8 +2567,8 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
     state->const_pattern = true;
     auto column = context->get_constant_column(1);
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
-    std::string pattern_str = pattern.to_string();
-    state->regex = std::make_unique<re2::RE2>(pattern_str, *(state->options));
+    state->pattern = pattern.to_string();
+    state->regex = std::make_unique<re2::RE2>(state->pattern, *(state->options));
 
     if (!state->regex->ok()) {
         std::stringstream error;
@@ -2560,9 +2581,9 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
 }
 
 Status StringFunctions::regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+    if (scope == FunctionContext::THREAD_LOCAL) {
         auto* state =
-                reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+                reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete state;
     }
     return Status::OK();
@@ -2658,10 +2679,10 @@ static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns
 }
 
 ColumnPtr StringFunctions::regexp_extract(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
-        re2::RE2* const_re = state->regex.get();
+        re2::RE2* const_re = state->get_or_prepare_regex();
         return regexp_extract_const(const_re, columns);
     }
 
@@ -2725,10 +2746,10 @@ static ColumnPtr regexp_replace_const(re2::RE2* const_re, const Columns& columns
 }
 
 ColumnPtr StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
-        re2::RE2* const_re = state->regex.get();
+        re2::RE2* const_re = state->get_or_prepare_regex();
         return regexp_replace_const(const_re, columns);
     }
 
