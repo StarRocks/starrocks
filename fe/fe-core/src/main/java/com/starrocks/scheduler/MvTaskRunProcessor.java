@@ -32,6 +32,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
@@ -60,6 +61,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -439,6 +441,8 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
         ctx.setThreadLocalInfo();
+        ctx.setStmtId(new AtomicInteger().incrementAndGet());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> selectedBasePartitionInfos = Maps.newHashMap();
             database.readLock();
