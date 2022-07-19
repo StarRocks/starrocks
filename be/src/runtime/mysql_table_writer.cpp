@@ -22,6 +22,7 @@
 #include <mariadb/mysql.h>
 
 #include <string_view>
+#include <type_traits>
 #include <variant>
 
 #include "column/chunk.h"
@@ -33,7 +34,6 @@
 #include "fmt/core.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
-#include "util/radix_sort.h"
 
 #define __StarRocksMysql MYSQL
 #include <sstream>
@@ -130,7 +130,7 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
         for (size_t col = 0; col < num_cols; col++) {
             std::visit(
                     [&](auto&& viewer) {
-                        using ViewerType = decay_t<decltype(viewer)>;
+                        using ViewerType = std::decay_t<decltype(viewer)>;
                         constexpr PrimitiveType type = ViewerType::TYPE;
 
                         if (viewer.is_null(i)) {
