@@ -88,13 +88,11 @@ public class LakeTable extends OlapTable {
         tableProperty
                 .setStorageInfo(new StorageInfo(newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS)));
     }
-    
+
     @Override
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState,
                                    MaterializedIndex.IndexExtState extState) {
         LakeTable copied = (LakeTable) new OlapTable();
-
-        TableType type = getType();
         copied = DeepCopy.copyWithGson(this, LakeTable.class);
         if (copied == null) {
             LOG.warn("failed to copy lake table: " + getName());
