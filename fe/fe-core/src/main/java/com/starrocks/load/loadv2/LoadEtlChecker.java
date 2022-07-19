@@ -18,7 +18,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,7 +26,7 @@ import org.apache.logging.log4j.Logger;
  * LoadEtlChecker will update etl status for jobs that have etl state.
  * Now only for SparkLoadJob
  */
-public class LoadEtlChecker extends MasterDaemon {
+public class LoadEtlChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadEtlChecker.class);
 
     private LoadManager loadManager;

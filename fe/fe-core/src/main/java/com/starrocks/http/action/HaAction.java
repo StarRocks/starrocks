@@ -74,7 +74,7 @@ public class HaAction extends WebBaseAction {
     private void appendJournalInfo(StringBuilder buffer) {
         buffer.append("<h2>Current Journal Id</h2>");
         buffer.append("<pre>");
-        if (GlobalStateMgr.getCurrentState().isMaster()) {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
             buffer.append("<p>" + GlobalStateMgr.getCurrentState().getMaxJournalId() + "</p>");
         } else {
             buffer.append("<p>" + GlobalStateMgr.getCurrentState().getReplayedJournalId() + "</p>");

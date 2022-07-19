@@ -22,7 +22,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +30,7 @@ import org.apache.logging.log4j.Logger;
  * LoadLoadingChecker will update loading status for jobs that loading by PushTask.
  * Now only for SparkLoadJob
  */
-public class LoadLoadingChecker extends MasterDaemon {
+public class LoadLoadingChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingChecker.class);
 
     private LoadManager loadManager;

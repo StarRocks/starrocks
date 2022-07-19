@@ -41,8 +41,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
-import com.starrocks.ha.MasterInfo;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
+import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.DeleteInfo;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.LoadErrorHub;
@@ -50,7 +51,6 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.master.Checkpoint;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
@@ -81,7 +81,6 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
-import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -205,11 +204,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_PARTITION_V2: {
-                data = PartitionPersistInfoV2.read(in);
                 isRead = true;
                 break;
             }
@@ -377,9 +371,9 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_MASTER_INFO_CHANGE: {
-                data = new MasterInfo();
-                ((MasterInfo) data).readFields(in);
+            case OperationType.OP_LEADER_INFO_CHANGE: {
+                data = new LeaderInfo();
+                ((LeaderInfo) data).readFields(in);
                 isRead = true;
                 break;
             }

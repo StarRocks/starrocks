@@ -45,7 +45,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
-import com.starrocks.ha.MasterInfo;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
@@ -183,14 +183,6 @@ public class EditLog {
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
                     globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
-                    break;
-                }
-                case OperationType.OP_ADD_PARTITION_V2: {
-                    PartitionPersistInfoV2 info = (PartitionPersistInfoV2) journal.getData();
-                    LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
-                            + " table = " + info.getTableId()
-                            + " partitionName = " + info.getPartition().getName());
-                    globalStateMgr.replayAddPartition(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -508,9 +500,9 @@ public class EditLog {
                     globalStateMgr.setSynchronizedTime(stamp.getTimestamp());
                     break;
                 }
-                case OperationType.OP_MASTER_INFO_CHANGE: {
-                    MasterInfo info = (MasterInfo) journal.getData();
-                    globalStateMgr.setMaster(info);
+                case OperationType.OP_LEADER_INFO_CHANGE: {
+                    LeaderInfo info = (LeaderInfo) journal.getData();
+                    globalStateMgr.setLeader(info);
                     break;
                 }
                 //compatible with old community meta, newly added log using OP_META_VERSION_V2
@@ -1049,10 +1041,6 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_PARTITION, info);
     }
 
-    public void logAddPartition(PartitionPersistInfoV2 info) {
-        logEdit(OperationType.OP_ADD_PARTITION_V2, info);
-    }
-
     public void logAddPartitions(AddPartitionsInfo info) {
         logEdit(OperationType.OP_ADD_PARTITIONS, info);
     }
@@ -1177,8 +1165,8 @@ public class EditLog {
         logEdit(OperationType.OP_TIMESTAMP, stamp);
     }
 
-    public void logMasterInfo(MasterInfo info) {
-        logEdit(OperationType.OP_MASTER_INFO_CHANGE, info);
+    public void logLeaderInfo(LeaderInfo info) {
+        logEdit(OperationType.OP_LEADER_INFO_CHANGE, info);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {

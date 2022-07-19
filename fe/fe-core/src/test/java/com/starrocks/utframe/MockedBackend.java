@@ -19,7 +19,7 @@ package com.starrocks.utframe;
 
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
-import com.starrocks.master.MasterImpl;
+import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
@@ -191,7 +191,7 @@ public class MockedBackend {
         private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
         private final TBackend tBackend;
         private long reportVersion = 0;
-        private final MasterImpl master = new MasterImpl();
+        private final LeaderImpl master = new LeaderImpl();
 
         public MockBeThriftClient(MockedBackend backend) {
             super(null);

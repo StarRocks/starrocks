@@ -134,7 +134,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -152,7 +152,7 @@ import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
-import com.starrocks.ha.MasterInfo;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -164,6 +164,7 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -177,7 +178,6 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
-import com.starrocks.master.Checkpoint;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -192,7 +192,6 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
-import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
@@ -298,9 +297,9 @@ public class GlobalStateMgr {
     private DeleteHandler deleteHandler;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
-    private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private MasterDaemon txnTimeoutChecker; // To abort timeout txns
-    private MasterDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
+    private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
+    private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
     private JournalWriter journalWriter; // master only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -879,7 +878,7 @@ public class GlobalStateMgr {
         }
     }
 
-    private void transferToMaster(FrontendNodeType oldType) {
+    private void transferToLeader(FrontendNodeType oldType) {
         // stop replayer
         if (replayer != null) {
             replayer.exit();
@@ -920,7 +919,7 @@ public class GlobalStateMgr {
 
         // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
-        feType = FrontendNodeType.MASTER;
+        feType = FrontendNodeType.LEADER;
         try {
             // Log meta_version
             int communityMetaVersion = MetaContext.get().getMetaVersion();
@@ -947,7 +946,7 @@ public class GlobalStateMgr {
 
             // MUST set master ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-master FE to push image
-            nodeMgr.setMasterInfo();
+            nodeMgr.setLeaderInfo();
 
             // start all daemon threads that only running on MASTER FE
             startMasterOnlyDaemonThreads();
@@ -1054,7 +1053,7 @@ public class GlobalStateMgr {
         domainResolver.start();
     }
 
-    private void transferToNonMaster(FrontendNodeType newType) {
+    private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
 
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
@@ -1108,7 +1107,7 @@ public class GlobalStateMgr {
         long remoteChecksum = -1;  // in case of empty image file checksum match
         try {
             checksum = loadHeader(dis, checksum);
-            checksum = nodeMgr.loadMasterInfo(dis, checksum);
+            checksum = nodeMgr.loadLeaderInfo(dis, checksum);
             checksum = nodeMgr.loadFrontends(dis, checksum);
             checksum = nodeMgr.loadBackends(dis, checksum);
             checksum = localMetastore.loadDb(dis, checksum);
@@ -1373,7 +1372,7 @@ public class GlobalStateMgr {
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
             checksum = saveHeader(dos, replayedJournalId, checksum);
-            checksum = nodeMgr.saveMasterInfo(dos, checksum);
+            checksum = nodeMgr.saveLeaderInfo(dos, checksum);
             checksum = nodeMgr.saveFrontends(dos, checksum);
             checksum = nodeMgr.saveBackends(dos, checksum);
             checksum = localMetastore.saveDb(dos, checksum);
@@ -1483,7 +1482,7 @@ public class GlobalStateMgr {
     }
 
     public void createLabelCleaner() {
-        labelCleaner = new MasterDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
+        labelCleaner = new LeaderDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
@@ -1492,7 +1491,7 @@ public class GlobalStateMgr {
     }
 
     public void createTaskCleaner() {
-        taskCleaner = new MasterDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+        taskCleaner = new LeaderDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
@@ -1501,7 +1500,7 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new MasterDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
@@ -1611,23 +1610,23 @@ public class GlobalStateMgr {
                     }
 
                     /*
-                     * INIT -> MASTER: transferToMaster
-                     * INIT -> FOLLOWER/OBSERVER: transferToNonMaster
-                     * UNKNOWN -> MASTER: transferToMaster
-                     * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonMaster
-                     * FOLLOWER -> MASTER: transferToMaster
+                     * INIT -> MASTER: transferToLeader
+                     * INIT -> FOLLOWER/OBSERVER: transferToNonLeader
+                     * UNKNOWN -> MASTER: transferToLeader
+                     * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonLeader
+                     * FOLLOWER -> MASTER: transferToLeader
                      * FOLLOWER/OBSERVER -> INIT/UNKNOWN: set isReady to false
                      */
                     switch (feType) {
                         case INIT: {
                             switch (newType) {
-                                case MASTER: {
-                                    transferToMaster(feType);
+                                case LEADER: {
+                                    transferToLeader(feType);
                                     break;
                                 }
                                 case FOLLOWER:
                                 case OBSERVER: {
-                                    transferToNonMaster(newType);
+                                    transferToNonLeader(newType);
                                     break;
                                 }
                                 case UNKNOWN:
@@ -1639,13 +1638,13 @@ public class GlobalStateMgr {
                         }
                         case UNKNOWN: {
                             switch (newType) {
-                                case MASTER: {
-                                    transferToMaster(feType);
+                                case LEADER: {
+                                    transferToLeader(feType);
                                     break;
                                 }
                                 case FOLLOWER:
                                 case OBSERVER: {
-                                    transferToNonMaster(newType);
+                                    transferToNonLeader(newType);
                                     break;
                                 }
                                 default:
@@ -1655,12 +1654,12 @@ public class GlobalStateMgr {
                         }
                         case FOLLOWER: {
                             switch (newType) {
-                                case MASTER: {
-                                    transferToMaster(feType);
+                                case LEADER: {
+                                    transferToLeader(feType);
                                     break;
                                 }
                                 case UNKNOWN: {
-                                    transferToNonMaster(newType);
+                                    transferToNonLeader(newType);
                                     break;
                                 }
                                 default:
@@ -1670,13 +1669,13 @@ public class GlobalStateMgr {
                         }
                         case OBSERVER: {
                             if (newType == FrontendNodeType.UNKNOWN) {
-                                transferToNonMaster(newType);
+                                transferToNonLeader(newType);
                             }
                             break;
                         }
-                        case MASTER: {
+                        case LEADER: {
                             // exit if master changed to any other type
-                            String msg = "transfer FE type from MASTER to " + newType.name() + ". exit";
+                            String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
                             LOG.error(msg);
                             Util.stdoutWithTime(msg);
                             System.exit(-1);
@@ -1734,7 +1733,7 @@ public class GlobalStateMgr {
             EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
-            if (feType != FrontendNodeType.MASTER) {
+            if (feType != FrontendNodeType.LEADER) {
                 journalObservable.notifyObservers(replayedJournalId.get());
             }
             if (MetricRepo.isInit) {
@@ -1752,7 +1751,7 @@ public class GlobalStateMgr {
 
     public void createTimePrinter() {
         // time printer will write timestamp edit log every 10 seconds
-        timePrinter = new MasterDaemon("timePrinter", 10 * 1000L) {
+        timePrinter = new LeaderDaemon("timePrinter", 10 * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 Timestamp stamp = new Timestamp();
@@ -1839,10 +1838,6 @@ public class GlobalStateMgr {
     }
 
     public void replayAddPartition(PartitionPersistInfo info) throws DdlException {
-        localMetastore.replayAddPartition(info);
-    }
-
-    public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
         localMetastore.replayAddPartition(info);
     }
 
@@ -2540,16 +2535,16 @@ public class GlobalStateMgr {
         return this.feType;
     }
 
-    public int getMasterRpcPort() {
-        return nodeMgr.getMasterRpcPort();
+    public int getLeaderRpcPort() {
+        return nodeMgr.getLeaderRpcPort();
     }
 
-    public int getMasterHttpPort() {
-        return nodeMgr.getMasterHttpPort();
+    public int getLeaderHttpPort() {
+        return nodeMgr.getLeaderHttpPort();
     }
 
-    public String getMasterIp() {
-        return nodeMgr.getMasterIp();
+    public String getLeaderIp() {
+        return nodeMgr.getLeaderIp();
     }
 
     public EsRepository getEsRepository() {
@@ -2572,8 +2567,8 @@ public class GlobalStateMgr {
         return this.metastoreEventsProcessor;
     }
 
-    public void setMaster(MasterInfo info) {
-        nodeMgr.setMaster(info);
+    public void setLeader(LeaderInfo info) {
+        nodeMgr.setLeader(info);
     }
 
     public boolean canRead() {
@@ -2584,8 +2579,8 @@ public class GlobalStateMgr {
         return nodeMgr.isElectable();
     }
 
-    public boolean isMaster() {
-        return feType == FrontendNodeType.MASTER;
+    public boolean isLeader() {
+        return feType == FrontendNodeType.LEADER;
     }
 
     public void setSynchronizedTime(long time) {

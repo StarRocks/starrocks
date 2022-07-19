@@ -111,7 +111,7 @@ public class OperationType {
     public static final short OP_UPDATE_USER_PROPERTY = 69;
 
     public static final short OP_TIMESTAMP = 70;
-    public static final short OP_MASTER_INFO_CHANGE = 71;
+    public static final short OP_LEADER_INFO_CHANGE = 71;
     public static final short OP_META_VERSION = 72;
     @Deprecated
     // replaced by OP_GLOBAL_VARIABLE_V2
@@ -247,8 +247,4 @@ public class OperationType {
     // shard operate 10221 ~ 10240
     public static final short OP_ADD_UNUSED_SHARD = 10221;
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
-
-    // new operator for add partition 10241 ~ 10260
-    // only used in list partition currently
-    public static final short OP_ADD_PARTITION_V2 = 10241;
 }
