@@ -260,16 +260,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                             expressionRangePartitionInfo.getIdToRange(false).values(),
                             basePartitionRange, basePartitionIndex);
             if (mvPartitionKeyRange != null) {
-                addPartition(database, materializedView, basePartitionName,
-                        mvPartitionKeyRange, partitionProperties, distributionDesc);
-            } else {
-                Map<Long, Range<PartitionKey>> idToRange = expressionRangePartitionInfo.getIdToRange(false);
-                for (Map.Entry<Long, Range<PartitionKey>> idRangeEntry : idToRange.entrySet()) {
-                    if (RangeUtils.isRangeIntersect(basePartitionRange, idRangeEntry.getValue())) {
-                        materializedView.addPartitionNameRef(basePartitionName,
-                                materializedView.getPartition(idRangeEntry.getKey()).getName());
-                        break;
-                    }
+                addPartition(database, materializedView, mvPartitionKeyRange, partitionProperties, distributionDesc);
+            }
+            Map<Long, Range<PartitionKey>> idToRange = expressionRangePartitionInfo.getIdToRange(false);
+            for (Map.Entry<Long, Range<PartitionKey>> idRangeEntry : idToRange.entrySet()) {
+                if (RangeUtils.isRangeIntersect(basePartitionRange, idRangeEntry.getValue())) {
+                    materializedView.addPartitionNameRef(basePartitionName,
+                            materializedView.getPartition(idRangeEntry.getKey()).getName());
                 }
             }
         }
@@ -330,7 +327,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         return new HashDistributionDesc(hashDistributionInfo.getBucketNum(), distColumnNames);
     }
 
-    private void addPartition(Database database, MaterializedView materializedView, String basePartitionName,
+    private void addPartition(Database database, MaterializedView materializedView,
                               Range<PartitionKey> partitionKeyRange, Map<String, String> partitionProperties,
                               DistributionDesc distributionDesc) {
         String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
@@ -347,7 +344,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                     database, materializedView.getName(),
                     new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
                             partitionProperties, false));
-            materializedView.addPartitionNameRef(basePartitionName, partitionName);
         } catch (Exception e) {
             throw new SemanticException("Expression add partition failed: %s, db: %s, table: %s", e.getMessage(),
                     database.getFullName(), materializedView.getName());
