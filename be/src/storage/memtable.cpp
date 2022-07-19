@@ -220,6 +220,9 @@ Status MemTable::flush() {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
+    std::cout<<"BEFORE flush"<<std::endl;
+    sleep(5);
+    std::cout<<"AFTER flush"<<std::endl;
     std::string msg;
     if (_result_chunk->capacity_limit_reached(&msg)) {
         return Status::InternalError(

@@ -106,7 +106,7 @@ void ThreadPoolToken::shutdown() {
     // outside the lock, in case there are concurrent threads wanting to access
     // the ThreadPool. The task's destructors may acquire locks, etc, so this
     // also prevents lock inversions.
-    PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> to_release = std::move(_entries);
+    PriorityQueue<ThreadPool::NUM_PRIORITY, ThreadPool::Task> to_release = _entries;
     _pool->_total_queued_tasks -= to_release.size();
 
     switch (state()) {
@@ -123,6 +123,7 @@ void ThreadPoolToken::shutdown() {
         // Note: this is an O(n) operation, but it's expected to be infrequent.
         // Plus doing it this way (rather than switching to QUIESCING and waiting
         // for a worker thread to process the queue entry) helps retain state
+
         // transition symmetry with ThreadPool::shutdown.
         for (auto it = _pool->_queue.begin(); it != _pool->_queue.end();) {
             if (*it == this) {
@@ -162,6 +163,7 @@ bool ThreadPoolToken::wait_for(const MonoDelta& delta) {
 }
 
 void ThreadPoolToken::transition(State new_state) {
+    /*
 #ifndef NDEBUG
     CHECK_NE(_state, new_state);
 
@@ -193,6 +195,7 @@ void ThreadPoolToken::transition(State new_state) {
         LOG(FATAL) << "Unknown token state: " << _state;
     }
 #endif
+    */
 
     // Take actions based on the state we're entering.
     switch (new_state) {

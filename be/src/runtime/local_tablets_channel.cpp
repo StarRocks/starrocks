@@ -157,6 +157,8 @@ private:
 
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
 
+    int _count = 0;
+
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
@@ -209,6 +211,7 @@ LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
     delete _row_desc;
     delete _schema;
+    std::cout<<"LocalTabletsChannel"<<std::endl;
     _mem_pool.reset();
 }
 
@@ -229,6 +232,13 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
 void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
                                     PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
+
+    _count ++;
+    if (_count >= 3) {
+        response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
+        response->mutable_status()->add_error_msgs("lxhhhhhhhhhhhhhhh");
+        return;
+    }
 
     auto t0 = std::chrono::steady_clock::now();
 
@@ -450,6 +460,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (auto& slot : params.schema().slot_descs()) {
         vectorized::GlobalDictMap global_dict;
         if (slot.global_dict_words_size()) {
+            std::cout<<"INIT DICT"<<std::endl;
             for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                 const std::string& dict_word = slot.global_dict_words(i);
                 auto* data = _mem_pool->allocate(dict_word.size());

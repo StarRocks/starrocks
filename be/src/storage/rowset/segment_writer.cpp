@@ -86,6 +86,7 @@ Status SegmentWriter::init() {
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
+    std::cout<<"GET 1"<<std::endl;
 
     if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
         return Status::InvalidArgument(
@@ -107,6 +108,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // set _num_rows as _num_rows in partial segment
         _num_rows = footer->num_rows();
     }
+    std::cout<<"GET 2"<<std::endl;
 
     _column_indexes.insert(_column_indexes.end(), column_indexes.begin(), column_indexes.end());
     _column_writers.reserve(_column_indexes.size());
@@ -150,8 +152,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                 return Status::NotSupported("Do not support bitmap index for array type");
             }
         }
+        std::cout<<"GET 3"<<std::endl;
 
         if (column.type() == FieldType::OLAP_FIELD_TYPE_VARCHAR && _opts.global_dicts != nullptr) {
+            std::cout<<"GET DICT"<<std::endl;
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
                 opts.global_dict = &iter->second;

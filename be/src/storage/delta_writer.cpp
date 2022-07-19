@@ -208,7 +208,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                 fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
     }
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, from, size);
+    _mem_table->insert(chunk, indexes, from, size);
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = _flush_memtable();
@@ -217,7 +217,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
         VLOG(2) << "Flushing memory table due to parent memory limit exceeded";
         st = _flush_memtable();
         _reset_mem_table();
-    } else if (full) {
+    } else {
         st = _flush_memtable_async();
         _reset_mem_table();
     }
