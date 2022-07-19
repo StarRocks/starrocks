@@ -14,6 +14,7 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/compiler_util.h"
+#include "common/constexpr.h"
 #include "common/status.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/math_functions.h"
@@ -2519,12 +2520,15 @@ int StringFunctions::index_of(const char* source, int source_count, const char* 
 }
 
 struct StringFunctionsState {
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
+                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
+                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+
     std::string pattern;
     std::unique_ptr<re2::RE2> regex;
     std::unique_ptr<re2::RE2::Options> options;
     bool const_pattern{false};
-    phmap::flat_hash_map<int32_t, std::unique_ptr<re2::RE2>>
-            driver_regex_map; // regex for each pipeline_driver, to make it driver-local
+    DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
 
     StringFunctionsState() : regex(), options() {}
 
@@ -2535,6 +2539,7 @@ struct StringFunctionsState {
         if (driver_id == 0) {
             return regex.get();
         }
+        // The driver would not execute concurrently, so it's safe to use the find-emplace pattern
         auto iter = driver_regex_map.find(driver_id);
         if (iter == driver_regex_map.end()) {
             auto regex = std::make_unique<re2::RE2>(pattern, *options);
