@@ -1258,7 +1258,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }
-
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
