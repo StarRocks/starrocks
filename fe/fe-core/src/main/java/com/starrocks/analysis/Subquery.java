@@ -32,7 +32,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Class representing a subquery. A Subquery consists of a QueryStmt and has
@@ -124,17 +123,6 @@ public class Subquery extends Expr {
         ArrayList<Expr> stmtResultExprs = stmt.getResultExprs();
         if (stmtResultExprs.size() == 1 && stmtResultExprs.get(0).getType().isScalarType()) {
             return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isCorrelatedPredicate(List<TupleId> tupleIdList) {
-        List<TupleId> tupleIdFromSubquery = stmt.collectTupleIds();
-        for (TupleId tupleId : tupleIdList) {
-            if (tupleIdFromSubquery.contains(tupleId)) {
-                return true;
-            }
         }
         return false;
     }
