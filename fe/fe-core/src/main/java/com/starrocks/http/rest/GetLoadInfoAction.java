@@ -56,7 +56,7 @@ public class GetLoadInfoAction extends RestBaseAction {
             throw new DdlException("No label selected");
         }
 
-        if (redirectToMaster(request, response)) {
+        if (redirectToLeader(request, response)) {
             return;
         }
 

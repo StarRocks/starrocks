@@ -152,7 +152,7 @@ public class StmtExecutor {
     private StatementBase parsedStmt;
     private RuntimeProfile profile;
     private Coordinator coord = null;
-    private MasterOpExecutor masterOpExecutor = null;
+    private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private final boolean isProxy;
     private ShowResultSet proxyResultSet = null;
@@ -236,13 +236,13 @@ public class StmtExecutor {
     }
 
     public boolean isForwardToMaster() {
-        if (GlobalStateMgr.getCurrentState().isMaster()) {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) &&
-                !GlobalStateMgr.getCurrentState().isMaster()
+                !GlobalStateMgr.getCurrentState().isLeader()
                 && !GlobalStateMgr.getCurrentState().canRead()) {
             return true;
         }
@@ -255,10 +255,10 @@ public class StmtExecutor {
     }
 
     public ByteBuffer getOutputPacket() {
-        if (masterOpExecutor == null) {
+        if (leaderOpExecutor == null) {
             return null;
         } else {
-            return masterOpExecutor.getOutputPacket();
+            return leaderOpExecutor.getOutputPacket();
         }
     }
 
@@ -267,10 +267,10 @@ public class StmtExecutor {
     }
 
     public ShowResultSet getShowResultSet() {
-        if (masterOpExecutor == null) {
+        if (leaderOpExecutor == null) {
             return null;
         } else {
-            return masterOpExecutor.getProxyResultSet();
+            return leaderOpExecutor.getProxyResultSet();
         }
     }
 
@@ -574,9 +574,9 @@ public class StmtExecutor {
     }
 
     private void forwardToMaster() throws Exception {
-        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus);
+        leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
-        masterOpExecutor.execute();
+        leaderOpExecutor.execute();
     }
 
     private void writeProfile(long beginTimeInNanoSecond) {

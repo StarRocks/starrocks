@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.master;
+package com.starrocks.leader;
 
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.server.GlobalStateMgr;
