@@ -51,11 +51,20 @@ public class Checkpoint extends LeaderDaemon {
     private GlobalStateMgr globalStateMgr;
     private String imageDir;
     private Journal journal;
+    // subDir comes after base imageDir, to distinguish different module's image dir
+    private final String subDir;
+    private final boolean belongToGlobalStateMgr;
 
     public Checkpoint(Journal journal) {
-        super("leaderCheckpointer", FeConstants.checkpoint_interval_second * 1000L);
-        this.imageDir = GlobalStateMgr.getServingState().getImageDir();
+        this("leaderCheckpointer", journal, "" /* subDir */, true /* belongToGlobalStateMgr */);
+    }
+
+    public Checkpoint(String name, Journal journal, String subDir, boolean belongToGlobalStateMgr) {
+        super(name, FeConstants.checkpoint_interval_second * 1000L);
+        this.imageDir = GlobalStateMgr.getServingState().getImageDir() + subDir;
         this.journal = journal;
+        this.subDir = subDir;
+        this.belongToGlobalStateMgr = belongToGlobalStateMgr;
     }
 
     @Override
@@ -78,37 +87,16 @@ public class Checkpoint extends LeaderDaemon {
             return;
         }
 
-        long replayedJournalId = -1;
-        // generate new image file
-        LOG.info("begin to generate new image: image.{}", checkPointVersion);
-        globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.setJournal(journal);
-        try {
-            globalStateMgr.loadImage(imageDir);
-            globalStateMgr.replayJournal(checkPointVersion);
-            if (globalStateMgr.getReplayedJournalId() != checkPointVersion) {
-                LOG.error("checkpoint version should be {}, actual replayed journal id is {}",
-                        checkPointVersion, globalStateMgr.getReplayedJournalId());
-                return;
-            }
+        boolean success = false;
+        if (belongToGlobalStateMgr) {
+            success = replayAndGenerateGlobalStateMgrImage(checkPointVersion);
+        } else {
+            assert belongToGlobalStateMgr == true;
+            // success = replayAndGenerateStarMgrImage(checkPointVersion);
+        }
 
-            globalStateMgr.clearExpiredJobs();
-
-            globalStateMgr.saveImage();
-            replayedJournalId = globalStateMgr.getReplayedJournalId();
-            if (MetricRepo.isInit) {
-                MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
-            }
-            GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);
-            LOG.info("checkpoint finished save image.{}", replayedJournalId);
-        } catch (Exception e) {
-            e.printStackTrace();
-            LOG.error("Exception when generate new image file", e);
+        if (!success) {
             return;
-        } finally {
-            // destroy checkpoint globalStateMgr, reclaim memory
-            globalStateMgr = null;
-            GlobalStateMgr.destroyCheckpoint();
         }
 
         // push image file to all the other non master nodes
@@ -126,8 +114,8 @@ public class Checkpoint extends LeaderDaemon {
                 }
                 int port = Config.http_port;
 
-                String url = "http://" + host + ":" + port + "/put?version=" + replayedJournalId
-                        + "&port=" + port;
+                String url = "http://" + host + ":" + port + "/put?version=" + checkPointVersion
+                        + "&port=" + port + "&subdir=" + subDir;
                 LOG.info("Put image:{}", url);
 
                 try {
@@ -138,8 +126,8 @@ public class Checkpoint extends LeaderDaemon {
                 }
             }
 
-            LOG.info("push image.{} to other nodes. totally {} nodes, push successed {} nodes",
-                    replayedJournalId, otherNodesCount, successPushed);
+            LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push successed {} nodes",
+                    checkPointVersion, subDir, otherNodesCount, successPushed);
         }
 
         // Delete old journals
@@ -163,7 +151,7 @@ public class Checkpoint extends LeaderDaemon {
                          * any non-master node's current replayed journal id. otherwise,
                          * this lagging node can never get the deleted journal.
                          */
-                        idURL = new URL("http://" + host + ":" + port + "/journal_id");
+                        idURL = new URL("http://" + host + ":" + port + "/journal_id?prefix=" + journal.getPrefix());
                         conn = (HttpURLConnection) idURL.openConnection();
                         conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                         conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);
@@ -189,17 +177,53 @@ public class Checkpoint extends LeaderDaemon {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
             }
-            LOG.info("journals <= {} are deleted. image version {}, other nodes min version {}",
-                    deleteVersion, checkPointVersion, minOtherNodesJournalId);
+            LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
+                    deleteVersion, journal.getPrefix(), checkPointVersion, minOtherNodesJournalId);
         }
 
         // Delete old image files
-        MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");
+        MetaCleaner cleaner = new MetaCleaner(imageDir);
         try {
             cleaner.clean();
         } catch (IOException e) {
             LOG.error("Master delete old image file fail.", e);
         }
+    }
 
+    private boolean replayAndGenerateGlobalStateMgrImage(long checkPointVersion) {
+        assert belongToGlobalStateMgr == true;
+        long replayedJournalId = -1;
+        // generate new image file
+        LOG.info("begin to generate new image: image.{}", checkPointVersion);
+        globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.setJournal(journal);
+        try {
+            globalStateMgr.loadImage(imageDir);
+            globalStateMgr.replayJournal(checkPointVersion);
+            if (globalStateMgr.getReplayedJournalId() != checkPointVersion) {
+                LOG.error("checkpoint version should be {}, actual replayed journal id is {}",
+                        checkPointVersion, globalStateMgr.getReplayedJournalId());
+                return false;
+            }
+
+            globalStateMgr.clearExpiredJobs();
+
+            globalStateMgr.saveImage();
+            replayedJournalId = globalStateMgr.getReplayedJournalId();
+            if (MetricRepo.isInit) {
+                MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
+            }
+            GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);
+            LOG.info("checkpoint finished save image.{}", replayedJournalId);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOG.error("Exception when generate new image file", e);
+            return false;
+        } finally {
+            // destroy checkpoint globalStateMgr, reclaim memory
+            globalStateMgr = null;
+            GlobalStateMgr.destroyCheckpoint();
+        }
     }
 }

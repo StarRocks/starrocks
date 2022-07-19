@@ -343,7 +343,18 @@ public class NodeMgr {
                     System.exit(-1);
                 }
             }
-            getNewImageOnStartup(rightHelperNode);
+            getNewImageOnStartup(rightHelperNode, "");
+            if (Config.integrate_starmgr) { // get star mgr image
+                // do nothing for now
+                // subdir might not exist
+                // String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+                // File dir = new File(subDir);
+                // if (!dir.exists()) {
+                //     LOG.info("create image dir for {}.", dir.getAbsolutePath());
+                //     dir.mkdir();
+                // }
+                // getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
+            }
         }
 
         if (Config.cluster_id != -1 && clusterId != Config.cluster_id) {
@@ -626,24 +637,25 @@ public class NodeMgr {
      * When a new node joins in the cluster for the first time, it will download image from the helper at the very beginning
      * Exception are free to raise on initialized phase
      */
-    private void getNewImageOnStartup(Pair<String, Integer> helperNode) throws IOException {
+    private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
         long localImageVersion = 0;
-        Storage storage = new Storage(this.imageDir);
+        String dirStr = this.imageDir + subDir;
+        Storage storage = new Storage(dirStr);
         localImageVersion = storage.getImageJournalId();
 
-        URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info");
+        URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info?subdir=" + subDir);
         StorageInfo info = getStorageInfo(infoUrl);
         long version = info.getImageJournalId();
         if (version > localImageVersion) {
             String url = "http://" + helperNode.first + ":" + Config.http_port
-                    + "/image?version=" + version;
-            LOG.info("start to download image.{} from {}", version, url);
+                    + "/image?version=" + version + "&subdir=" + subDir;
             String filename = Storage.IMAGE + "." + version;
-            File dir = new File(this.imageDir);
+            File dir = new File(dirStr);
             MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
             MetaHelper.complete(filename, dir);
         } else {
-            LOG.info("skip download image, current version {} >= version {} from {}", localImageVersion, version, helperNode);
+            LOG.info("skip download image for {}, current version {} >= version {} from {}",
+                    dirStr, localImageVersion, version, helperNode);
         }
     }
 
