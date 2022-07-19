@@ -252,7 +252,7 @@ public class MvTaskRunProcessorTest {
                     materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
             MaterializedView.BasePartitionInfo p1BasePartitionInfo =
                     baseTableVisibleVersionMap.get(tbl1.getId()).get("p1");
-            Assert.assertEquals(p1BasePartitionInfo.getVersion(), 1);
+            Assert.assertEquals(1, p1BasePartitionInfo.getVersion());
             Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p1_1"));
         }
     }

@@ -91,7 +91,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         // if mv has not partition by clause
         if (partitionInfo instanceof SinglePartitionInfo) {
             // must create partition when creating mv
-            Preconditions.checkState(materializedView.getPartitions().size() != 0);
+            Preconditions.checkState(!materializedView.getPartitions().isEmpty());
             boolean needRefresh = false;
             for (Map.Entry<Long, OlapTable> idOlapTableEntry : olapTables.entrySet()) {
                 long baseTableId = idOlapTableEntry.getKey();
@@ -379,7 +379,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                         .map(materializedView::getTablePartitionNamesByMv)
                         .flatMap(Set::stream)
                         .collect(Collectors.toSet());
-                Preconditions.checkState(needRefreshTablePartitionNames.size() > 0);
+                Preconditions.checkState(!needRefreshTablePartitionNames.isEmpty());
                 tableNamePartitionNames.put(olapTable.getName(), needRefreshTablePartitionNames);
             } else {
                 tableNamePartitionNames.put(olapTable.getName(), olapTable.getPartitionNames());
