@@ -9,18 +9,18 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PartitionPickerByTimeTest {
+public class CompactionPickerByTimeTest {
     private static final long MIN_COMPACTION_INTERVAL = 3000;
     private static final long MIN_COMPACTION_VERSIONS = 3;
 
-    private PartitionPicker picker;
+    private CompactionPicker picker;
 
-    public PartitionPickerByTimeTest() {
+    public CompactionPickerByTimeTest() {
     }
 
     @Before
     public void init() {
-        picker = new PartitionPickerByTime(MIN_COMPACTION_INTERVAL, MIN_COMPACTION_VERSIONS);
+        picker = new CompactionPickerByTime(MIN_COMPACTION_INTERVAL, MIN_COMPACTION_VERSIONS);
     }
 
     @Test

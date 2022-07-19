@@ -2,11 +2,11 @@
 
 package com.starrocks.lake.compaction;
 
-public class PartitionPickerByTime implements PartitionPicker {
+public class CompactionPickerByTime implements CompactionPicker {
     private final long maxCompactionInterval;
     private final long minCompactionVersionCount;
 
-    PartitionPickerByTime(long maxCompactionInterval, long minCompactionVersionCount) {
+    CompactionPickerByTime(long maxCompactionInterval, long minCompactionVersionCount) {
         this.maxCompactionInterval = maxCompactionInterval;
         this.minCompactionVersionCount = minCompactionVersionCount;
     }

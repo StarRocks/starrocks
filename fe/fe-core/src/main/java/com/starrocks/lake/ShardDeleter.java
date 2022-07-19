@@ -2,7 +2,7 @@
 
 package com.starrocks.lake;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;

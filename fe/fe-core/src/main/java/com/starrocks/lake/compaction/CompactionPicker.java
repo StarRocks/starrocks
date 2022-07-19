@@ -2,6 +2,6 @@
 
 package com.starrocks.lake.compaction;
 
-public interface PartitionPicker {
+public interface CompactionPicker {
     PartitionStatistics pick(Iterable<PartitionStatistics> statistics);
 }

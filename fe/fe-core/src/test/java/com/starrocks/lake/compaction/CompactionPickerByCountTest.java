@@ -9,17 +9,17 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-public class PartitionPickerByCountTest {
+public class CompactionPickerByCountTest {
     private static final long MIN_COMPACTION_VERSIONS = 3;
 
-    private PartitionPicker picker;
+    private CompactionPicker picker;
 
-    public PartitionPickerByCountTest() {
+    public CompactionPickerByCountTest() {
     }
 
     @Before
     public void init() {
-        picker = new PartitionPickerByCount(MIN_COMPACTION_VERSIONS);
+        picker = new CompactionPickerByCount(MIN_COMPACTION_VERSIONS);
     }
 
     @Test

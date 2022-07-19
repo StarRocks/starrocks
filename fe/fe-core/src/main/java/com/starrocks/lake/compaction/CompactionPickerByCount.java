@@ -2,10 +2,10 @@
 
 package com.starrocks.lake.compaction;
 
-public class PartitionPickerByCount implements PartitionPicker {
+public class CompactionPickerByCount implements CompactionPicker {
     private final long minCompactionVersionCount;
 
-    PartitionPickerByCount(long minCompactionVersionCount) {
+    CompactionPickerByCount(long minCompactionVersionCount) {
         this.minCompactionVersionCount = minCompactionVersionCount;
     }
 

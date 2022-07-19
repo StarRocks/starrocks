@@ -11,7 +11,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.proto.CompactRequest;
@@ -37,14 +37,14 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-public class CompactionDispatchDaemon extends MasterDaemon {
+public class CompactionDispatchDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(CompactionDispatchDaemon.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
     private static final long TXN_TIMEOUT_SECOND = 1800L;
     private static final long BUSY_LOOP_INTERVAL_MS = 10L;
     private static final long IDLE_LOOP_INTERVAL_MS = 500L;
-    private static final long MIN_COMPACTION_INTERVAL_ON_SUCCESS = 1000L;
-    private static final long MIN_COMPACTION_INTERVAL_ON_FAILURE = 5000L;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = 1000L;
+    private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = 5000L;
 
     public CompactionDispatchDaemon() {
         super("COMPACTION_DISPATCH", BUSY_LOOP_INTERVAL_MS);
@@ -61,7 +61,7 @@ public class CompactionDispatchDaemon extends MasterDaemon {
             }
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(partitionIdentifier.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
             return;
@@ -69,6 +69,7 @@ public class CompactionDispatchDaemon extends MasterDaemon {
 
         if (!db.tryReadLock(50, TimeUnit.MILLISECONDS)) {
             LOG.info("Skipped partition compaction due to get database lock timeout");
+            compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
             return;
         }
 
@@ -114,11 +115,11 @@ public class CompactionDispatchDaemon extends MasterDaemon {
             return;
         }
 
-        long nextCompactionInterval = MIN_COMPACTION_INTERVAL_ON_SUCCESS;
+        long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {
             compactTablets(db, currentVersion, beToTablets, txnId);
         } catch (UserException | RpcException | ExecutionException | InterruptedException e) {
-            nextCompactionInterval = MIN_COMPACTION_INTERVAL_ON_FAILURE;
+            nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             LOG.error(e);
             try {
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnId, e.getMessage());
