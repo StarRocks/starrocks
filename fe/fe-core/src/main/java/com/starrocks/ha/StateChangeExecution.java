@@ -3,6 +3,6 @@
 package com.starrocks.ha;
 
 public interface StateChangeExecution {
-    public void transferToMaster(FrontendNodeType newType);
-    public void transferToNonMaster(FrontendNodeType newType);
+    public void transferToLeader(FrontendNodeType newType);
+    public void transferToNonLeader(FrontendNodeType newType);
 }

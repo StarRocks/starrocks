@@ -71,11 +71,11 @@ public class StateChangeExecutor extends Daemon {
             }
 
             /*
-             * INIT -> MASTER: transferToMaster
-             * INIT -> FOLLOWER/OBSERVER: transferToNonMaster
-             * UNKNOWN -> MASTER: transferToMaster
-             * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonMaster
-             * FOLLOWER -> MASTER: transferToMaster
+             * INIT -> MASTER: transferToLeader
+             * INIT -> FOLLOWER/OBSERVER: transferToNonLeader
+             * UNKNOWN -> MASTER: transferToLeader
+             * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonLeader
+             * FOLLOWER -> MASTER: transferToLeader
              * FOLLOWER/OBSERVER -> INIT/UNKNOWN: set isReady to false
              */
             switch (feType) {
@@ -83,14 +83,14 @@ public class StateChangeExecutor extends Daemon {
                     switch (newType) {
                         case MASTER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToMaster(newType);
+                                execution.transferToLeader(newType);
                             }
                             break;
                         }
                         case FOLLOWER:
                         case OBSERVER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToNonMaster(newType);
+                                execution.transferToNonLeader(newType);
                             }
                             break;
                         }
@@ -105,14 +105,14 @@ public class StateChangeExecutor extends Daemon {
                     switch (newType) {
                         case MASTER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToMaster(newType);
+                                execution.transferToLeader(newType);
                             }
                             break;
                         }
                         case FOLLOWER:
                         case OBSERVER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToNonMaster(newType);
+                                execution.transferToNonLeader(newType);
                             }
                             break;
                         }
@@ -125,13 +125,13 @@ public class StateChangeExecutor extends Daemon {
                     switch (newType) {
                         case MASTER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToMaster(newType);
+                                execution.transferToLeader(newType);
                             }
                             break;
                         }
                         case UNKNOWN: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToNonMaster(newType);
+                                execution.transferToNonLeader(newType);
                             }
                             break;
                         }
@@ -143,7 +143,7 @@ public class StateChangeExecutor extends Daemon {
                 case OBSERVER: {
                     if (newType == FrontendNodeType.UNKNOWN) {
                         for (StateChangeExecution execution : executions) {
-                            execution.transferToNonMaster(newType);
+                            execution.transferToNonLeader(newType);
                         }
                     }
                     break;

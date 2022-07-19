@@ -3081,13 +3081,13 @@ public class GlobalStateMgr {
     public StateChangeExecution getStateChangeExecution() {
         StateChangeExecution execution = new StateChangeExecution() {
             @Override
-            public void transferToMaster(FrontendNodeType newType) {
-                getCurrentState().transferToMaster(newType);
+            public void transferToLeader(FrontendNodeType newType) {
+                transferToMaster(newType);
             }
 
             @Override
-            public void transferToNonMaster(FrontendNodeType newType) {
-                getCurrentState().transferToNonMaster(newType);
+            public void transferToNonLeader(FrontendNodeType newType) {
+                transferToNonMaster(newType);
             }
         };
         return execution;
