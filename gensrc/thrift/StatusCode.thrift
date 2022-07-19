@@ -87,6 +87,6 @@ enum TStatusCode {
     TXN_NOT_EXISTS = 51,
     TXN_IN_PROCESSING = 52,
 
-    SHUTDOWN_TABLET_OCCUPIED = 53
+    RESOURCE_BUSY = 53
 }
 

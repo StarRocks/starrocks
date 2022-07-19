@@ -957,8 +957,7 @@ Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
         DroppedTabletInfo& info = _shutdown_tablets[tablet_id];
         if (info.tablet.use_count() != 1) {
             // there is usage, can not delete it
-            return Status::ShutdownTabletOccupied(
-                    fmt::format("used in somewhere, use count:{}", info.tablet.use_count()));
+            return Status::ResourceBusy(fmt::format("used in somewhere, use count:{}", info.tablet.use_count()));
         }
         to_delete = info;
     }
@@ -1403,7 +1402,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
                               << " successfully, retried " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
                               << " times";
                     break;
-                } else if (st.code() == TStatusCode::SHUTDOWN_TABLET_OCCUPIED) {
+                } else if (st.code() == TStatusCode::RESOURCE_BUSY) {
                     // The SHUTDOWN tablet being referenced by other thread is just a temporal state, so we retry
                     // a few times before mark this clone task failed to avoid too much wasted work.
                     retry--;

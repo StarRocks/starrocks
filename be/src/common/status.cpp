@@ -167,8 +167,8 @@ std::string Status::code_as_string() const {
         return "Incomplete";
     case TStatusCode::DATA_QUALITY_ERROR:
         return "Data quality error";
-    case TStatusCode::SHUTDOWN_TABLET_OCCUPIED:
-        return "Shutdown tablet occupied";
+    case TStatusCode::RESOURCE_BUSY:
+        return "Resource busy";
     default: {
         char tmp[30];
         snprintf(tmp, sizeof(tmp), "Unknown code(%d): ", static_cast<int>(code()));
