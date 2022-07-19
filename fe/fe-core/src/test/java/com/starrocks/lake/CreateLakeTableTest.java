@@ -10,6 +10,7 @@ import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
@@ -202,5 +203,14 @@ public class CreateLakeTableTest {
             Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
             Assert.assertEquals(Config.storage_cooldown_second, partition2StorageInfo.getStorageCacheTtlS());
         }
+    }
+
+    @Test
+    public void testCreateLakeTableException() {
+        // primary key type is not supported
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Lake table does not support primary key type",
+                () -> createTable(
+                        "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
+                                "engine = starrocks primary key (key1) distributed by hash(key1) buckets 3"));
     }
 }
