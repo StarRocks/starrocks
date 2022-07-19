@@ -8,14 +8,20 @@ Broker Load 是一种**异步的导入方式**，通过部署的Broker程序，S
 
 Broker Load支持从 HDFS、Amazon S3等外部存储系统导入数据，支持 CSV、ORCFile、Parquet 等文件格式。
 
+## 基本原理
+
+用户在提交导入任务后，FE 会生成对应的 Plan 并根据目前 BE 的个数和文件的大小，将 Plan 分给多个 BE 执行，每个 BE 执行一部分导入任务。BE 在执行过程中会通过 Broker 拉取数据，在对数据预处理之后将数据导入系统。所有 BE 均完成导入后，由 FE 最终判断导入是否成功。
+
+下图展示了 Broker Load 的主要流程：
+
+![Broker Load 原理图](/assets/4.2.2-1.png)
+
 ## 支持的远程文件系统
 
 * HDFS
 * Amazon S3
 * 阿里云 OSS
 * 腾讯 COS
-  
----
 
 ## 导入示例
 
