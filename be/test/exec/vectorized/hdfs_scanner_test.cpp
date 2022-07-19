@@ -34,7 +34,7 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
+    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
 
     THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
@@ -73,7 +73,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 }
 
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
-                                                  TupleDescriptor* tuple_desc) {
+                                                  const TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
     param->fs = FileSystem::Default();
     param->path = file;
@@ -363,7 +363,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
 
 static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerParams* params,
                                                 const std::vector<int>& values) {
-    TupleDescriptor* min_max_tuple_desc = params->min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = params->min_max_tuple_desc;
 
     // id >= values[0] && id <= values[1] && part_y >= values[2] && part_y <= values[3]
     // id min/max = 2629/5212
@@ -549,20 +549,12 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        for (auto& it2 : it.second) {
-            ExprContext* ctx = it2;
-            ctx->prepare(_runtime_state);
-            ctx->open(_runtime_state);
-        }
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
     }
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (auto& it : param->conjunct_ctxs_by_slot) {
-        for (auto& it2 : it.second) {
-            it2->close(_runtime_state);
-        }
-    }
 
     // so stripe will not be filtered out by search argument
     // and we can test dict-filtering strategy.
@@ -643,7 +635,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     auto* param = _create_param(datetime_orc_file, range, tuple_desc);
 
     param->min_max_tuple_desc = tuple_desc;
-    TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
 
     // expect c0 >= '2021-05-25 08:59:22'
     // which means only stripe3 matches, and all rows in stripe3 matches.
@@ -755,20 +747,12 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
-        for (auto& it2 : it.second) {
-            ExprContext* ctx = it2;
-            ctx->prepare(_runtime_state);
-            ctx->open(_runtime_state);
-        }
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
     }
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (auto& it : param->conjunct_ctxs_by_slot) {
-        for (auto& it2 : it.second) {
-            it2->close(_runtime_state);
-        }
-    }
 
     // so stripe will not be filtered out by search argument
     // and we can test dict-filtering strategy.
@@ -873,7 +857,7 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         auto* param = _create_param(c.file, range, tuple_desc);
 
         param->min_max_tuple_desc = tuple_desc;
-        TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+        const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
 
         {
             std::vector<TExprNode> nodes;
