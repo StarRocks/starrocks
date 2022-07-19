@@ -2236,11 +2236,6 @@ show_param ::=
     {:
         RESULT = new ShowMaterializedViewStmt(db);
     :}
-    /* show processlist */
-    | opt_full KW_PROCESSLIST
-    {:
-        RESULT = new ShowProcesslistStmt(parser.isVerbose);
-    :}
     /* routine */
     | procedure_or_function KW_STATUS opt_wild_where
     {:
@@ -4957,8 +4952,6 @@ keyword ::=
     | KW_PLUGINS:id
     {: RESULT = id; :}
     | KW_PROC:id
-    {: RESULT = id; :}
-    | KW_PROCESSLIST:id
     {: RESULT = id; :}
     | KW_PROPERTIES:id
     {: RESULT = id; :}

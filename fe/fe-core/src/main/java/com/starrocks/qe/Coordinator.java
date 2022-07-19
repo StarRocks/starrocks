@@ -1722,6 +1722,7 @@ public class Coordinator {
                         parallelExecInstanceNum, pipelineDop, enablePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
+                boolean assignScanRangesPerDriverSeq = enablePipeline && fragment.isAssignScanRangesPerDriverSeq();
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
@@ -1743,8 +1744,21 @@ public class Coordinator {
 
                         for (List<TScanRangeParams> scanRangeParams : perInstanceScanRanges) {
                             FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
-                            instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             params.instanceExecParams.add(instanceParam);
+
+                            if (!assignScanRangesPerDriverSeq) {
+                                instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
+                            } else {
+                                int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
+                                List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq =
+                                        ListUtil.splitBySize(scanRangeParams, expectedDop);
+                                instanceParam.pipelineDop = scanRangeParamsPerDriverSeq.size();
+                                Map<Integer, List<TScanRangeParams>> scanRangesPerDriverSeq = new HashMap<>();
+                                instanceParam.nodeToPerDriverSeqScanRanges.put(planNodeId, scanRangesPerDriverSeq);
+                                for (int driverSeq = 0; driverSeq < scanRangeParamsPerDriverSeq.size(); ++driverSeq) {
+                                    scanRangesPerDriverSeq.put(driverSeq, scanRangeParamsPerDriverSeq.get(driverSeq));
+                                }
+                            }
                         }
                     }
 

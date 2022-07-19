@@ -155,7 +155,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                 // AnalysisException: keys.size is always equal to column.size, cannot reach this exception
                 // IllegalArgumentException: lb is greater than ub
                 LOG.warn("Error in gen addPartitionKeyRange. Error={}, db: {}, table: {}", e.getMessage(),
-                        db.getFullName(), olapTable.getName());
+                        db.getOriginName(), olapTable.getName());
                 continue;
             }
             for (Range<PartitionKey> partitionKeyRange : rangePartitionInfo.getIdToRange(false).values()) {
@@ -167,7 +167,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                     if (addPartitionKeyRange.equals(partitionKeyRange)) {
                         clearCreatePartitionFailedMsg(olapTable.getName());
                     } else {
-                        recordCreatePartitionFailedMsg(db.getFullName(), olapTable.getName(), e.getMessage());
+                        recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), e.getMessage());
                     }
                     break;
                 }
@@ -239,7 +239,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
             // AnalysisException: keys.size is always equal to column.size, cannot reach this exception
             // IllegalArgumentException: lb is greater than ub
             LOG.warn("Error in gen reservePartitionKeyRange. Error={}, db: {}, table: {}", e.getMessage(),
-                    db.getFullName(), olapTable.getName());
+                    db.getOriginName(), olapTable.getName());
             return dropPartitionClauses;
         }
         RangePartitionInfo info = (RangePartitionInfo) (olapTable.getPartitionInfo());
@@ -293,7 +293,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                 if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
                     String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL."
                             + "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
-                    recordCreatePartitionFailedMsg(db.getFullName(), olapTable.getName(), errorMsg);
+                    recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
                     skipAddPartition = true;
                 }
 
@@ -314,7 +314,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                 try {
                     partitionFormat = DynamicPartitionUtil.getPartitionFormat(partitionColumn);
                 } catch (DdlException e) {
-                    recordCreatePartitionFailedMsg(db.getFullName(), olapTable.getName(), e.getMessage());
+                    recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), e.getMessage());
                     continue;
                 }
 
@@ -333,7 +333,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                     GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
-                    recordDropPartitionFailedMsg(db.getFullName(), tableName, e.getMessage());
+                    recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                 } finally {
                     db.writeUnlock();
                 }
@@ -345,7 +345,7 @@ public class DynamicPartitionScheduler extends MasterDaemon {
                         GlobalStateMgr.getCurrentState().addPartitions(db, tableName, addPartitionClause);
                         clearCreatePartitionFailedMsg(tableName);
                     } catch (DdlException | AnalysisException e) {
-                        recordCreatePartitionFailedMsg(db.getFullName(), tableName, e.getMessage());
+                        recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
                     }
                 }
             }

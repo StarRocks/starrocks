@@ -23,10 +23,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -37,11 +35,9 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -57,11 +53,9 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 public class AccessTestUtil {
-    private static FakeEditLog fakeEditLog;
 
     public static SystemInfoService fetchSystemInfoService() {
-        SystemInfoService clusterInfo = new SystemInfoService();
-        return clusterInfo;
+        return new SystemInfoService();
     }
 
     public static Auth fetchAdminAccess() {
@@ -92,82 +86,27 @@ public class AccessTestUtil {
     }
 
     public static GlobalStateMgr fetchAdminCatalog() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(100);
+        EditLog editLog = new EditLog(journalQueue);
+        globalStateMgr.setEditLog(editLog);
 
-            Auth auth = fetchAdminAccess();
-
-            BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(100);
-            fakeEditLog = new FakeEditLog();
-            EditLog editLog = new EditLog(journalQueue);
-            globalStateMgr.setEditLog(editLog);
-
-            Database db = new Database(50000L, "testCluster:testDb");
-            MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
-            RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-            Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
-            List<Column> baseSchema = new LinkedList<Column>();
-            Column column = new Column();
-            baseSchema.add(column);
-            OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
-                    KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
-                    null);
-            table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
-                    TStorageType.COLUMN, KeysType.AGG_KEYS);
-            table.addPartition(partition);
-            table.setBaseIndexId(baseIndex.getId());
-            db.createTable(table);
-
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
-
-                    globalStateMgr.getDb(50000L);
-                    minTimes = 0;
-                    result = db;
-
-                    globalStateMgr.getDb("testCluster:testDb");
-                    minTimes = 0;
-                    result = db;
-
-                    globalStateMgr.getDb("testCluster:emptyDb");
-                    minTimes = 0;
-                    result = null;
-
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
-
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testCluster:testDb");
-
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = editLog;
-
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                    minTimes = 0;
-                    result = new DdlException("failed");
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
-
-                    globalStateMgr.getBrokerMgr();
-                    minTimes = 0;
-                    result = new BrokerMgr();
-                }
-            };
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+        Database db = new Database(50000L, "testCluster:testDb");
+        MaterializedIndex baseIndex = new MaterializedIndex(30001, IndexState.NORMAL);
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        Partition partition = new Partition(20000L, "testTbl", baseIndex, distributionInfo);
+        List<Column> baseSchema = new LinkedList<Column>();
+        Column column = new Column();
+        baseSchema.add(column);
+        OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
+                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
+                null);
+        table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
+                TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.addPartition(partition);
+        table.setBaseIndexId(baseIndex.getId());
+        db.createTable(table);
+        return globalStateMgr;
     }
 
     public static Auth fetchBlockAccess() {

@@ -783,7 +783,7 @@ public class ShowExecutor {
             Table table = db.getTable(showStmt.getTableName().getTbl());
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        db.getFullName() + "." + showStmt.getTableName().toString());
+                        db.getOriginName() + "." + showStmt.getTableName().toString());
             } else if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
