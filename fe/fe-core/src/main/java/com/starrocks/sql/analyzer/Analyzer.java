@@ -10,6 +10,7 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelLoadStmt;
@@ -472,6 +473,12 @@ public class Analyzer {
         @Override
         public Void visitCancelLoadStmt(CancelLoadStmt statement, ConnectContext context) {
             CancelLoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
+            BackupStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }
