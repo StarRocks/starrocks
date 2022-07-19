@@ -107,10 +107,12 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
                 // Set _cur_file_eof to open a new reader.
                 _cur_file_eof = true;
             } else {
+                if (++_error_chunk_num <= _kMaxErrorChunkNum) {
+                    LOG(WARNING) << "read chunk failed: : " << status;
+                }
                 // To read all readers, we just log and ignore the error returned by read_chunk.
                 // Set _cur_file_eof to open a new reader, since the error is not recoverable by retrying.
                 _cur_file_eof = true;
-                LOG(WARNING) << "read chunk failed: : " << status;
             }
         }
     } while (src_chunk->num_rows() == 0);
