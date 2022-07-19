@@ -981,7 +981,7 @@ public class GlobalStateMgr {
 
     // start all daemon threads only running on Master
     private void startMasterOnlyDaemonThreads() {
-        if (Config.integrate_starmgr) {
+        if (Config.integrate_starmgr && Config.use_staros) {
             // register service to starMgr
             getStarOSAgent().registerAndBootstrapService();
         }
