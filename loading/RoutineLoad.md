@@ -7,6 +7,22 @@
 * CSV
 * JSON
 
+## 基本原理
+
+![routine load](../assets/4.5.2-1.png)
+
+导入流程如上图：
+
+1. 用户通过支持MySQL协议的客户端向 FE 提交一个Kafka导入任务。
+2. FE将一个导入任务拆分成若干个Task，每个Task负责导入指定的一部分数据。
+3. 每个Task被分配到指定的 BE 上执行。在 BE 上，一个 Task 被视为一个普通的导入任务，
+  通过 Stream Load 的导入机制进行导入。
+4. BE导入完成后，向 FE 汇报。
+5. FE 根据汇报结果，继续生成后续新的 Task，或者对失败的 Task 进行重试。
+6. FE 会不断的产生新的 Task，来完成数据不间断的导入。
+
+---
+
 ## 基本操作
 
 ### 创建导入任务
@@ -131,7 +147,7 @@ ReasonOfStateChanged:
 
 ~~~sql
 MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD WHERE Jobname="routine_wiki_edit_1589191587"\G;
+MySQL [load_test] > SHOW ROUTINE LOAD TASK WHERE Jobname="routine_wiki_edit_1589191587"\G;
 *************************** 1. row ***************************
               TaskId: 645da10b-0a5c-4e90-84f0-03b33ec58b68
                TxnId: 2776810
