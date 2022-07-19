@@ -4,6 +4,14 @@ Stream Load 是一种同步的导入方式，需要通过发送 HTTP 请求将�
 
 Stream Load 适用于导入数据量小于 10 GB 的本地文件、或通过程序导入数据流的业务场景。
 
+## 基本原理
+
+Stream Load 中，用户通过 HTTP 协议提交导入命令。如果提交到 FE 节点，则 FE 节点会通过 HTTP redirect 指令将请求转发给某一个 BE 节点，您也可以直接提交导入命令给某一指定的 BE 节点。该 BE 节点作为 Coordinator 节点，将数据按表结构划分、并分发数据到相关的 BE 节点。导入的最终结果由 Coordinator 节点返回给您。
+
+下图展示了 Stream Load 的主要流程：
+
+![Stream Load 原理图](/assets/4.2.2-3.png)
+
 ## 支持的数据格式
 
 Stream Load 支持导入 CSV 和 JSON 格式的数据：
