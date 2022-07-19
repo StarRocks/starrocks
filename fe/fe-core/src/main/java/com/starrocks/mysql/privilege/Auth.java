@@ -661,7 +661,7 @@ public class Auth implements Writable {
         String user = stmt.getUserIdentity().getQualifiedUser();
         String host = stmt.getUserIdentity().getHost();
         if (ROOT_USER.equals(user) && "%".equals(host)) {
-            // Dropping `root@%` and `admin@%` is not allowed
+            // Dropping `root@%` is not allowed
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 
