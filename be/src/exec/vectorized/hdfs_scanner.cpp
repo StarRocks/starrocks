@@ -162,7 +162,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
 }
 
-void HdfsScanner::fianlize() {
+void HdfsScanner::finalize() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }

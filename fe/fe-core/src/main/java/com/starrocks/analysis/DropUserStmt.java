@@ -46,7 +46,7 @@ public class DropUserStmt extends DdlStmt {
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
-        userIdent.analyze(analyzer.getClusterName());
+        userIdent.analyze();
 
         // only user with GLOBAL level's GRANT_PRIV can drop user.
         if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {

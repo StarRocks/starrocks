@@ -180,7 +180,7 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
                         write_buf->put_bytes((char*)data, bytes_read);
                         write_buf->flip();
                         // error happens iff pipe is cancelled
-                        RETURN_IF_ERROR(_push_front(write_buf));
+                        RETURN_IF_ERROR(_push_front_unlocked(write_buf));
                         write_buf.reset();
                         _read_buf.reset();
                     }
@@ -248,21 +248,14 @@ Status StreamLoadPipe::_append(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
-Status StreamLoadPipe::_push_front(const ByteBufferPtr& buf) {
-    if (buf != nullptr && buf->has_remaining()) {
-        std::unique_lock<std::mutex> l(_lock);
-        // if _buf_queue is empty, we append this buf without size check
-        _put_cond.wait(l, [&]() {
-            return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
-        });
-
-        if (_cancelled) {
-            return _err_st;
-        }
-        _buf_queue.push_front(buf);
-        _buffered_bytes += buf->remaining();
-        _get_cond.notify_one();
+Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
+    DCHECK(buf != nullptr && buf->has_remaining());
+    if (_cancelled) {
+        return _err_st;
     }
+    _buf_queue.push_front(buf);
+    _buffered_bytes += buf->remaining();
+    _get_cond.notify_one();
     return Status::OK();
 }
 

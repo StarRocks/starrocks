@@ -23,6 +23,7 @@ statement
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -45,6 +46,8 @@ statement
     | truncateTableStatement                                                                #truncateTable
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
+    | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -105,6 +108,7 @@ statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
@@ -156,6 +160,11 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -323,6 +332,16 @@ cancelAlterTableStatement
     | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
     ;
 
+showPartitionsStatement
+    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
+    (WHERE expression)?
+    (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+recoverPartitionStatement
+    : RECOVER PARTITION identifier FROM table=qualifiedName
+    ;
+
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
@@ -419,6 +438,7 @@ alterClause
     | dropPartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
+    | modifyPartitionClause
     ;
 
 addPartitionClause
@@ -480,6 +500,10 @@ addComputeNodeClause
 dropComputeNodeClause
    : DROP COMPUTE NODE string (',' string)*
    ;
+
+modifyPartitionClause
+    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
@@ -571,6 +595,11 @@ showDatabasesStatement
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
+
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
+    ;
+
 
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?

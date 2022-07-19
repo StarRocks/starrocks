@@ -29,7 +29,7 @@ public class PrivilegeStmtAnalyzer {
         private void analyseUserAndCheckExist(UserIdentity userIdent, ConnectContext session) {
             // validate user
             try {
-                userIdent.analyze(session.getClusterName());
+                userIdent.analyze();
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.

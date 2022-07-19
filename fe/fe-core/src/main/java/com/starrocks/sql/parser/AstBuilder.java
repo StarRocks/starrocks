@@ -86,6 +86,7 @@ import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
+import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.MultiRangePartitionDesc;
@@ -101,6 +102,7 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
@@ -116,9 +118,12 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -230,6 +235,7 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -268,7 +274,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier())).getValue();
@@ -292,7 +297,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowCreateDbStmt(dbName);
     }
 
-
     @Override
     public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
@@ -315,6 +319,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return new ShowDataStmt(null, null);
         }
+    }
+
+    @Override
+    public ParseNode visitShowDynamicPartitionStatement(StarRocksParser.ShowDynamicPartitionStatementContext context) {
+
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        return new ShowDynamicPartitionStmt(dbName == null ? null : dbName.toString());
     }
 
     // ------------------------------------------- Table Statement -----------------------------------------------------
@@ -827,6 +842,52 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
+    }
+
+    @Override
+    public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        if (context.identifier() != null) {
+            final String partitionName = ((Identifier) visit(context.identifier())).getValue();
+            return new ModifyPartitionClause(Collections.singletonList(partitionName), properties);
+        } else if (context.identifierList() != null) {
+            final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            return new ModifyPartitionClause(identifierList.stream().map(Identifier::getValue).collect(toList()),
+                    properties);
+        } else if (context.ASTERISK_SYMBOL() != null) {
+            return ModifyPartitionClause.createStarClause(properties);
+        }
+        return null;
+    }
+
+    @Override
+    public ParseNode visitShowPartitionsStatement(StarRocksParser.ShowPartitionsStatementContext context) {
+        boolean temp = context.TEMPORARY() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.ORDER() != null) {
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
 
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -2181,6 +2242,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowVariablesStmt(getVariableType(context.varType()), pattern, where);
     }
 
+    @Override
+    public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
+        boolean isShowFull = context.FULL() != null;
+        return new ShowProcesslistStmt(isShowFull);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -3334,5 +3401,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcStatement(StarRocksParser.ShowProcStatementContext context) {
         StringLiteral stringLiteral = (StringLiteral) visit(context.path);
         return new ShowProcStmt(stringLiteral.getValue());
+    }
+
+    @Override
+    public ParseNode visitRecoverPartitionStatement(StarRocksParser.RecoverPartitionStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        String partitionName = ((Identifier) visit(context.identifier())).getValue();
+        return new RecoverPartitionStmt(tableName, partitionName);
     }
 }

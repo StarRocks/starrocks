@@ -1669,14 +1669,6 @@ Status PersistentIndex::_check_and_flush_l0() {
     return Status::OK();
 }
 
-size_t PersistentIndex::mutable_index_size() {
-    return (_l0 == nullptr) ? 0 : _l0->size();
-}
-
-size_t PersistentIndex::mutable_index_capacity() {
-    return (_l0 == nullptr) ? 0 : _l0->capacity();
-}
-
 size_t PersistentIndex::_dump_bound() {
     return (_l0 == nullptr) ? 0 : _l0->dump_bound();
 }

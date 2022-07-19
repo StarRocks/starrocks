@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
@@ -33,6 +34,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -199,18 +201,18 @@ public class RangePartitionInfo extends PartitionInfo {
         return range;
     }
 
-    public void handleNewRangePartitionDescs(List<SingleRangePartitionDesc> listDesc,
+    public void handleNewRangePartitionDescs(List<PartitionDesc> partitionDescs,
                                              List<Partition> partitionList, Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
-        int len = listDesc.size();
+        int len = partitionDescs.size();
         for (int i = 0; i < len; i++) {
             if (!existPartitionNameSet.contains(partitionList.get(i).getName())) {
                 long partitionId = partitionList.get(i).getId();
-                SingleRangePartitionDesc desc = listDesc.get(i);
+                SingleRangePartitionDesc desc = (SingleRangePartitionDesc) partitionDescs.get(i);
                 Preconditions.checkArgument(desc.isAnalyzed());
                 Range<PartitionKey> range;
                 try {
-                    range = checkAndCreateRange(listDesc.get(i), isTemp);
+                    range = checkAndCreateRange((SingleRangePartitionDesc) partitionDescs.get(i), isTemp);
                     setRangeInternal(partitionId, isTemp, range);
                 } catch (IllegalArgumentException e) {
                     // Range.closedOpen may throw this if (lower > upper)
@@ -230,6 +232,14 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, dataProperty);
         idToReplicationNum.put(partitionId, replicationNum);
         idToInMemory.put(partitionId, isInMemory);
+    }
+
+    /**
+     * @param info
+     * @TODO This method may be used in future
+     */
+    public void unprotectHandleNewSinglePartitionDesc(RangePartitionPersistInfo info) {
+
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

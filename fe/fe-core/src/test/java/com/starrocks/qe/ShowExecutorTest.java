@@ -275,7 +275,6 @@ public class ShowExecutorTest {
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("default_cluster:testUser");
-        ctx.setCluster("default_cluster");
 
         new Expectations(ctx) {
             {
@@ -346,10 +345,6 @@ public class ShowExecutorTest {
 
         new Expectations() {
             {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = "default_cluster";
-
                 globalStateMgr.getDb(0);
                 minTimes = 0;
                 result = db;
@@ -359,7 +354,7 @@ public class ShowExecutorTest {
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
                 null, null, null, false);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
@@ -508,7 +503,7 @@ public class ShowExecutorTest {
         Assert.fail("No Exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test
     public void testShowCreateTableEmptyTbl() throws AnalysisException, DdlException {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("default_cluster:testDb", "emptyTable"),
                 ShowCreateTableStmt.CreateTableType.TABLE);
