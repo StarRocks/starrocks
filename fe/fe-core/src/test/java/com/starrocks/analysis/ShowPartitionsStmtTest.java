@@ -81,6 +81,19 @@ public class ShowPartitionsStmtTest {
     }
 
     @Test
+    public void testShowPartitionsStmtWithEqualPredicate() {
+        SlotRef slotRef = new SlotRef(null, "PartitionName");
+        StringLiteral stringLiteral = new StringLiteral("p1");
+        BinaryPredicate equalPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef, stringLiteral);
+        ShowPartitionsStmt stmt =
+                new ShowPartitionsStmt(new TableName("testDb", "testTable"), equalPredicate, null, null, false);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals(
+                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` = 'p1'",
+                stmt.toString());
+    }
+
+    @Test
     public void testShowParitionsStmtOrderByAndLimit() {
         SlotRef slotRef = new SlotRef(null, "PartitionId");
         OrderByElement orderByElement = new OrderByElement(slotRef, true, true);

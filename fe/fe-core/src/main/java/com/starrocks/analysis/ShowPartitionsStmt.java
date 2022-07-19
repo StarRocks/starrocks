@@ -31,9 +31,12 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ShowPartitionsStmt extends ShowStmt {
 
@@ -43,6 +46,18 @@ public class ShowPartitionsStmt extends ShowStmt {
     public static final String FILTER_BUCKETS = "Buckets";
     public static final String FILTER_REPLICATION_NUM = "ReplicationNum";
     public static final String FILTER_LAST_CONSISTENCY_CHECK_TIME = "LastConsistencyCheckTime";
+
+    public static final Set<String> FILTER_COLUMNS;
+
+    static {
+        FILTER_COLUMNS = new HashSet<>();
+        FILTER_COLUMNS.add(FILTER_PARTITION_ID);
+        FILTER_COLUMNS.add(FILTER_PARTITION_NAME);
+        FILTER_COLUMNS.add(FILTER_STATE);
+        FILTER_COLUMNS.add(FILTER_BUCKETS);
+        FILTER_COLUMNS.add(FILTER_REPLICATION_NUM);
+        FILTER_COLUMNS.add(FILTER_LAST_CONSISTENCY_CHECK_TIME);
+    }
 
     private String dbName;
     private String tableName;
