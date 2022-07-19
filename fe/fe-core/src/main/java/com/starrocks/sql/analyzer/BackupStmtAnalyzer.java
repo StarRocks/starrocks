@@ -25,8 +25,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
 
-import java.util.List;
-
 public class BackupStmtAnalyzer {
 
     public static void analyze(BackupStmt backupStmt, ConnectContext session) {
