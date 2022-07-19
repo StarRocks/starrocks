@@ -127,7 +127,7 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     auto cache = StoragePageCache::instance();
     PageCacheHandle cache_handle;
     StoragePageCache::CacheKey cache_key(opts.read_file->filename(), opts.page_pointer.offset);
-    if (opts.use_page_cache && cache->lookup(cache_key, &cache_handle)) {
+    if (opts.use_page_cache && cache != nullptr && cache->lookup(cache_key, &cache_handle)) {
         // we find page in cache, use it
         *handle = PageHandle(std::move(cache_handle));
         opts.stats->cached_pages_num++;
