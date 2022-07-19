@@ -22,12 +22,10 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.thrift.TTabletType;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.List;
@@ -41,8 +39,7 @@ public class PartitionDesc implements ParseNode {
         return type;
     }
 
-    public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties)
-            throws AnalysisException {
+    public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
         throw new NotImplementedException();
     }
 
@@ -52,38 +49,6 @@ public class PartitionDesc implements ParseNode {
 
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId, boolean isTemp)
             throws DdlException {
-        throw new NotImplementedException();
-    }
-
-    public String getPartitionName() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public boolean isSetIfNotExists() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public Map<String, String> getProperties() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public short getReplicationNum() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public DataProperty getPartitionDataProperty() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public Long getVersionInfo() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public TTabletType getTabletType() throws NotImplementedException {
-        throw new NotImplementedException();
-    }
-
-    public boolean isInMemory() throws NotImplementedException {
         throw new NotImplementedException();
     }
 }

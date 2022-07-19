@@ -1,12 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
+import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -17,7 +13,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class CatalogUtils {
 
@@ -46,13 +41,13 @@ public class CatalogUtils {
     }
 
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
-                                                                      List<PartitionDesc> partitionDescs)
+                                                                      List<SingleRangePartitionDesc> singleRangePartitionDescs)
             throws DdlException {
         Set<String> existPartitionNameSet = Sets.newHashSet();
-        for (PartitionDesc partitionDesc : partitionDescs) {
-            String partitionName = partitionDesc.getPartitionName();
+        for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
+            String partitionName = singleRangePartitionDesc.getPartitionName();
             if (olapTable.checkPartitionNameExist(partitionName)) {
-                if (partitionDesc.isSetIfNotExists()) {
+                if (singleRangePartitionDesc.isSetIfNotExists()) {
                     existPartitionNameSet.add(partitionName);
                 } else {
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
@@ -80,55 +75,6 @@ public class CatalogUtils {
             }
         } finally {
             db.readUnlock();
-        }
-    }
-
-    public static void checkPartitionValuesExistForAddListPartition(OlapTable olapTable, PartitionDesc partitionDesc)
-            throws DdlException {
-        try {
-            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
-            if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
-                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getLiteralExprValues().forEach((k, v) -> allLiteralExprValues.addAll(v));
-
-                SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
-                for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
-                    for (LiteralExpr value : allLiteralExprValues) {
-                        if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value %s");
-                        }
-                    }
-                }
-            } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
-                List<List<LiteralExpr>> allMultiLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getMultiLiteralExprValues().forEach((k, v) -> allMultiLiteralExprValues.addAll(v));
-
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
-                MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
-                for (List<LiteralExpr> itemExpr : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
-                    for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
-                        int duplicatedSize = 0;
-                        for (int i = 0; i < itemExpr.size(); i++) {
-                            String itemValue = itemExpr.get(i).getStringValue();
-                            String value = valueExpr.get(i).getStringValue();
-                            if (value.equals(itemValue)) {
-                                duplicatedSize++;
-                            }
-                        }
-                        if (duplicatedSize == partitionColSize) {
-                            List<String> msg = itemExpr.stream()
-                                    .map(value -> ("\"" + value.getStringValue() + "\""))
-                                    .collect(Collectors.toList());
-                            throw new DdlException("Duplicate values " +
-                                    "(" + String.join(",", msg) + ") ");
-                        }
-                    }
-                }
-            }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
         }
     }
 }
