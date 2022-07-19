@@ -173,7 +173,7 @@ public class EditLog {
                         break;
                     }
                     LOG.info("Begin to unprotect drop table. db = "
-                            + db.getFullName() + " table = " + info.getTableId());
+                            + db.getOriginName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
@@ -692,9 +692,9 @@ public class EditLog {
                     globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
-                case OperationType.OP_WORKGROUP: {
-                    final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
-                    globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
+                case OperationType.OP_RESOURCE_GROUP: {
+                    final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.getData();
+                    globalStateMgr.getResourceGroupMgr().replayResourceGroupOp(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK: {
@@ -1017,8 +1017,8 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
     }
 
-    public void logWorkGroupOp(WorkGroupOpEntry op) {
-        logEdit(OperationType.OP_WORKGROUP, op);
+    public void logResourceGroupOp(ResourceGroupOpEntry op) {
+        logEdit(OperationType.OP_RESOURCE_GROUP, op);
     }
 
     public void logCreateTask(Task info) {

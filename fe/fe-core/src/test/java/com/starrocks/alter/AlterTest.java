@@ -75,6 +75,7 @@ public class AlterTest {
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
+        Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
@@ -274,6 +275,15 @@ public class AlterTest {
         }
     }
 
+    private static void alterTableWithMewParserAndExceptionMsg(String sql, String msg) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        } catch (Exception e) {
+            Assert.assertEquals(msg, e.getMessage());
+        }
+    }
+
     @Test
     public void testRenameMaterializedView() throws Exception {
         starRocksAssert.useDatabase("test")
@@ -457,7 +467,7 @@ public class AlterTest {
                 "'dynamic_partition.prefix' = 'p',\n" +
                 "'dynamic_partition.buckets' = '3'\n" +
                 " );";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
 
         Assert.assertTrue(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
         Assert.assertEquals(4, tbl.getIndexIdToSchema().size());
@@ -475,7 +485,7 @@ public class AlterTest {
 
         // disable the dynamic partition
         stmt = "alter table test.tbl1 set ('dynamic_partition.enable' = 'false')";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         Assert.assertFalse(tbl.getTableProperty().getDynamicPartitionProperty().getEnable());
 
         // add partition when dynamic partition is disable
@@ -486,14 +496,14 @@ public class AlterTest {
         // set table's default replication num
         Assert.assertEquals(Short.valueOf("1"), tbl.getDefaultReplicationNum());
         stmt = "alter table test.tbl1 set ('default.replication_num' = '3');";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("3"), tbl.getDefaultReplicationNum());
 
         // set range table's real replication num
         Partition p1 = tbl.getPartition("p1");
         Assert.assertEquals(Short.valueOf("1"), Short.valueOf(tbl.getPartitionInfo().getReplicationNum(p1.getId())));
         stmt = "alter table test.tbl1 set ('replication_num' = '3');";
-        alterTable(stmt, true);
+        alterTableWithNewParser(stmt, true);
         Assert.assertEquals(Short.valueOf("1"), Short.valueOf(tbl.getPartitionInfo().getReplicationNum(p1.getId())));
 
         // set un-partitioned table's real replication num
@@ -503,17 +513,17 @@ public class AlterTest {
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
         // partition replication num and table default replication num are updated at the same time in unpartitioned table
         stmt = "alter table test.tbl2 set ('replication_num' = '3');";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("3"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
         Assert.assertEquals(Short.valueOf("3"), tbl2.getDefaultReplicationNum());
         stmt = "alter table test.tbl2 set ('default.replication_num' = '2');";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("2"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
         Assert.assertEquals(Short.valueOf("2"), tbl2.getDefaultReplicationNum());
         stmt = "alter table test.tbl2 modify partition tbl2 set ('replication_num' = '1');";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         Assert.assertEquals(Short.valueOf("1"),
                 Short.valueOf(tbl2.getPartitionInfo().getReplicationNum(partition.getId())));
         Assert.assertEquals(Short.valueOf("1"), tbl2.getDefaultReplicationNum());
@@ -552,7 +562,7 @@ public class AlterTest {
             Assert.assertEquals(Short.valueOf("1"),
                     Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
         }
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
             Assert.assertEquals(Short.valueOf("3"),
                     Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
@@ -565,7 +575,7 @@ public class AlterTest {
         for (Partition partition : partitionList) {
             Assert.assertEquals(false, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
         }
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
             Assert.assertEquals(true, tbl4.getPartitionInfo().getIsInMemory(partition.getId()));
         }
@@ -580,7 +590,7 @@ public class AlterTest {
         for (Partition partition : partitionList) {
             Assert.assertEquals(oldDataProperty, tbl4.getPartitionInfo().getDataProperty(partition.getId()));
         }
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         DataProperty newDataProperty = new DataProperty(TStorageMedium.HDD, DataProperty.MAX_COOLDOWN_TIME_MS);
         for (Partition partition : partitionList) {
             Assert.assertEquals(newDataProperty, tbl4.getPartitionInfo().getDataProperty(partition.getId()));
@@ -590,7 +600,7 @@ public class AlterTest {
         // batch update range partitions' properties with *
         stmt = "alter table test.tbl4 modify partition (*) set ('replication_num' = '1')";
         partitionList = Lists.newArrayList(p1, p2, p3, p4);
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         for (Partition partition : partitionList) {
             Assert.assertEquals(Short.valueOf("1"),
                     Short.valueOf(tbl4.getPartitionInfo().getReplicationNum(partition.getId())));
@@ -662,9 +672,9 @@ public class AlterTest {
                 ");";
         createTable(createOlapTblStmt);
         String alterStmt = "alter table test." + tableName + " set (\"dynamic_partition.enable\" = \"true\");";
-        String errorMsg = "Table default_cluster:test.no_dynamic_table is not a dynamic partition table. " +
+        String errorMsg = "Table test.no_dynamic_table is not a dynamic partition table. " +
                 "Use command `HELP ALTER TABLE` to see how to change a normal table to a dynamic partition table.";
-        alterTableWithExceptionMsg(alterStmt, errorMsg);
+        alterTableWithMewParserAndExceptionMsg(alterStmt, errorMsg);
         // test set dynamic properties in a no dynamic partition table
         String stmt = "alter table test." + tableName + " set (\n" +
                 "'dynamic_partition.enable' = 'true',\n" +
@@ -674,7 +684,7 @@ public class AlterTest {
                 "'dynamic_partition.prefix' = 'p',\n" +
                 "'dynamic_partition.buckets' = '3'\n" +
                 " );";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
     }
 
     @Test
@@ -708,17 +718,17 @@ public class AlterTest {
 
         createTable(createOlapTblStmt);
         String alterStmt1 = "alter table test." + tableName + " set (\"dynamic_partition.enable\" = \"false\");";
-        alterTable(alterStmt1, false);
+        alterTableWithNewParser(alterStmt1, false);
         String alterStmt2 = "alter table test." + tableName + " set (\"dynamic_partition.time_unit\" = \"week\");";
-        alterTable(alterStmt2, false);
+        alterTableWithNewParser(alterStmt2, false);
         String alterStmt3 = "alter table test." + tableName + " set (\"dynamic_partition.start\" = \"-10\");";
-        alterTable(alterStmt3, false);
+        alterTableWithNewParser(alterStmt3, false);
         String alterStmt4 = "alter table test." + tableName + " set (\"dynamic_partition.end\" = \"10\");";
-        alterTable(alterStmt4, false);
+        alterTableWithNewParser(alterStmt4, false);
         String alterStmt5 = "alter table test." + tableName + " set (\"dynamic_partition.prefix\" = \"pp\");";
-        alterTable(alterStmt5, false);
+        alterTableWithNewParser(alterStmt5, false);
         String alterStmt6 = "alter table test." + tableName + " set (\"dynamic_partition.buckets\" = \"5\");";
-        alterTable(alterStmt6, false);
+        alterTableWithNewParser(alterStmt6, false);
     }
 
     @Test
@@ -1407,7 +1417,7 @@ public class AlterTest {
         auth.grant(grantUserStmt);
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
-        testUser.analyze("default_cluster");
+        testUser.analyze();
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);

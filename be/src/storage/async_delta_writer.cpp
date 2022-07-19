@@ -46,6 +46,8 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
             iter->write_cb->run(st, nullptr);
         }
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
+        LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id=" << writer->txn_id()
+                                << " tablet_id=" << writer->tablet()->tablet_id() << ": " << st;
     }
     return 0;
 }

@@ -121,9 +121,9 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
                                                           const PTransmitRuntimeFilterParams* request,
                                                           PTransmitRuntimeFilterResult* response,
                                                           google::protobuf::Closure* done) {
-    VLOG_FILE << "transmit runtime filter: fragment_instance_id=" << print_id(request->finst_id())
-              << " query_id=" << print_id(request->query_id()) << ", is_partial=" << request->is_partial()
-              << ", filter_id=" << request->filter_id() << ", is_pipeline=" << request->is_pipeline();
+    VLOG_FILE << "transmit runtime filter: fragment_instance_id = " << print_id(request->finst_id())
+              << " query_id = " << print_id(request->query_id()) << ", is_partial = " << request->is_partial()
+              << ", filter_id = " << request->filter_id() << ", is_pipeline = " << request->is_pipeline();
     ClosureGuard closure_guard(done);
     _exec_env->runtime_filter_worker()->receive_runtime_filter(*request);
     Status st;
@@ -260,10 +260,10 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
-    auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
-    auto status = fragment_executor->prepare(_exec_env, t_common_param, t_unique_request);
+    pipeline::FragmentExecutor fragment_executor;
+    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
-        return fragment_executor->execute(_exec_env);
+        return fragment_executor.execute(_exec_env);
     } else {
         return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
     }

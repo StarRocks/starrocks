@@ -66,6 +66,12 @@ public class MvTaskRunProcessorTest {
                         "distributed by hash(k2)\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
+                        "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
+                .withNewMaterializedView("create materialized view test.mv_inactive\n" +
+                        "partition by date_trunc('week',k1) \n" +
+                        "distributed by hash(k2)\n" +
+                        "refresh manual\n" +
+                        "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
     }
 
@@ -116,6 +122,23 @@ public class MvTaskRunProcessorTest {
             Assert.assertEquals(partitionInfo.getIdToRange(false).size(), 1);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testInactive() {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
+        materializedView.setActive(false);
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        try {
+            taskRun.executeTaskRun();
+            Assert.fail("should not be here. executeTaskRun will throw exception");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("is not active, skip sync partition and data with base tables"));
         }
     }
 }

@@ -38,7 +38,7 @@ public class CatalogRecycleBinTest {
         Assert.assertNull(recycledDb);
         recycledDb = bin.getDatabase(2);
         Assert.assertEquals(2L, recycledDb.getId());
-        Assert.assertEquals("db", recycledDb.getFullName());
+        Assert.assertEquals("db", recycledDb.getOriginName());
 
         List<Long> dbIds = bin.getAllDbIds();
         Assert.assertEquals(Lists.newArrayList(2L), dbIds);

@@ -248,6 +248,11 @@ public abstract class AlterHandler extends MasterDaemon {
         return this.alterJobs.remove(tableId);
     }
 
+    // For UT
+    public void clearJobs() {
+        this.alterJobsV2.clear();
+    }
+
     @Deprecated
     public void removeDbAlterJob(long dbId) {
         Iterator<Map.Entry<Long, AlterJob>> iterator = alterJobs.entrySet().iterator();
@@ -274,32 +279,6 @@ public abstract class AlterHandler extends MasterDaemon {
             throw new MetaNotFoundException("Cannot find " + task.getTaskType().name() + " job[" + tableId + "]");
         }
         alterJob.handleFinishedReplica(task, finishTabletInfo, reportVersion);
-    }
-
-    /*
-     * cancel alter job when drop table
-     * olapTable:
-     *      table which is being dropped
-     */
-    public void cancelWithTable(OlapTable olapTable) {
-        // make sure to hold to db write lock before calling this
-        AlterJob alterJob = getAlterJob(olapTable.getId());
-        if (alterJob == null) {
-            return;
-        }
-        alterJob.cancel(olapTable, "table is dropped");
-
-        // remove from alterJobs and add to finishedOrCancelledAlterJobs operation should be perform atomically
-        lock();
-        try {
-            alterJob = alterJobs.remove(olapTable.getId());
-            if (alterJob != null) {
-                alterJob.clear();
-                finishedOrCancelledAlterJobs.add(alterJob);
-            }
-        } finally {
-            unlock();
-        }
     }
 
     protected void cancelInternal(AlterJob alterJob, OlapTable olapTable, String msg) {

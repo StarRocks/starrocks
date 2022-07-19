@@ -209,5 +209,38 @@ TEST_F(ChunkHelperTest, NewChunkWithTuple) {
     ASSERT_EQ(chunk->get_column_by_slot_id(8)->get_name(), "binary");
 }
 
+TEST_F(ChunkHelperTest, ReorderChunk) {
+    auto* tuple_desc = _create_tuple_desc();
+
+    auto reversed_slots = tuple_desc->slots();
+    std::reverse(reversed_slots.begin(), reversed_slots.end());
+    auto chunk = ChunkHelper::new_chunk(reversed_slots, 1024);
+
+    // check
+    ASSERT_EQ(chunk->num_columns(), 9);
+    ASSERT_EQ(chunk->columns()[8]->get_name(), "integral-1");
+    ASSERT_EQ(chunk->columns()[7]->get_name(), "integral-2");
+    ASSERT_EQ(chunk->columns()[6]->get_name(), "integral-4");
+    ASSERT_EQ(chunk->columns()[5]->get_name(), "integral-8");
+    ASSERT_EQ(chunk->columns()[4]->get_name(), "int128");
+    ASSERT_EQ(chunk->columns()[3]->get_name(), "float-4");
+    ASSERT_EQ(chunk->columns()[2]->get_name(), "float-8");
+    ASSERT_EQ(chunk->columns()[1]->get_name(), "binary");
+    ASSERT_EQ(chunk->columns()[0]->get_name(), "binary");
+
+    ChunkHelper::reorder_chunk(*tuple_desc, chunk.get());
+    // check
+    ASSERT_EQ(chunk->num_columns(), 9);
+    ASSERT_EQ(chunk->columns()[0]->get_name(), "integral-1");
+    ASSERT_EQ(chunk->columns()[1]->get_name(), "integral-2");
+    ASSERT_EQ(chunk->columns()[2]->get_name(), "integral-4");
+    ASSERT_EQ(chunk->columns()[3]->get_name(), "integral-8");
+    ASSERT_EQ(chunk->columns()[4]->get_name(), "int128");
+    ASSERT_EQ(chunk->columns()[5]->get_name(), "float-4");
+    ASSERT_EQ(chunk->columns()[6]->get_name(), "float-8");
+    ASSERT_EQ(chunk->columns()[7]->get_name(), "binary");
+    ASSERT_EQ(chunk->columns()[8]->get_name(), "binary");
+}
+
 } // namespace vectorized
 } // namespace starrocks

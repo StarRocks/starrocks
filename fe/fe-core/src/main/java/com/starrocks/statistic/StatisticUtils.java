@@ -40,7 +40,6 @@ public class StatisticUtils {
         context.getSessionVariable().setPipelineDop(1);
         // TODO(kks): remove this if pipeline support STATISTIC result sink type
         context.getSessionVariable().setEnablePipelineEngine(false);
-        context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);

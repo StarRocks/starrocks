@@ -1001,7 +1001,8 @@ bool OlapTableSink::is_close_done() {
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     if (close_status.ok()) {
         do {
-            RETURN_IF_ERROR(try_close(state));
+            close_status = try_close(state);
+            if (!close_status.ok()) break;
             SleepFor(MonoDelta::FromMilliseconds(5));
         } while (!is_close_done());
     }

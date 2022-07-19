@@ -207,6 +207,11 @@ public:
         return _num_threads + _num_threads_pending_start;
     }
 
+    int num_queued_tasks() const {
+        std::lock_guard l(_lock);
+        return _total_queued_tasks;
+    }
+
 private:
     friend class ThreadPoolBuilder;
     friend class ThreadPoolToken;

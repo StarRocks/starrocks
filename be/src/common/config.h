@@ -23,8 +23,7 @@
 
 #include "configbase.h"
 
-namespace starrocks {
-namespace config {
+namespace starrocks::config {
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -100,6 +99,8 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
+// The count of parallel clone task per storage path
+CONF_Int32(parallel_clone_task_per_path, "2");
 // The count of thread to clone.
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
@@ -751,6 +752,9 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
 
+// Config for query debug trace
+CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
+
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 // Root dir used for cache if cache enabled.
@@ -759,6 +763,13 @@ CONF_String(starlet_cache_dir, "");
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
-} // namespace config
+CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
-} // namespace starrocks
+// A comma-separated list of debug contexts to enable.
+// Producer debug context: broker, topic, msg
+// Consumer debug context: consumer, cgrp, topic, fetch
+// Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
+// admin, eos, mock, assigner, conf
+CONF_String(dependency_librdkafka_debug, "all");
+
+} // namespace starrocks::config

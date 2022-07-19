@@ -87,9 +87,6 @@ public abstract class StatementBase implements ParseNode {
             analyzer.setIsExplain();
         }
         this.analyzer = analyzer;
-        if (Strings.isNullOrEmpty(analyzer.getClusterName())) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_SELECT_CLUSTER);
-        }
     }
 
     public Analyzer getAnalyzer() {
