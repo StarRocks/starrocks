@@ -58,10 +58,6 @@ public class FromClause implements ParseNode, Iterable<TableRef> {
         return tableRefs_;
     }
 
-    public void setNeedToSql(boolean needToSql) {
-        this.needToSql = needToSql;
-    }
-
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         if (analyzed_) {
