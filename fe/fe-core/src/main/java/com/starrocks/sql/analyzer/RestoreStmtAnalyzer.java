@@ -91,6 +91,7 @@ public class RestoreStmtAnalyzer {
                     if (tbl == null) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
                     }
+
                     tableName.setDb(null);
                     String alias = tableRef.getAlias();
                     if (!tableName.getTbl().equalsIgnoreCase(alias)) {

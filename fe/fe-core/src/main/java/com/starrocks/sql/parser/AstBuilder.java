@@ -260,7 +260,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return visit(context.statement());
     }
 
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
     public ParseNode visitAlterDbQuotaStmt(StarRocksParser.AlterDbQuotaStmtContext context) {
@@ -1490,8 +1489,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.ALL() != null) {
                 return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
             } else {
-                return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
-                        .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
+                return new AlterResourceGroupStmt(name,
+                        new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
+                                .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
             }
         } else {
             Map<String, String> properties = new HashMap<>();
@@ -2256,7 +2256,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitRestoreStatement(StarRocksParser.RestoreStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         LabelName labelName = qualifiedNameToLabelName(qualifiedName);
-        StarRocksParser.IdentifierContext repo = context.identifier();
 
         List<TableRef> tblRefs = new ArrayList<>();
         for (StarRocksParser.RestoreTableDescContext tableDescContext : context.restoreTableDesc()) {
@@ -2267,10 +2266,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (tableDescContext.partitionNames() != null) {
                 partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
             }
-            StarRocksParser.IdentifierContext alias = tableDescContext.identifier();
-            TableRef tableRef =
-                    new TableRef(tableName, Optional.ofNullable(alias).map(RuleContext::getText).orElse(null),
-                            partitionNames);
+
+            String alias = null;
+            if (tableDescContext.identifier() != null) {
+                alias = ((Identifier) visit(tableDescContext.identifier())).getValue();
+            }
+
+            TableRef tableRef = new TableRef(tableName, alias, partitionNames);
             tblRefs.add(tableRef);
         }
         Map<String, String> properties = null;
@@ -2282,13 +2284,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        String repoName = repo.getText();
+        String repoName = ((Identifier) visit(context.identifier())).getValue();
         if (repoName != null && repoName.startsWith("`") && repoName.endsWith("`")) {
             repoName = repoName.substring(1, repoName.length() - 1);
         }
         return new RestoreStmt(labelName, repoName, tblRefs, properties);
     }
-
 
     // ------------------------------------------- Expression ----------------------------------------------------------
 
