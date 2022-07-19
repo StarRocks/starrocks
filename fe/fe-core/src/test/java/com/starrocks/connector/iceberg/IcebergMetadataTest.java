@@ -19,8 +19,12 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 
 public class IcebergMetadataTest {
@@ -34,8 +38,11 @@ public class IcebergMetadataTest {
             }
         };
 
+        Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
-        IcebergMetadata metadata = new IcebergMetadata(metastoreUris);
+        properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
+        properties.put(ICEBERG_CATALOG, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(properties);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
     }
@@ -52,8 +59,11 @@ public class IcebergMetadataTest {
             }
         };
 
+        Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
-        IcebergMetadata metadata = new IcebergMetadata(metastoreUris);
+        properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
+        properties.put(ICEBERG_CATALOG, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(properties);
         Database expectResult = new Database(0, db);
         Assert.assertEquals(expectResult, metadata.getDb(db));
     }
@@ -73,8 +83,11 @@ public class IcebergMetadataTest {
             }
         };
 
+        Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
-        IcebergMetadata metadata = new IcebergMetadata(metastoreUris);
+        properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
+        properties.put(ICEBERG_CATALOG, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(properties);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
         Assert.assertEquals(expectResult, metadata.listTableNames(db1));
     }
@@ -91,8 +104,11 @@ public class IcebergMetadataTest {
             }
         };
 
-        String resourceName = "thrift://127.0.0.1:9083";
-        IcebergMetadata metadata = new IcebergMetadata(resourceName);
+        Map<String, String> properties = new HashMap<>();
+        String metastoreUris = "thrift://127.0.0.1:9083";
+        properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
+        properties.put(ICEBERG_CATALOG, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(properties);
         Table expectResult = new Table(0, "tbl", ICEBERG, new ArrayList<>());
         Assert.assertEquals(expectResult, metadata.getTable("db", "tbl"));
     }
@@ -107,8 +123,12 @@ public class IcebergMetadataTest {
                 minTimes = 0;
             }
         };
-        String resourceName = "thrift://127.0.0.1:9083";
-        IcebergMetadata metadata = new IcebergMetadata(resourceName);
+
+        Map<String, String> properties = new HashMap<>();
+        String metastoreUris = "thrift://127.0.0.1:9083";
+        properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
+        properties.put(ICEBERG_CATALOG, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(properties);
         Assert.assertNull(metadata.getTable("db", "tbl2").getName());
     }
 }

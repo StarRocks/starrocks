@@ -4,6 +4,7 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.iceberg.hive.CachedClientPool;
 import com.starrocks.external.iceberg.hive.HiveTableOperations;
@@ -163,6 +164,16 @@ public class IcebergCustomCatalogTest {
 
         @Override
         protected String defaultWarehouseLocation(TableIdentifier tableIdentifier) {
+            throw new UnsupportedOperationException("Not implemented");
+        }
+
+        @Override
+        public List<String> listAllDatabases() {
+            throw new UnsupportedOperationException("Not implemented");
+        }
+
+        @Override
+        public Database getDB(String dbName) throws InterruptedException, TException {
             throw new UnsupportedOperationException("Not implemented");
         }
 
