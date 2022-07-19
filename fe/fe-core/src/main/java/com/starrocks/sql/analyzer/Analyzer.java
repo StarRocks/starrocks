@@ -23,6 +23,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
@@ -326,6 +327,12 @@ public class Analyzer {
 
         public Void visitRecoverTableStatement(RecoverTableStmt statement, ConnectContext context) {
             RecoverTableAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
+            PauseRoutineLoadAnalyzer.analyze(statement, session);
             return null;
         }
 
