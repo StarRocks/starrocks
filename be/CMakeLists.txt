@@ -403,6 +403,11 @@ if (WITH_GCOV)
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
+if (ENABLE_QUERY_DEBUG_TRACE)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
+    message(STATUS "enable query debug trace")
+endif()
+
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible

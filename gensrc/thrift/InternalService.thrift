@@ -169,6 +169,8 @@ struct TQueryOptions {
   59: optional bool enable_tablet_internal_parallel;
 
   60: optional i32 query_delivery_timeout;
+  
+  61: optional bool enable_query_debug_trace;
 }
 
 
