@@ -753,7 +753,6 @@ void RuntimeFilterWorker::execute() {
             if (it != _mergers.end()) {
                 _mergers.erase(it);
             }
-            _exec_env->runtime_filter_cache()->remove(ev.query_id);
             break;
         }
 
