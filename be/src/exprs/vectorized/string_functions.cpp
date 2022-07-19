@@ -2539,13 +2539,11 @@ struct StringFunctionsState {
         if (driver_id == 0) {
             return regex.get();
         }
-        // The driver would not execute concurrently, so it's safe to use the find-emplace pattern
-        auto iter = driver_regex_map.find(driver_id);
-        if (iter == driver_regex_map.end()) {
+        auto iter = driver_regex_map.lazy_emplace(driver_id, [&](auto build) {
             auto regex = std::make_unique<re2::RE2>(pattern, *options);
             DCHECK(regex->ok());
-            iter = driver_regex_map.emplace(driver_id, std::move(regex)).first;
-        }
+            build(driver_id, std::move(regex));
+        });
         return iter->second.get();
     }
 };

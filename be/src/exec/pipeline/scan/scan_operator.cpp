@@ -283,10 +283,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     }
     starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
     query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
         workgroup::ScanTask task = workgroup::ScanTask(
-                _workgroup, [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx](int worker_id) {
+                _workgroup,
+                [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id](int worker_id) {
                     if (auto sp = wp.lock()) {
+                        // Set driver_id here to share some driver-local contents.
+                        // Current it's used by ExprContext's driver-local state
+                        CurrentThread::current().set_pipeline_driver_id(driver_id);
+                        DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
                         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                         [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
                         QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
@@ -320,8 +326,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id]() {
             if (auto sp = wp.lock()) {
+                // Set driver_id here to share some driver-local contents.
+                // Current it's used by ExprContext's driver-local state
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                 [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
                 QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
