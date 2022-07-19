@@ -42,7 +42,6 @@ public class AnalyzeRestoreTest {
         Repository repo = new Repository(10000, "repo", false, location, storage);
         repo.initRepository();
         GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repo, false);
-
     }
 
     @Test
