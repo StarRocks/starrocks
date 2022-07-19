@@ -81,7 +81,6 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
-import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -205,11 +204,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ADD_PARTITION_V2: {
-                data = PartitionPersistInfoV2.read(in);
                 isRead = true;
                 break;
             }
