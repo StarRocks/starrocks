@@ -2,6 +2,7 @@
 
 package com.starrocks.transaction;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.lake.LakeTable;
 
@@ -22,7 +23,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     @Override
-    public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo) {
+    public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
             long version = partitionCommitInfo.getVersion();

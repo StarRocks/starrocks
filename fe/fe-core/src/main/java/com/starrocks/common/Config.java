@@ -1612,7 +1612,7 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * Fqdn function switch, 
+     * Fqdn function switch,
      * this switch will be deleted after release the fqdn func
      */
     @ConfField(mutable = true)
@@ -1623,4 +1623,7 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String jaeger_grpc_endpoint = "";
+
+    @ConfField
+    public static boolean enable_new_publish_mechanism = false;
 }

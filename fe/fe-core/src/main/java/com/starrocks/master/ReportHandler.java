@@ -903,7 +903,7 @@ public class ReportHandler extends Daemon {
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 PublishVersionTask task =
-                        new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null,
+                        new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null, null,
                                 createPublishVersionTaskTime);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.

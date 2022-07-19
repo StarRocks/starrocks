@@ -108,6 +108,9 @@ public class DatabaseTransactionMgr {
     // to store transtactionStates with final status
     private ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
 
+    // store committed transactions' dependency relationships
+    private DatabaseTransactionGraph transactionGraph = new DatabaseTransactionGraph();
+
     // label -> txn ids
     // this is used for checking if label already used. a label may correspond to multiple txns,
     // and only one is success.
@@ -434,7 +437,7 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateListeners.add(listener);
         }
-
+        transactionState.buildFinishChecker(db);
         txnSpan.setAttribute("tables", tableListString.toString());
 
         // before state transform
@@ -542,6 +545,16 @@ public class DatabaseTransactionMgr {
                             TransactionStatus.COMMITTED))
                     .sorted(Comparator.comparing(TransactionState::getCommitTime))
                     .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public List<TransactionState> getReadyToPublishTxnList() {
+        readLock();
+        try {
+            List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
+            return txnIds.stream().map(id -> idToRunningTransactionState.get(id)).collect(Collectors.toList());
         } finally {
             readUnlock();
         }
@@ -874,6 +887,9 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
+            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
+            }
         } else {
             if (idToRunningTransactionState.remove(transactionState.getTransactionId()) != null) {
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
@@ -882,6 +898,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums--;
                 }
             }
+            transactionGraph.remove(transactionState.getTransactionId());
             idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
             finalStatusTransactionStateDeque.add(transactionState);
         }
@@ -1193,7 +1210,7 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             Table table = db.getTable(tableCommitInfo.getTableId());
             TransactionLogApplier applier = txnLogApplierFactory.create(table);
-            applier.applyVisibleLog(transactionState, tableCommitInfo);
+            applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }
         return true;
     }
@@ -1321,4 +1338,51 @@ public class DatabaseTransactionMgr {
     GlobalStateMgr getGlobalStateMgr() {
         return globalStateMgr;
     }
+
+    public void finishTransactionNew(TransactionState transactionState, Set<Long> publishErrorReplicas) throws UserException {
+        Database db = globalStateMgr.getDb(transactionState.getDbId());
+        if (db == null) {
+            writeLock();
+            try {
+                transactionState.setTransactionStatus(TransactionStatus.ABORTED);
+                transactionState.setReason("db is dropped");
+                LOG.warn("db is dropped during transaction, abort transaction {}", transactionState);
+                unprotectUpsertTransactionState(transactionState, false);
+                return;
+            } finally {
+                writeUnlock();
+            }
+        }
+        Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
+        db.writeLock();
+        finishSpan.addEvent("db_lock");
+        try {
+            boolean txnOperated = false;
+            writeLock();
+            finishSpan.addEvent("txnmgr_lock");
+            try {
+                transactionState.setErrorReplicas(publishErrorReplicas);
+                transactionState.setFinishTime(System.currentTimeMillis());
+                transactionState.clearErrorMsg();
+                transactionState.setNewFinish();
+                transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
+                unprotectUpsertTransactionState(transactionState, false);
+                txnOperated = true;
+            } finally {
+                writeUnlock();
+                transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
+            }
+            Span updateCatalogSpan = TraceManager.startSpan("updateCatalogAfterVisible", finishSpan);
+            try {
+                updateCatalogAfterVisible(transactionState, db);
+            } finally {
+                updateCatalogSpan.end();
+            }
+        } finally {
+            db.writeUnlock();
+            finishSpan.end();
+        }
+        LOG.info("finish transaction {} successfully", transactionState);
+    }
+
 }

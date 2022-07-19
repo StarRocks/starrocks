@@ -22,18 +22,23 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.common.TraceManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
+import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
+import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PublishVersionTask extends AgentTask {
     private static final Logger LOG = LogManager.getLogger(PublishVersionTask.class);
@@ -41,23 +46,31 @@ public class PublishVersionTask extends AgentTask {
     private long transactionId;
     private List<TPartitionVersionInfo> partitionVersionInfos;
     private List<Long> errorTablets;
+    private Set<Long> errorReplicas;
     private long commitTimestamp;
-    private String traceParent;
+    private Span span;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
-                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, long createTime) {
-        super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime);
+                              List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
+                              long createTime) {
+        super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
         this.errorTablets = new ArrayList<Long>();
         this.isFinished = false;
         this.commitTimestamp = commitTimestamp;
-        this.traceParent = traceParent;
+        if (txnSpan != null) {
+            span = TraceManager.startSpan("publish_version_task", txnSpan);
+            span.setAttribute("backend_id", backendId);
+            span.setAttribute("num_partition", partitionVersionInfos.size());
+        }
     }
 
     public TPublishVersionRequest toThrift() {
-        TPublishVersionRequest publishVersionRequest = new TPublishVersionRequest(transactionId,
-                partitionVersionInfos);
+        if (span != null) {
+            span.addEvent("send_to_be");
+        }
+        TPublishVersionRequest publishVersionRequest = new TPublishVersionRequest(transactionId, partitionVersionInfos);
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         return publishVersionRequest;
@@ -75,24 +88,32 @@ public class PublishVersionTask extends AgentTask {
         return errorTablets;
     }
 
-    public synchronized void addErrorTablets(List<Long> errorTablets) {
+    public synchronized Set<Long> getErrorReplicas() {
+        return errorReplicas;
+    }
+
+    public synchronized void setErrorTablets(List<Long> errorTablets) {
         this.errorTablets.clear();
-        if (errorTablets == null) {
-            return;
+        if (errorTablets != null) {
+            this.errorTablets.addAll(errorTablets);
         }
-        this.errorTablets.addAll(errorTablets);
+        this.errorReplicas = collectErrorReplicas();
     }
 
     public void setIsFinished(boolean isFinished) {
         this.isFinished = isFinished;
+        if (span != null) {
+            span.setAttribute("num_error_replicas", errorReplicas.size());
+            span.setAttribute("num_error_tablets", errorTablets.size());
+            span.end();
+        }
     }
 
     public boolean isFinished() {
         return isFinished;
     }
 
-    // collect all failed replicas for publish version task
-    public Set<Long> collectErrorReplicas() {
+    private Set<Long> collectErrorReplicas() {
         TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
@@ -107,11 +128,47 @@ public class PublishVersionTask extends AgentTask {
                 if (replica != null) {
                     errorReplicas.add(replica.getId());
                 } else {
-                    LOG.info("could not find related replica with tabletid={}, backendid={}",
-                            tabletId, this.getBackendId());
+                    LOG.info("could not find related replica with tabletid={}, backendid={}", tabletId, this.getBackendId());
                 }
             }
         }
         return errorReplicas;
+    }
+
+    public void updateReplicaVersions(List<TTabletVersionPair> tabletVersions) {
+        if (span != null) {
+            span.addEvent("update_replica_version_start");
+            span.setAttribute("num_replicas", tabletVersions.size());
+        }
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
+        List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
+        if (replicas == null) {
+            LOG.warn("backend not found backendid={}", backendId);
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db not found dbid={}", dbId);
+            return;
+        }
+        db.writeLock();
+        try {
+            // TODO: persistent replica version
+            for (int i = 0; i < tabletVersions.size(); i++) {
+                TTabletVersionPair tabletVersion = tabletVersions.get(i);
+                Replica replica = replicas.get(i);
+                if (replica == null) {
+                    LOG.warn("replica not found backendid={} tabletid={}", backendId, tabletVersion.tablet_id);
+                    continue;
+                }
+                replica.updateVersion(tabletVersion.version);
+            }
+        } finally {
+            db.writeUnlock();
+            if (span != null) {
+                span.addEvent("update_replica_version_finish");
+            }
+        }
     }
 }
