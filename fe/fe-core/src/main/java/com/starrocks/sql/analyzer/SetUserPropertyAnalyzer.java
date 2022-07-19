@@ -17,7 +17,7 @@ public class SetUserPropertyAnalyzer {
             statement.setUser(ConnectContext.get().getQualifiedUser());
         } else {
             // If param 'user' is set, check if it need to be full-qualified
-            if (!user.equals(Auth.ROOT_USER) && !user.equals(Auth.ADMIN_USER)) {
+            if (!user.equals(Auth.ROOT_USER)) {
                 statement.setUser(ClusterNamespace.getFullName(user));
             }
         }
