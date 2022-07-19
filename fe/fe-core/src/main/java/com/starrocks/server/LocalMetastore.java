@@ -3786,7 +3786,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (!table.isOlapOrLakeTable()) {
-                throw new DdlException("Only support truncate OLAP table");
+                throw new DdlException("Only support truncate OLAP table or LAKE table");
             }
 
             OlapTable olapTable = (OlapTable) table;
@@ -3931,8 +3931,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // if it is lake table, need to delete shard and drop tablet
         if (olapTable.isLakeTable()) { 
-            // for debug
-            LOG.info("add oldTabletIds {} in truncateTableInternal", oldTabletIds);
             stateMgr.getShardManager().getShardDeleter().addUnusedShardId(oldTabletIds);
             editLog.logAddUnusedShard(oldTabletIds);
         }

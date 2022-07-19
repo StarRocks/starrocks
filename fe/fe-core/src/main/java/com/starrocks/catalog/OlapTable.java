@@ -49,6 +49,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -1254,10 +1255,19 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
         OlapTable copied = new OlapTable();
-        if (!DeepCopy.copy(this, copied, OlapTable.class)) {
+
+        TableType type = getType();
+        if (type == TableType.LAKE) {
+            copied = DeepCopy.copyWithGson(this, LakeTable.class);
+            if (copied == null) {
+                LOG.warn("failed to copy lake table: " + getName());
+                return null;
+            }
+        } else if (!DeepCopy.copy(this, copied, OlapTable.class)) {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }
+
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
