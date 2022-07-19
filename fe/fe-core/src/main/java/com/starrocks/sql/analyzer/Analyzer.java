@@ -421,7 +421,6 @@ public class Analyzer {
             return null;
         }
 
-        @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
