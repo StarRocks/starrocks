@@ -477,12 +477,11 @@ public class BDBEnvironment {
         }
 
         try {
-            LOG.info("begin to remove database {} from replicatedEnviroment", dbName);
             // the first parameter null means auto-commit
             replicatedEnvironment.removeDatabase(null, dbName);
             LOG.info("remove database {} from replicatedEnviroment successfully", dbName);
         } catch (DatabaseNotFoundException e) {
-            LOG.warn("catch an exception when remove db:{}, this db does not exist", dbName, e);
+            LOG.warn("Exception: {} does not exist", dbName, e);
         }
     }
 

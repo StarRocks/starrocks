@@ -450,6 +450,9 @@ public class BDBJournalCursorTest {
         }
         long interval = System.currentTimeMillis() - start;
 
+        // 2022-07-12 17:20:49 .. - call environment.getDatabaseNames() 1000000 times cost 6797 ms
+        // 2022-07-12 18:56:41 .. - call environment.getDatabaseNames() 1000000 times cost 6892 ms
+        // seems like an in-memory operation, only cost 6µs
         LOG.info("call environment.getDatabaseNames() {} times cost {} ms", CNT, interval);
    }
 

@@ -1718,7 +1718,7 @@ public class GlobalStateMgr {
      * used by checkpointer/replay after state change
      */
     public boolean replayJournal(long toJournalId) throws JournalException {
-        LOG.info("replayed journal id is {}, replay to journal id is {}", replayedJournalId, toJournalId);
+        LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
         boolean hasLog = false;
         JournalCursor cursor = null;
         try {
