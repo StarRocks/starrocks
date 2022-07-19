@@ -1,13 +1,13 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.alter.AlterTest;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -25,10 +25,12 @@ public class AnalyzerRestoreTest {
     @Test
     public void testShowRestore() {
         String sql = "SHOW RESTORE FROM test;";
-        analyzeSuccess(sql);
+        StatementBase statementBase = analyzeSuccess(sql);
+        System.out.println(statementBase.toSql());
+        Assert.assertEquals(statementBase.toSql(), "SHOW RESTORE FROM `default_cluster:test` ");
         analyzeSuccess("SHOW RESTORE;");
         analyzeFail("SHOW RESTORE FROM test1;");
-        analyzeFail("SHOW RESTORE FROM test1;");
+        analyzeFail("SHOW RESTORE FROM `a:test1`;");
         new MockUp<Auth>() {
             @Mock
             public boolean checkDbPriv(ConnectContext ctx, String qualifiedDb, PrivPredicate wanted) {
