@@ -77,6 +77,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
         _has_partition_conjuncts = true;
     }
+
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
@@ -258,7 +259,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         return Status::NotSupported(msg);
     }
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
-    RETURN_IF_ERROR(scanner->open(state));
+    Status st = scanner->open(state);
+    if (!st.ok()) {
+        auto msg = fmt::format("file = {}", native_file_path);
+        return st.clone_and_append(msg);
+    }
     _scanner = scanner;
     return Status::OK();
 }

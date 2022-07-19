@@ -65,9 +65,8 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
         }
     }
 
-    // min/max conjuncts.
-    RETURN_IF_ERROR(
-            Expr::clone_if_not_exists(_scanner_params.min_max_conjunct_ctxs, runtime_state, &_min_max_conjunct_ctxs));
+    // No need to clone. It's cloned from outside.
+    _min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
 
     Status status = do_init(runtime_state, scanner_params);
     return status;
@@ -167,10 +166,10 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     if (!_is_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     Expr::close(_conjunct_ctxs, runtime_state);
-    Expr::close(_min_max_conjunct_ctxs, runtime_state);
     for (auto& it : _conjunct_ctxs_by_slot) {
         Expr::close(it.second, runtime_state);
     }
+
     do_close(runtime_state);
     _file.reset(nullptr);
     _raw_file.reset(nullptr);
@@ -179,7 +178,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
 }
 
-void HdfsScanner::fianlize() {
+void HdfsScanner::finalize() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }
