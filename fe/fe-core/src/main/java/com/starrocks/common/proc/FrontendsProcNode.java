@@ -26,7 +26,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import org.apache.commons.validator.routines.InetAddressValidator;
