@@ -1029,7 +1029,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
-	}
+    }
 
     public boolean isEnableQueryDebugTrace() {
         return enableQueryDebugTrace;
