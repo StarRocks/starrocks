@@ -100,11 +100,12 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
+            info.add(fe.getRole().name());
 
             if (fe.getHost().equals(leaderIp)) {
-                info.add(FrontendNodeType.LEADER.toString());
+                info.add("true");
             } else {
-                info.add(fe.getRole().name());
+                info.add("false");
             }
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));
