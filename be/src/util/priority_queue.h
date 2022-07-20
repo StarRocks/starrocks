@@ -16,16 +16,6 @@ public:
     using const_reference = const T&;
     using size_type = typename Container::size_type;
 
-    PriorityQueue() = default;
-    ~PriorityQueue() = default;
-
-    // std::array is not movable, so we manually implement the move constructor
-    PriorityQueue(PriorityQueue&& src) noexcept {
-        for (size_t i = 0; i < NUM_PRIORITY; i++) {
-            _queues[i] = std::move(src._queues[i]);
-        }
-    }
-
     // Checks if the container has no elements
     [[nodiscard]] bool empty() const noexcept;
 
