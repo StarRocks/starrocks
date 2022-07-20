@@ -55,6 +55,7 @@ public:
         _fragment_instance_id = fragment_instance_id;
     }
     void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
+    int32_t get_driver_id() const { return _driver_id; }
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
