@@ -163,6 +163,8 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
+        // Time in nano of saving closure
+        int64_t queue_enter_time;
     };
 
     class ChunkQueue {

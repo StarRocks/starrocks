@@ -11,6 +11,7 @@
 #include "util/faststring.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
+#include "util/time.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {
@@ -528,6 +529,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
         DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 #endif
+        _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
         closure->Run();
     }
     _total_chunks--;
@@ -562,6 +564,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     auto* closure = item.closure;
     if (closure != nullptr) {
+        _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
         closure->Run();
     }
     _total_chunks--;
@@ -654,6 +657,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         }
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
+            chunks.back().queue_enter_time = MonotonicNanos();
             *done = nullptr;
         }
         for (auto& chunk : chunks) {
@@ -795,6 +799,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
                         // We may buffered closure in last reception, but the branch of the driver_sequence may
                         // become short-circuit now, so we make sure to invoke the closure
                         if (item.closure != nullptr) {
+                            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                             item.closure->Run();
                         }
                         continue;
@@ -845,6 +850,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
         while (!chunk_queue.empty()) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
+                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
                 --_total_chunks;
@@ -856,6 +862,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
+                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
             }
@@ -875,6 +882,7 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
         while (!chunk_queue.empty()) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
+                    _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
                 --_total_chunks;
