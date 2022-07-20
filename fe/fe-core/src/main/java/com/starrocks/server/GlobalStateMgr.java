@@ -847,7 +847,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (starOSAgent.init() == false) {
+        if (!starOSAgent.init()) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -989,7 +989,7 @@ public class GlobalStateMgr {
     private void startMasterOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
             // register service to starMgr
-            if (getStarOSAgent().registerAndBootstrapService() == false) {
+            if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
             }
         }

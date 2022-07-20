@@ -63,7 +63,7 @@ public class StarOSAgent {
             // check if Config.starmanager_address == FE address
             String[] starMgrAddr = Config.starmgr_address.split(":");
             if (!starMgrAddr[0].equals("127.0.0.1")) {
-                LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
+                LOG.error("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
                 return false;
             }
         }
@@ -111,7 +111,7 @@ public class StarOSAgent {
             client.registerService("starrocks");
         } catch (StarClientException e) {
             if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                LOG.warn("Failed to register service from starMgr. Error: {}", e);
+                LOG.error("Failed to register service from starMgr. Error: {}", e);
                 return false;
             }
         }
@@ -122,7 +122,7 @@ public class StarOSAgent {
                 LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
             } catch (StarClientException e) {
                 if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                    LOG.warn("Failed to bootstrap service from starMgr. Error: {}", e);
+                    LOG.error("Failed to bootstrap service from starMgr. Error: {}", e);
                     return false;
                 } else {
                     getServiceId();
