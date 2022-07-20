@@ -42,8 +42,8 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.MasterTask;
-import com.starrocks.task.MasterTaskExecutor;
+import com.starrocks.task.LeaderTask;
+import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -211,10 +211,10 @@ public class BrokerLoadJobTest {
     }
 
     @Test
-    public void testExecuteJob(@Mocked MasterTaskExecutor masterTaskExecutor) throws LoadException {
+    public void testExecuteJob(@Mocked LeaderTaskExecutor leaderTaskExecutor) throws LoadException {
         new Expectations() {
             {
-                masterTaskExecutor.submit((MasterTask) any);
+                leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
             }
@@ -266,7 +266,7 @@ public class BrokerLoadJobTest {
                                           @Injectable BrokerFileGroup brokerFileGroup1,
                                           @Injectable BrokerFileGroup brokerFileGroup2,
                                           @Injectable BrokerFileGroup brokerFileGroup3,
-                                          @Mocked MasterTaskExecutor masterTaskExecutor,
+                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
                                           @Injectable OlapTable olapTable,
                                           @Mocked LoadingTaskPlanner loadingTaskPlanner) {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
@@ -309,7 +309,7 @@ public class BrokerLoadJobTest {
                 result = 1L;
                 result = 2L;
                 result = 3L;
-                masterTaskExecutor.submit((MasterTask) any);
+                leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
             }

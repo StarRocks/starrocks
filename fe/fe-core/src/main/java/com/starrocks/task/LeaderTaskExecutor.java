@@ -35,14 +35,14 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-public class MasterTaskExecutor {
-    private static final Logger LOG = LogManager.getLogger(MasterTaskExecutor.class);
+public class LeaderTaskExecutor {
+    private static final Logger LOG = LogManager.getLogger(LeaderTaskExecutor.class);
 
     private ThreadPoolExecutor executor;
     private Map<Long, Future<?>> runningTasks;
     public ScheduledThreadPoolExecutor scheduledThreadPool;
 
-    public MasterTaskExecutor(String name, int threadNum, boolean needRegisterMetric) {
+    public LeaderTaskExecutor(String name, int threadNum, boolean needRegisterMetric) {
         executor = ThreadPoolManager
                 .newDaemonFixedThreadPool(threadNum, threadNum * 2, name + "_pool", needRegisterMetric);
         runningTasks = Maps.newHashMap();
@@ -50,7 +50,7 @@ public class MasterTaskExecutor {
                 ThreadPoolManager.newDaemonScheduledThreadPool(1, name + "_scheduler_thread_pool", needRegisterMetric);
     }
 
-    public MasterTaskExecutor(String name, int threadNum, int queueSize, boolean needRegisterMetric) {
+    public LeaderTaskExecutor(String name, int threadNum, int queueSize, boolean needRegisterMetric) {
         executor = ThreadPoolManager.newDaemonFixedThreadPool(threadNum, queueSize, name + "_pool", needRegisterMetric);
         runningTasks = Maps.newHashMap();
         scheduledThreadPool =
@@ -71,7 +71,7 @@ public class MasterTaskExecutor {
      * @return true if submit success
      * false if task exists
      */
-    public boolean submit(MasterTask task) {
+    public boolean submit(LeaderTask task) {
         long signature = task.getSignature();
         synchronized (runningTasks) {
             if (runningTasks.containsKey(signature)) {

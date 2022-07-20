@@ -28,8 +28,8 @@ import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.ExportExportingTask;
 import com.starrocks.task.ExportPendingTask;
-import com.starrocks.task.MasterTask;
-import com.starrocks.task.MasterTaskExecutor;
+import com.starrocks.task.LeaderTask;
+import com.starrocks.task.LeaderTaskExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,10 +42,10 @@ public final class ExportChecker extends LeaderDaemon {
     // checkers for running job state
     private static Map<JobState, ExportChecker> checkers = Maps.newHashMap();
     // executors for pending tasks
-    private static Map<JobState, MasterTaskExecutor> executors = Maps.newHashMap();
+    private static Map<JobState, LeaderTaskExecutor> executors = Maps.newHashMap();
     private JobState jobState;
 
-    private static MasterTaskExecutor exportingSubTaskExecutor;
+    private static LeaderTaskExecutor exportingSubTaskExecutor;
 
     private ExportChecker(JobState jobState, long intervalMs) {
         super("export checker " + jobState.name().toLowerCase(), intervalMs);
@@ -57,14 +57,14 @@ public final class ExportChecker extends LeaderDaemon {
         checkers.put(JobState.EXPORTING, new ExportChecker(JobState.EXPORTING, intervalMs));
 
         int poolSize = Config.export_running_job_num_limit == 0 ? 5 : Config.export_running_job_num_limit;
-        MasterTaskExecutor pendingTaskExecutor = new MasterTaskExecutor("export_pending_job", poolSize, true);
+        LeaderTaskExecutor pendingTaskExecutor = new LeaderTaskExecutor("export_pending_job", poolSize, true);
         executors.put(JobState.PENDING, pendingTaskExecutor);
 
-        MasterTaskExecutor exportingTaskExecutor = new MasterTaskExecutor("export_exporting_job", poolSize, true);
+        LeaderTaskExecutor exportingTaskExecutor = new LeaderTaskExecutor("export_exporting_job", poolSize, true);
         executors.put(JobState.EXPORTING, exportingTaskExecutor);
 
         // One export job will be split into multiple exporting sub tasks, the queue size is not determined, so set Integer.MAX_VALUE.
-        exportingSubTaskExecutor = new MasterTaskExecutor("export_exporting_sub_task", Config.export_task_pool_size,
+        exportingSubTaskExecutor = new LeaderTaskExecutor("export_exporting_sub_task", Config.export_task_pool_size,
                 Integer.MAX_VALUE, true);
     }
 
@@ -72,13 +72,13 @@ public final class ExportChecker extends LeaderDaemon {
         for (ExportChecker exportChecker : checkers.values()) {
             exportChecker.start();
         }
-        for (MasterTaskExecutor masterTaskExecutor : executors.values()) {
-            masterTaskExecutor.start();
+        for (LeaderTaskExecutor leaderTaskExecutor : executors.values()) {
+            leaderTaskExecutor.start();
         }
         exportingSubTaskExecutor.start();
     }
 
-    public static MasterTaskExecutor getExportingSubTaskExecutor() {
+    public static LeaderTaskExecutor getExportingSubTaskExecutor() {
         return exportingSubTaskExecutor;
     }
 
@@ -123,7 +123,7 @@ public final class ExportChecker extends LeaderDaemon {
 
         for (ExportJob job : pendingJobs) {
             try {
-                MasterTask task = new ExportPendingTask(job);
+                LeaderTask task = new ExportPendingTask(job);
                 if (executors.get(JobState.PENDING).submit(task)) {
                     LOG.info("run pending export job. job: {}", job);
                 }
@@ -138,7 +138,7 @@ public final class ExportChecker extends LeaderDaemon {
         LOG.debug("exporting export job num: {}", jobs.size());
         for (ExportJob job : jobs) {
             try {
-                MasterTask task = new ExportExportingTask(job);
+                LeaderTask task = new ExportExportingTask(job);
                 if (executors.get(JobState.EXPORTING).submit(task)) {
                     LOG.info("run exporting export job. job: {}", job);
                 }

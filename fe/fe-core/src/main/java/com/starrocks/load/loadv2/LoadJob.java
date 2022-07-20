@@ -63,7 +63,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.MasterTaskExecutor;
+import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
@@ -429,7 +429,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    protected void submitTask(MasterTaskExecutor executor, LoadTask task) throws LoadException {
+    protected void submitTask(LeaderTaskExecutor executor, LoadTask task) throws LoadException {
         int retryNum = 0;
         while (!executor.submit(task)) {
             LOG.warn("submit load task failed. try to resubmit. job id: {}, task id: {}, retry: {}",
