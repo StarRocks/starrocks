@@ -447,15 +447,16 @@ public:
         return Status::OK();
     }
 
-    Status write_shard(size_t key_size, size_t value_size, size_t npage_hint, const std::vector<KVRef>& kvs) {
+    Status write_shard(size_t key_size, size_t npage_hint, const std::vector<KVRef>& kvs) {
         // only fixed length shards supported currently
         if (_nshard == 0) {
             _fixed_key_size = key_size;
-            _fixed_value_size = value_size;
+            _fixed_value_size = kIndexValueSize;
         } else {
-            CHECK(key_size == _fixed_key_size && value_size == _fixed_value_size) << "key/value sizes not the same";
+            CHECK(key_size == _fixed_key_size && kIndexValueSize == _fixed_value_size)
+                    << "key/value sizes not the same";
         }
-        size_t kv_size = key_size + value_size;
+        size_t kv_size = key_size + kIndexValueSize;
         auto rs_create = ImmutableIndexShard::create(kv_size, kvs, npage_hint);
         if (!rs_create.ok()) {
             return std::move(rs_create).status();
@@ -680,7 +681,7 @@ public:
 
     void reserve(size_t size) { _map.reserve(size); }
 
-    size_t memory_usage() { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + sizeof(IndexValue)); }
+    size_t memory_usage() { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                          bool without_null) const override {
@@ -703,15 +704,13 @@ public:
     }
 
     Status flush_to_immutable_index(const std::string& dir, const EditVersion& version) const override {
-        size_t value_size = sizeof(IndexValue);
-        size_t kv_size = KeySize + value_size;
-        auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_size, size(), kDefaultUsagePercent);
+        auto [nshard, npage_hint] = estimate_nshard_and_npage(KeySize + kIndexValueSize, size(), kDefaultUsagePercent);
         ImmutableIndexWriter writer;
         RETURN_IF_ERROR(writer.init(dir, version));
         if (nshard > 0) {
             auto kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), true);
             for (auto& kvs : kv_ref_by_shard) {
-                RETURN_IF_ERROR(writer.write_shard(KeySize, value_size, npage_hint, kvs));
+                RETURN_IF_ERROR(writer.write_shard(KeySize, npage_hint, kvs));
             }
         }
         return writer.finish();
@@ -1004,6 +1003,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     }
 
     _key_size = key_size;
+    _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = version;
     _offset = 0;
@@ -1023,6 +1023,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
 
 Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     _key_size = index_meta.key_size();
+    _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = index_meta.version();
     auto st = MutableIndex::create(_key_size);
@@ -1077,20 +1078,20 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
         size_t offset = page_pb.offset();
         size_t size = page_pb.size();
         _offset = offset + size;
-        size_t kv_size = key_size + sizeof(IndexValue);
+        size_t kv_size = kv_pair_size();
         size_t nums = size / kv_size;
         std::string buff;
         while (nums > 0) {
             size_t batch_num = (nums > 4096) ? 4096 : nums;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_size);
             RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
-            uint8_t keys[key_size * batch_num];
+            uint8_t keys[_key_size * batch_num];
             std::vector<IndexValue> values;
             values.reserve(batch_num);
             size_t buf_offset = 0;
             for (size_t j = 0; j < batch_num; ++j) {
-                memcpy(keys + j * key_size, buff.data() + buf_offset, key_size);
-                uint64_t val = UNALIGNED_LOAD64(buff.data() + buf_offset + key_size);
+                memcpy(keys + j * _key_size, buff.data() + buf_offset, _key_size);
+                uint64_t val = UNALIGNED_LOAD64(buff.data() + buf_offset + _key_size);
                 values.emplace_back(val);
                 buf_offset += kv_size;
             }
@@ -1274,6 +1275,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
 
     // Init PersistentIndex
     _key_size = fix_size;
+    _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = lastest_applied_version;
     auto st = MutableIndex::create(_key_size);
@@ -1554,7 +1556,7 @@ Status PersistentIndex::erase(size_t n, const void* keys, IndexValue* old_values
         // write wal
         const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
         faststring fixed_buf;
-        fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+        fixed_buf.reserve(replace_idxes.size() * kv_pair_size());
         for (size_t i = 0; i < replace_idxes.size(); ++i) {
             fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
             put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
@@ -1585,7 +1587,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
         // write wal
         const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
         faststring fixed_buf;
-        fixed_buf.reserve(replace_idxes.size() * (_key_size + sizeof(IndexValue)));
+        fixed_buf.reserve(replace_idxes.size() * kv_pair_size());
         for (size_t i = 0; i < replace_idxes.size(); ++i) {
             fixed_buf.append(fkeys + replace_idxes[i] * _key_size, _key_size);
             put_fixed64_le(&fixed_buf, values[replace_idxes[i]].get_value());
@@ -1599,7 +1601,7 @@ Status PersistentIndex::try_replace(size_t n, const void* keys, const IndexValue
 Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue* values) {
     const uint8_t* fkeys = reinterpret_cast<const uint8_t*>(keys);
     faststring fixed_buf;
-    fixed_buf.reserve(n * (_key_size + sizeof(IndexValue)));
+    fixed_buf.reserve(n * kv_pair_size());
     for (size_t i = 0; i < n; i++) {
         const auto v = (values != nullptr) ? values[i] : IndexValue(NullIndexValue);
         fixed_buf.append(fkeys + i * _key_size, _key_size);
@@ -1611,14 +1613,12 @@ Status PersistentIndex::_append_wal(size_t n, const void* keys, const IndexValue
 }
 
 Status PersistentIndex::_flush_l0() {
-    size_t value_size = sizeof(IndexValue);
-    size_t kv_size = _key_size + value_size;
-    auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_size, _size, kDefaultUsagePercent);
+    auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_pair_size(), _size, kDefaultUsagePercent);
     auto kv_ref_by_shard = _l0->get_kv_refs_by_shard(nshard, _size, true);
     ImmutableIndexWriter writer;
     RETURN_IF_ERROR(writer.init(_path, _version));
     for (auto& kvs : kv_ref_by_shard) {
-        RETURN_IF_ERROR(writer.write_shard(_key_size, value_size, npage_hint, kvs));
+        RETURN_IF_ERROR(writer.write_shard(_key_size, npage_hint, kvs));
     }
     return writer.finish();
 }
@@ -1647,8 +1647,7 @@ Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
 // In addition, there may be io waste because we append wals first and
 // do _flush_l0 or merge compaction.
 Status PersistentIndex::_check_and_flush_l0() {
-    size_t kv_size = _key_size + sizeof(IndexValue);
-    size_t l0_mem_size = kv_size * _l0->size();
+    size_t l0_mem_size = kv_pair_size() * _l0->size();
     uint64_t l1_file_size = 0;
     if (_l1 != nullptr) {
         _l1->file_size(&l1_file_size);
@@ -1797,9 +1796,7 @@ Status PersistentIndex::_merge_compaction() {
     }
     ImmutableIndexWriter writer;
     RETURN_IF_ERROR(writer.init(_path, _version));
-    size_t value_size = sizeof(IndexValue);
-    size_t kv_size = _key_size + value_size;
-    auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_size, _size, kDefaultUsagePercent);
+    auto [nshard, npage_hint] = estimate_nshard_and_npage(kv_pair_size(), _size, kDefaultUsagePercent);
     size_t estimated_size_per_shard = _size / nshard;
     std::vector<std::vector<KVRef>> l0_kvs_by_shard = _l0->get_kv_refs_by_shard(nshard, _l0->size(), false);
     std::vector<std::vector<KVRef>> l1_kvs_by_shard(nshard);
@@ -1833,7 +1830,7 @@ Status PersistentIndex::_merge_compaction() {
             kvs.clear();
             RETURN_IF_ERROR(merge_shard_kvs(_key_size, l0_kvs_by_shard[cur_shard_idx], l1_kvs_by_shard[cur_shard_idx],
                                             estimated_size_per_shard, kvs));
-            RETURN_IF_ERROR(writer.write_shard(_key_size, value_size, npage_hint, kvs));
+            RETURN_IF_ERROR(writer.write_shard(_key_size, npage_hint, kvs));
             // clear to optimize memory usage
             l0_kvs_by_shard[cur_shard_idx].clear();
             l0_kvs_by_shard[cur_shard_idx].shrink_to_fit();

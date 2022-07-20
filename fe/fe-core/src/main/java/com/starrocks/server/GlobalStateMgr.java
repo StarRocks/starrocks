@@ -27,7 +27,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Queues;
 import com.google.common.collect.Range;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
@@ -153,6 +152,7 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
+import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -268,7 +268,6 @@ public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
     // 0 ~ 9999 used for qe
     public static final long NEXT_ID_INIT_VALUE = 10000;
-    private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
     private static final String IMAGE_DIR = "/image";
     // will break the loop and refresh in-memory data after at most 1k logs or at most 1 seconds
@@ -306,7 +305,6 @@ public class GlobalStateMgr {
     private JournalWriter journalWriter; // master only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
-    private Daemon listener;
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
@@ -320,7 +318,6 @@ public class GlobalStateMgr {
     // canRead can be true even if isReady is false.
     // for example: OBSERVER transfer to UNKNOWN, then isReady will be set to false, but canRead can still be true
     private AtomicBoolean canRead = new AtomicBoolean(false);
-    private BlockingQueue<FrontendNodeType> typeTransferQueue;
 
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
@@ -417,6 +414,8 @@ public class GlobalStateMgr {
 
     private ShardManager shardManager;
 
+    private StateChangeExecution execution;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -502,7 +501,6 @@ public class GlobalStateMgr {
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
         this.feType = FrontendNodeType.INIT;
-        this.typeTransferQueue = Queues.newLinkedBlockingDeque();
 
         this.journalObservable = new JournalObservable();
 
@@ -577,6 +575,19 @@ public class GlobalStateMgr {
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
+
+        GlobalStateMgr gsm = this;
+        this.execution = new StateChangeExecution() {
+            @Override
+            public void transferToLeader() {
+                gsm.transferToLeader();
+            }
+
+            @Override
+            public void transferToNonLeader(FrontendNodeType newType) {
+                gsm.transferToNonLeader(newType);
+            }
+        };
     }
 
     public static void destroyCheckpoint() {
@@ -837,10 +848,6 @@ public class GlobalStateMgr {
 
         // 6. start task cleaner thread
         createTaskCleaner();
-
-        // 7. start state listener thread
-        createStateListener();
-        listener.start();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -881,7 +888,8 @@ public class GlobalStateMgr {
         }
     }
 
-    private void transferToLeader(FrontendNodeType oldType) {
+    private void transferToLeader() {
+        FrontendNodeType oldType = feType;
         // stop replayer
         if (replayer != null) {
             replayer.exit();
@@ -1065,6 +1073,7 @@ public class GlobalStateMgr {
             // not set canRead here, leave canRead as what is was.
             // if meta out of date, canRead will be set to false in replayer thread.
             metaReplayState.setTransferToUnknown();
+            feType = newType;
             return;
         }
 
@@ -1089,6 +1098,8 @@ public class GlobalStateMgr {
         startNonMasterDaemonThreads();
 
         MetricRepo.init();
+
+        feType = newType;
     }
 
     public void loadImage(String imageDir) throws IOException, DdlException {
@@ -1597,126 +1608,10 @@ public class GlobalStateMgr {
             isReady.set(true);
         }
     }
-
-    public void notifyNewFETypeTransfer(FrontendNodeType newType) {
-        try {
-            String msg = "notify new FE type transfer: " + newType;
-            LOG.warn(msg);
-            Util.stdoutWithTime(msg);
-            this.typeTransferQueue.put(newType);
-        } catch (InterruptedException e) {
-            LOG.error("failed to put new FE type: {}", newType, e);
-        }
-    }
-
-    public void createStateListener() {
-        listener = new Daemon("stateListener", STATE_CHANGE_CHECK_INTERVAL_MS) {
-            @Override
-            protected synchronized void runOneCycle() {
-
-                while (true) {
-                    FrontendNodeType newType = null;
-                    try {
-                        newType = typeTransferQueue.take();
-                    } catch (InterruptedException e) {
-                        LOG.error("got exception when take FE type from queue", e);
-                        Util.stdoutWithTime("got exception when take FE type from queue. " + e.getMessage());
-                        System.exit(-1);
-                    }
-                    Preconditions.checkNotNull(newType);
-                    LOG.info("begin to transfer FE type from {} to {}", feType, newType);
-                    if (feType == newType) {
-                        return;
-                    }
-
-                    /*
-                     * INIT -> MASTER: transferToLeader
-                     * INIT -> FOLLOWER/OBSERVER: transferToNonLeader
-                     * UNKNOWN -> MASTER: transferToLeader
-                     * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonLeader
-                     * FOLLOWER -> MASTER: transferToLeader
-                     * FOLLOWER/OBSERVER -> INIT/UNKNOWN: set isReady to false
-                     */
-                    switch (feType) {
-                        case INIT: {
-                            switch (newType) {
-                                case LEADER: {
-                                    transferToLeader(feType);
-                                    break;
-                                }
-                                case FOLLOWER:
-                                case OBSERVER: {
-                                    transferToNonLeader(newType);
-                                    break;
-                                }
-                                case UNKNOWN:
-                                    break;
-                                default:
-                                    break;
-                            }
-                            break;
-                        }
-                        case UNKNOWN: {
-                            switch (newType) {
-                                case LEADER: {
-                                    transferToLeader(feType);
-                                    break;
-                                }
-                                case FOLLOWER:
-                                case OBSERVER: {
-                                    transferToNonLeader(newType);
-                                    break;
-                                }
-                                default:
-                                    break;
-                            }
-                            break;
-                        }
-                        case FOLLOWER: {
-                            switch (newType) {
-                                case LEADER: {
-                                    transferToLeader(feType);
-                                    break;
-                                }
-                                case UNKNOWN: {
-                                    transferToNonLeader(newType);
-                                    break;
-                                }
-                                default:
-                                    break;
-                            }
-                            break;
-                        }
-                        case OBSERVER: {
-                            if (newType == FrontendNodeType.UNKNOWN) {
-                                transferToNonLeader(newType);
-                            }
-                            break;
-                        }
-                        case LEADER: {
-                            // exit if master changed to any other type
-                            String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
-                            LOG.error(msg);
-                            Util.stdoutWithTime(msg);
-                            System.exit(-1);
-                        }
-                        default:
-                            break;
-                    } // end switch formerFeType
-
-                    feType = newType;
-                    LOG.info("finished to transfer FE type to {}", feType);
-                }
-            } // end runOneCycle
-        };
-
-        listener.setMetaContext(metaContext);
-    }
-
     /**
-     * Replay journal from replayedJournalId + 1 to toJournalId
-     * used by checkpointer/replay after state change
-     */
+      * Replay journal from replayedJournalId + 1 to toJournalId
+      * used by checkpointer/replay after state change
+      */
     public boolean replayJournal(long toJournalId) throws JournalException {
         LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
         boolean hasLog = false;
@@ -3236,5 +3131,13 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("task manager clean expire task runs history failed", t);
         }
+    }
+
+    public StateChangeExecution getStateChangeExecution() {
+        return execution;
+    }
+
+    public MetaContext getMetaContext() {
+        return metaContext;
     }
 }
