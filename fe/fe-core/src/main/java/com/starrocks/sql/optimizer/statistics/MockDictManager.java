@@ -14,6 +14,16 @@ public class MockDictManager implements IDictManager {
             ImmutableMap.of(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)), 1);
     private static final ColumnDict columnDict = new ColumnDict(mockDict, 1);
 
+    private boolean onlyReturnEmptyDict = false;
+
+    public boolean isOnlyReturnEmptyDict() {
+        return onlyReturnEmptyDict;
+    }
+
+    public void setOnlyReturnEmptyDict(boolean onlyReturnEmptyDict) {
+        this.onlyReturnEmptyDict = onlyReturnEmptyDict;
+    }
+
     private MockDictManager() {
     }
 
@@ -52,6 +62,9 @@ public class MockDictManager implements IDictManager {
 
     @Override
     public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+        if (onlyReturnEmptyDict) {
+            return Optional.empty();
+        }
         return Optional.of(columnDict);
     }
 }

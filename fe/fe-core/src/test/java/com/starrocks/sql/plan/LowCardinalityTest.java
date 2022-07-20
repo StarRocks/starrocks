@@ -4,6 +4,8 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.MockDictManager;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -1182,6 +1184,18 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
                 "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+    }
+
+    @Test
+    public void testHasGlobalDictButNotFound() throws Exception {
+        IDictManager dictManager = IDictManager.getInstance();
+        MockDictManager instance = (MockDictManager) dictManager;
+        instance.setOnlyReturnEmptyDict(true);
+        String sql = "select S_ADDRESS from supplier group by S_ADDRESS";
+        // Check No Exception
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+        instance.setOnlyReturnEmptyDict(false);
     }
 
 }
