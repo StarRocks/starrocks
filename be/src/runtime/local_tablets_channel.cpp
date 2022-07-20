@@ -493,7 +493,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 
 void LocalTabletsChannel::cancel() {
     for (auto& it : _delta_writers) {
-        (void)it.second->abort(false, true);
+        (void)it.second->abort(true, true);
     }
 }
 
