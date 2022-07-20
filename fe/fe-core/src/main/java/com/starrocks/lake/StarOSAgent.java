@@ -49,7 +49,6 @@ public class StarOSAgent {
 
     public StarOSAgent() {
         serviceId = -1;
-
         workerToId = Maps.newHashMap();
         workerToBackend = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
@@ -57,7 +56,8 @@ public class StarOSAgent {
 
     public boolean init() {
         if (Config.integrate_starmgr) {
-            if (Config.use_staros == false) {
+            if (!Config.use_staros) {
+                LOG.error("integrate_starmgr is true but use_staros is false!");
                 return false;
             }
             // check if Config.starmanager_address == FE address
@@ -66,12 +66,11 @@ public class StarOSAgent {
                 LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
                 return false;
             }
-            client = new StarClient();
-            client.connectServer(Config.starmgr_address);
-            return true;
         }
 
-        return false;
+        client = new StarClient();
+        client.connectServer(Config.starmgr_address);
+        return true;
     }
 
     private void prepare() {
