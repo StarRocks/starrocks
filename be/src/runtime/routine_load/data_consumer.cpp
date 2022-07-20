@@ -253,13 +253,39 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
-        RdKafka::ErrorCode err = _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset,
-                                                                      config::routine_load_kafka_timeout_second * 1000);
+
+        //When all kafka brokers are down,  query_watermark_offsets would block until timeout, which make the bthread unable to be preemptive.
+        // Here, we make 2 attempt to query_watermark_offsets. 
+        // When all brokers are down, the 1st query_watermark_offsets with 1s timeout would fail quickly and return RdKafka::ERR__ALL_BROKERS_DOWN.
+        // When the 1st query_watermark_offsets fails but not due to all brokers are down, the 2nd query_watermark_offsets would try with timeout config::routine_load_kafka_timeout_second.
+
+        // fast path
+        RdKafka::ErrorCode err =
+                _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, 1000 /*1000ms*/);
         if (err != RdKafka::ERR_NO_ERROR) {
-            LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
-                         << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
+            if (err == RdKafka::ERR__ALL_BROKERS_DOWN) {
+                LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
+                             << ", timeout: 1s"
+                             << " , err: " << RdKafka::err2str(err);
+                return Status::ServiceUnavailable("failed to query watermark offset, err: " + RdKafka::err2str(err));
+            }
+
+            LOG(WARNING) << "failed to query watermark offset in fast path, topic: " << _topic
+                         << " partition: " << p_id << ", timeout: 1s"
+                         << " , err: " << RdKafka::err2str(err);
+
+            // slow path
+            RdKafka::ErrorCode err = _k_consumer->query_watermark_offsets(
+                    _topic, p_id, &beginning_offset, &latest_offset, config::routine_load_kafka_timeout_second * 1000);
+            if (err != RdKafka::ERR_NO_ERROR) {
+                LOG(WARNING) << "failed to query watermark offset in slow path,  topic: " << _topic
+                             << " partition: " << p_id << "timeout: " << config::routine_load_kafka_timeout_second
+                             << "s"
+                             << " , err: " << RdKafka::err2str(err);
+                return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
+            }
         }
+
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
     }
