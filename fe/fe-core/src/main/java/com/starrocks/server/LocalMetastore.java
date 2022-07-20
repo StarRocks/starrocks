@@ -3785,8 +3785,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, dbTbl.getTbl());
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
-                throw new DdlException("Only support truncate OLAP table");
+            if (!table.isOlapOrLakeTable()) {
+                throw new DdlException("Only support truncate OLAP table or LAKE table");
             }
 
             OlapTable olapTable = (OlapTable) table;
@@ -3892,7 +3892,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             // replace
-            truncateTableInternal(olapTable, newPartitions, truncateEntireTable);
+            truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
@@ -3906,7 +3906,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
     }
 
-    private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions, boolean isEntireTable) {
+    private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
+                                       boolean isEntireTable, boolean isReplay) {
         // use new partitions to replace the old ones.
         Set<Long> oldTabletIds = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
@@ -3928,6 +3929,12 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Long tabletId : oldTabletIds) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
+
+        // if it is lake table, need to delete shard and drop tablet
+        if (olapTable.isLakeTable() && !isReplay) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(oldTabletIds);
+            editLog.logAddUnusedShard(oldTabletIds);
+        }
     }
 
     public void replayTruncateTable(TruncateTableInfo info) {
@@ -3935,7 +3942,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTblId());
-            truncateTableInternal(olapTable, info.getPartitions(), info.isEntireTable());
+            truncateTableInternal(olapTable, info.getPartitions(), info.isEntireTable(), true);
 
             if (!GlobalStateMgr.isCheckpointThread()) {
                 // add tablet to inverted index
