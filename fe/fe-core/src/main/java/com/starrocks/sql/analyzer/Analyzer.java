@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.BackupStmt;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -610,6 +611,12 @@ public class Analyzer {
         @Override
         public Void visitShowSnapshotStmt(ShowSnapshotStmt statement, ConnectContext context) {
             ShowSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            CreateRepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }
