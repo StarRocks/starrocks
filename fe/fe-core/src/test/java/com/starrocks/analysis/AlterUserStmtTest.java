@@ -5,7 +5,6 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -34,8 +33,7 @@ public class AlterUserStmtTest {
 
         new Expectations() {
             {
-                auth.checkHasPriv((ConnectContext) any, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth
-                        .PrivLevel.DATABASE);
+                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
                 result = true;
             }
         };
