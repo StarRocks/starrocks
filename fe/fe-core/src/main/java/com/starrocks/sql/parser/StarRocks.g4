@@ -104,6 +104,13 @@ statement
     | alterResourceGroupStatement                                                               #alterResourceGroup
     | showResourceGroupStatement                                                                #showResourceGroup
 
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+    | dropFunctionStatement                                                                 #dropFunctionst
+    | createFunctionStatement                                                               #createFunction
+
+
+
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
@@ -583,6 +590,24 @@ showResourceGroupStatement
 
 classifier
     : '(' expression (',' expression)* ')'
+    ;
+
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+dropFunctionStatement
+    : DROP FUNCTION qualifiedName '(' typeList ')'
+    ;
+
+createFunctionStatement
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    ;
+
+typeList
+    : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -1221,4 +1246,5 @@ nonReserved
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WORK | WRITE
     | YEAR
+    | DOTDOTDOT
     ;
