@@ -717,7 +717,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     aggOperator.isSplit(),
                     aggOperator.getLimit(),
                     aggOperator.getPredicate(),
-                    aggOperator.getProjection());
+                    aggOperator.getProjection(),
+                    aggOperator.isWithLocalShuffleOperator());
         }
 
         @Override

@@ -722,6 +722,10 @@ public class SystemInfoService {
         return idToComputeNodeRef;
     }
 
+    public int backendSize() {
+        return idToBackendRef.size();
+    }
+
     public ImmutableCollection<ComputeNode> getComputeNodes() {
         List<Long> computeNodeIds = getComputeNodeIds(true);
         if (computeNodeIds != null && computeNodeIds.size() > 0) {

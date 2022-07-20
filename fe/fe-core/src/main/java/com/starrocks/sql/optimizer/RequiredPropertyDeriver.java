@@ -169,6 +169,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             return null;
         }
 
+
         if (!node.getType().isLocal()) {
             List<Integer> columns = node.getPartitionByColumns().stream().map(ColumnRefOperator::getId).collect(
                     Collectors.toList());
@@ -176,6 +177,11 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             // None grouping columns
             if (columns.isEmpty()) {
                 requiredProperties.add(Lists.newArrayList(createGatherPropertySet()));
+                return null;
+            }
+
+            if (node.isWithLocalShuffleOperator()) {
+                requiredProperties.add(Lists.newArrayList(createLocalShuffleAggPropertySet()));
                 return null;
             }
 

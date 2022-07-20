@@ -174,13 +174,20 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
+            if (!needGenerateOneStageAggNode(context) && node.isOnePhaseAgg()) {
                 return CostEstimate.infinite();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            return CostEstimate.of(inputStatistics.getComputeSize(), statistics.getComputeSize(), 0);
+
+            double cpuCost = inputStatistics.getComputeSize();
+            if (node.isWithLocalShuffleOperator()) {
+                // The cpu cost of LocalShuffleOperator is also the input size.
+                cpuCost *= 2;
+            }
+
+            return CostEstimate.of(cpuCost, statistics.getComputeSize(), 0);
         }
 
         @Override

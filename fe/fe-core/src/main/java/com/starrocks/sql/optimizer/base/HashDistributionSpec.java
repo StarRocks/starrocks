@@ -111,6 +111,11 @@ public class HashDistributionSpec extends DistributionSpec {
         HashDistributionDesc.SourceType thisSourceType = hashDistributionDesc.getSourceType();
         HashDistributionDesc.SourceType otherSourceType = other.hashDistributionDesc.getSourceType();
 
+        if (thisSourceType == HashDistributionDesc.SourceType.LOCAL &&
+                other.hashDistributionDesc.isAggWithLocalShuffle()) {
+            return true;
+        }
+
         // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
@@ -134,6 +139,7 @@ public class HashDistributionSpec extends DistributionSpec {
                 return false;
             }
         }
+
         return hashDistributionDesc.isSatisfy(other.hashDistributionDesc) || isJoinEqColumnsCompatible(other);
     }
 

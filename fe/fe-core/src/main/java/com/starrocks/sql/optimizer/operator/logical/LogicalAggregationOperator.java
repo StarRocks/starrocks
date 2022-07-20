@@ -45,6 +45,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // if singleDistinctFunctionPos is -1, means no single distinct function
     private int singleDistinctFunctionPos = -1;
 
+    private final boolean withLocalShuffleOperator;
+
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
                                       Map<ColumnRefOperator, CallOperator> aggregations) {
@@ -67,6 +69,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.aggregations = ImmutableMap.copyOf(aggregations);
         this.isSplit = isSplit;
         this.singleDistinctFunctionPos = singleDistinctFunctionPos;
+        this.withLocalShuffleOperator = false;
     }
 
     private LogicalAggregationOperator(Builder builder) {
@@ -77,6 +80,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.aggregations = builder.aggregations;
         this.isSplit = builder.isSplit;
         this.singleDistinctFunctionPos = builder.singleDistinctFunctionPos;
+        this.withLocalShuffleOperator = builder.withLocalShuffleOperator;
     }
 
     public AggType getType() {
@@ -95,6 +99,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return isSplit;
     }
 
+    public boolean isOnePhaseAgg() {
+        return type.isGlobal() && !isSplit;
+    }
+
     public void setSplit() {
         isSplit = true;
     }
@@ -109,6 +117,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public void setPartitionByColumns(List<ColumnRefOperator> partitionByColumns) {
         this.partitionByColumns = partitionByColumns;
+    }
+
+    public boolean isWithLocalShuffleOperator() {
+        return withLocalShuffleOperator;
     }
 
     @Override
@@ -150,13 +162,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return false;
         }
         LogicalAggregationOperator that = (LogicalAggregationOperator) o;
-        return type == that.type && Objects.equals(aggregations, that.aggregations) &&
+        return type == that.type && withLocalShuffleOperator == that.withLocalShuffleOperator &&
+                Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, aggregations, groupingKeys);
+        return Objects.hash(super.hashCode(), type, withLocalShuffleOperator, aggregations, groupingKeys);
     }
 
     public static class Builder
@@ -167,6 +180,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
         private ImmutableList<ColumnRefOperator> groupingKeys;
         private List<ColumnRefOperator> partitionByColumns;
         private int singleDistinctFunctionPos = -1;
+
+        private boolean withLocalShuffleOperator = false;
 
         @Override
         public LogicalAggregationOperator build() {
@@ -186,6 +201,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             this.aggregations = aggregationOperator.aggregations;
             this.isSplit = aggregationOperator.isSplit;
             this.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
+            this.withLocalShuffleOperator = aggregationOperator.withLocalShuffleOperator;
             return this;
         }
 
@@ -218,6 +234,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         public Builder setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
             this.singleDistinctFunctionPos = singleDistinctFunctionPos;
+            return this;
+        }
+
+        public Builder setWithLocalShuffleOperator(boolean withLocalShuffleOperator) {
+            this.withLocalShuffleOperator = withLocalShuffleOperator;
             return this;
         }
     }

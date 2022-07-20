@@ -23,6 +23,7 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
@@ -49,6 +50,8 @@ public class MVRewriteTest {
     private static final String QUERY_USE_USER_TAG_MV = "rollup: " + USER_TAG_MV_NAME;
     private static final String QUERY_USE_USER_TAG = "rollup: " + USER_TAG_TABLE_NAME;
     private static final String TEST_TABLE_NAME = "test_tb";
+
+    public static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
@@ -57,7 +60,10 @@ public class MVRewriteTest {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
-        starRocksAssert = new StarRocksAssert();
+
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
         starRocksAssert.withTable("CREATE TABLE `ods_order` (\n" +
                 "  `order_dt` date NOT NULL DEFAULT '9999-12-31',\n" +
@@ -116,6 +122,7 @@ public class MVRewriteTest {
     @AfterClass
     public static void afterClass() throws Exception {
         starRocksAssert.dropTable("ods_order");
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
     @Test

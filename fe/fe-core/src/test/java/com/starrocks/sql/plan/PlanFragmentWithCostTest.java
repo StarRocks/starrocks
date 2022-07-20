@@ -9,9 +9,11 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -22,8 +24,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.List;
 
 public class PlanFragmentWithCostTest extends PlanTestBase {
+    private static final int NUM_TABLE2_ROWS = 10000;
+    private static final int NUM_TABLE0_ROWS = 10000;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -33,10 +38,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
-        setTableStatistics(table2, 10000);
+        setTableStatistics(table2, NUM_TABLE2_ROWS);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
-        setTableStatistics(t0, 10000);
+        setTableStatistics(t0, NUM_TABLE0_ROWS);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE test_mv\n" +
@@ -1430,5 +1435,100 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----2:EXCHANGE");
     
+    }
+
+    @Test
+    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo().backendSize();
+                returns(1, 1, 1,  3, 1);
+            }
+
+            final List<ColumnStatistic> avgHighCardinality = ImmutableList.of(
+                    new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
+            final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
+                    new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, 100));
+            {
+                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
+                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality, avgLowCardinality);
+            }
+
+            {
+                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v1"));
+                result = avgLowCardinality;
+            }
+        };
+
+        boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+
+        try {
+            // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
+            String sql = "select sum(v2) from t0 group by v2";
+            String plan = getFragmentPlan(sql);
+            System.out.println(plan);
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            sql = "select sum(v1) from t0 group by v1";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(1: v1)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 3: use two-phase aggregation for non-grouping agg.
+            sql = "select sum(v2) from t0";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: \n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            // case 4: use two-phase aggregation for multiple BEs.
+            sql = "select sum(v2) from t0 group by v2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            // case 5: use two-phase aggregation for low-cardinality agg.
+            sql = "select sum(v2) from t0 group by v2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+        } finally {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
+        }
     }
 }
