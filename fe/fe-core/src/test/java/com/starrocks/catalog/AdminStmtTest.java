@@ -93,7 +93,7 @@ public class AdminStmtTest {
         long tabletId = tabletToBackendList.get(0).first;
         long backendId = tabletToBackendList.get(0).second;
         Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertFalse(replica.isBad());
+        Assert.assertTrue(replica.isBad());
 
         // set replica to bad
         String adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
