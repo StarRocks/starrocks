@@ -847,7 +847,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (!starOSAgent.init()) {
+        if (Config.use_staros && !starOSAgent.init()) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
