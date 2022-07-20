@@ -29,7 +29,6 @@ import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.JdkUtils;
-import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
