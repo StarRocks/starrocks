@@ -175,7 +175,7 @@ public:
     void set_scan_wait_timeout_ms(int v) { _scan_wait_timeout_ms = v; }
     long scan_wait_timeout_ms() const { return _scan_wait_timeout_ms; }
     // wait for all runtime filters are ready.
-    void wait();
+    void wait(bool on_scan_node);
 
     std::string debug_string() const;
     bool empty() const { return _descriptors.empty(); }
@@ -196,6 +196,7 @@ private:
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
     int _plan_node_id = -1;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace vectorized

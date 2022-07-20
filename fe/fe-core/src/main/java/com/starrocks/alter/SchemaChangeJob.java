@@ -1098,7 +1098,7 @@ public class SchemaChangeJob extends AlterJob {
 
                 indexState.put(indexId, idxState);
 
-                if (GlobalStateMgr.getCurrentState().isMaster() && state == JobState.RUNNING && totalReplicaNum != 0) {
+                if (GlobalStateMgr.getCurrentState().isLeader() && state == JobState.RUNNING && totalReplicaNum != 0) {
                     indexProgress.put(indexId, (finishedReplicaNum * 100 / totalReplicaNum) + "%");
                 } else {
                     indexProgress.put(indexId, "0%");

@@ -27,7 +27,7 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,7 +39,7 @@ import java.util.Map;
  * It is responsible for loading all ES external table's meta-data such as `fields`, `partitions` periodically,
  * playing the `repo` role at StarRocks On ES
  */
-public class EsRepository extends MasterDaemon {
+public class EsRepository extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(EsRepository.class);
 

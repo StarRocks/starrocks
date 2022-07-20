@@ -25,7 +25,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.action.WebBaseAction;
-import com.starrocks.master.MetaHelper;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpResponseStatus;

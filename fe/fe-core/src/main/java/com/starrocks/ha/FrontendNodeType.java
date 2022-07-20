@@ -22,7 +22,7 @@
 package com.starrocks.ha;
 
 public enum FrontendNodeType {
-    MASTER,
+    LEADER,
     FOLLOWER,
     OBSERVER,
     INIT,

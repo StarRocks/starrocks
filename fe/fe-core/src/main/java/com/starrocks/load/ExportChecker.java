@@ -23,7 +23,7 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.ExportExportingTask;
@@ -36,7 +36,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 
-public final class ExportChecker extends MasterDaemon {
+public final class ExportChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ExportChecker.class);
 
     // checkers for running job state

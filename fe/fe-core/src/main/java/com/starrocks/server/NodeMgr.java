@@ -40,9 +40,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.ha.MasterInfo;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
-import com.starrocks.master.MetaHelper;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -86,9 +86,9 @@ public class NodeMgr {
     private String nodeName;
     private FrontendNodeType role;
 
-    private int masterRpcPort;
-    private int masterHttpPort;
-    private String masterIp;
+    private int leaderRpcPort;
+    private int leaderHttpPort;
+    private String leaderIp;
 
     private int clusterId;
     private String token;
@@ -111,9 +111,9 @@ public class NodeMgr {
 
     public NodeMgr(boolean isCheckpoint, GlobalStateMgr globalStateMgr) {
         this.role = FrontendNodeType.UNKNOWN;
-        this.masterRpcPort = 0;
-        this.masterHttpPort = 0;
-        this.masterIp = "";
+        this.leaderRpcPort = 0;
+        this.leaderHttpPort = 0;
+        this.leaderIp = "";
         this.systemInfo = new SystemInfoService();
         this.heartbeatMgr = new HeartbeatMgr(systemInfo, !isCheckpoint);
         this.brokerMgr = new BrokerMgr();
@@ -692,7 +692,7 @@ public class NodeMgr {
     public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException { 
         String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
         String fqdn = modifyFrontendAddressClause.getDestHost();
-        if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.MASTER) {
+        if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
             throw new DdlException("can not modify current master node.");
         }
         if (!tryLock(false)) {
@@ -719,7 +719,7 @@ public class NodeMgr {
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
-        if (host.equals(selfNode.first) && port == selfNode.second && stateMgr.getFeType() == FrontendNodeType.MASTER) {
+        if (host.equals(selfNode.first) && port == selfNode.second && stateMgr.getFeType() == FrontendNodeType.LEADER) {
             throw new DdlException("can not drop current master node.");
         }
         if (!tryLock(false)) {
@@ -898,31 +898,31 @@ public class NodeMgr {
         return this.nodeName;
     }
 
-    public int getMasterRpcPort() {
+    public int getLeaderRpcPort() {
         if (!stateMgr.isReady()) {
             return 0;
         }
-        return this.masterRpcPort;
+        return this.leaderRpcPort;
     }
 
-    public int getMasterHttpPort() {
+    public int getLeaderHttpPort() {
         if (!stateMgr.isReady()) {
             return 0;
         }
-        return this.masterHttpPort;
+        return this.leaderHttpPort;
     }
 
-    public String getMasterIp() {
+    public String getLeaderIp() {
         if (!stateMgr.isReady()) {
             return "";
         }
-        return this.masterIp;
+        return this.leaderIp;
     }
 
-    public void setMaster(MasterInfo info) {
-        this.masterIp = info.getIp();
-        this.masterHttpPort = info.getHttpPort();
-        this.masterRpcPort = info.getRpcPort();
+    public void setLeader(LeaderInfo info) {
+        this.leaderIp = info.getIp();
+        this.leaderHttpPort = info.getHttpPort();
+        this.leaderRpcPort = info.getRpcPort();
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
@@ -1021,35 +1021,35 @@ public class NodeMgr {
         return checksum;
     }
 
-    public long loadMasterInfo(DataInputStream dis, long checksum) throws IOException {
-        masterIp = Text.readString(dis);
-        masterRpcPort = dis.readInt();
-        long newChecksum = checksum ^ masterRpcPort;
-        masterHttpPort = dis.readInt();
-        newChecksum ^= masterHttpPort;
+    public long loadLeaderInfo(DataInputStream dis, long checksum) throws IOException {
+        leaderIp = Text.readString(dis);
+        leaderRpcPort = dis.readInt();
+        long newChecksum = checksum ^ leaderRpcPort;
+        leaderHttpPort = dis.readInt();
+        newChecksum ^= leaderHttpPort;
 
         LOG.info("finished replay masterInfo from image");
         return newChecksum;
     }
 
-    public long saveMasterInfo(DataOutputStream dos, long checksum) throws IOException {
-        Text.writeString(dos, masterIp);
+    public long saveLeaderInfo(DataOutputStream dos, long checksum) throws IOException {
+        Text.writeString(dos, leaderIp);
 
-        checksum ^= masterRpcPort;
-        dos.writeInt(masterRpcPort);
+        checksum ^= leaderRpcPort;
+        dos.writeInt(leaderRpcPort);
 
-        checksum ^= masterHttpPort;
-        dos.writeInt(masterHttpPort);
+        checksum ^= leaderHttpPort;
+        dos.writeInt(leaderHttpPort);
 
         return checksum;
     }
 
-    public void setMasterInfo() {
-        this.masterIp = FrontendOptions.getLocalHostAddress();
-        this.masterRpcPort = Config.rpc_port;
-        this.masterHttpPort = Config.http_port;
-        MasterInfo info = new MasterInfo(this.masterIp, this.masterHttpPort, this.masterRpcPort);
-        GlobalStateMgr.getCurrentState().getEditLog().logMasterInfo(info);
+    public void setLeaderInfo() {
+        this.leaderIp = FrontendOptions.getLocalHostAddress();
+        this.leaderRpcPort = Config.rpc_port;
+        this.leaderHttpPort = Config.http_port;
+        LeaderInfo info = new LeaderInfo(this.leaderIp, this.leaderHttpPort, this.leaderRpcPort);
+        GlobalStateMgr.getCurrentState().getEditLog().logLeaderInfo(info);
     }
 
     public boolean isFirstTimeStartUp() {

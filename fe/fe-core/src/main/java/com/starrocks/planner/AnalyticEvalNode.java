@@ -58,10 +58,6 @@ public class AnalyticEvalNode extends PlanNode {
     private final TupleDescriptor intermediateTupleDesc;
     private final TupleDescriptor outputTupleDesc;
 
-    // maps from the logical output slots in logicalTupleDesc_ to their corresponding
-    // physical output slots in outputTupleDesc_
-    private final ExprSubstitutionMap logicalToPhysicalSmap;
-
     // predicates constructed from partitionExprs_/orderingExprs_ to
     // compare input to buffered tuples
     private final Expr partitionByEq;
@@ -84,7 +80,6 @@ public class AnalyticEvalNode extends PlanNode {
         this.analyticWindow = analyticWindow;
         this.intermediateTupleDesc = intermediateTupleDesc;
         this.outputTupleDesc = outputTupleDesc;
-        this.logicalToPhysicalSmap = logicalToPhysicalSmap;
         this.partitionByEq = partitionByEq;
         this.orderByEq = orderByEq;
         this.bufferedTupleDesc = bufferedTupleDesc;

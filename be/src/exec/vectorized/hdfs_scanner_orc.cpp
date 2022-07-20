@@ -213,7 +213,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
 bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                                       const std::unordered_map<uint64_t, orc::proto::RowIndex>& rowIndexes,
                                       const std::map<uint32_t, orc::BloomFilterIndex>& bloomFilter) {
-    TupleDescriptor* min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ChunkPtr min_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
@@ -484,25 +484,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    ChunkPtr temp_chunk = std::make_shared<vectorized::Chunk>();
-    ChunkPtr result_chunk = *chunk;
-    // The column order of chunk is required to be invariable. When a table performs schema change,
-    // say we want to add a new column to table A, the reader of old files of table A will append new
-    // column to the tail of the chunk, while the reader of new files of table A will put the new column
-    // in the chunk according to the order it's stored. This will lead two chunk from different file to
-    // different column order, so we need to adjust the column order according to the input chunk to make
-    // sure every chunk has same column order
-    auto output_result_chunk = [&result_chunk, &temp_chunk]() {
-        const auto& slot_id_to_index_map = result_chunk->get_slot_id_to_index_map();
-        for (auto iter = slot_id_to_index_map.begin(); iter != slot_id_to_index_map.end(); iter++) {
-            auto ck_iter = temp_chunk->get_slot_id_to_index_map().find(iter->first);
-            if (ck_iter == temp_chunk->get_slot_id_to_index_map().end()) {
-                continue;
-            }
-            result_chunk->columns()[iter->second]->swap_column(*temp_chunk->columns()[ck_iter->second]);
-        }
-    };
-
+    ChunkPtr& ck = *chunk;
     // this infinite for loop is for retry.
     for (;;) {
         orc::RowReader::ReadPosition position;
@@ -531,14 +513,14 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     ret = _orc_reader->get_active_chunk();
                 }
                 RETURN_IF_ERROR(ret);
-                temp_chunk = std::move(ret.value());
+                *chunk = std::move(ret.value());
             }
 
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(&temp_chunk, temp_chunk->num_rows());
-            _scanner_ctx.append_partition_column_to_chunk(&temp_chunk, temp_chunk->num_rows());
-            chunk_size = temp_chunk->num_rows();
+            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, ck->num_rows());
+            _scanner_ctx.append_partition_column_to_chunk(chunk, ck->num_rows());
+            chunk_size = ck->num_rows();
             // do stats before we filter rows which does not match.
             _stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
@@ -550,20 +532,19 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                         continue;
                     }
                     ASSIGN_OR_RETURN(chunk_size,
-                                     ExecNode::eval_conjuncts_into_filter(it.second, temp_chunk.get(), &_chunk_filter));
+                                     ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
                     if (chunk_size == 0) {
                         break;
                     }
                 }
             }
-            if (chunk_size != 0 && chunk_size != temp_chunk->num_rows()) {
-                temp_chunk->filter(_chunk_filter);
+            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
+                ck->filter(_chunk_filter);
             }
         }
-        temp_chunk->set_num_rows(chunk_size);
+        ck->set_num_rows(chunk_size);
 
         if (!_orc_reader->has_lazy_load_context()) {
-            output_result_chunk();
             return Status::OK();
         }
 
@@ -585,9 +566,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             StatusOr<ChunkPtr> ret = _orc_reader->get_lazy_chunk();
             RETURN_IF_ERROR(ret);
             Chunk& ret_ck = *(ret.value());
-            temp_chunk->merge(std::move(ret_ck));
+            ck->merge(std::move(ret_ck));
         }
-        output_result_chunk();
         return Status::OK();
     }
     __builtin_unreachable();

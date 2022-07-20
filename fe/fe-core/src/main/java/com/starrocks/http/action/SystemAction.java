@@ -33,7 +33,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.MasterOpExecutor;
+import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -86,20 +86,20 @@ public class SystemAction extends WebBaseAction {
 
         List<String> columnNames = null;
         List<List<String>> rows = null;
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             // forward to master
             String showProcStmt = "SHOW PROC \"" + procPath + "\"";
-            MasterOpExecutor masterOpExecutor = new MasterOpExecutor(new OriginStatement(showProcStmt, 0),
+            LeaderOpExecutor leaderOpExecutor = new LeaderOpExecutor(new OriginStatement(showProcStmt, 0),
                     ConnectContext.get(), RedirectStatus.FORWARD_NO_SYNC);
             try {
-                masterOpExecutor.execute();
+                leaderOpExecutor.execute();
             } catch (Exception e) {
                 LOG.warn("Fail to forward. ", e);
                 buffer.append("<p class=\"text-error\"> Failed to forward request to master</p>");
                 return;
             }
 
-            ShowResultSet resultSet = masterOpExecutor.getProxyResultSet();
+            ShowResultSet resultSet = leaderOpExecutor.getProxyResultSet();
             if (resultSet == null) {
                 buffer.append("<p class=\"text-error\"> Failed to get result from master</p>");
                 return;
