@@ -452,8 +452,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = FORWARD_TO_MASTER, alias = FORWARD_TO_LEADER)
-    private boolean forwardToMaster = false;
+    @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
+    private boolean forwardToLeader = false;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -737,7 +737,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getForwardToLeader() {
-        return forwardToMaster;
+        return forwardToLeader;
     }
 
     public void setMaxScanKeyNum(int maxScanKeyNum) {
