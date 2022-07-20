@@ -62,7 +62,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /**
  * Mv task run core logic，if multiple MvTaskRunProcessor instances are running, it will cause some concurrency issues
@@ -219,6 +218,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Set<String> deletedPartitionNames = materializedView.getNoExistBasePartitionNames(baseTableId, partitionNames);
         // record checked mv and get need refresh partition ids
         Set<String> checkedMvPartitionNames = Sets.newHashSet();
+        Set<String> needDeletedMvPartitionNames = Sets.newHashSet();
         for (String deletedPartitionName : deletedPartitionNames) {
             // if base partition dropped
             Set<String> refMvPartitionNames = materializedView.getMvPartitionNamesByTable(deletedPartitionName);
@@ -230,12 +230,16 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 Set<String> refTablePartitionNames = materializedView.getTablePartitionNamesByMv(refMvPartitionName);
                 if (deletedPartitionNames.containsAll(refTablePartitionNames)) {
                     dropPartition(database, materializedView, refMvPartitionName);
+                    needDeletedMvPartitionNames.add(refMvPartitionName);
                 } else {
                     needRefreshPartitionNames.add(refMvPartitionName);
                 }
             }
             materializedView.removePartitionNameRefByTable(deletedPartitionName);
             materializedView.removeBasePartition(baseTableId, deletedPartitionName);
+        }
+        for (String needDeletedMvPartitionName : needDeletedMvPartitionNames) {
+            materializedView.removePartitionNameRefByMv(needDeletedMvPartitionName);
         }
         // 2. add partitions & partition refs
         for (Partition needAddPartition : needAddPartitions) {
@@ -357,7 +361,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));
-            materializedView.removePartitionNameRefByMv(mvPartitionName);
         } catch (Exception e) {
             throw new SemanticException("Expression drop partition failed: {}, db: {}, table: {}", e.getMessage(),
                     database.getFullName(), materializedView.getName());
@@ -373,10 +376,19 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Map<String, Set<String>> tableNamePartitionNames = Maps.newHashMap();
         for (OlapTable olapTable : olapTables.values()) {
             if (partitionTable != null && olapTable.getId() == partitionTable.getId()) {
-                Set<String> needRefreshTablePartitionNames = needRefreshMvPartitionNames.stream()
-                        .map(materializedView::getTablePartitionNamesByMv)
-                        .flatMap(Set::stream)
-                        .collect(Collectors.toSet());
+                Set<String> needRefreshTablePartitionNames;
+                // if refresh all mv partitions, use all base table partitions
+                if (materializedView.getPartitionNames().size() == needRefreshMvPartitionNames.size()) {
+                    needRefreshTablePartitionNames = olapTable.getPartitionNames();
+                } else {
+                    Set<String> newNeedRefreshMvPartitionNames = Sets.newHashSet();
+                    needRefreshTablePartitionNames = Sets.newHashSet();
+                    for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
+                        collectNeedRefreshPartitionNames(materializedView, olapTable, needRefreshMvPartitionName,
+                                newNeedRefreshMvPartitionNames, needRefreshTablePartitionNames);
+                    }
+                    needRefreshMvPartitionNames = newNeedRefreshMvPartitionNames;
+                }
                 Preconditions.checkState(!needRefreshTablePartitionNames.isEmpty());
                 tableNamePartitionNames.put(olapTable.getName(), needRefreshTablePartitionNames);
             } else {
@@ -411,6 +423,27 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         // execute insert stmt
         execInsertStmt(database, insertStmt, context, materializedView,
                 collectPartitionInfo(olapTables, tableNamePartitionNames));
+    }
+
+    private void collectNeedRefreshPartitionNames(MaterializedView materializedView, OlapTable olapTable,
+                                                  String mvPartitionName, Set<String> needRefreshMvPartitionNames,
+                                                  Set<String> needRefreshTablePartitionNames) {
+        if (needRefreshMvPartitionNames.contains(mvPartitionName)) {
+            return;
+        }
+        needRefreshMvPartitionNames.add(mvPartitionName);
+        Set<String> tablePartitionNames = materializedView.getTablePartitionNamesByMv(mvPartitionName);
+        for (String tablePartitionName : tablePartitionNames) {
+            if (needRefreshTablePartitionNames.contains(tablePartitionName)) {
+                continue;
+            }
+            needRefreshTablePartitionNames.add(tablePartitionName);
+            Set<String> mvPartitionNames = materializedView.getMvPartitionNamesByTable(tablePartitionName);
+            for (String partitionName : mvPartitionNames) {
+                collectNeedRefreshPartitionNames(materializedView, olapTable, partitionName,
+                        needRefreshMvPartitionNames, needRefreshTablePartitionNames);
+            }
+        }
     }
 
     private Map<Long, Map<String, MaterializedView.BasePartitionInfo>> collectPartitionInfo(
