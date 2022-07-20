@@ -51,6 +51,7 @@ public class StarOSAgentTest {
     @Before
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
+        starosAgent.init();
     }
 
     @Test
@@ -66,6 +67,7 @@ public class StarOSAgentTest {
                 result = 1;
             }
         };
+
         starosAgent.registerAndBootstrapService();
         Assert.assertEquals(1, (long) Deencapsulation.getField(starosAgent, "serviceId"));
     }
@@ -84,6 +86,7 @@ public class StarOSAgentTest {
                 result = 3;
             }
         };
+
         starosAgent.registerAndBootstrapService();
         Assert.assertEquals(3, (long) Deencapsulation.getField(starosAgent, "serviceId"));
     }
@@ -102,6 +105,7 @@ public class StarOSAgentTest {
                 result = 4;
             }
         };
+
         starosAgent.registerAndBootstrapService();
         Assert.assertEquals(4, (long) Deencapsulation.getField(starosAgent, "serviceId"));
     }
@@ -223,6 +227,7 @@ public class StarOSAgentTest {
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
         };
+
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to remove worker.",
                 () -> starosAgent.removeWorker("127.0.0.1:8090"));
