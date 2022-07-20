@@ -2096,10 +2096,6 @@ show_param ::=
     {:
         RESULT = new ShowUserStmt();
     :}
-    | KW_REPOSITORIES
-    {:
-       RESULT = new ShowRepositoriesStmt();
-    :}
     | KW_SNAPSHOT KW_ON ident:repo opt_wild_where
     {:
         RESULT = new ShowSnapshotStmt(repo, parser.where);

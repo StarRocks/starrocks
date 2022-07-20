@@ -154,6 +154,9 @@ statement
 
     // Backup Restore Satement
     | backupStatement                                                                        #backup
+
+    // Repositories Satement
+    | showRepositoriesStatement                                                              #showRepositories
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -999,6 +1002,11 @@ backupStatement
     TO identifier
     ON '(' tableDesc (',' tableDesc) * ')'
     (PROPERTIES propertyList)?
+    ;
+
+// ---------------------------------------- Repositories Statement -----------------------------------------------------
+showRepositoriesStatement
+    : SHOW REPOSITORIES
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
