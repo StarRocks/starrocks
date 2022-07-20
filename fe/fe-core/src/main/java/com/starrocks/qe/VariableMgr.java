@@ -103,6 +103,8 @@ public class VariableMgr {
     public static final int READ_ONLY = 8;
     // Variables with this flag can not be seen with `SHOW VARIABLES` statement.
     public static final int INVISIBLE = 16;
+    // Variables with this flag will not forward to leader when modified in session
+    public static final int DISABLE_FORWARD_TO_LEADER = 1 << 5;
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
@@ -548,6 +550,10 @@ public class VariableMgr {
     public static long saveGlobalVariable(DataOutputStream out, long checksum) throws IOException {
         VariableMgr.write(out);
         return checksum;
+    }
+
+    public static boolean shouldForwardToLeader(String name) {
+        return (getVarContext(name).getFlag() & DISABLE_FORWARD_TO_LEADER) != 0;
     }
 
     @Retention(RetentionPolicy.RUNTIME)

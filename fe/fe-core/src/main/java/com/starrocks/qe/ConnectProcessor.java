@@ -567,6 +567,10 @@ public class ConnectProcessor {
 
         StmtExecutor executor = null;
         try {
+            // set session variables first
+            if (request.isSetModified_variables_sql()) {
+                new StmtExecutor(ctx, new OriginStatement(request.modified_variables_sql, 0), true).execute();
+            }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
             executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);

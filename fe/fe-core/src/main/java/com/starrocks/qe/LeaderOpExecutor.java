@@ -131,6 +131,11 @@ public class LeaderOpExecutor {
         params.setQuery_options(queryOptions);
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        // forward all session variables
+        SetStmt setStmt = ctx.getModifiedSessionVariables();
+        if (setStmt != null) {
+            params.setModified_variables_sql(setStmt.toSql());
+        }
         LOG.info("Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
 
         result = FrontendServiceProxy.call(thriftAddress,

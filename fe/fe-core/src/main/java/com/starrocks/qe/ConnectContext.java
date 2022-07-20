@@ -23,10 +23,13 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -109,6 +112,8 @@ public class ConnectContext {
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
+    // all the modified session variables, will forward to master
+    protected List<SetVar> modifiedSessionVariables;
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -263,12 +268,25 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
+    public void modifySessionVariable(SetVar setVar) throws DdlException {
+        VariableMgr.setVar(sessionVariable, setVar, true);
+        modifiedSessionVariables.add(setVar);
+    }
+
+    public SetStmt getModifiedSessionVariables() {
+        if (modifiedSessionVariables.size() > 0) {
+            return new SetStmt(modifiedSessionVariables);
+        }
+        return null;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
 
     public void resetSessionVariable() {
         this.sessionVariable = VariableMgr.newSessionVariable();
+        modifiedSessionVariables.clear();
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {
