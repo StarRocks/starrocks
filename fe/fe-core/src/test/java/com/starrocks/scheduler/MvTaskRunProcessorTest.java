@@ -246,7 +246,7 @@ public class MvTaskRunProcessorTest {
         } catch (SemanticException e) {
             Assert.assertEquals(
                     "Refresh materialized view failed: Base table: " + tbl1.getId() +
-                            " Partition: p1 can not find", e.getMessage());
+                            " partition: p1 can not find", e.getMessage());
         } finally {
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                     materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
@@ -393,7 +393,7 @@ public class MvTaskRunProcessorTest {
         } catch (SemanticException e) {
             Assert.assertEquals(
                     "Refresh materialized view failed: Base table: " + tbl1.getId() +
-                            " Partition: p4 can not find", e.getMessage());
+                            " partition: p4 can not find", e.getMessage());
         }
     }
 

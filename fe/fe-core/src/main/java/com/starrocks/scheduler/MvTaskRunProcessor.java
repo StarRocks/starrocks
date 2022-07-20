@@ -421,9 +421,11 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             Set<String> tablePartitionNames = tableNamePartitionNames.get(olapTable.getName());
             for (String tablePartitionName : tablePartitionNames) {
                 Partition partition = olapTable.getPartition(tablePartitionName);
-                namePartitionInfos.put(partition.getName(),
-                        new MaterializedView.BasePartitionInfo(partition.getId(),
-                                partition.getVisibleVersion()));
+                if (partition.hasData()) {
+                    namePartitionInfos.put(partition.getName(),
+                            new MaterializedView.BasePartitionInfo(partition.getId(),
+                                    partition.getVisibleVersion()));
+                }
             }
             tablePartitionInfos.put(olapTable.getId(), namePartitionInfos);
         }
@@ -534,7 +536,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 // check partition is renamed or removed
                 if (selectedBasePartitionInfo == null) {
                     throw new SemanticException(
-                            "Base table: " + olapTableId + " Partition: " + plannedPartitionName + " can not find");
+                            "Base table: " + olapTableId + " partition: " + plannedPartitionName + " can not find");
                 }
             }
         }
