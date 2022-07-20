@@ -55,6 +55,13 @@ public class ShowOpenTableStmtTest {
     }
 
     @Test
+    public void testShowOpenTableParserAndAnalyzer() {
+        String sql_1 = "SHOW OPEN TABLES";
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        Assert.assertTrue(stmt instanceof ShowOpenTableStmt);
+    }
+
+    @Test
     public void testNormal() throws Exception {
         ShowOpenTableStmt stmt = (ShowOpenTableStmt) UtFrameUtils.parseStmtWithNewParser("SHOW OPEN TABLES", ctx);
         Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
