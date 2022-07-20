@@ -1295,8 +1295,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if (node.isOnePhaseAgg() && aggregationNode.isColocate()) {
+            if (node.isOnePhaseAgg() && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 inputFragment.setEnableSharedScan(false);
+                inputFragment.setAssignScanRangesPerDriverSeq(true);
             }
 
             inputFragment.setPlanRoot(aggregationNode);

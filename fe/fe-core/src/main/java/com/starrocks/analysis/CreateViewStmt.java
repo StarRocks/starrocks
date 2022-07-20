@@ -22,27 +22,16 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class CreateViewStmt extends BaseViewStmt {
-    private static final Logger LOG = LogManager.getLogger(CreateViewStmt.class);
 
     private final boolean ifNotExists;
     private final String comment;
@@ -71,64 +60,6 @@ public class CreateViewStmt extends BaseViewStmt {
 
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        tableName.analyze(analyzer);
-        viewDefStmt.setNeedToSql(true);
-
-        // check privilege
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tableName.getDb(),
-                tableName.getTbl(), PrivPredicate.CREATE)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
-        }
-
-        if (cols != null) {
-            cloneStmt = viewDefStmt.clone();
-        }
-
-        // Analyze view define statement
-        Analyzer viewAnalyzer = new Analyzer(analyzer);
-        viewDefStmt.analyze(viewAnalyzer);
-
-        createView(analyzer);
-    }
-
-    void createView(Analyzer analyzer) throws UserException {
-        if (cols != null) {
-            if (cols.size() != viewDefStmt.getColLabels().size()) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_VIEW_WRONG_LIST);
-            }
-            for (int i = 0; i < cols.size(); ++i) {
-                Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
-                Column col = new Column(cols.get(i).getColName(), type);
-                col.setComment(cols.get(i).getComment());
-                finalCols.add(col);
-            }
-        } else {
-            for (int i = 0; i < viewDefStmt.getBaseTblResultExprs().size(); ++i) {
-                Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
-                finalCols.add(new Column(viewDefStmt.getColLabels().get(i), type));
-            }
-        }
-        // Set for duplicate columns
-        Set<String> colSets = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (Column col : finalCols) {
-            if (!colSets.add(col.getName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_DUP_FIELDNAME, col.getName());
-            }
-        }
-
-        // format view def string
-        originalViewDef = viewDefStmt.toSql();
-
-        if (cols == null) {
-            inlineViewDef = originalViewDef;
-            return;
-        }
-
-        // It's different with createColumnAndViewDefs in here, cloneStmt is origin stmt which analyze without set `setNeedSql`
-        Analyzer tmpAnalyzer = new Analyzer(analyzer);
-        List<String> colNames = cols.stream().map(ColWithComment::getColName).collect(Collectors.toList());
-        viewDefStmt.substituteSelectListForCreateView(tmpAnalyzer, colNames);
-        inlineViewDef = viewDefStmt.toSql();
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

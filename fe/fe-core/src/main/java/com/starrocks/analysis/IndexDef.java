@@ -141,24 +141,6 @@ public class IndexDef {
         }
     }
 
-    public void verifyColumn(Column column, KeysType keysType) {
-        if (indexType == IndexType.BITMAP) {
-            String indexColName = column.getName();
-            PrimitiveType colType = column.getPrimitiveType();
-            if (!(colType.isDateType() ||
-                    colType.isFixedPointType() || colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
-                throw new SemanticException(colType + " is not supported in bitmap index. "
-                        + "invalid column: " + indexColName);
-            } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
-                throw new SemanticException(
-                        "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
-                                + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
-            }
-        } else {
-            throw new SemanticException("Unsupported index type: " + indexType);
-        }
-    }
-
     public enum IndexType {
         BITMAP,
     }

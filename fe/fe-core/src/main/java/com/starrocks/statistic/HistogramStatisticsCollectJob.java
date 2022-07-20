@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -57,7 +56,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
         context.put("columnName", columnName);
-        context.put("dbName", ClusterNamespace.getNameFromFullName(database.getFullName()));
+        context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
 
         context.put("totalRows", totalRows);

@@ -51,7 +51,7 @@ import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -89,7 +89,7 @@ import java.util.stream.Collectors;
  * Case 2:
  * A new Backend is added to the cluster. Replicas should be transfer to that host to balance the cluster load.
  */
-public class TabletScheduler extends MasterDaemon {
+public class TabletScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
 
     // handle at most BATCH_NUM tablets in one loop
@@ -556,6 +556,9 @@ public class TabletScheduler extends MasterDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
+            if (tbl.isLakeTable()) {
+                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
+            }
 
             boolean isColocateTable = colocateTableIndex.isColocateTable(tbl.getId());
 
@@ -564,9 +567,6 @@ public class TabletScheduler extends MasterDaemon {
             Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(tbl, tabletCtx.getPartitionId());
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
-            }
-            if (partition.isUseStarOS()) {
-                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
             }
 
             short replicaNum =

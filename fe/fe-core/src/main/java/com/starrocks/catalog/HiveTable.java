@@ -276,7 +276,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void modifyTableSchema(String dbName, String tableName) throws DdlException {
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);

@@ -50,9 +50,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -152,7 +152,7 @@ public class StmtExecutor {
     private StatementBase parsedStmt;
     private RuntimeProfile profile;
     private Coordinator coord = null;
-    private MasterOpExecutor masterOpExecutor = null;
+    private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private final boolean isProxy;
     private ShowResultSet proxyResultSet = null;
@@ -213,8 +213,8 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-            if (context.getWorkGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -236,13 +236,13 @@ public class StmtExecutor {
     }
 
     public boolean isForwardToMaster() {
-        if (GlobalStateMgr.getCurrentState().isMaster()) {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) &&
-                !GlobalStateMgr.getCurrentState().isMaster()
+                !GlobalStateMgr.getCurrentState().isLeader()
                 && !GlobalStateMgr.getCurrentState().canRead()) {
             return true;
         }
@@ -255,10 +255,10 @@ public class StmtExecutor {
     }
 
     public ByteBuffer getOutputPacket() {
-        if (masterOpExecutor == null) {
+        if (leaderOpExecutor == null) {
             return null;
         } else {
-            return masterOpExecutor.getOutputPacket();
+            return leaderOpExecutor.getOutputPacket();
         }
     }
 
@@ -267,10 +267,10 @@ public class StmtExecutor {
     }
 
     public ShowResultSet getShowResultSet() {
-        if (masterOpExecutor == null) {
+        if (leaderOpExecutor == null) {
             return null;
         } else {
-            return masterOpExecutor.getProxyResultSet();
+            return leaderOpExecutor.getProxyResultSet();
         }
     }
 
@@ -574,9 +574,9 @@ public class StmtExecutor {
     }
 
     private void forwardToMaster() throws Exception {
-        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus);
+        leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
-        masterOpExecutor.execute();
+        leaderOpExecutor.execute();
     }
 
     private void writeProfile(long beginTimeInNanoSecond) {
@@ -961,9 +961,10 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
-                String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
-                explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
+                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                String resourceGroupStr =
+                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
             }
         }
         explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
@@ -1027,7 +1028,7 @@ public class StmtExecutor {
                 context.getDatabase(),
                 sql,
                 context.getQualifiedUser(),
-                Optional.ofNullable(context.getWorkGroup()).map(WorkGroup::getName).orElse(""));
+                Optional.ofNullable(context.getResourceGroup()).map(ResourceGroup::getName).orElse(""));
         context.setQueryDetail(queryDetail);
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());

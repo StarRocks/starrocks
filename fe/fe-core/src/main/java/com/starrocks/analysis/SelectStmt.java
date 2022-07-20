@@ -21,28 +21,22 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.TableAliasGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -52,7 +46,6 @@ import java.util.UUID;
  * clauses.
  */
 public class SelectStmt extends QueryStmt {
-    private static final Logger LOG = LogManager.getLogger(SelectStmt.class);
     private UUID id = UUIDUtil.genUUID();
 
     // ///////////////////////////////////////
@@ -66,8 +59,6 @@ public class SelectStmt extends QueryStmt {
     //
     private Expr havingClause;  // original having clause
     protected Expr whereClause;
-    // havingClause with aliases and agg output resolved
-    private Expr havingPred;
 
     // set if we have any kind of aggregation operation, include SELECT DISTINCT
     private AggregateInfo aggInfo;
@@ -79,23 +70,12 @@ public class SelectStmt extends QueryStmt {
 
     private ValueList valueList;
 
-    // if we have grouping extensions like cube or rollup or grouping sets
-    private GroupingInfo groupingInfo;
-
-    // having clause which has been analyzed
-    // For example: select k1, sum(k2) a from t group by k1 having a>1;
-    // this parameter: sum(t.k2) > 1
-    private Expr havingClauseAfterAnaylzed;
-
     // END: Members that need to be reset()
     // ///////////////////////////////////////
 
     // SQL string of this SelectStmt before inline-view expression substitution.
     // Set in analyze().
     protected String sqlString_;
-
-    // Table alias generator used during query rewriting.
-    private TableAliasGenerator tableAliasGenerator = null;
 
     public SelectStmt(ValueList valueList, ArrayList<OrderByElement> orderByElement, LimitElement limitElement) {
         super(orderByElement, limitElement);
@@ -125,10 +105,8 @@ public class SelectStmt extends QueryStmt {
         this.havingClause = havingPredicate;
 
         this.colLabels = Lists.newArrayList();
-        this.havingPred = null;
         this.aggInfo = null;
         this.sortInfo = null;
-        this.groupingInfo = null;
     }
 
     protected SelectStmt(SelectStmt other) {
@@ -145,7 +123,6 @@ public class SelectStmt extends QueryStmt {
         analyticInfo = (other.analyticInfo != null) ? other.analyticInfo.clone() : null;
         sqlString_ = (other.sqlString_ != null) ? other.sqlString_ : null;
         baseTblSmap = other.baseTblSmap.clone();
-        groupingInfo = null;
     }
 
     @Override
@@ -163,12 +140,9 @@ public class SelectStmt extends QueryStmt {
         if (havingClause != null) {
             havingClause.reset();
         }
-        havingClauseAfterAnaylzed = null;
-        havingPred = null;
         aggInfo = null;
         analyticInfo = null;
         baseTblSmap.clear();
-        groupingInfo = null;
     }
 
     @Override
@@ -277,70 +251,6 @@ public class SelectStmt extends QueryStmt {
     }
 
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-    }
-
-    public List<TupleId> getTableRefIds() {
-        List<TupleId> result = Lists.newArrayList();
-
-        for (TableRef ref : fromClause_) {
-            result.add(ref.getId());
-        }
-
-        return result;
-    }
-
-    @Override
-    public List<TupleId> collectTupleIds() {
-        List<TupleId> result = Lists.newArrayList();
-        resultExprs.stream().forEach(expr -> expr.getIds(result, null));
-        result.addAll(getTableRefIds());
-        if (whereClause != null) {
-            whereClause.getIds(result, null);
-        }
-        if (havingClauseAfterAnaylzed != null) {
-            havingClauseAfterAnaylzed.getIds(result, null);
-        }
-        return result;
-    }
-
-    /**
-     * Expand "*" select list item.
-     */
-    private void expandStar(Analyzer analyzer) throws AnalysisException {
-        if (fromClause_.isEmpty()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_TABLES_USED);
-        }
-        // expand in From clause order
-        for (TableRef tableRef : fromClause_) {
-            if (analyzer.isSemiJoined(tableRef.getId())) {
-                continue;
-            }
-            expandStar(tableRef.getAliasAsName(), tableRef.getDesc());
-        }
-    }
-
-    /**
-     * Expand "<tbl>.*" select list item.
-     */
-    private void expandStar(Analyzer analyzer, TableName tblName) throws AnalysisException {
-        Collection<TupleDescriptor> descs = analyzer.getDescriptor(tblName);
-        if (descs == null || descs.isEmpty()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName.getTbl());
-        }
-        for (TupleDescriptor desc : descs) {
-            expandStar(tblName, desc);
-        }
-    }
-
-    /**
-     * Expand "*" for a particular tuple descriptor by appending
-     * refs for each column to selectListExprs.
-     */
-    private void expandStar(TableName tblName, TupleDescriptor desc) {
-        for (Column col : desc.getTable().getBaseSchema()) {
-            resultExprs.add(new SlotRef(tblName, col.getName()));
-            colLabels.add(col.getName());
-        }
     }
 
     @Override
@@ -506,75 +416,6 @@ public class SelectStmt extends QueryStmt {
         }
 
         return strBuilder.toString();
-    }
-
-    @Override
-    public void substituteSelectList(Analyzer analyzer, List<String> newColLabels)
-            throws AnalysisException, UserException {
-        // analyze with clause
-        if (hasWithClause()) {
-            withClause_.analyze(analyzer);
-        }
-        // start out with table refs to establish aliases
-        TableRef leftTblRef = null;  // the one to the left of tblRef
-        for (int i = 0; i < fromClause_.size(); ++i) {
-            // Resolve and replace non-InlineViewRef table refs with a BaseTableRef or ViewRef.
-            TableRef tblRef = fromClause_.get(i);
-            tblRef = analyzer.resolveTableRef(tblRef);
-            Preconditions.checkNotNull(tblRef);
-            fromClause_.set(i, tblRef);
-            tblRef.setLeftTblRef(leftTblRef);
-            tblRef.analyze(analyzer);
-            leftTblRef = tblRef;
-        }
-        // populate selectListExprs, aliasSMap, and colNames
-        for (SelectListItem item : selectList.getItems()) {
-            if (item.isStar()) {
-                TableName tblName = item.getTblName();
-                if (tblName == null) {
-                    expandStar(analyzer);
-                } else {
-                    expandStar(analyzer, tblName);
-                }
-            } else {
-                // to make sure the sortinfo's AnalyticExpr and resultExprs's AnalyticExpr analytic once
-                if (item.getExpr() instanceof AnalyticExpr) {
-                    item.getExpr().analyze(analyzer);
-                }
-                if (item.getAlias() != null) {
-                    SlotRef aliasRef = new SlotRef(null, item.getAlias());
-                    SlotRef newAliasRef = new SlotRef(null, newColLabels.get(resultExprs.size()));
-                    newAliasRef.analysisDone();
-                    aliasSMap.put(aliasRef, newAliasRef);
-                }
-                resultExprs.add(item.getExpr());
-            }
-        }
-        // substitute group by
-        if (groupByClause != null) {
-            substituteOrdinalsAliases(groupByClause.getGroupingExprs(), "GROUP BY", analyzer);
-        }
-        // substitute having
-        if (havingClause != null) {
-            havingClause = havingClause.clone(aliasSMap);
-        }
-        // substitute order by
-        if (orderByElements != null) {
-            for (int i = 0; i < orderByElements.size(); ++i) {
-                orderByElements = OrderByElement.substitute(orderByElements, aliasSMap, analyzer);
-            }
-        }
-
-        colLabels.clear();
-        colLabels.addAll(newColLabels);
-    }
-
-    @Override
-    public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
-            throws UserException {
-        resultExprs = Lists.newArrayList();
-        substituteSelectList(analyzer, newColLabels);
-        sqlString_ = null;
     }
 
     public boolean hasAggInfo() {

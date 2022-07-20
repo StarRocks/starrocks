@@ -673,7 +673,7 @@ public class RestoreJob extends AbstractJob {
                     for (OlapTable tbl : restoredTbls) {
                         if (!db.createTable(tbl)) {
                             status = new Status(ErrCode.COMMON_ERROR, "Table " + tbl.getName()
-                                    + " already exist in db: " + db.getFullName());
+                                    + " already exist in db: " + db.getOriginName());
                             return;
                         }
                     }

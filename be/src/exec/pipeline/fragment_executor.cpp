@@ -31,7 +31,9 @@
 #include "runtime/exec_env.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/result_sink.h"
+#include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
+#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks::pipeline {
@@ -84,12 +86,17 @@ static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr
 }
 
 /// FragmentExecutor.
+FragmentExecutor::FragmentExecutor() {
+    _fragment_start_time = MonotonicNanos();
+}
+
 Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
     const auto& params = request.common().params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = request.fragment_instance_id();
+    const auto& query_options = request.common().query_options;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -110,6 +117,12 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     // initialize query's deadline
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
+
+    bool enable_query_trace = false;
+    if (query_options.__isset.enable_query_debug_trace && query_options.enable_query_debug_trace) {
+        enable_query_trace = true;
+    }
+    _query_ctx->set_query_trace(std::make_shared<starrocks::debug::QueryTrace>(query_id, enable_query_trace));
 
     return Status::OK();
 }
@@ -297,11 +310,12 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         ASSIGN_OR_RETURN(auto morsel_queue_factory, scan_node->convert_scan_range_to_morsel_queue_factory(
                                                             scan_ranges, scan_ranges_per_driver_seq, scan_node->id(),
                                                             dop, enable_tablet_internal_parallel));
-        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
 
         if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
-            olap_scan->enable_shared_scan(enable_shared_scan);
+            olap_scan->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         }
+
+        morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
 
     int64_t logical_scan_limit = 0;
@@ -379,7 +393,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queue_factories.count(source_id));
             auto& morsel_queue_factory = morsel_queue_factories[source_id];
-            // DOP of OlapScanPrepareOperator is always 1.
+            // DOP of OlapScanPrepareOperator is 1 (shared scan)
+            // or equal to DOP of OlapScanOperator (morsel_queue_factory->size()).
             DCHECK(cur_pipeline_dop == 1 || cur_pipeline_dop == morsel_queue_factory->size());
 
             pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
@@ -417,6 +432,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     // The pipeline created later should be placed in the front
     runtime_state->runtime_profile()->reverse_childs();
     _fragment_ctx->set_drivers(std::move(drivers));
+    _query_ctx->query_trace()->register_drivers(fragment_instance_id, _fragment_ctx->drivers());
 
     // Acquire driver token to avoid overload
     auto maybe_driver_token = exec_env->driver_limiter()->try_acquire(_fragment_ctx->drivers().size());
@@ -491,6 +507,11 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     }
     prepare_success = true;
 
+    if (_wg) {
+        int64_t elapsed = MonotonicNanos() - _fragment_start_time;
+        _wg->increment_real_runtime_ns(elapsed);
+    }
+
     auto* executor =
             _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
     for (const auto& driver : _fragment_ctx->drivers()) {
@@ -544,12 +565,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
             sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
             dest_dop = t_stream_sink.dest_dop;
-
-            // UNPARTITIONED mode will be performed if both num of destination and dest dop is 1
-            // So we only enable pipeline level shuffle when num of destination or dest dop is greater than 1
-            if (sender->destinations().size() > 1 || dest_dop > 1) {
-                is_pipeline_level_shuffle = true;
-            }
+            is_pipeline_level_shuffle = true;
             DCHECK_GT(dest_dop, 0);
         }
 

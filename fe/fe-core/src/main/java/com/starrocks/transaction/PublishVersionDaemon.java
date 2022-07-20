@@ -31,13 +31,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTable;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.rpc.LakeServiceClient;
@@ -61,7 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-public class PublishVersionDaemon extends MasterDaemon {
+public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
@@ -348,6 +348,7 @@ public class PublishVersionDaemon extends MasterDaemon {
 
     /**
      * Refresh the materialized view if it should be triggered after base table was loaded.
+     *
      * @param transactionState
      * @throws DdlException
      * @throws MetaNotFoundException

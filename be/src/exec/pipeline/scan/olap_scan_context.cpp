@@ -9,6 +9,7 @@ namespace starrocks::pipeline {
 
 using namespace vectorized;
 
+/// OlapScanContext.
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
     DCHECK(_active_inputs.count(key) == 0);
@@ -34,16 +35,10 @@ BalancedChunkBuffer& OlapScanContext::get_shared_buffer() {
 }
 
 Status OlapScanContext::prepare(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
-
     return Status::OK();
 }
 
 void OlapScanContext::close(RuntimeState* state) {
-    const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
-    Expr::close(conjunct_ctxs, state);
     _chunk_buffer.close();
 }
 
@@ -95,6 +90,19 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
 
     return Status::OK();
+}
+
+/// OlapScanContextFactory.
+OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
+    DCHECK_LT(driver_sequence, _dop);
+    // ScanOperators sharing one morsel and chunk buffer use the same context.
+    int32_t idx = _shared_scan ? 0 : driver_sequence;
+    DCHECK_LT(idx, _contexts.size());
+
+    if (_contexts[idx] == nullptr) {
+        _contexts[idx] = std::make_shared<OlapScanContext>(_scan_node, _dop, _shared_scan, _chunk_buffer);
+    }
+    return _contexts[idx];
 }
 
 } // namespace starrocks::pipeline

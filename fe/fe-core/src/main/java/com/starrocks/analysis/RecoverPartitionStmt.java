@@ -32,6 +32,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class RecoverPartitionStmt extends DdlStmt {
     private TableName dbTblName;
@@ -48,6 +49,10 @@ public class RecoverPartitionStmt extends DdlStmt {
 
     public String getTableName() {
         return dbTblName.getTbl();
+    }
+
+    public TableName getDbTblName() {
+        return dbTblName;
     }
 
     public String getPartitionName() {
@@ -79,5 +84,15 @@ public class RecoverPartitionStmt extends DdlStmt {
         }
         sb.append(getTableName());
         return sb.toString();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRecoverPartitionStmt(this, context);
     }
 }

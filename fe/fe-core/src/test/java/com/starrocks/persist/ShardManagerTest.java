@@ -2,7 +2,7 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.lake.ShardManager;
+import com.starrocks.lake.ShardManager;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;

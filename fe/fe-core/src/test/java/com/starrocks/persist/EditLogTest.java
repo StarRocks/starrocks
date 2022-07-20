@@ -2,8 +2,8 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.catalog.lake.ShardDeleter;
-import com.starrocks.catalog.lake.ShardManager;
+import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.ShardManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
@@ -132,7 +132,7 @@ public class EditLogTest {
         field1.setAccessible(true);
 
         ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
-        Frontend fe1 = new Frontend(FrontendNodeType.MASTER, "testName", "127.0.0.1", 1000);
+        Frontend fe1 = new Frontend(FrontendNodeType.LEADER, "testName", "127.0.0.1", 1000);
         frontends.put("testName", fe1);
         field1.set(nodeMgr, frontends);
 

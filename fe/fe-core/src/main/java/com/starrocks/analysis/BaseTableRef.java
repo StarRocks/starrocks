@@ -27,7 +27,6 @@ import org.apache.logging.log4j.Logger;
  * BaseTableRef.
  */
 public class BaseTableRef extends TableRef {
-    private static final Logger LOG = LogManager.getLogger(BaseTableRef.class);
 
     private Table table;
 
@@ -69,9 +68,6 @@ public class BaseTableRef extends TableRef {
         name.analyze(analyzer);
         desc = analyzer.registerTableRef(this);
         isAnalyzed = true;  // true that we have assigned desc
-        analyzeJoin(analyzer);
-        analyzeSortHints();
-        analyzeHints();
     }
 }
 

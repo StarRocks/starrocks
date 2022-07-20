@@ -8,8 +8,6 @@
 
 namespace starrocks::pipeline {
 
-const int32_t LocalPartitionTopnContext::MAX_PARTITION_NUM = 4096;
-
 LocalPartitionTopnContext::LocalPartitionTopnContext(
         const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
         std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset, int64_t partition_limit,
@@ -53,18 +51,11 @@ Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
 
 Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* state,
                                                                 const vectorized::ChunkPtr& chunk) {
-    const auto num_partitions = _chunks_partitioner->num_partitions();
-    if (!_is_downgrade && num_partitions < MAX_PARTITION_NUM) {
-        return _chunks_partitioner->offer(chunk);
-    } else {
+    auto st = _chunks_partitioner->offer(chunk);
+    if (_chunks_partitioner->is_downgrade()) {
         transfer_all_chunks_from_partitioner_to_sorters(state);
-        {
-            std::lock_guard<std::mutex> l(_buffer_lock);
-            _downgrade_buffer.push(chunk);
-        }
-        _is_downgrade = true;
-        return Status::OK();
     }
+    return st;
 }
 
 void LocalPartitionTopnContext::sink_complete() {
@@ -82,8 +73,8 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
                 state, &_sort_exec_exprs.lhs_ordering_expr_ctxs(), &_is_asc_order, &_is_null_first, _sort_keys, _offset,
                 _partition_limit, _topn_type, vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
     }
-    RETURN_IF_ERROR(
-            _chunks_partitioner->accept([this, state](int32_t partition_idx, const vectorized::ChunkPtr& chunk) {
+    RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map(
+            [this, state](int32_t partition_idx, const vectorized::ChunkPtr& chunk) {
                 _chunks_sorters[partition_idx]->update(state, chunk);
                 return true;
             }));
@@ -97,8 +88,8 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
 }
 
 bool LocalPartitionTopnContext::has_output() {
-    if (_is_downgrade) {
-        return _sorter_index < _chunks_sorters.size() || !_downgrade_buffer.empty();
+    if (_chunks_partitioner->is_downgrade() && _is_transfered) {
+        return _sorter_index < _chunks_sorters.size() || !_chunks_partitioner->is_downgrade_buffer_empty();
     }
     return _is_sink_complete && _sorter_index < _chunks_sorters.size();
 }
@@ -118,14 +109,7 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk() {
             return chunk;
         }
     }
-    if (_downgrade_buffer.empty()) {
-        return nullptr;
-    }
-    {
-        std::lock_guard<std::mutex> l(_buffer_lock);
-        chunk = _downgrade_buffer.front();
-        _downgrade_buffer.pop();
-    }
+    chunk = _chunks_partitioner->consume_from_downgrade_buffer();
     return chunk;
 }
 

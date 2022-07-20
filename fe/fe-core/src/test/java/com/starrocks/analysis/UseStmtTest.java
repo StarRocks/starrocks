@@ -69,7 +69,6 @@ public class UseStmtTest {
         };
 
         ctx.setQueryId(UUIDUtil.genUUID());
-        ctx.setCluster("default_cluster");
         StmtExecutor executor = new StmtExecutor(ctx, "use default_catalog.db");
         executor.execute();
 

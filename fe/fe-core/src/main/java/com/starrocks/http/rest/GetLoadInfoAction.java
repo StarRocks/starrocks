@@ -48,19 +48,15 @@ public class GetLoadInfoAction extends RestBaseAction {
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException {
         Load.JobInfo info = new Load.JobInfo(request.getSingleParameter(DB_KEY),
-                request.getSingleParameter(LABEL_KEY),
-                ConnectContext.get().getClusterName());
+                request.getSingleParameter(LABEL_KEY));
         if (Strings.isNullOrEmpty(info.dbName)) {
             throw new DdlException("No database selected");
         }
         if (Strings.isNullOrEmpty(info.label)) {
             throw new DdlException("No label selected");
         }
-        if (Strings.isNullOrEmpty(info.clusterName)) {
-            throw new DdlException("No cluster name selected");
-        }
 
-        if (redirectToMaster(request, response)) {
+        if (redirectToLeader(request, response)) {
             return;
         }
 

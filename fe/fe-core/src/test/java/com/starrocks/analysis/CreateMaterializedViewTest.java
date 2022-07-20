@@ -432,7 +432,7 @@ public class CreateMaterializedViewTest {
         Table tbl2 = testDb.getTable("tbl2");
         Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p1"));
         Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p2"));
-        // add partition p3
+        // add tbl1 partition p3
         String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
         new StmtExecutor(connectContext, addPartitionSql).execute();
         taskManager.executeTask(mvTaskName);
@@ -445,7 +445,7 @@ public class CreateMaterializedViewTest {
         Assert.assertEquals("p3",
                 materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").iterator().next());
         Assert.assertNotNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
-        // delete partition p3
+        // delete tbl1 partition p3
         String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
         new StmtExecutor(connectContext, dropPartitionSql).execute();
         taskManager.executeTask(mvTaskName);
@@ -454,6 +454,18 @@ public class CreateMaterializedViewTest {
         Assert.assertEquals(0, materializedView.getTableMvPartitionNameRefMap("p3").size());
         Assert.assertEquals(0, materializedView.getMvTablePartitionNameRefMap("p20200301_20200401").size());
         Assert.assertNull(baseTableVisibleVersionMap.get(baseTable.getId()).get("p3"));
+        // add tbl2 partition p3
+        addPartitionSql = "ALTER TABLE test.tbl2 ADD PARTITION p3 values less than('30');";
+        new StmtExecutor(connectContext, addPartitionSql).execute();
+        taskManager.executeTask(mvTaskName);
+        waitingTaskFinish();
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p3"));
+        // drop tbl2 partition p3
+        dropPartitionSql = "ALTER TABLE test.tbl2 DROP PARTITION p3\n";
+        new StmtExecutor(connectContext, dropPartitionSql).execute();
+        taskManager.executeTask(mvTaskName);
+        waitingTaskFinish();
+        Assert.assertNull(baseTableVisibleVersionMap.get(tbl2.getId()).get("p3"));
     }
 
     @Test
@@ -1303,7 +1315,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Materialized view do not support table: tbl3 " +
-                    "do not exist in database: default_cluster:test", e.getMessage());
+                    "do not exist in database: test", e.getMessage());
         }
     }
 

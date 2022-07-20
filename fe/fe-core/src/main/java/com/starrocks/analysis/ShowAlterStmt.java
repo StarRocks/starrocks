@@ -44,7 +44,6 @@ import java.util.List;
  *      SHOW ALTER TABLE [COLUMN | ROLLUP | MATERIALIZED_VIEW] [FROM dbName] [WHERE TableName="xxx"] [ORDER BY CreateTime DESC] [LIMIT [offset,]rows]
  */
 public class ShowAlterStmt extends ShowStmt {
-    private static final Logger LOG = LogManager.getLogger(ShowAlterStmt.class);
 
     public static enum AlterType {
         COLUMN, ROLLUP, MATERIALIZED_VIEW

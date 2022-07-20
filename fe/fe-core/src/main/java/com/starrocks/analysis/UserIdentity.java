@@ -115,7 +115,7 @@ public class UserIdentity implements Writable {
         this.isAnalyzed = true;
     }
 
-    public void analyze(String clusterName) throws AnalysisException {
+    public void analyze() throws AnalysisException {
         if (isAnalyzed) {
             return;
         }
@@ -124,7 +124,7 @@ public class UserIdentity implements Writable {
         }
 
         FeNameFormat.checkUserName(user);
-        if (!user.equals(Auth.ROOT_USER) && !user.equals(Auth.ADMIN_USER)) {
+        if (!user.equals(Auth.ROOT_USER)) {
             user = ClusterNamespace.getFullName(user);
         }
 

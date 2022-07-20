@@ -45,7 +45,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
-import com.starrocks.ha.MasterInfo;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
@@ -173,7 +173,7 @@ public class EditLog {
                         break;
                     }
                     LOG.info("Begin to unprotect drop table. db = "
-                            + db.getFullName() + " table = " + info.getTableId());
+                            + db.getOriginName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
@@ -500,9 +500,9 @@ public class EditLog {
                     globalStateMgr.setSynchronizedTime(stamp.getTimestamp());
                     break;
                 }
-                case OperationType.OP_MASTER_INFO_CHANGE: {
-                    MasterInfo info = (MasterInfo) journal.getData();
-                    globalStateMgr.setMaster(info);
+                case OperationType.OP_LEADER_INFO_CHANGE: {
+                    LeaderInfo info = (LeaderInfo) journal.getData();
+                    globalStateMgr.setLeader(info);
                     break;
                 }
                 //compatible with old community meta, newly added log using OP_META_VERSION_V2
@@ -692,9 +692,9 @@ public class EditLog {
                     globalStateMgr.getResourceMgr().replayDropResource(operationLog);
                     break;
                 }
-                case OperationType.OP_WORKGROUP: {
-                    final WorkGroupOpEntry entry = (WorkGroupOpEntry) journal.getData();
-                    globalStateMgr.getWorkGroupMgr().replayWorkGroupOp(entry);
+                case OperationType.OP_RESOURCE_GROUP: {
+                    final ResourceGroupOpEntry entry = (ResourceGroupOpEntry) journal.getData();
+                    globalStateMgr.getResourceGroupMgr().replayResourceGroupOp(entry);
                     break;
                 }
                 case OperationType.OP_CREATE_TASK: {
@@ -1017,8 +1017,8 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_MATERIALIZED_VIEW, info);
     }
 
-    public void logWorkGroupOp(WorkGroupOpEntry op) {
-        logEdit(OperationType.OP_WORKGROUP, op);
+    public void logResourceGroupOp(ResourceGroupOpEntry op) {
+        logEdit(OperationType.OP_RESOURCE_GROUP, op);
     }
 
     public void logCreateTask(Task info) {
@@ -1165,8 +1165,8 @@ public class EditLog {
         logEdit(OperationType.OP_TIMESTAMP, stamp);
     }
 
-    public void logMasterInfo(MasterInfo info) {
-        logEdit(OperationType.OP_MASTER_INFO_CHANGE, info);
+    public void logLeaderInfo(LeaderInfo info) {
+        logEdit(OperationType.OP_LEADER_INFO_CHANGE, info);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {

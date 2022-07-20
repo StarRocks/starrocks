@@ -467,8 +467,8 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
 void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
                                          const std::shared_ptr<const vectorized::JoinRuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
-    _exec_env->add_rf_event(
-            {params.query_id(), params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
+    const PUniqueId& query_id = params.query_id();
+    _exec_env->add_rf_event({query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
     size_t size = params.probe_finst_ids_size();
     for (size_t i = 0; i < size; i++) {
         TUniqueId frag_inst_id;
@@ -486,7 +486,12 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
             }
         }
         if (!found) {
-            VLOG_FILE << "FragmentMgr::receive_runtime_filter: finst not found. finst_id = " << frag_inst_id;
+            VLOG_FILE << "FragmentMgr::receive_runtime_filter: finst not found. finst_id = " << frag_inst_id
+                      << ", filter_id = " << params.filter_id();
+            TUniqueId tquery_id;
+            tquery_id.lo = query_id.lo();
+            tquery_id.hi = query_id.hi();
+            _exec_env->runtime_filter_cache()->put_if_absent(tquery_id, params.filter_id(), shared_rf);
         } else {
             auto profile = exec_state->runtime_state()->runtime_profile_ptr();
             auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();

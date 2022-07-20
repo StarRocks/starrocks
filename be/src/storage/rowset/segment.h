@@ -42,8 +42,6 @@ namespace starrocks {
 
 class TabletSchema;
 class ShortKeyIndexDecoder;
-class Schema;
-class StorageReadOptions;
 
 namespace vectorized {
 class ChunkIterator;
@@ -73,17 +71,28 @@ class Segment : public std::enable_shared_from_this<Segment> {
     };
 
 public:
-    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
-                                                   const std::string& filename, uint32_t segment_id,
+    // Does NOT take the ownership of |tablet_schema|.
+    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> fs,
+                                                   const std::string& path, uint32_t segment_id,
                                                    const TabletSchema* tablet_schema,
+                                                   size_t* footer_length_hint = nullptr,
+                                                   const FooterPointerPB* partial_rowset_footer = nullptr);
+
+    // Like above but share the ownership of |tablet_schema|.
+    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> fs,
+                                                   const std::string& path, uint32_t segment_id,
+                                                   std::shared_ptr<const TabletSchema> tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr);
 
     static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
                                        const FooterPointerPB* partial_rowset_footer);
 
-    Segment(const private_type&, std::shared_ptr<FileSystem> blk_mgr, std::string fname, uint32_t segment_id,
+    Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
             const TabletSchema* tablet_schema, MemTracker* mem_tracker);
+
+    Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
+            std::shared_ptr<const TabletSchema> tablet_schema, MemTracker* mem_tracker);
 
     ~Segment() = default;
 
@@ -153,9 +162,31 @@ public:
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
+    DISALLOW_COPY_AND_MOVE(Segment);
+
 private:
-    Segment(const Segment&) = delete;
-    const Segment& operator=(const Segment&) = delete;
+    struct DummyDeleter {
+        void operator()(const TabletSchema*) {}
+    };
+
+    // TabletSchemaWrapper can work as a raw pointer or shared pointer.
+    class TabletSchemaWrapper {
+    public:
+        // Does not take the ownership of TabletSchema pointed by |raw_ptr|.
+        explicit TabletSchemaWrapper(const TabletSchema* raw_ptr) : _schema(raw_ptr, DummyDeleter()) {}
+
+        // Shard the ownership of |ptr|.
+        explicit TabletSchemaWrapper(std::shared_ptr<const TabletSchema> ptr) : _schema(std::move(ptr)) {}
+
+        DISALLOW_COPY_AND_MOVE(TabletSchemaWrapper);
+
+        const TabletSchema* operator->() const { return _schema.get(); }
+
+        const TabletSchema& operator*() const { return *_schema; }
+
+    private:
+        std::shared_ptr<const TabletSchema> _schema;
+    };
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(MemTracker* mem_tracker, size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
@@ -171,7 +202,7 @@ private:
 
     std::shared_ptr<FileSystem> _fs;
     std::string _fname;
-    const TabletSchema* _tablet_schema;
+    TabletSchemaWrapper _tablet_schema;
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
