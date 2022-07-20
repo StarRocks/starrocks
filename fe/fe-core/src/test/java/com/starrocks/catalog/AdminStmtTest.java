@@ -102,7 +102,7 @@ public class AdminStmtTest {
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
         GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
-        Assert.assertFalse(replica.isBad());
+        Assert.assertTrue(replica.isBad());
 
         // set replica to ok
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
