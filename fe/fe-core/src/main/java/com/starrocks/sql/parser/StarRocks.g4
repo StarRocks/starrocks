@@ -90,6 +90,7 @@ statement
 
     // Analyze Statement
     | analyzeStatement                                                                      #analyze
+    | dropStatsStatement                                                                    #dropStats
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
@@ -532,6 +533,10 @@ deleteStatement
 
 analyzeStatement
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    ;
+
+dropStatsStatement
+    : DROP STATS qualifiedName
     ;
 
 analyzeHistogramStatement

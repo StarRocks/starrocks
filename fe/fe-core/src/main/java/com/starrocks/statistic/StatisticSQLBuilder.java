@@ -11,6 +11,8 @@ import java.io.StringWriter;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 
@@ -33,6 +35,7 @@ public class StatisticSQLBuilder {
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), table_id, column_name, histogram"
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
+
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 
@@ -84,6 +87,17 @@ public class StatisticSQLBuilder {
         context.put("predicate", Joiner.on(" and ").join(predicateList));
 
         return build(context, QUERY_FULL_STATISTIC_TEMPLATE);
+    }
+
+    public static String buildDropStatisticsSQL(Long tableId, StatsConstants.AnalyzeType analyzeType) {
+        String tableName;
+        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            tableName = SAMPLE_STATISTICS_TABLE_NAME;
+        } else {
+            tableName = FULL_STATISTICS_TABLE_NAME;
+        }
+
+        return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
     }
 
     public static String buildQueryHistogramStatisticsSQL(Long tableId, List<String> columnNames) {

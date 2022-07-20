@@ -413,6 +413,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitDropStatsStatement(DropStatsStmt statsStmt, C context) {
+        return visitStatement(statsStmt, context);
+    }
+
     public R visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, C context) {
         return visitShowStatement(statement, context);
     }

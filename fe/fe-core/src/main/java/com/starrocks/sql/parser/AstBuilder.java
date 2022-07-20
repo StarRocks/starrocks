@@ -185,6 +185,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -1328,6 +1329,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new AnalyzeStmt(tableName, columnNames, properties, context.SAMPLE() != null, new AnalyzeBasicDesc());
+    }
+
+    @Override
+    public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        return new DropStatsStmt(tableName);
     }
 
     @Override

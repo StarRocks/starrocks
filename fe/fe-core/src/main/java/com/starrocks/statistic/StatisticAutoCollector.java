@@ -2,10 +2,7 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
@@ -36,8 +33,6 @@ public class StatisticAutoCollector extends LeaderDaemon {
             setInterval(Config.statistic_collect_interval_sec * 1000);
         }
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().expireAnalyzeJob();
-
         if (!Config.enable_statistic_collect || FeConstants.runningUnitTest) {
             return;
         }
@@ -66,8 +61,6 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 analyzeJob.run(statisticExecutor);
             }
         }
-
-        expireStatistic();
     }
 
     private void initDefaultJob() {
@@ -81,29 +74,5 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
                 ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
-    }
-
-    private void expireStatistic() {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
-        List<Long> tables = Lists.newArrayList();
-        for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
-                continue;
-            }
-
-            db.getTables().stream().map(Table::getId).forEach(tables::add);
-        }
-        try {
-            List<String> expireTables = statisticExecutor.queryExpireTableSync(tables);
-
-            if (expireTables.isEmpty()) {
-                return;
-            }
-            LOG.info("Statistic expire tableIds: {}", expireTables);
-            statisticExecutor.expireStatisticSync(expireTables);
-        } catch (Exception e) {
-            LOG.warn("expire statistic failed.", e);
-        }
     }
 }

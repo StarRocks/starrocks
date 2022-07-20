@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -35,8 +36,6 @@ import org.apache.logging.log4j.Logger;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.common.Config.statistics_manager_sleep_time_sec;
 
 public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
@@ -339,10 +338,11 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
+
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
-        trySleep(statistics_manager_sleep_time_sec * 1000);
+        trySleep(Config.statistics_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
@@ -353,5 +353,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
     }
 }
