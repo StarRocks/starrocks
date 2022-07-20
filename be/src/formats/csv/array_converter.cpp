@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "formats/csv/array_converter.h"
-
 #include "column/array_column.h"
 #include "common/logging.h"
 
@@ -32,63 +31,11 @@ Status ArrayConverter::write_quoted_string(OutputStream* os, const Column& colum
 }
 
 bool ArrayConverter::read_string(Column* column, Slice s, const Options& options) const {
-    if (s.size < 2) {
-        return false;
-    }
-    if (s[0] != '[' || s[s.size - 1] != ']') {
-        return false;
-    }
-    s.remove_prefix(1);
-    s.remove_suffix(1);
-
-    auto* array = down_cast<ArrayColumn*>(column);
-    auto* offsets = array->offsets_column().get();
-    auto* elements = array->elements_column().get();
-
-    std::vector<Slice> fields;
-    if (!s.empty() && !_split_array_elements(s, &fields)) {
-        return false;
-    }
-    size_t old_size = elements->size();
-    Options sub_options = options;
-    sub_options.invalid_field_as_null = false;
-    DCHECK_EQ(old_size, offsets->get_data().back());
-    for (const auto& f : fields) {
-        if (!_element_converter->read_quoted_string(elements, f, sub_options)) {
-            elements->resize(old_size);
-            return false;
-        }
-    }
-    offsets->append(old_size + fields.size());
-    return true;
+    return _array_reader->read_string(_element_converter, column, s, options);
 }
 
 bool ArrayConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
     return read_string(column, s, options);
-}
-
-bool ArrayConverter::_split_array_elements(Slice s, std::vector<Slice>* elements) const {
-    bool in_quote = false;
-    int array_nest_level = 0;
-    elements->push_back(s);
-    for (size_t i = 0; i < s.size; i++) {
-        char c = s[i];
-        // TODO(zhuming): handle escaped double quotes
-        if (c == '"') {
-            in_quote = !in_quote;
-        } else if (!in_quote && c == '[') {
-            array_nest_level++;
-        } else if (!in_quote && c == ']') {
-            array_nest_level--;
-        } else if (!in_quote && array_nest_level == 0 && c == ',') {
-            elements->back().remove_suffix(s.size - i);
-            elements->push_back(Slice(s.data + i + 1, s.size - i - 1));
-        }
-    }
-    if (array_nest_level != 0 || in_quote) {
-        return false;
-    }
-    return true;
 }
 
 } // namespace starrocks::vectorized::csv

@@ -10,7 +10,7 @@
 namespace starrocks::vectorized::csv {
 
 // NOLINTNEXTLINE
-TEST(ArrayConverterTest, test_read_string) {
+TEST(ArrayConverterTest, test_read_string01) {
     // ARRAY<TINYINT>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_TINYINT);
@@ -41,7 +41,7 @@ TEST(ArrayConverterTest, test_read_string) {
 }
 
 // NOLINTNEXTLINE
-TEST(ArrayConverterTest, test_read_string01) {
+TEST(ArrayConverterTest, test_read_string02) {
     // ARRAY<STRING>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_VARCHAR);
@@ -64,7 +64,7 @@ TEST(ArrayConverterTest, test_read_string01) {
 }
 
 // NOLINTNEXTLINE
-TEST(ArrayConverterTest, test_read_string02) {
+TEST(ArrayConverterTest, test_read_string03) {
     // ARRAY<STRING>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_VARCHAR);
@@ -84,7 +84,7 @@ TEST(ArrayConverterTest, test_read_string02) {
 }
 
 // NOLINTNEXTLINE
-TEST(ArrayConverterTest, test_read_string03) {
+TEST(ArrayConverterTest, test_read_string04) {
     // ARRAY<STRING>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_VARCHAR);
@@ -100,7 +100,7 @@ TEST(ArrayConverterTest, test_read_string03) {
 }
 
 // NOLINTNEXTLINE
-TEST(ArrayConverterTest, test_read_string04) {
+TEST(ArrayConverterTest, test_read_string05) {
     // ARRAY<ARRAY<STRING>>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_ARRAY);
@@ -136,7 +136,7 @@ TEST(ArrayConverterTest, test_read_string04) {
 }
 
 // NOLINTNEXTLINE
-TEST(ArrayConverterTest, test_read_string05) {
+TEST(ArrayConverterTest, test_read_string06) {
     // ARRAY<DATE>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_DATE);
@@ -151,6 +151,225 @@ TEST(ArrayConverterTest, test_read_string05) {
     EXPECT_EQ(2, col->get(0).get_array().size());
     EXPECT_EQ("1990-11-25", col->get(0).get_array()[0].get_date().to_string());
     EXPECT_EQ("2021-02-22", col->get(0).get_array()[1].get_date().to_string());
+}
+
+// NOLINTNEXTLINE
+TEST(ArrayConverterTest, test_hive_read_string01) {
+    // ARRAY<TINYINT>
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_TINYINT);
+
+    const char COLLECTION_DELIMITER = '_';
+    const char MAPKEY_DELIMITER = '\003';
+
+    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto col = ColumnHelper::create_column(t, false);
+
+    EXPECT_TRUE(conv->read_string(col.get(), "", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "10", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "-1", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1_2_3_\\N", Converter::Options()));
+
+    EXPECT_EQ(4, col->size());
+    // []
+    EXPECT_EQ(0, col->get(0).get_array().size());
+    // [10]
+    EXPECT_EQ(1, col->get(1).get_array().size());
+    EXPECT_EQ(10, col->get(1).get_array()[0].get_int8());
+    // [-1]
+    EXPECT_EQ(1, col->get(2).get_array().size());
+    EXPECT_EQ(-1, col->get(2).get_array()[0].get_int8());
+    // [1,2,3,null]
+    EXPECT_EQ(4, col->get(3).get_array().size());
+    EXPECT_EQ(1, col->get(3).get_array()[0].get_int8());
+    EXPECT_EQ(2, col->get(3).get_array()[1].get_int8());
+    EXPECT_EQ(3, col->get(3).get_array()[2].get_int8());
+    EXPECT_TRUE(col->get(3).get_array()[3].is_null());
+}
+
+// NOLINTNEXTLINE
+TEST(ArrayConverterTest, test_hive_read_string02) {
+    // ARRAY<STRING>
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_VARCHAR);
+    t.children.back().len = 6000;
+
+    const char COLLECTION_DELIMITER = '_';
+    const char MAPKEY_DELIMITER = '\003';
+
+    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto col = ColumnHelper::create_column(t, false);
+
+    EXPECT_TRUE(conv->read_string(col.get(), "", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "apple_banana_\\N", Converter::Options()));
+
+    EXPECT_EQ(2, col->size());
+    // []
+    EXPECT_EQ(0, col->get(0).get_array().size());
+    // ["apple","banana",null]
+    EXPECT_EQ(3, col->get(1).get_array().size());
+    EXPECT_EQ("apple", col->get(1).get_array()[0].get_slice());
+    EXPECT_EQ("banana", col->get(1).get_array()[1].get_slice());
+    EXPECT_TRUE(col->get(1).get_array()[2].is_null());
+}
+
+// NOLINTNEXTLINE
+TEST(ArrayConverterTest, test_hive_read_string03) {
+    // ARRAY<ARRAY<STRING>>
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_ARRAY);
+    t.children.back().children.emplace_back(TYPE_VARCHAR);
+    t.children.back().children.back().len = 6000;
+
+    const char COLLECTION_DELIMITER = '_';
+    const char MAPKEY_DELIMITER = ':';
+
+    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto col = ColumnHelper::create_column(t, false);
+
+    // [[],[null],["apple",null],["banana","pear"]]
+    EXPECT_TRUE(
+            conv->read_string(col.get(), "_\\N_apple:\\N_banana:pear", Converter::Options()));
+    EXPECT_EQ(1, col->size());
+
+    auto arr = col->get(0).get_array();
+    EXPECT_EQ(4, arr.size());
+
+    // []
+    EXPECT_EQ(0, arr[0].get_array().size());
+
+    // [null] NOTE!!!: In Hive, [null] will be parsed to null directly.
+    EXPECT_TRUE(arr[1].is_null());
+
+    // ["apple",null]
+    EXPECT_EQ(2, arr[2].get_array().size());
+    EXPECT_EQ("apple", arr[2].get_array()[0].get_slice());
+    EXPECT_TRUE(arr[2].get_array()[1].is_null());
+
+    // ["banana","pear"]
+    EXPECT_EQ(2, arr[3].get_array().size());
+    EXPECT_EQ("banana", arr[3].get_array()[0].get_slice());
+    EXPECT_EQ("pear", arr[3].get_array()[1].get_slice());
+}
+
+// NOLINTNEXTLINE
+TEST(ArrayConverterTest, test_hive_read_string04) {
+    // ARRAY<ARRAY<ARRAY<STRING>>>
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_ARRAY);
+    t.children.back().children.emplace_back(TYPE_ARRAY);
+    t.children.back().children.back().children.emplace_back(TYPE_VARCHAR);
+    t.children.back().children.back().children.back().len = 6000;
+
+    const char COLLECTION_DELIMITER = '\002';
+    const char MAPKEY_DELIMITER = '\003';
+
+    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto col = ColumnHelper::create_column(t, false);
+
+    // [[[null, "smith"]]]
+    EXPECT_TRUE(conv->read_string(col.get(), "\\N\004smith", Converter::Options()));
+    EXPECT_EQ(1, col->size());
+
+    auto arr = col->get(0).get_array()[0].get_array()[0].get_array();
+    EXPECT_EQ(2, arr.size());
+    EXPECT_TRUE(arr[0].is_null());
+    EXPECT_EQ("smith", arr[1].get_slice());
+}
+
+// NOLINTNEXTLINE
+TEST(ArrayConverterTest, test_hive_read_string05) {
+    // Super complex Hive array test
+    const char COLLECTION_DELIMITER = '\002';
+    const char MAPKEY_DELIMITER = ':';
+    {
+        // ARRAY<ARRAY<TINYINT>>
+        TypeDescriptor t(TYPE_ARRAY);
+        t.children.emplace_back(TYPE_ARRAY);
+        t.children.back().children.emplace_back(TYPE_TINYINT);
+
+        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto col = ColumnHelper::create_column(t, false);
+
+        // [[1, 2, 3], [4, 5, 6], null, [7, 8, null]]
+        EXPECT_TRUE(conv->read_string(col.get(), "1:2:3\0024:5:6\002\\N\0027:8:\\N", Converter::Options()));
+        EXPECT_EQ(1, col->size());
+
+        auto arr = col->get(0).get_array();
+
+        auto arr0 = arr[0].get_array();
+        EXPECT_EQ(1, arr0[0].get_int8());
+        EXPECT_EQ(2, arr0[1].get_int8());
+        EXPECT_EQ(3, arr0[2].get_int8());
+
+        auto arr1 = arr[1].get_array();
+        EXPECT_EQ(4, arr1[0].get_int8());
+        EXPECT_EQ(5, arr1[1].get_int8());
+        EXPECT_EQ(6, arr1[2].get_int8());
+
+        auto arr2 = arr[2];
+        EXPECT_TRUE(arr2.is_null());
+
+        auto arr3 = arr[3].get_array();
+        EXPECT_EQ(7, arr3[0].get_int8());
+        EXPECT_EQ(8, arr3[1].get_int8());
+        EXPECT_TRUE(arr3[2].is_null());
+
+    }
+    {
+        // ARRAY<ARRAY<ARRAY<VARCHAR>>>
+        TypeDescriptor t(TYPE_ARRAY);
+        t.children.emplace_back(TYPE_ARRAY);
+        t.children.back().children.emplace_back(TYPE_ARRAY);
+        t.children.back().children.back().children.emplace_back(TYPE_VARCHAR);
+        t.children.back().children.back().children.back().len = 6000;
+
+        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto col = ColumnHelper::create_column(t, false);
+
+        // [[["null", "a", null], ["a"]], null, null]
+        EXPECT_TRUE(conv->read_string(col.get(), "null\004a\004\\N:a\002\\N\002\\N", Converter::Options()));
+        EXPECT_EQ(1, col->size());
+
+        auto arr = col->get(0).get_array();
+
+        // ["null", "a", null]
+        auto arr0 = arr[0].get_array();
+        auto arr00 = arr0[0].get_array();
+        EXPECT_EQ("null", arr00[0].get_slice());
+        EXPECT_EQ("a", arr00[1].get_slice());
+        EXPECT_TRUE(arr00[2].is_null());
+
+        // ["a"]
+        auto arr01 = arr0[1].get_array();
+        EXPECT_EQ("a", arr01[0].get_slice());
+
+        // [null]
+        auto arr1 = arr[1];
+        EXPECT_TRUE(arr1.is_null());
+
+        // [null]
+        auto arr2 = arr[2];
+        EXPECT_TRUE(arr2.is_null());
+    }
+    {
+        // ARRAY<VARCHAR>
+        TypeDescriptor t(TYPE_ARRAY);
+        t.children.emplace_back(TYPE_VARCHAR);
+        t.children.back().len = 5000;
+
+        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto col = ColumnHelper::create_column(t, false);
+
+        // ["null", "a", null]
+        EXPECT_TRUE(conv->read_string(col.get(), "null\002a\002\\N", Converter::Options()));
+        EXPECT_EQ(1, col->size());
+
+        auto arr = col->get(0).get_array();
+        EXPECT_EQ("null", arr[0].get_slice());
+        EXPECT_EQ("a", arr[1].get_slice());
+        EXPECT_TRUE(arr[2].is_null());
+    }
 }
 
 // NOLINTNEXTLINE

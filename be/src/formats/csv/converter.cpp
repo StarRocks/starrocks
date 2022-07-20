@@ -75,4 +75,57 @@ std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool n
     return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
 }
 
+// Hive collection delimiter generate rule refer to:
+// https://github.com/apache/hive/blob/master/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
+static char get_collection_delimiter(char mapkey_delimiter, size_t nested_array_level) {
+    CHECK(nested_array_level > 1 && nested_array_level < 153);
+
+    if (nested_array_level == 2) {
+        return mapkey_delimiter;
+    }
+
+    // tmp maybe negative, dont use size_t.
+    int32_t tmp;
+    if (nested_array_level <= 7) {
+        // [3, 7] -> [4, 8]
+        tmp = static_cast<int32_t>(nested_array_level) + (4 - 3);
+    } else if (nested_array_level <= 20) {
+        // [8, 20] -> [14, 26]
+        tmp = static_cast<int32_t>(nested_array_level) + (14 - 8);
+    } else if (nested_array_level <= 24) {
+        // [21, 24] -> [28, 31]
+        tmp = static_cast<int32_t>(nested_array_level) + (28 - 21);
+    } else if (nested_array_level <= 152) {
+        // [25, 152] -> [-128, -1]
+        tmp = static_cast<int32_t>(nested_array_level) + (-128 - 25);
+    }
+
+    return (char)tmp;
+}
+
+std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable, char collection_delimiter,
+                                         char mapkey_delimiter, size_t nested_array_level) {
+    if (type_desc.type != TYPE_ARRAY || nested_array_level < 1) {
+        // this should not happen
+        return get_converter(type_desc, nullable);
+    }
+
+    // Must be array type and has collection_delimiter
+    size_t next_nested_array_level = nested_array_level + 1;
+    char next_delimiter = get_collection_delimiter(mapkey_delimiter, next_nested_array_level);
+
+    auto c = std::make_unique<ArrayConverter>(
+            get_converter(type_desc.children[0], true, next_delimiter, mapkey_delimiter, next_nested_array_level),
+            collection_delimiter);
+    if (c == nullptr) {
+        return nullptr;
+    }
+
+    if (nullable) {
+        return std::make_unique<NullableConverter>(std::move(c));
+    } else {
+        return std::move(c);
+    }
+}
+
 } // namespace starrocks::vectorized::csv
