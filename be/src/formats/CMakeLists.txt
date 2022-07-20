@@ -5,6 +5,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 
 add_library(Formats STATIC
         csv/array_converter.cpp
+        csv/array_reader.cpp
         csv/binary_converter.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp

@@ -99,17 +99,29 @@ Status HdfsScannerCSVReader::_fill_buffer() {
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
     _field_delimiter = text_file_desc.field_delim;
-    // we should cast string to char now since csv reader only support record delimiter by char
+
+    // we should cast string to char now since csv reader only support record, collection, mapkey delimiter by char
     _record_delimiter = text_file_desc.line_delim.front();
+    _collection_delimiter = text_file_desc.collection_delim.front();
+    _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+
+    // _collection_delimiter and _mapkey_delimiter won't be empty
+    CHECK(!_collection_delimiter.empty());
+    CHECK(!_mapkey_delimiter.empty());
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
-    for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
-        auto slot = _scanner_params.materialize_slots[i];
-        ConverterPtr conv = csv::get_converter(slot->type(), true);
+    for (auto slot : _scanner_params.materialize_slots) {
+        ConverterPtr conv;
+        if (slot->type().type == TYPE_ARRAY) {
+            // Use array converter with custom delimiter (Using it in Hive).
+            conv = csv::get_converter(slot->type(), true, _collection_delimiter.front(), _mapkey_delimiter.front());
+        } else {
+            conv = csv::get_converter(slot->type(), true);
+        }
         RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
             return Status::InternalError(strings::Substitute("Unsupported CSV type $0", slot->type().debug_string()));
