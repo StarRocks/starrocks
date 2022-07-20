@@ -1549,9 +1549,16 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "  16:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
         connectContext.getSessionVariable().setCboCteReuse(false);
+=======
+        assertContains(plan, " 28:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
+>>>>>>> d8e0830e6 ([BugFix] Disable one stage aggregate with one distinct function (#8918))
     }
 }
