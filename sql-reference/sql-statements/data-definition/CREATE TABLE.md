@@ -649,7 +649,7 @@ CREATE TABLE example_db.dynamic_partition
     k2 INT,
     k3 SMALLINT,
     v1 VARCHAR(2048),
-    v2 DATETIME DEFAULT "2014-02-04 15: 36: 00"
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
 ENGINE = olap
 DUPLICATE KEY(k1, k2, k3)
