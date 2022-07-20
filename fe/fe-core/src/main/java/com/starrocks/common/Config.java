@@ -1498,6 +1498,12 @@ public class Config extends ConfigBase {
     public static boolean enable_pipeline_load = true;
 
     /**
+     * Enable shuffle load
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_shuffle_load = true;
+
+    /**
      * Unused config field, leave it here for backward compatibility
      */
     @Deprecated
