@@ -185,7 +185,8 @@ protected:
         _load_channel = scoped_refptr<LoadChannel>(new LoadChannel(_load_channel_mgr.get(), UniqueId::gen_uid(),
                                                                    string(), 1000, std::move(load_mem_tracker)));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
-        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), key, nullptr);
+        auto lake_load_mem_tracker = std::make_shared<MemTracker>(-1, "", _mem_tracker.get());
+        _tablets_channel = new_lake_tablets_channel(_load_channel.get(), key, lake_load_mem_tracker);
     }
 
     void TearDown() override {
