@@ -123,8 +123,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
     // if set to true, some of stmt will be forwarded to leader FE to get result
-    public static final String FORWARD_TO_MASTER = "forward_to_master";
     public static final String FORWARD_TO_LEADER = "forward_to_leader";
+    public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
     public static final String EVENT_SCHEDULER = "event_scheduler";
@@ -452,11 +452,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
+    @VariableMgr.VarAttr(name = FORWARD_TO_MASTER, alias = FORWARD_TO_LEADER)
     private boolean forwardToMaster = false;
-
-    @VariableMgr.VarAttr(name = FORWARD_TO_LEADER)
-    private boolean forwardToLeader = false;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -740,7 +737,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getForwardToLeader() {
-        return forwardToMaster || forwardToLeader;
+        return forwardToMaster;
     }
 
     public void setMaxScanKeyNum(int maxScanKeyNum) {
