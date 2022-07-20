@@ -1293,6 +1293,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_cache_columns = 100000;
 
+    @ConfField
+    public static long statistic_dict_columns = 100000;
+
     /**
      * The collect thread work interval
      */
