@@ -74,7 +74,7 @@ classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
 语法如下：
 
 ```SQL
-CREAE RESOURCE_GROUP <name> 
+CREAE RESOURCE GROUP <name> 
 TO CLASSIFIER[,...] --创建分类器，语法见下方。多个分类器间用英文逗号（,）分隔。
 WITH (
     "cpu_core_limit" = "n",
@@ -90,7 +90,7 @@ CLASSIFIER:
 示例：
 
 ```SQL
-create resource_group rg1
+create resource group rg1
 to 
     (user='rg1_user1', role='rg1_role1', query_type in ('select'), source_ip='192.168.2.1/24'),
     (user='rg1_user2', query_type in ('select'), source_ip='192.168.3.1/24'),
@@ -109,19 +109,19 @@ with (
 
 ```SQL
 -- 查询所有的资源组和分类器。
-SHOW RESOURCE_GROUPS ALL;
+SHOW RESOURCE GROUPS ALL;
 
 -- 查询和当前用户匹配的资源组和分类器。
-SHOW RESOURCE_GROUPS;
+SHOW RESOURCE GROUPS;
 
 -- 查询指定的资源组和分类器。
-SHOW RESOURCE_GROUP <NAME>
+SHOW RESOURCE GROUP <NAME>
 ```
 
 示例：
 
 ```Plain%20Text
-SHOW RESOURCE_GROUPS ALL;
+SHOW RESOURCE GROUPS ALL;
 
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+
 | Name | Id     | CPUCoreLimit | MemLimit | ConcurrencyLimit | Type   | Classifiers                                                                                                            |
@@ -144,7 +144,7 @@ SHOW RESOURCE_GROUPS ALL;
 语法如下：
 
 ```SQL
-ALTER RESOURCE_GROUP <NAME> WITH (
+ALTER RESOURCE GROUP <NAME> WITH (
     'cpu_core_limit' = '10',
     'mem_limit' = '20%',
     'type' = 'normal'
@@ -155,7 +155,7 @@ ALTER RESOURCE_GROUP <NAME> WITH (
 
 ```SQL
 -- 修改资源组rg1的CPU核数上限为20;
-ALTER RESOURCE_GROUP rg1 WITH (
+ALTER RESOURCE GROUP rg1 WITH (
     'cpu_core_limit' = '20'
 );
 ```
@@ -166,26 +166,26 @@ ALTER RESOURCE_GROUP rg1 WITH (
 
 ```SQL
 -- 添加新的分类器
-ALTER RESOURCE_GROUP <NAME> ADD CLASSIFIER[,...];
+ALTER RESOURCE GROUP <NAME> ADD CLASSIFIER[,...];
 
 -- 删除指定的分类器
-ALTER RESOURCE_GROUP <NAME> DROP (CLASSIFER_ID_1, CLASSIFIER_ID_2, ...);
+ALTER RESOURCE GROUP <NAME> DROP (CLASSIFER_ID_1, CLASSIFIER_ID_2, ...);
 
 -- 删除所有的分类器
-ALTER RESOURCE_GROUP <NAME> DROP ALL;
+ALTER RESOURCE GROUP <NAME> DROP ALL;
 ```
 
 示例：
 
 ```SQL
 -- 在资源组rg1中, 添加新的分类器。
-ALTER RESOURCE_GROUP rg1 ADD (user='root', query_type in ('select'));
+ALTER RESOURCE GROUP rg1 ADD (user='root', query_type in ('select'));
 
 -- 删除资源组rg1的id为(300040, 300041, 300041)的分类器。
-ALTER RESOURCE_GROUP rg1 DROP (300040, 300041, 300041);
+ALTER RESOURCE GROUP rg1 DROP (300040, 300041, 300041);
 
 -- 删除资源组rg1的所有分类器。
-ALTER RESOURCE_GROUP rg1 DROP ALL;
+ALTER RESOURCE GROUP rg1 DROP ALL;
 ```
 
 ### 删除资源组
@@ -193,12 +193,12 @@ ALTER RESOURCE_GROUP rg1 DROP ALL;
 语法如下：
 
 ```Nginx
-DROP RESOURCE_GROUP <NAME>;
+DROP RESOURCE GROUP <NAME>;
 ```
 
 示例：
 
 ```SQL
 -- 删除资源组rg1。
-DROP RESOURCE_GROUP rg1;
+DROP RESOURCE GROUP rg1;
 ```
