@@ -5,6 +5,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.AddBackendClause;
 import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
@@ -32,12 +33,14 @@ import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -47,6 +50,7 @@ import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DefaultValueExpr;
@@ -83,11 +87,13 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.KillStmt;
+import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.ModifyPartitionClause;
@@ -108,6 +114,7 @@ import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -2170,6 +2177,123 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String authString = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
         boolean isPasswordPlain = context.AS() == null;
         return new UserAuthOption(null, authPlugin.getValue().toUpperCase(), authString, isPasswordPlain);
+    }
+
+    // ------------------------------------------- Load Statement ------------------------------------------------------
+
+    @Override
+    public ParseNode visitLoadStatement(StarRocksParser.LoadStatementContext context) {
+        LabelName label = getLabelName(context.labelName());
+        List<DataDescription> dataDescriptions = null;
+        if (context.data != null) {
+            dataDescriptions = context.data.dataDesc().stream().map(this::getDataDescription)
+                    .collect(toList());
+        }
+        Map<String, String> properties = null;
+        if (context.props != null) {
+            properties = Maps.newHashMap();
+            List<Property> propertyList = visit(context.props.property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        if (context.resource != null) {
+            ResourceDesc resourceDesc = getResourceDesc(context.resource);
+            return new LoadStmt(label, dataDescriptions, resourceDesc, properties);
+        }
+        BrokerDesc brokerDesc = getBrokerDesc(context.broker);
+        String cluster = null;
+        if (context.system != null) {
+            cluster = ((Identifier) visit(context.system)).getValue();
+        }
+        return new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties);
+    }
+
+    private LabelName getLabelName(StarRocksParser.LabelNameContext context) {
+        String label = ((Identifier) visit(context.label)).getValue();
+        String db = "";
+        if (context.db != null) {
+            db = ((Identifier) visit(context.db)).getValue();
+        }
+        return new LabelName(db, label);
+    }
+
+    private DataDescription getDataDescription(StarRocksParser.DataDescContext context) {
+        String dstTableName = ((Identifier) visit(context.dstTableName)).getValue();
+        PartitionNames partitionNames = (PartitionNames) visitIfPresent(context.partitions);
+        Expr whereExpr = (Expr) visitIfPresent(context.where);
+        List<Expr> colMappingList = null;
+        if (context.colMappingList != null) {
+            colMappingList = visit(context.colMappingList.expression(), Expr.class);
+        }
+        if (context.srcTableName != null) {
+            String srcTableName = ((Identifier) visit(context.srcTableName)).getValue();
+            return new DataDescription(dstTableName, partitionNames, srcTableName,
+                    context.NEGATIVE() != null, colMappingList, whereExpr);
+        }
+        List<String> files = context.srcFiles.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue())
+                .collect(toList());
+        ColumnSeparator colSep = getColumnSeparator(context.colSep);
+        String format = null;
+        if (context.format != null) {
+            if (context.format.identifier() != null) {
+                format = ((Identifier) visit(context.format.identifier())).getValue();
+            } else if (context.format.string() != null) {
+                format = ((StringLiteral) visit(context.format.string())).getStringValue();
+            }
+        }
+        List<String> colList = null;
+        if (context.colList != null) {
+            List<Identifier> identifiers = visit(context.colList.identifier(), Identifier.class);
+            colList = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+        }
+        List<String> colFromPath = null;
+        if (context.colFromPath != null) {
+            List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
+            colFromPath = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+        }
+        return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
+                colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
+    }
+
+    private ColumnSeparator getColumnSeparator(StarRocksParser.StringContext context) {
+        if (context != null) {
+            String sep = ((StringLiteral) visit(context)).getValue();
+            return new ColumnSeparator(sep);
+        }
+        return null;
+    }
+
+    private BrokerDesc getBrokerDesc(StarRocksParser.BrokerDescContext context) {
+        if (context != null) {
+            String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
+            Map<String, String> properties = null;
+            if (context.props != null) {
+                properties = Maps.newHashMap();
+                List<Property> propertyList = visit(context.props.property(), Property.class);
+                for (Property property : propertyList) {
+                    properties.put(property.getKey(), property.getValue());
+                }
+            }
+            return new BrokerDesc(brokerName, properties);
+        }
+        return null;
+    }
+
+    private ResourceDesc getResourceDesc(StarRocksParser.ResourceDescContext context) {
+        if (context != null) {
+            String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
+            Map<String, String> properties = null;
+            if (context.props != null) {
+                properties = Maps.newHashMap();
+                List<Property> propertyList = visit(context.props.property(), Property.class);
+                for (Property property : propertyList) {
+                    properties.put(property.getKey(), property.getValue());
+                }
+            }
+            return new ResourceDesc(brokerName, properties);
+        }
+        return null;
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------

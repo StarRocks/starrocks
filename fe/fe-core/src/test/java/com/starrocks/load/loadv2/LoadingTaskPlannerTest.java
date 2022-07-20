@@ -55,6 +55,7 @@ import com.starrocks.load.Load;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -71,6 +72,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -81,6 +83,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -100,13 +103,15 @@ public class LoadingTaskPlannerTest {
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
 
+    private static ConnectContext ctx;
+
     @Mocked
     Partition partition;
     @Mocked
     OlapTableSink sink;
 
     @Before
-    public void setUp() {
+    public void setUp() throws IOException {
         jobId = 1L;
         txnId = 2L;
         loadId = new TUniqueId(3, 4);
@@ -124,6 +129,7 @@ public class LoadingTaskPlannerTest {
         b2.setAlive(true);
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
+        ctx = UtFrameUtils.createDefaultCtx();
     }
 
     @After
@@ -262,8 +268,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -399,8 +405,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -483,8 +489,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',') with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -569,8 +575,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',' set ( __op = 'delete')) with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -674,8 +680,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',' (c0,c1,c2,c3) set (pk=c0, v1=c1, v2=c2, __op = c3)) with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -769,8 +775,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',' (pk,v1,v2,__op)) with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -873,8 +879,7 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -974,8 +979,7 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 

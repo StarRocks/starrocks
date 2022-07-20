@@ -439,18 +439,13 @@ nonterminal List<String> string_list;
 nonterminal List<Long> integer_list, cancel_rollup_job_id_list;
 nonterminal AccessPrivilege privilege_type;
 
-nonterminal DataDescription data_desc;
-nonterminal List<DataDescription> data_desc_list;
 nonterminal LabelName job_label;
 nonterminal String opt_with_label;
-nonterminal String opt_system;
 nonterminal BrokerDesc opt_broker;
-nonterminal ResourceDesc resource_desc;
-nonterminal List<String> opt_col_list, opt_dup_keys, opt_columns_from_path;
+nonterminal List<String> opt_col_list, opt_dup_keys;
 nonterminal List<ColWithComment> opt_col_with_comment_list, col_with_comment_list;
 nonterminal ColWithComment col_with_comment;
-nonterminal List<Expr> opt_col_mapping_list;
-nonterminal ColumnSeparator opt_field_term, column_separator;
+nonterminal ColumnSeparator column_separator;
 nonterminal RowDelimiter row_delimiter;
 nonterminal String opt_user_role;
 nonterminal TablePattern tbl_pattern;
@@ -462,7 +457,7 @@ nonterminal ParseNode load_property;
 nonterminal List<ParseNode> opt_load_property_list;
 
 // Boolean
-nonterminal Boolean opt_negative, opt_is_allow_null, opt_is_key, opt_read_only;
+nonterminal Boolean opt_is_allow_null, opt_is_key, opt_read_only;
 nonterminal String opt_from_rollup, opt_to_rollup, function_type;
 nonterminal ColumnPosition opt_col_pos;
 
@@ -1185,25 +1180,6 @@ export_stmt ::=
     :}
     ;
 
-// Load
-load_stmt ::=
-    KW_LOAD KW_LABEL job_label:label
-    LPAREN data_desc_list:dataDescList RPAREN
-    opt_broker:broker
-    opt_system:system
-    opt_properties:properties
-    {:
-        RESULT = new LoadStmt(label, dataDescList, broker, system, properties);
-    :}
-    | KW_LOAD KW_LABEL job_label:label
-    LPAREN data_desc_list:dataDescList RPAREN
-    resource_desc:resource
-    opt_properties:properties
-    {:
-        RESULT = new LoadStmt(label, dataDescList, resource, properties);
-    :}
-    ;
-
 job_label ::=
     ident:label
     {:
@@ -1212,65 +1188,6 @@ job_label ::=
     | ident:db DOT ident:label
     {:
         RESULT = new LabelName(db, label);
-    :}
-    ;
-
-data_desc_list ::=
-    data_desc:desc
-    {:
-        RESULT = Lists.newArrayList(desc);
-    :}
-    | data_desc_list:list COMMA data_desc:desc
-    {:
-        list.add(desc);
-        RESULT = list;
-    :}
-    ;
-
-data_desc ::=
-    KW_DATA KW_INFILE LPAREN string_list:files RPAREN
-    opt_negative:isNeg
-    KW_INTO KW_TABLE ident:tableName
-    opt_partition_names:partitionNames
-    opt_field_term:colSep
-    opt_file_format:fileFormat
-    opt_col_list:colList
-    opt_columns_from_path:columnsFromPath
-    opt_col_mapping_list:colMappingList
-    where_clause:whereExpr
-    {:
-        RESULT = new DataDescription(tableName, partitionNames, files, colList, colSep, null, fileFormat,
-        columnsFromPath, isNeg, colMappingList, whereExpr);
-    :}
-    | KW_DATA KW_FROM KW_TABLE ident:srcTableName
-    opt_negative:isNeg
-    KW_INTO KW_TABLE ident:tableName
-    opt_partition_names:partitionNames
-    opt_col_mapping_list:colMappingList
-    where_clause:whereExpr
-    {:
-        RESULT = new DataDescription(tableName, partitionNames, srcTableName, isNeg, colMappingList, whereExpr);
-    :}
-    ;
-
-opt_negative ::=
-    {:
-        RESULT = false;
-    :}
-    | KW_NEGATIVE
-    {:
-        RESULT = true;
-    :}
-    ;
-
-opt_field_term ::=
-    /* Empty */
-    {:
-        RESULT = null;
-    :}
-    | KW_COLUMNS KW_TERMINATED KW_BY STRING_LITERAL:sep
-    {:
-        RESULT = new ColumnSeparator(sep);
     :}
     ;
 
@@ -1293,13 +1210,6 @@ opt_file_format ::=
     {: RESULT = null; :}
     | KW_FORMAT KW_AS ident_or_text:format
     {: RESULT = format; :}
-    ;
-
-opt_columns_from_path ::=
-    /* Empty */
-    {: RESULT = null; :}
-    | KW_COLUMNS KW_FROM KW_PATH KW_AS LPAREN ident_list:columnsFromPath RPAREN
-    {: RESULT = columnsFromPath; :}
     ;
 
 opt_col_list ::=
@@ -1343,27 +1253,6 @@ col_with_comment ::=
     :}
     ;
 
-opt_col_mapping_list ::=
-    /* Empty */
-    {:
-        RESULT = null;
-    :}
-    | KW_SET LPAREN expr_list:list RPAREN
-    {:
-    	RESULT = list;
-    :}
-    ;
-
-opt_system ::=
-    {:
-        RESULT = null;
-    :}
-    | KW_BY ident_or_text:system
-    {:
-        RESULT = system;
-    :}
-    ;
-
 opt_broker ::=
     {:
         RESULT = null;
@@ -1375,17 +1264,6 @@ opt_broker ::=
     | KW_WITH KW_BROKER ident_or_text:name LPAREN key_value_map:properties RPAREN
     {:
         RESULT = new BrokerDesc(name, properties);
-    :}
-    ;
-
-resource_desc ::=
-    KW_WITH KW_RESOURCE ident_or_text:resourceName
-    {:
-        RESULT = new ResourceDesc(resourceName, null);
-    :}
-    | KW_WITH KW_RESOURCE ident_or_text:resourceName LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new ResourceDesc(resourceName, properties);
     :}
     ;
 
