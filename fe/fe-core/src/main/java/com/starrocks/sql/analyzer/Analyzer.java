@@ -13,12 +13,14 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -34,6 +36,7 @@ import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
@@ -269,13 +272,15 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
+                                                        ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement, ConnectContext context) {
+        public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
+                                                          ConnectContext context) {
             MaterializedViewAnalyzer.analyze(statement, context);
             return null;
         }
@@ -308,6 +313,22 @@ public class Analyzer {
         @Override
         public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+            DropStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+            try {
+                statement.analyze(context);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
             return null;
         }
 
