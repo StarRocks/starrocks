@@ -334,7 +334,9 @@ public class ConnectProcessor {
         }
         db.readLock();
         try {
-            Table table = db.getTable(tableName);
+            // we should get table through metadata manager
+            Table table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
+                    ctx.getCurrentCatalog(), ctx.getDatabase(), tableName);
             if (table == null) {
                 ctx.getState().setError("Unknown table(" + tableName + ")");
                 return;
