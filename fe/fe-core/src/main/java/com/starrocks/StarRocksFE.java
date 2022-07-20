@@ -111,12 +111,13 @@ public class StarRocksFE {
             ExecuteEnv.setup();
 
             // init globalStateMgr
-            StateChangeExecution execution = GlobalStateMgr.getCurrentState().initialize(args);
+            GlobalStateMgr.getCurrentState().initialize(args);
 
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
 
-            StateChangeExecutor.getInstance().registerStateChangeExecution(execution);
+            StateChangeExecutor.getInstance().registerStateChangeExecution(
+                    GlobalStateMgr.getCurrentState().getStateChangeExecution());
             // start state change executor
             StateChangeExecutor.getInstance().start();
 

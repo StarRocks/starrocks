@@ -411,6 +411,8 @@ public class GlobalStateMgr {
 
     private ShardManager shardManager;
 
+    private StateChangeExecution execution;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -570,6 +572,19 @@ public class GlobalStateMgr {
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
+
+        GlobalStateMgr gsm = this;
+        this.execution = new StateChangeExecution() {
+            @Override
+            public void transferToLeader() {
+                gsm.transferToLeader();
+            }
+
+            @Override
+            public void transferToNonLeader(FrontendNodeType newType) {
+                gsm.transferToNonLeader(newType);
+            }
+        };
     }
 
     public static void destroyCheckpoint() {
@@ -789,7 +804,7 @@ public class GlobalStateMgr {
         nodeMgr.setImageDir(imageDir);
     }
 
-    public StateChangeExecution initialize(String[] args) throws Exception {
+    public void initialize(String[] args) throws Exception {
         // set meta dir first.
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
@@ -830,8 +845,6 @@ public class GlobalStateMgr {
 
         // 6. start task cleaner thread
         createTaskCleaner();
-
-        return getStateChangeExecution();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -3079,19 +3092,7 @@ public class GlobalStateMgr {
         }
     }
 
-    private StateChangeExecution getStateChangeExecution() {
-        GlobalStateMgr gsm = this;
-        StateChangeExecution execution = new StateChangeExecution() {
-            @Override
-            public void transferToLeader() {
-                gsm.transferToLeader();
-            }
-
-            @Override
-            public void transferToNonLeader(FrontendNodeType newType) {
-                gsm.transferToNonLeader(newType);
-            }
-        };
+    public StateChangeExecution getStateChangeExecution() {
         return execution;
     }
 
