@@ -372,7 +372,6 @@ void PlanFragmentExecutor::cancel() {
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
     }
-    _exec_env->runtime_filter_cache()->remove(_query_id);
 }
 
 const RowDescriptor& PlanFragmentExecutor::row_desc() {
@@ -415,7 +414,6 @@ void PlanFragmentExecutor::close() {
     if (_is_runtime_filter_merge_node) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
-    _exec_env->runtime_filter_cache()->remove(_query_id);
     _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state
