@@ -30,7 +30,8 @@ public:
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
     // Create a new transaction in TxnManager and return a AsyncDeltaWriter for write.
-    static StatusOr<std::unique_ptr<AsyncDeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
+    static StatusOr<std::unique_ptr<AsyncDeltaWriter>> open(const DeltaWriterOptions& opt,
+                                                            std::shared_ptr<MemTracker> mem_tracker);
 
     AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer)
             : _writer(std::move(writer)), _queue_id{kInvalidQueueId} {}

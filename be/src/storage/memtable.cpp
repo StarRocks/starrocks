@@ -44,30 +44,30 @@ void MemTable::_init_aggregator_if_needed() {
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
-                   MemTableSink* sink, MemTracker* mem_tracker)
+                   std::shared_ptr<MemTableSink> sink, std::shared_ptr<MemTracker> mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
           _slot_descs(slot_descs),
           _keys_type(schema->keys_type()),
-          _sink(sink),
+          _sink(std::move(sink)),
           _aggregator(nullptr),
-          _mem_tracker(mem_tracker) {
+          _mem_tracker(std::move(mem_tracker)) {
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
-                   MemTracker* mem_tracker)
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, std::shared_ptr<MemTableSink> sink, int64_t max_buffer_size,
+                   std::shared_ptr<MemTracker> mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
           _slot_descs(nullptr),
           _keys_type(schema->keys_type()),
-          _sink(sink),
+          _sink(std::move(sink)),
           _aggregator(nullptr),
           _max_buffer_size(max_buffer_size),
-          _mem_tracker(mem_tracker) {
+          _mem_tracker(std::move(mem_tracker)) {
     _init_aggregator_if_needed();
 }
 

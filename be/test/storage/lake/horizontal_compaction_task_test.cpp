@@ -41,7 +41,7 @@ public:
         _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
 
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
-        _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
+        _mem_tracker = std::make_shared<MemTracker>(-1, "", _parent_mem_tracker.get());
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
@@ -140,7 +140,7 @@ protected:
 
     TabletManager* _tablet_manager;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -162,7 +162,7 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -294,7 +294,7 @@ protected:
 
     TabletManager* _tablet_manager;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -316,7 +316,7 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());

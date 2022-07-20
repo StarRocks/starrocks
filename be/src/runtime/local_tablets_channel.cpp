@@ -50,7 +50,8 @@ class LocalTabletsChannel : public TabletsChannel {
     using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
 
 public:
-    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                        std::shared_ptr<MemTracker> mem_tracker);
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
     LocalTabletsChannel(LocalTabletsChannel&&) = delete;
@@ -66,7 +67,7 @@ public:
 
     void cancel() override;
 
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -161,7 +162,7 @@ private:
 
     TabletsChannelKey _key;
 
-    MemTracker* _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
 
     // initialized in open function
     int64_t _txn_id = -1;
@@ -170,7 +171,7 @@ private:
     RowDescriptor* _row_desc = nullptr;
 
     // next sequence we expect
-    std::atomic<int> _num_remaining_senders;
+    std::atomic<int> _num_remaining_senders = 0;
     std::vector<Sender> _senders;
     size_t _max_sliding_window_size = config::max_load_dop * 3;
 
@@ -179,7 +180,7 @@ private:
 
     mutable bthread::Mutex _chunk_meta_lock;
     serde::ProtobufChunkMeta _chunk_meta;
-    std::atomic<bool> _has_chunk_meta;
+    std::atomic<bool> _has_chunk_meta = false;
 
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
@@ -192,12 +193,11 @@ private:
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                         MemTracker* mem_tracker)
+                                         std::shared_ptr<MemTracker> mem_tracker)
         : TabletsChannel(),
           _load_channel(load_channel),
           _key(key),
-          _mem_tracker(mem_tracker),
-          _has_chunk_meta(false),
+          _mem_tracker(std::move(mem_tracker)),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
@@ -606,8 +606,8 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
 }
 
 scoped_refptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                        MemTracker* mem_tracker) {
-    return scoped_refptr<TabletsChannel>(new LocalTabletsChannel(load_channel, key, mem_tracker));
+                                                        std::shared_ptr<MemTracker> mem_tracker) {
+    return {new LocalTabletsChannel(load_channel, key, std::move(mem_tracker))};
 }
 
 } // namespace starrocks

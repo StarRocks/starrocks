@@ -2,6 +2,8 @@
 
 #include "storage/lake/delta_writer.h"
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "column/column.h"
 #include "gutil/strings/util.h"
@@ -50,12 +52,12 @@ private:
 class DeltaWriterImpl {
 public:
     explicit DeltaWriterImpl(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                             const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
+                             const std::vector<SlotDescriptor*>* slots, std::shared_ptr<MemTracker> mem_tracker)
             : _tablet_id(tablet_id),
               _txn_id(txn_id),
               _partition_id(partition_id),
               _slots(slots),
-              _mem_tracker(mem_tracker),
+              _mem_tracker(std::move(mem_tracker)),
               _schema_initialized(false) {}
 
     ~DeltaWriterImpl() = default;
@@ -76,7 +78,7 @@ public:
 
     [[nodiscard]] int64_t txn_id() const { return _txn_id; }
 
-    [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
+    [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     [[nodiscard]] Status flush();
 
@@ -89,11 +91,11 @@ private:
     const int64_t _txn_id;
     const int64_t _partition_id;
     const std::vector<SlotDescriptor*>* const _slots;
-    MemTracker* const _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
-    std::unique_ptr<MemTableSink> _mem_table_sink;
+    std::shared_ptr<MemTableSink> _mem_table_sink;
     std::unique_ptr<FlushToken> _flush_token;
     std::shared_ptr<const TabletSchema> _tablet_schema;
     vectorized::Schema _vectorized_schema;
@@ -101,11 +103,11 @@ private:
 };
 
 inline void DeltaWriterImpl::reset_memtable() {
-    if (_schema_initialized == false) {
+    if (!_schema_initialized) {
         _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema.get(), _slots));
         _schema_initialized = true;
     }
-    _mem_table.reset(new MemTable(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker));
+    _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink, _mem_tracker);
 }
 
 inline Status DeltaWriterImpl::flush_async() {
@@ -124,7 +126,7 @@ inline Status DeltaWriterImpl::flush() {
 }
 
 Status DeltaWriterImpl::open() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     DCHECK(_tablet_writer == nullptr);
     // TODO: remove the dependency |ExecEnv::GetInstance()|
@@ -132,7 +134,7 @@ Status DeltaWriterImpl::open() {
     ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
     ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
     RETURN_IF_ERROR(_tablet_writer->open());
-    _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
+    _mem_table_sink = std::make_shared<TabletWriterSink>(_tablet_writer.get());
     _flush_token = ExecEnv::GetInstance()->storage_engine()->memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
@@ -141,7 +143,7 @@ Status DeltaWriterImpl::open() {
 }
 
 Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_mem_table == nullptr) {
         reset_memtable();
@@ -161,7 +163,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
 }
 
 Status DeltaWriterImpl::finish() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     // TODO: move file type checking to a common place
     auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
@@ -191,7 +193,7 @@ Status DeltaWriterImpl::finish() {
 }
 
 void DeltaWriterImpl::close() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
 
     if (_flush_token != nullptr) {
         (void)_flush_token->wait();
@@ -255,8 +257,9 @@ Status DeltaWriter::flush_async() {
 }
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                                                 const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker) {
-    auto impl = new DeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker);
+                                                 const std::vector<SlotDescriptor*>* slots,
+                                                 std::shared_ptr<MemTracker> mem_tracker) {
+    auto impl = new DeltaWriterImpl(tablet_id, txn_id, partition_id, slots, std::move(mem_tracker));
     return std::make_unique<DeltaWriter>(impl);
 }
 

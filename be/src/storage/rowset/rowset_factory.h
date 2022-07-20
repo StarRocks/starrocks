@@ -41,6 +41,8 @@ public:
     // return OK on success and set `*output` to inited rowset writer.
     // return error if failed
     static Status create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output);
+
+    static Status create_rowset_writer(const RowsetWriterContext& context, std::shared_ptr<RowsetWriter>* output);
 };
 
 } // namespace starrocks

@@ -46,7 +46,7 @@ namespace vectorized {
 
 class ChunkChanger {
 public:
-    ChunkChanger(const TabletSchema& tablet_schema);
+    explicit ChunkChanger(const TabletSchema& tablet_schema);
 
     virtual ~ChunkChanger();
 
@@ -99,8 +99,8 @@ public:
     virtual bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 
-    virtual Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
-                             TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+    virtual Status processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer,
+                             TabletSharedPtr tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 };
 
 class LinkedSchemaChange : public SchemaChange {
@@ -111,7 +111,7 @@ public:
     bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    Status processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer, TabletSharedPtr new_tablet,
                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
@@ -128,7 +128,7 @@ public:
     bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    Status processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer, TabletSharedPtr new_tablet,
                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
@@ -145,7 +145,7 @@ public:
     bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    Status processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer, TabletSharedPtr new_tablet,
                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset);
 
 private:
@@ -173,7 +173,6 @@ public:
     };
 
     struct SchemaChangeParams {
-        AlterTabletType alter_tablet_type;
         TabletSharedPtr base_tablet;
         TabletSharedPtr new_tablet;
         std::vector<std::unique_ptr<TabletReader>> rowset_readers;

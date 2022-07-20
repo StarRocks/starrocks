@@ -22,10 +22,10 @@ class MemTableSink;
 class MemTable {
 public:
     MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
-             MemTableSink* sink, MemTracker* mem_tracker);
+             std::shared_ptr<MemTableSink> sink, std::shared_ptr<MemTracker> mem_tracker);
 
-    MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
-             MemTracker* mem_tracker);
+    MemTable(int64_t tablet_id, const Schema* schema, std::shared_ptr<MemTableSink> sink, int64_t max_buffer_size,
+             std::shared_ptr<MemTracker> mem_tracker);
 
     ~MemTable();
 
@@ -33,7 +33,7 @@ public:
 
     // the total memory used (contain tmp chunk and aggregator chunk)
     size_t memory_usage() const;
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     // buffer memory usage for write segment
     size_t write_buffer_size() const;
@@ -75,7 +75,7 @@ private:
     const std::vector<SlotDescriptor*>* _slot_descs;
     KeysType _keys_type;
 
-    MemTableSink* _sink;
+    std::shared_ptr<MemTableSink> _sink;
 
     // aggregate
     std::unique_ptr<ChunkAggregator> _aggregator;
@@ -88,7 +88,7 @@ private:
     int64_t _max_buffer_size = config::write_buffer_size;
 
     // memory statistic
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker;
     // memory usage and bytes usage calculation cost of object column is high,
     // so cache calculated memory usage and bytes usage to avoid repeated calculation.
     size_t _chunk_memory_usage = 0;

@@ -34,7 +34,7 @@ public:
 
     // |slots| and |mem_tracker| must outlive the AsyncDeltaWriter
     static Ptr create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+                      const std::vector<SlotDescriptor*>* slots, std::shared_ptr<MemTracker> mem_tracker);
 
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 

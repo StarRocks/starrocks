@@ -237,8 +237,8 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     writer_options.slots = &tuple_desc->slots();
 
     {
-        MemTracker mem_checker(1024 * 1024 * 1024);
-        auto writer_status = vectorized::DeltaWriter::open(writer_options, &mem_checker);
+        auto mem_checker = std::make_shared<MemTracker>(1024 * 1024 * 1024);
+        auto writer_status = vectorized::DeltaWriter::open(writer_options, mem_checker);
         ASSERT_TRUE(writer_status.ok());
         auto delta_writer = std::move(writer_status.value());
         ASSERT_TRUE(delta_writer != nullptr);

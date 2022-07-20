@@ -122,7 +122,7 @@ protected:
 
     TabletManager* _tablet_manager;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     LocationProvider* _backup_location_provider;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
@@ -136,7 +136,7 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     // Invalid tablet id
     {
         auto tablet_id = -1;
-        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         ASSERT_ERROR(delta_writer->open());
         ASSERT_ERROR(delta_writer->open());
         delta_writer->close();
@@ -144,7 +144,7 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     // Call open() multiple times
     {
         auto tablet_id = _tablet_metadata->id();
-        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->open());
@@ -153,7 +153,7 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     // Call open() concurrently
     {
         auto tablet_id = _tablet_metadata->id();
-        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         auto t1 = std::thread([&]() {
             for (int i = 0; i < 10000; i++) {
                 ASSERT_OK(delta_writer->open());
@@ -181,7 +181,7 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
 
     // Create and open DeltaWriter
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
     ASSERT_OK(delta_writer->open());
     // Call open() again
     ASSERT_OK(delta_writer->open());
@@ -258,7 +258,7 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
 
     // Create and open DeltaWriter
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
 
     ASSERT_OK(delta_writer->open());
 
@@ -353,7 +353,7 @@ TEST_F(AsyncDeltaWriterTest, test_write_after_close) {
 
     // Create and open DeltaWriter
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
     ASSERT_OK(delta_writer->open());
 
     // close()
@@ -381,7 +381,7 @@ TEST_F(AsyncDeltaWriterTest, test_write_after_close) {
 TEST_F(AsyncDeltaWriterTest, test_finish_after_close) {
     // Create and open DeltaWriter
     auto tablet_id = _tablet_metadata->id();
-    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+    auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
     ASSERT_OK(delta_writer->open());
 
     // close()
@@ -399,7 +399,7 @@ TEST_F(AsyncDeltaWriterTest, test_close) {
     // Call close() multiple times
     {
         auto tablet_id = _tablet_metadata->id();
-        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         ASSERT_OK(delta_writer->open());
 
         delta_writer->close();
@@ -408,7 +408,7 @@ TEST_F(AsyncDeltaWriterTest, test_close) {
     // Call close() concurrently
     {
         auto tablet_id = _tablet_metadata->id();
-        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
+        auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker);
         ASSERT_OK(delta_writer->open());
         auto t1 = std::thread([&]() {
             for (int i = 0; i < 10000; i++) {

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
@@ -187,7 +188,7 @@ public:
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
-        _mem_tracker.reset(new MemTracker(-1, "root"));
+        _mem_tracker = std::make_shared<MemTracker>(-1, "root");
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
         _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
         RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
@@ -203,9 +204,9 @@ public:
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
-        _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
+        _mem_table_sink = std::make_shared<MemTableRowsetWriterSink>(_writer);
         _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
-        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get()));
+        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink, _mem_tracker));
     }
 
     void TearDown() override {
@@ -216,13 +217,13 @@ public:
     std::string _root_path;
 
     ObjectPool _obj_pool;
-    unique_ptr<MemTracker> _mem_tracker;
+    shared_ptr<MemTracker> _mem_tracker;
     shared_ptr<TabletSchema> _schema;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
-    unique_ptr<RowsetWriter> _writer;
+    shared_ptr<RowsetWriter> _writer;
     unique_ptr<MemTable> _mem_table;
     Schema _vectorized_schema;
-    unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
+    shared_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 
 TEST_F(MemTableTest, testDupKeysInsertFlushRead) {

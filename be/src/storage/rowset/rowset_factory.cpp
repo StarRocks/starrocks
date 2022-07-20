@@ -40,6 +40,13 @@ Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::strin
     return Status::OK();
 }
 
+Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::shared_ptr<RowsetWriter>* output) {
+    std::unique_ptr<RowsetWriter> writer;
+    RETURN_IF_ERROR(create_rowset_writer(context, &writer));
+    *output = std::move(writer);
+    return Status::OK();
+}
+
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
     auto tablet_schema = context.tablet_schema;
     auto memory_format_version = context.memory_format_version;

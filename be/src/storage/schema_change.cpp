@@ -802,9 +802,9 @@ bool LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_
     return true;
 }
 
-Status LinkedSchemaChange::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-    if (process(reader, new_rowset_writer, new_tablet, base_tablet, rowset)) {
+Status LinkedSchemaChange::processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer,
+                                     TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+    if (process(reader, new_rowset_writer.get(), new_tablet, base_tablet, rowset)) {
         return Status::OK();
     } else {
         return Status::InternalError("failed to proccessV2 LinkedSchemaChange");
@@ -884,7 +884,7 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
     return true;
 }
 
-Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
+Status SchemaChangeDirectly::processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer,
                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                        RowsetSharedPtr rowset) {
     Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
@@ -1073,10 +1073,10 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
     return true;
 }
 
-Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
+Status SchemaChangeWithSorting::processV2(TabletReader* reader, std::shared_ptr<RowsetWriter> new_rowset_writer,
                                           TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                           RowsetSharedPtr rowset) {
-    MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
+    auto mem_table_sink = std::make_shared<MemTableRowsetWriterSink>(new_rowset_writer);
     Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
             base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
     Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
@@ -1086,8 +1086,11 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
     // set max memtable size to 4G since some column has limit size, it will make invalid data
     size_t max_buffer_size = std::min<size_t>(
             4294967296, static_cast<size_t>(_memory_limitation * config::memory_ratio_for_sorting_schema_change));
-    auto mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink, max_buffer_size,
-                                                CurrentThread::mem_tracker());
+
+    // If we don't use the asynchronous queue to flush `Memtable`,
+    // this MemTracker is useless, so set it to nullptr.
+    auto mem_table =
+            std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, mem_table_sink, max_buffer_size, nullptr);
 
     auto selective = std::make_unique<std::vector<uint32_t>>();
     selective->resize(config::vector_chunk_size);
@@ -1107,8 +1110,10 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
         if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
-                                                   max_buffer_size, CurrentThread::mem_tracker());
+            // If we don't use the asynchronous queue to flush `Memtable`,
+            // this MemTracker is useless, so set it to nullptr.
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, mem_table_sink,
+                                                   max_buffer_size, nullptr);
             VLOG(1) << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
                     << CurrentThread::mem_tracker()->consumption();
         }
@@ -1139,8 +1144,10 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), "failed to flush mem table");
-            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
-                                                   max_buffer_size, CurrentThread::mem_tracker());
+            // If we don't use the asynchronous queue to flush `Memtable`,
+            // this MemTracker is useless, so set it to nullptr.
+            mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, mem_table_sink,
+                                                   max_buffer_size, nullptr);
         }
 
         mem_pool->clear();
@@ -1516,15 +1523,15 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             writer_context.schema_change_sorting = true;
         }
 
-        std::unique_ptr<RowsetWriter> rowset_writer;
+        std::shared_ptr<RowsetWriter> rowset_writer;
         status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
         if (!status.ok()) {
             return Status::InternalError("build rowset writer failed");
         }
 
         if (config::enable_schema_change_v2) {
-            auto st = sc_procedure->processV2(sc_params.rowset_readers[i].get(), rowset_writer.get(), new_tablet,
-                                              base_tablet, sc_params.rowsets_to_change[i]);
+            auto st = sc_procedure->processV2(sc_params.rowset_readers[i].get(), rowset_writer, new_tablet, base_tablet,
+                                              sc_params.rowsets_to_change[i]);
             if (!st.ok()) {
                 LOG(WARNING) << "failed to process the schema change. from tablet "
                              << base_tablet->get_tablet_info().to_string() << " to tablet "

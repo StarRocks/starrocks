@@ -94,7 +94,7 @@ private:
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;
     int64_t _timeout_s;
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;
 
     // lock protect the tablets channel map

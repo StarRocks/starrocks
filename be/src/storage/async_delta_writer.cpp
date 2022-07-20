@@ -53,8 +53,8 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
 }
 
 StatusOr<std::unique_ptr<AsyncDeltaWriter>> AsyncDeltaWriter::open(const DeltaWriterOptions& opt,
-                                                                   MemTracker* mem_tracker) {
-    auto res = DeltaWriter::open(opt, mem_tracker);
+                                                                   std::shared_ptr<MemTracker> mem_tracker) {
+    auto res = DeltaWriter::open(opt, std::move(mem_tracker));
     if (!res.ok()) {
         return res.status();
     }

@@ -16,30 +16,20 @@
 
 namespace starrocks::vectorized {
 
-StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt, MemTracker* mem_tracker) {
-    std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, mem_tracker, StorageEngine::instance()));
-    SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, false);
+StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOptions& opt,
+                                                         std::shared_ptr<MemTracker> mem_tracker) {
+    std::unique_ptr<DeltaWriter> writer(new DeltaWriter(opt, std::move(mem_tracker), StorageEngine::instance()));
+    SCOPED_THREAD_LOCAL_MEM_SETTER(writer->mem_tracker(), false);
     RETURN_IF_ERROR(writer->_init());
     return std::move(writer);
 }
 
-DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
-        : _state(kUninitialized),
-          _opt(opt),
-          _mem_tracker(mem_tracker),
-          _storage_engine(storage_engine),
-          _tablet(nullptr),
-          _cur_rowset(nullptr),
-          _rowset_writer(nullptr),
-          _schema_initialized(false),
-          _mem_table(nullptr),
-          _mem_table_sink(nullptr),
-          _tablet_schema(nullptr),
-          _flush_token(nullptr),
-          _with_rollback_log(true) {}
+DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, std::shared_ptr<MemTracker> mem_tracker,
+                         StorageEngine* storage_engine)
+        : _opt(opt), _mem_tracker(std::move(mem_tracker)), _storage_engine(storage_engine) {}
 
 DeltaWriter::~DeltaWriter() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
@@ -50,10 +40,6 @@ DeltaWriter::~DeltaWriter() {
         _garbage_collection();
         break;
     }
-    _mem_table.reset();
-    _mem_table_sink.reset();
-    _rowset_writer.reset();
-    _cur_rowset.reset();
 }
 
 void DeltaWriter::_garbage_collection() {
@@ -71,7 +57,7 @@ void DeltaWriter::_garbage_collection() {
 }
 
 Status DeltaWriter::_init() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
@@ -141,7 +127,7 @@ Status DeltaWriter::_init() {
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
 
     const std::size_t partial_cols_num = [this]() {
-        if (_opt.slots->size() > 0 && _opt.slots->back()->col_name() == "__op") {
+        if (!_opt.slots->empty() && _opt.slots->back()->col_name() == "__op") {
             return _opt.slots->size() - 1;
         } else {
             return _opt.slots->size();
@@ -188,7 +174,7 @@ Status DeltaWriter::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-    _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
+    _mem_table_sink = std::make_shared<MemTableRowsetWriterSink>(_rowset_writer);
     _tablet_schema = writer_context.tablet_schema;
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
     _set_state(kWriting);
@@ -196,7 +182,7 @@ Status DeltaWriter::_init() {
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {
@@ -228,7 +214,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
 }
 
 Status DeltaWriter::close() {
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
@@ -268,8 +254,8 @@ void DeltaWriter::_reset_mem_table() {
         _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema, _opt.slots));
         _schema_initialized = true;
     }
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
-                                            _mem_table_sink.get(), _mem_tracker);
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots, _mem_table_sink,
+                                            _mem_tracker);
 }
 
 Status DeltaWriter::commit() {
@@ -282,7 +268,7 @@ Status DeltaWriter::commit() {
         span = Tracer::Instance().start_trace_txn_tablet("delta_writer_commit", _opt.txn_id, _opt.tablet_id);
     }
     auto scoped = trace::Scope(span);
-    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker.get(), false);
     auto state = _get_state();
     switch (state) {
     case kUninitialized:
@@ -348,7 +334,7 @@ int64_t DeltaWriter::partition_id() const {
     return _opt.partition_id;
 }
 
-const char* DeltaWriter::_state_name(State state) const {
+const char* DeltaWriter::_state_name(State state) {
     switch (state) {
     case kUninitialized:
         return "kUninitialized";

@@ -9,7 +9,7 @@ namespace starrocks::vectorized {
 
 class MemTableRowsetWriterSink : public MemTableSink {
 public:
-    explicit MemTableRowsetWriterSink(RowsetWriter* w) : _rowset_writer(w) {}
+    explicit MemTableRowsetWriterSink(std::shared_ptr<RowsetWriter> w) : _rowset_writer(std::move(w)) {}
     ~MemTableRowsetWriterSink() override = default;
 
     DISALLOW_COPY(MemTableRowsetWriterSink);
@@ -21,7 +21,7 @@ public:
     }
 
 private:
-    RowsetWriter* _rowset_writer;
+    std::shared_ptr<RowsetWriter> _rowset_writer;
 };
 
 } // namespace starrocks::vectorized

@@ -30,8 +30,8 @@ public:
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
     AsyncDeltaWriterImpl(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                         const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_id, txn_id, partition_id, slots, mem_tracker)),
+                         const std::vector<SlotDescriptor*>* slots, std::shared_ptr<MemTracker> mem_tracker)
+            : _writer(DeltaWriter::create(tablet_id, txn_id, partition_id, slots, std::move(mem_tracker))),
               _queue_id{kInvalidQueueId},
               _open_mtx(),
               _status(),
@@ -219,8 +219,8 @@ int64_t AsyncDeltaWriter::txn_id() const {
 
 std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                                                            const std::vector<SlotDescriptor*>* slots,
-                                                           MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker);
+                                                           std::shared_ptr<MemTracker> mem_tracker) {
+    auto impl = new AsyncDeltaWriterImpl(tablet_id, txn_id, partition_id, slots, std::move(mem_tracker));
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 

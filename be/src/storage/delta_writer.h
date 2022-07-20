@@ -41,7 +41,8 @@ class DeltaWriter {
 public:
     // Create a new DeltaWriter and call `TxnManager::prepare_txn` to register a new trasaction associated with
     // this DeltaWriter.
-    static StatusOr<std::unique_ptr<DeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
+    static StatusOr<std::unique_ptr<DeltaWriter>> open(const DeltaWriterOptions& opt,
+                                                       std::shared_ptr<MemTracker> mem_tracker);
     ~DeltaWriter();
 
     DISALLOW_COPY(DeltaWriter);
@@ -75,20 +76,13 @@ public:
 
     const Tablet* tablet() const { return _tablet.get(); }
 
-    MemTracker* mem_tracker() { return _mem_tracker; };
+    MemTracker* mem_tracker() { return _mem_tracker.get(); };
 
     // Return the rowset created by `commit()`, or nullptr if `commit()` not been called or failed.
     const Rowset* committed_rowset() const { return _cur_rowset.get(); }
 
     // REQUIRE: has successfully `commit()`ed
     const RowsetWriter* committed_rowset_writer() const { return _rowset_writer.get(); }
-
-    // REQUIRE: has successfully `commit()`ed
-    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
-        CHECK_EQ(kCommitted, _state);
-        CHECK(_rowset_writer != nullptr);
-        return _rowset_writer->global_dict_columns_valid_info();
-    }
 
 private:
     enum State {
@@ -99,12 +93,12 @@ private:
         kCommitted, // committed state can transfer to kAborted state
     };
 
-    DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
+    DeltaWriter(const DeltaWriterOptions& opt, std::shared_ptr<MemTracker> parent, StorageEngine* storage_engine);
 
     Status _init();
     Status _flush_memtable_async();
     Status _flush_memtable();
-    const char* _state_name(State state) const;
+    static const char* _state_name(State state);
 
     void _garbage_collection();
 
@@ -113,22 +107,22 @@ private:
     State _get_state() { return _state.load(std::memory_order_acquire); }
     void _set_state(State state) { _state.store(state, std::memory_order_release); }
 
-    std::atomic<State> _state;
+    std::atomic<State> _state = kUninitialized;
     DeltaWriterOptions _opt;
-    MemTracker* _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker;
     StorageEngine* _storage_engine;
 
     TabletSharedPtr _tablet;
     RowsetSharedPtr _cur_rowset;
-    std::unique_ptr<RowsetWriter> _rowset_writer;
-    bool _schema_initialized;
+    std::shared_ptr<RowsetWriter> _rowset_writer;
+    bool _schema_initialized = false;
     Schema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
-    std::unique_ptr<MemTableSink> _mem_table_sink;
-    const TabletSchema* _tablet_schema;
+    std::shared_ptr<MemTableSink> _mem_table_sink;
+    const TabletSchema* _tablet_schema = nullptr;
 
     std::unique_ptr<FlushToken> _flush_token;
-    bool _with_rollback_log;
+    bool _with_rollback_log = true;
 };
 
 } // namespace vectorized

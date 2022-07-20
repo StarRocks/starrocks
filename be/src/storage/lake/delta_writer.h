@@ -28,7 +28,7 @@ public:
     using Ptr = std::unique_ptr<DeltaWriter>;
 
     static Ptr create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+                      const std::vector<SlotDescriptor*>* slots, std::shared_ptr<MemTracker> mem_tracker);
 
     explicit DeltaWriter(DeltaWriterImpl* impl) : _impl(impl) {}
 
