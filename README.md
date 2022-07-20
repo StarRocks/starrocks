@@ -75,6 +75,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules：Front
 
 | Section | Description |
 |-|-|
+| [Build](https://github.com/StarRocks/starrocks/blob/main/docs/administration/Build_in_docker.md) | Build StarRocks in docker.|
 | [Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy) | Learn how to run and configure StarRocks.|
 | [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://www.starrocks.com/en-US/blog) | StarRocks deep dive and user stories.  |
