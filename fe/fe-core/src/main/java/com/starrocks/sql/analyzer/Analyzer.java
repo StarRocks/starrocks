@@ -7,6 +7,7 @@ import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateRoleStmt;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.DeleteStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.LimitElement;
@@ -616,7 +617,13 @@ public class Analyzer {
 
         @Override
         public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
-            CreateRepositoryAnalyzer.analyze(statement, context);
+            RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStmt(DropRepositoryStmt statement, ConnectContext context) {
+            RepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }
