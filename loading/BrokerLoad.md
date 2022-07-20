@@ -35,7 +35,7 @@ Broker Load 支持从如下外部云存储系统导入数据：
 
 Broker Load 需要借助 Broker 程序程访问外部云存储系统。因此，使用 Broker Load 前，您需要提前部署好 Broker 程序。
 
-Broker 程序的部署可参考[部署 Broker 节点](/quick_start/Deploy.md)。
+Broker 程序的部署可参考[部署 Broker 节点](/administration/deploy_broker.md)。
 
 ### 创建导入作业
 
