@@ -152,7 +152,6 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
-import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
@@ -3079,15 +3078,16 @@ public class GlobalStateMgr {
     }
 
     public StateChangeExecution getStateChangeExecution() {
+        GlobalStateMgr gsm = this;
         StateChangeExecution execution = new StateChangeExecution() {
             @Override
             public void transferToLeader(FrontendNodeType newType) {
-                transferToMaster(newType);
+                gsm.transferToLeader(newType);
             }
 
             @Override
             public void transferToNonLeader(FrontendNodeType newType) {
-                transferToNonMaster(newType);
+                gsm.transferToNonLeader(newType);
             }
         };
         return execution;

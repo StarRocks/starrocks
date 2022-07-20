@@ -71,26 +71,26 @@ public class StateChangeExecutorTest {
                 return execution.getType();
             }
         };
-        // INIT -> MASTER
+        // INIT -> LEADER
         execution.setType(FrontendNodeType.INIT);
         Assert.assertEquals(FrontendNodeType.INIT, execution.getType());
-        notifyAndCheck(FrontendNodeType.MASTER, execution);
+        notifyAndCheck(FrontendNodeType.LEADER, execution);
 
         // INIT -> FOLLOWER
         execution.setType(FrontendNodeType.INIT);
         notifyAndCheck(FrontendNodeType.FOLLOWER, execution);
 
-        // UNKNOWN -> MASTER
+        // UNKNOWN -> LEADER
         execution.setType(FrontendNodeType.UNKNOWN);
-        notifyAndCheck(FrontendNodeType.MASTER, execution);
+        notifyAndCheck(FrontendNodeType.LEADER, execution);
 
         // UNKNOWN -> FOLLOWER
         execution.setType(FrontendNodeType.UNKNOWN);
         notifyAndCheck(FrontendNodeType.FOLLOWER, execution);
 
-        // FOLLOWER -> MASTER
+        // FOLLOWER -> LEADER
         execution.setType(FrontendNodeType.FOLLOWER);
-        notifyAndCheck(FrontendNodeType.MASTER, execution);
+        notifyAndCheck(FrontendNodeType.LEADER, execution);
 
         // FOLLOWER -> UNKNOWN
         execution.setType(FrontendNodeType.FOLLOWER);

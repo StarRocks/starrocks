@@ -71,17 +71,17 @@ public class StateChangeExecutor extends Daemon {
             }
 
             /*
-             * INIT -> MASTER: transferToLeader
+             * INIT -> LEADER: transferToLeader
              * INIT -> FOLLOWER/OBSERVER: transferToNonLeader
-             * UNKNOWN -> MASTER: transferToLeader
+             * UNKNOWN -> LEADER: transferToLeader
              * UNKNOWN -> FOLLOWER/OBSERVER: transferToNonLeader
-             * FOLLOWER -> MASTER: transferToLeader
+             * FOLLOWER -> LEADER: transferToLeader
              * FOLLOWER/OBSERVER -> INIT/UNKNOWN: set isReady to false
              */
             switch (feType) {
                 case INIT: {
                     switch (newType) {
-                        case MASTER: {
+                        case LEADER: {
                             for (StateChangeExecution execution : executions) {
                                 execution.transferToLeader(newType);
                             }
@@ -103,7 +103,7 @@ public class StateChangeExecutor extends Daemon {
                 }
                 case UNKNOWN: {
                     switch (newType) {
-                        case MASTER: {
+                        case LEADER: {
                             for (StateChangeExecution execution : executions) {
                                 execution.transferToLeader(newType);
                             }
@@ -123,7 +123,7 @@ public class StateChangeExecutor extends Daemon {
                 }
                 case FOLLOWER: {
                     switch (newType) {
-                        case MASTER: {
+                        case LEADER: {
                             for (StateChangeExecution execution : executions) {
                                 execution.transferToLeader(newType);
                             }
@@ -148,9 +148,9 @@ public class StateChangeExecutor extends Daemon {
                     }
                     break;
                 }
-                case MASTER: {
-                    // exit if master changed to any other type
-                    String msg = "transfer FE type from MASTER to " + newType.name() + ". exit";
+                case LEADER: {
+                    // exit if leader changed to any other type
+                    String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
                     LOG.error(msg);
                     Util.stdoutWithTime(msg);
                     System.exit(-1);
