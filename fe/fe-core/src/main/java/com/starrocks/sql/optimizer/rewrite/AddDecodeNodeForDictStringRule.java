@@ -850,7 +850,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
-                    if (dict == null || !dict.isPresent()) {
+                    if (!dict.isPresent()) {
                         continue;
                     }
                     globalDictCache.put(new Pair<>(table.getId(), column.getName()), dict.get());
