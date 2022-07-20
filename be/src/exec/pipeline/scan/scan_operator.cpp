@@ -12,6 +12,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -280,12 +281,15 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
+    starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
+    query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task =
-                workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index](int worker_id) {
+        workgroup::ScanTask task = workgroup::ScanTask(
+                _workgroup, [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx](int worker_id) {
                     if (auto sp = wp.lock()) {
                         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-
+                        [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                        QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
                         auto& chunk_source = _chunk_sources[chunk_source_index];
                         size_t num_read_chunks = 0;
                         int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
@@ -306,6 +310,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                         _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                                   chunk_source->get_scan_rows() - prev_scan_rows,
                                                   chunk_source->get_scan_bytes() - prev_scan_bytes);
+                        QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
                     }
                 });
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
@@ -315,10 +320,11 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx]() {
             if (auto sp = wp.lock()) {
                 SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-
+                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
                 auto& chunk_source = _chunk_sources[chunk_source_index];
                 int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
                 int64_t prev_scan_rows = chunk_source->get_scan_rows();
@@ -334,6 +340,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                           chunk_source->get_scan_rows() - prev_scan_rows,
                                           chunk_source->get_scan_bytes() - prev_scan_bytes);
+                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
             }
         };
         // TODO(by satanson): set a proper priority

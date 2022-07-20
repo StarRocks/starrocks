@@ -634,7 +634,7 @@ public class Auth implements Writable {
             // other user properties
             propertyMgr.addUserResource(userIdent.getQualifiedUser()  /* not system user */);
 
-            if (!userIdent.getQualifiedUser().equals(ROOT_USER) && !userIdent.getQualifiedUser().equals(ADMIN_USER)) {
+            if (!userIdent.getQualifiedUser().equals(ROOT_USER)) {
                 // grant read privs to database information_schema
                 TablePattern tblPattern = new TablePattern(InfoSchemaDb.DATABASE_NAME, "*");
                 try {
@@ -660,8 +660,8 @@ public class Auth implements Writable {
     public void dropUser(DropUserStmt stmt) throws DdlException {
         String user = stmt.getUserIdentity().getQualifiedUser();
         String host = stmt.getUserIdentity().getHost();
-        if ((ROOT_USER.equals(user) || ADMIN_USER.equals(user)) && "%".equals(host)) {
-            // Dropping `root@%` and `admin@%` is not allowed for `default_cluster`.
+        if (ROOT_USER.equals(user) && "%".equals(host)) {
+            // Dropping `root@%` is not allowed
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 

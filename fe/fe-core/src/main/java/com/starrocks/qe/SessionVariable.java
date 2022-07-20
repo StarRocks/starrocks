@@ -240,6 +240,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
 
+    public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -256,6 +258,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -559,6 +562,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryDebugTrace = false;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -1025,6 +1031,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeFilterOnExchangeNode;
     }
 
+    public boolean isEnableQueryDebugTrace() {
+        return enableQueryDebugTrace;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1084,6 +1094,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+        tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
 
         return tResult;
     }

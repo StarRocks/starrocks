@@ -37,7 +37,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -55,7 +55,7 @@ import java.util.stream.IntStream;
 /**
  * ColocateTableBalancer is responsible for tablets' repair and balance of colocated tables.
  */
-public class ColocateTableBalancer extends MasterDaemon {
+public class ColocateTableBalancer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ColocateTableBalancer.class);
 
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second

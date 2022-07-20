@@ -39,6 +39,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -371,6 +372,7 @@ void PlanFragmentExecutor::cancel() {
     if (_is_runtime_filter_merge_node) {
         _runtime_state->exec_env()->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->runtime_filter_cache()->remove(_query_id);
 }
 
 const RowDescriptor& PlanFragmentExecutor::row_desc() {
@@ -413,6 +415,7 @@ void PlanFragmentExecutor::close() {
     if (_is_runtime_filter_merge_node) {
         _exec_env->runtime_filter_worker()->close_query(_query_id);
     }
+    _exec_env->runtime_filter_cache()->remove(_query_id);
     _exec_env->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
 
     // Prepare may not have been called, which sets _runtime_state

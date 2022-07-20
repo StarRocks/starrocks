@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.master;
+package com.starrocks.leader;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.LinkedListMultimap;

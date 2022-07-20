@@ -71,6 +71,7 @@ private:
 
 class FragmentExecutor {
 public:
+    FragmentExecutor();
     Status prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
@@ -100,6 +101,7 @@ private:
                                             const UnifiedExecPlanFragmentParams& request,
                                             std::unique_ptr<starrocks::DataSink>& datasink);
 
+    int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;
     FragmentContextPtr _fragment_ctx = nullptr;
     workgroup::WorkGroupPtr _wg = nullptr;

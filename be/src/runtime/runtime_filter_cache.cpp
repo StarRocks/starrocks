@@ -43,7 +43,7 @@ private:
     void _extend_lifetime() const {
         _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + EXPIRE_SECONDS).count();
     }
-    std::unordered_map<int, std::shared_ptr<vectorized::JoinRuntimeFilter>> _filters;
+    std::unordered_map<int, std::shared_ptr<const vectorized::JoinRuntimeFilter>> _filters;
     mutable int64_t _deadline;
     static constexpr seconds EXPIRE_SECONDS = seconds(60);
 };
