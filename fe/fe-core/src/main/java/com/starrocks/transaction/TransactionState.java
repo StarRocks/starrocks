@@ -188,7 +188,7 @@ public class TransactionState implements Writable {
     private List<Long> tableIdList;
     private long transactionId;
     private String label;
-    // requestId is used to judge whether a begin request is a internal retry request.
+    // requestId is used to judge whether a begin request is an internal retry request.
     // no need to persist it.
     private TUniqueId requestId;
     private Map<Long, TableCommitInfo> idToTableCommitInfos;
@@ -204,7 +204,7 @@ public class TransactionState implements Writable {
     private Set<Long> errorReplicas;
     private CountDownLatch latch;
 
-    // this state need not to be serialized
+    // these states need not be serialized
     private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;

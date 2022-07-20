@@ -123,7 +123,7 @@ WorkGroupManager::WorkGroupManager() {
     _scan_worker_owner_manager = std::make_unique<WorkerOwnerManager>(
             config::pipeline_scan_thread_pool_thread_num > 0 ? config::pipeline_scan_thread_pool_thread_num
                                                              : std::thread::hardware_concurrency());
-    _hdfs_scan_worker_owner_manager =
+    _connector_scan_worker_owner_manager =
             std::make_unique<WorkerOwnerManager>(config::pipeline_hdfs_scan_thread_pool_thread_num);
 }
 
@@ -133,7 +133,7 @@ void WorkGroupManager::destroy() {
 
     _driver_worker_owner_manager.reset(nullptr);
     _scan_worker_owner_manager.reset(nullptr);
-    _hdfs_scan_worker_owner_manager.reset(nullptr);
+    _connector_scan_worker_owner_manager.reset(nullptr);
     update_metrics_unlocked();
     _workgroups.clear();
 }
@@ -490,7 +490,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
 void WorkGroupManager::reassign_worker_to_wgs() {
     _driver_worker_owner_manager->reassign_to_wgs(_workgroups, _sum_cpu_limit);
     _scan_worker_owner_manager->reassign_to_wgs(_workgroups, _sum_cpu_limit);
-    _hdfs_scan_worker_owner_manager->reassign_to_wgs(_workgroups, _sum_cpu_limit);
+    _connector_scan_worker_owner_manager->reassign_to_wgs(_workgroups, _sum_cpu_limit);
 }
 
 std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_driver_worker(int worker_id) {
@@ -503,13 +503,13 @@ bool WorkGroupManager::should_yield_driver_worker(int worker_id, WorkGroupPtr ru
 
 std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_scan_worker(ScanExecutorType type, int worker_id) {
     return type == TypeOlapScanExecutor ? _scan_worker_owner_manager->get_owners(worker_id)
-                                        : _hdfs_scan_worker_owner_manager->get_owners(worker_id);
+                                        : _connector_scan_worker_owner_manager->get_owners(worker_id);
 }
 
 bool WorkGroupManager::get_owners_of_scan_worker(ScanExecutorType type, int worker_id, WorkGroupPtr running_wg) {
     return type == TypeOlapScanExecutor
                    ? _scan_worker_owner_manager->should_yield(worker_id, std::move(running_wg))
-                   : _hdfs_scan_worker_owner_manager->should_yield(worker_id, std::move(running_wg));
+                   : _connector_scan_worker_owner_manager->should_yield(worker_id, std::move(running_wg));
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {

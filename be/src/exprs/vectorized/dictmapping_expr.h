@@ -24,12 +24,29 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictMappingExpr(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override { return get_child(1)->evaluate(context, ptr); }
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
+
+    void rewrite(Expr* expr) {
+        DCHECK(dict_func_expr == nullptr);
+        DCHECK(expr != nullptr);
+        dict_func_expr = expr;
+        add_child(dict_func_expr);
+    }
 
     SlotId slot_id() {
+        DCHECK(dict_func_expr == nullptr);
         DCHECK_EQ(children().size(), 2);
         return down_cast<const ColumnRef*>(get_child(0))->slot_id();
     }
-    int get_slot_ids(std::vector<SlotId>* slot_ids) const override { return get_child(1)->get_slot_ids(slot_ids); }
+
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
+        DCHECK(dict_func_expr == nullptr);
+        return get_child(1)->get_slot_ids(slot_ids);
+    }
+
+private:
+    // used for dictionary expression calculation.
+    // the input columns are dictionary columns
+    Expr* dict_func_expr = nullptr;
 };
 } // namespace starrocks::vectorized

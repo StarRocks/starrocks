@@ -69,6 +69,25 @@ public:
         }
     }
 
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition) const override {
+        const auto* column = down_cast<const InputColumnType*>(columns[0]);
+        const auto* data = column->get_data().data();
+
+        const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+        const int64_t current_frame_last_position = current_row_position + rows_end_offset;
+        if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
+            previous_frame_first_position < partition_end) {
+            this->data(state).sum -= data[previous_frame_first_position];
+        }
+        if (!ignore_addition && current_frame_last_position >= partition_start &&
+            current_frame_last_position < partition_end) {
+            this->data(state).sum += data[current_frame_last_position];
+        }
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric() || column->is_decimal());
         const auto* input_column = down_cast<const ResultColumnType*>(column);

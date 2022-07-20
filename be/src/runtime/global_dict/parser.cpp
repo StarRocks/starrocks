@@ -5,6 +5,7 @@
 #include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
+#include "common/global_types.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
@@ -135,33 +136,31 @@ Status DictOptimizeParser::_check_could_apply_dict_optimize(Expr* expr, DictOpti
         dict_opt_ctx->could_apply_dict_optimize = true;
         return Status::OK();
     }
-
     return Status::OK();
 }
 
-Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
-                                           SlotId targetSlotId) {
-    SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
-    SlotId expr_slot_id = need_decode_slot_id;
+Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
+                                             int32_t targetSlotId) {
+    auto* dict_mapping = down_cast<DictMappingExpr*>(expr);
+    auto* origin_expr = dict_mapping->get_child(1);
+    std::vector<SlotId> slots;
+    dict_mapping->get_slot_ids(&slots);
 
-    Expr* origin_expr = expr_ctx->root();
-    if (auto f = dynamic_cast<DictMappingExpr*>(expr_ctx->root())) {
-        origin_expr = f->get_child(1);
-        std::vector<SlotId> slots;
-        f->get_slot_ids(&slots);
-        expr_slot_id = slots.back();
-    }
+    auto need_decode_slot_id = dict_mapping->slot_id();
+    dict_opt_ctx->slot_id = need_decode_slot_id;
+    SlotId expr_slot_id = slots.back();
 
     DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
     if (_mutable_dict_maps->count(need_decode_slot_id) == 0) {
         return Status::InternalError(fmt::format("couldn't found dict cid:{}", need_decode_slot_id));
     }
+
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
     auto [binary_column, codes] = extract_column_with_codes(column_dict_map);
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, expr_slot_id);
     // call inner expr with input column
-    ASSIGN_OR_RETURN(auto result_column, expr_ctx->evaluate(origin_expr, temp_chunk.get()));
+    ASSIGN_OR_RETURN(auto result_column, ctx->evaluate(origin_expr, temp_chunk.get()));
     // assign convert mapping column
     dict_opt_ctx->convert_column = result_column;
     // build code convert map
@@ -169,12 +168,13 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
     for (int i = 0; i < codes.size(); ++i) {
         dict_opt_ctx->code_convert_map[codes[i]] = i;
     }
+
     // insert dict result to global dicts
 
     // if dict expr return type not equels to origin expr return type
     // it means dict expr return a lowcardinality column. we need insert it
     // to global dicts
-    if (origin_expr->type().type != expr_ctx->root()->type().type) {
+    if (origin_expr->type().type != dict_mapping->type().type) {
         DCHECK_EQ(origin_expr->type().type, TYPE_VARCHAR);
         DCHECK_GE(targetSlotId, 0);
         ColumnViewer<TYPE_VARCHAR> viewer(result_column);
@@ -233,48 +233,44 @@ Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeCo
     return Status::OK();
 }
 
-template <bool close_original_expr>
+Status DictOptimizeParser::eval_expression(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
+                                           SlotId targetSlotId) {
+    return _eval_and_rewrite(expr_ctx, expr_ctx->root(), dict_opt_ctx, targetSlotId);
+}
+
+Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id) {
+    // call rewrite for each DictMappingExpr
+    if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
+        auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext());
+        RETURN_IF_ERROR(_eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id));
+        f->rewrite(_free_pool.add(new DictFuncExpr(*f, dict_ctx_handle)));
+        return Status::OK();
+    }
+
+    for (auto child : expr->children()) {
+        RETURN_IF_ERROR(rewrite_expr(ctx, child, -1));
+    }
+    return Status::OK();
+}
+
 Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                               const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
-        DictOptimizeContext dict_ctx;
-        _check_could_apply_dict_optimize(expr_ctx->root(), &dict_ctx);
-        if (dict_ctx.could_apply_dict_optimize) {
-            eval_expression(expr_ctx, &dict_ctx, slot_ids[i]);
-            auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext(std::move(dict_ctx)));
-            Expr* replaced_expr = _free_pool.add(new DictFuncExpr(*expr_ctx->root(), dict_ctx_handle));
-
-            // Because the ExprContext is close safe,
-            // Add both pre- and post-rewritten expressions to
-            // the free_list to ensure they are closed correctly
-            if constexpr (close_original_expr) {
-                _expr_close_list.emplace_back(expr_ctx);
-            }
-            expr_ctx = _free_pool.add(new ExprContext(replaced_expr));
-            expr_ctx->prepare(state);
-            expr_ctx->open(state);
-            _expr_close_list.emplace_back(expr_ctx);
-        }
+        auto expr = expr_ctx->root();
+        rewrite_expr(expr_ctx, expr, slot_ids[i]);
     }
     return Status::OK();
 }
 
-template <bool close_original_expr>
 Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    return _rewrite_expr_ctxs<close_original_expr>(pconjuncts_ctxs, state,
-                                                   std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
+    return _rewrite_expr_ctxs(pconjuncts_ctxs, state, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
 }
-
-template Status DictOptimizeParser::rewrite_conjuncts<true>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                            RuntimeState* state);
-template Status DictOptimizeParser::rewrite_conjuncts<false>(std::vector<ExprContext*>* conjuncts_ctxs,
-                                                             RuntimeState* state);
 
 Status DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
                                          const std::vector<SlotId>& target_slotids) {
-    return _rewrite_expr_ctxs<true>(pexpr_ctxs, state, target_slotids);
+    return _rewrite_expr_ctxs(pexpr_ctxs, state, target_slotids);
 }
 
 void DictOptimizeParser::close(RuntimeState* state) noexcept {

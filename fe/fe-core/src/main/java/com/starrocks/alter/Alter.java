@@ -140,7 +140,7 @@ public class Alter {
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
                         "please start to create materialized view after insert overwrite");
             }
-            olapTable.checkStableAndNormal(db.getClusterName());
+            olapTable.checkStableAndNormal();
 
             ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,
                     olapTable);
@@ -242,20 +242,42 @@ public class Alter {
                 processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
             } else if (refreshSchemeDesc != null) {
                 //change refresh scheme
-                processChangeRefreshScheme(refreshSchemeDesc, materializedView);
+                processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName);
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
         } finally {
             db.writeUnlock();
         }
-        if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+    }
+
+    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
+                                            String dbName) throws DdlException {
+        final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
+            asyncRefreshContext.setStep(step.getLongValue());
+            asyncRefreshContext.setTimeUnit(
+                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+        }
+        MaterializedView.RefreshType oldRefreshType = refreshScheme.getType();
+        final String refreshType = refreshSchemeDesc.getType().name();
+        final MaterializedView.RefreshType newRefreshType = MaterializedView.RefreshType.valueOf(refreshType);
+        refreshScheme.setType(newRefreshType);
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        if (oldRefreshType == MaterializedView.RefreshType.ASYNC) {
             //drop task
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
+        }
+
+        if (newRefreshType == MaterializedView.RefreshType.ASYNC) {
             // create task
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             MaterializedView.AsyncRefreshContext asyncRefreshContext =
@@ -271,23 +293,6 @@ public class Alter {
             // run task
             taskManager.executeTask(task.getName());
         }
-    }
-
-    private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView) {
-        final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
-        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
-            asyncRefreshContext.setStep(step.getLongValue());
-            asyncRefreshContext.setTimeUnit(
-                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
-        }
-        MaterializedView.RefreshType oldRefreshType = refreshScheme.getType();
-        final String refreshType = refreshSchemeDesc.getType().name();
-        final MaterializedView.RefreshType newRefreshType = MaterializedView.RefreshType.valueOf(refreshType);
-        refreshScheme.setType(newRefreshType);
 
         final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);

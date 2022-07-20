@@ -3,12 +3,15 @@
 #include "storage/lake/tablet.h"
 
 #include "column/schema.h"
+#include "fs/fs.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
+#include "storage/rowset/segment.h"
 
 namespace starrocks::lake {
 
@@ -67,6 +70,23 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;
+}
+
+StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
+                                          bool fill_cache) {
+    auto segment = _mgr->lookup_segment(segment_name);
+    if (segment != nullptr) {
+        return segment;
+    }
+    auto location = segment_location(segment_name);
+    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+    ASSIGN_OR_RETURN(segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, location, seg_id,
+                                            tablet_schema.get(), footer_size_hint));
+    if (fill_cache) {
+        _mgr->cache_segment(segment_name, segment);
+    }
+    return segment;
 }
 
 std::string Tablet::metadata_location(int64_t version) const {

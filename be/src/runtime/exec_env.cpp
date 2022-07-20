@@ -146,23 +146,22 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                    config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
 
-    int hdfs_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
-    CHECK_GT(hdfs_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
+    int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
+    CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
 
-    _pipeline_hdfs_scan_io_thread_pool =
-            new PriorityThreadPool("pip_hdfs_scan_io", // pipeline hdfs scan io
-                                   hdfs_num_io_threads, config::pipeline_scan_thread_pool_queue_size);
+    _pipeline_connector_scan_io_thread_pool = new PriorityThreadPool("pip_connector_scan_io", connector_num_io_threads,
+                                                                     config::pipeline_scan_thread_pool_queue_size);
 
-    std::unique_ptr<ThreadPool> hdfs_scan_worker_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("hdfs_scan_executor") // hdfs_scan io task executor
+    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("connector_scan_executor")
                             .set_min_threads(0)
-                            .set_max_threads(hdfs_num_io_threads)
+                            .set_max_threads(connector_num_io_threads)
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&hdfs_scan_worker_thread_pool));
-    _hdfs_scan_executor =
-            new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool), workgroup::TypeHdfsScanExecutor);
-    _hdfs_scan_executor->initialize(hdfs_num_io_threads);
+                            .build(&connector_scan_worker_thread_pool));
+    _connector_scan_executor = new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool),
+                                                           workgroup::TypeConnectorScanExecutor);
+    _connector_scan_executor->initialize(connector_num_io_threads);
 
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
@@ -254,9 +253,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 #else
         _lake_location_provider = new lake::StarletLocationProvider();
 #endif
-        // TODO: cache capacity configurable
-        _lake_tablet_manager =
-                new lake::TabletManager(_lake_location_provider, /*cache_capacity=1GB*/ 1024 * 1024 * 1024);
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
     }
     _broker_mgr->init();
     _small_file_mgr->init();
@@ -444,17 +441,17 @@ void ExecEnv::_destroy() {
         delete _pipeline_scan_io_thread_pool;
         _pipeline_scan_io_thread_pool = nullptr;
     }
-    if (_pipeline_hdfs_scan_io_thread_pool) {
-        delete _pipeline_hdfs_scan_io_thread_pool;
-        _pipeline_hdfs_scan_io_thread_pool = nullptr;
+    if (_pipeline_connector_scan_io_thread_pool) {
+        delete _pipeline_connector_scan_io_thread_pool;
+        _pipeline_connector_scan_io_thread_pool = nullptr;
     }
     if (_scan_executor) {
         delete _scan_executor;
         _scan_executor = nullptr;
     }
-    if (_hdfs_scan_executor) {
-        delete _hdfs_scan_executor;
-        _hdfs_scan_executor = nullptr;
+    if (_connector_scan_executor) {
+        delete _connector_scan_executor;
+        _connector_scan_executor = nullptr;
     }
     if (_runtime_filter_cache) {
         delete _runtime_filter_cache;

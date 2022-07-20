@@ -85,7 +85,7 @@ public abstract class Type implements Cloneable {
 
     // DECIMAL64_INT and DECIMAL128_INT for integer casting to decimal
     public static final ScalarType DECIMAL_ZERO =
-            ScalarType.createDecimalV3TypeForZero();
+            ScalarType.createDecimalV3TypeForZero(0);
     public static final ScalarType DECIMAL32_INT =
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 9, 0);
     public static final ScalarType DECIMAL64_INT =

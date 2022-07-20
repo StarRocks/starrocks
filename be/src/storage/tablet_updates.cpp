@@ -1044,8 +1044,8 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
     return itr->second;
 }
 
-Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms) {
-    std::unique_lock<std::mutex> ul(_lock);
+Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t timeout_ms,
+                                        std::unique_lock<std::mutex>& ul) {
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when _wait_for_version tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -1149,7 +1149,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     EditVersion version;
     RETURN_IF_ERROR(_commit_compaction(pinfo, *output_rowset, &version));
     // already committed, so we can ignore timeout error here
-    _wait_for_version(version, 120000);
+    std::unique_lock<std::mutex> ul(_lock);
+    _wait_for_version(version, 120000, ul);
     return Status::OK();
 }
 
@@ -2164,9 +2165,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                 Substitute("get_applied_rowsets failed, tablet updates is in error state: tablet:$0 $1",
                            _tablet.tablet_id(), _error_msg));
     }
-    // TODO(cbl): optimize: following code lock _lock twice, should make it just lock once
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000));
-    std::lock_guard rl(_lock);
+    std::unique_lock<std::mutex> ul(_lock);
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000, ul));
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;

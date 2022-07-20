@@ -33,8 +33,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.catalog.WorkGroup;
-import com.starrocks.catalog.WorkGroupClassifier;
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -105,7 +105,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
-import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -215,7 +214,6 @@ public class Coordinator {
     private final boolean preferComputeNode;
     //this query use compute node number
     private final int useComputeNodeNumber;
-    private final String clusterName;
     // force schedule local be for HybridBackendSelector
     // only for hive now
     private boolean forceScheduleLocal = false;
@@ -224,6 +222,9 @@ public class Coordinator {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
+
+    // Resource group
+    ResourceGroup resourceGroup = null;
 
     private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
@@ -262,7 +263,6 @@ public class Coordinator {
         this.needReport = context.getSessionVariable().isReportSucc();
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
         this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
-        this.clusterName = context.getClusterName();
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -271,7 +271,7 @@ public class Coordinator {
 
     // Used for broker load task/export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
-                       List<ScanNode> scanNodes, String cluster, String timezone, long startTime) {
+                       List<ScanNode> scanNodes, String timezone, long startTime) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -287,7 +287,6 @@ public class Coordinator {
         this.needReport = true;
         this.preferComputeNode = false;
         this.useComputeNodeNumber = -1;
-        this.clusterName = cluster;
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -452,21 +451,26 @@ public class Coordinator {
     // 'Request' must contain at least a coordinator plan fragment (ie, can't
     // be for a query like 'SELECT 1').
     // A call to Exec() must precede all other member function calls.
-    public void exec() throws Exception {
-        if (LOG.isDebugEnabled() && !scanNodes.isEmpty()) {
-            LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
-                    DebugUtil.printId(queryId), scanNodes.get(0).treeToThrift());
+    public void prepareExec() throws Exception {
+        if (LOG.isDebugEnabled()) {
+            if (!scanNodes.isEmpty()) {
+                LOG.debug("debug: in Coordinator::exec. query id: {}, planNode: {}",
+                        DebugUtil.printId(queryId), scanNodes.get(0).treeToThrift());
+            }
+            if (!fragments.isEmpty()) {
+                LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
+                        DebugUtil.printId(queryId), fragments.get(0).toThrift());
+            }
+            LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
+                    DebugUtil.printId(queryId), descTable);
         }
-
-        if (LOG.isDebugEnabled() && !fragments.isEmpty()) {
-            LOG.debug("debug: in Coordinator::exec. query id: {}, fragment: {}",
-                    DebugUtil.printId(queryId), fragments.get(0).toThrift());
-        }
-        LOG.debug("debug: in Coordinator::exec. query id: {}, desc table: {}",
-                DebugUtil.printId(queryId), descTable);
 
         // prepare information
         prepare();
+
+        // prepare workgroup
+        this.resourceGroup = prepareResourceGroup(connectContext);
+
         // compute Fragment Instance
         computeScanRangeAssignment();
 
@@ -475,6 +479,73 @@ public class Coordinator {
         traceInstance();
 
         // create result receiver
+        prepareResultSink();
+
+        computeBeInstanceNumbers();
+
+        prepareProfile();
+    }
+
+    public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
+        return fragmentExecParamsMap;
+    }
+
+    public List<PlanFragment> getFragments() {
+        return fragments;
+    }
+
+    public void exec() throws Exception {
+        prepareExec();
+        deliverExecFragments();
+    }
+
+
+    public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
+        ResourceGroup resourceGroup = null;
+        if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
+            return resourceGroup;
+        }
+        SessionVariable sessionVariable = connect.getSessionVariable();
+
+        // 1. try to use the resource group specified by the variable
+        if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
+            String rgName = sessionVariable.getResourceGroup();
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+        }
+
+        // 2. try to use the resource group specified by workgroup_id
+        long workgroupId = connect.getSessionVariable().getResourceGroupId();
+        if (resourceGroup == null && workgroupId > 0) {
+            resourceGroup = new ResourceGroup();
+            resourceGroup.setId(workgroupId);
+        }
+
+        // 3. if the specified resource group not exist try to use the default one
+        if (resourceGroup == null) {
+            Set<Long> dbIds = connect.getCurrentSqlDbIds();
+            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                    connect, ResourceGroupClassifier.QueryType.SELECT, dbIds);
+        }
+
+        if (resourceGroup != null) {
+            connect.getAuditEventBuilder().setResourceGroup(resourceGroup.getName());
+            connect.setResourceGroup(resourceGroup);
+        }
+
+        return resourceGroup;
+    }
+
+    private void prepareProfile() {
+        // to keep things simple, make async Cancel() calls wait until plan fragment
+        // execution has been initiated, otherwise we might try to cancel fragment
+        // execution at backends where it hasn't even started
+        profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
+        for (TUniqueId instanceId : instanceIds) {
+            profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
+        }
+    }
+
+    private void prepareResultSink() throws Exception {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
         FragmentExecParams topParams = fragmentExecParamsMap.get(topId);
         if (topParams.fragment.getSink() instanceof ResultSink) {
@@ -512,18 +583,6 @@ public class Coordinator {
                     relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId), addressToBackendID.keySet());
         }
-
-        computeBeInstanceNumbers();
-
-        // to keep things simple, make async Cancel() calls wait until plan fragment
-        // execution has been initiated, otherwise we might try to cancel fragment
-        // execution at backends where it hasn't even started
-        profileDoneSignal = new MarkedCountDownLatch<>(instanceIds.size());
-        for (TUniqueId instanceId : instanceIds) {
-            profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
-        }
-
-        deliverExecFragments();
     }
 
     private void deliverExecFragments() throws Exception {
@@ -611,13 +670,11 @@ public class Coordinator {
                             params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine);
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
-                    boolean needCheckBackendState = false;
-                    if (queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0) {
-                        // this is a load process, and it is the first fragment.
-                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
-                        // so that we can check these backends' state when joining this Coordinator
-                        needCheckBackendState = true;
-                    }
+                    // This is a load process, and it is the first fragment.
+                    // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                    // so that we can check these backends' state when joining this Coordinator
+                    boolean needCheckBackendState =
+                            queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
@@ -693,19 +750,19 @@ public class Coordinator {
      * - Each group should be delivered sequentially, and fragments in a group can be delivered concurrently.
      * <p>
      * For example, the following tree will produce four groups: [[1], [2, 3, 4], [5, 6], [7]]
-     *         1
-     *         │
-     *    ┌────┼────┐
-     *    │    │    │
-     *    2    3    4
-     *    │    │    │
-     * ┌──┴─┐  │    │
-     * │    │  │    │
-     * 5    6  │    │
-     *      │  │    │
-     *      └──┼────┘
-     *         │
-     *         7
+     * -     *         1
+     * -     *         │
+     * -     *    ┌────┼────┐
+     * -     *    │    │    │
+     * -     *    2    3    4
+     * -     *    │    │    │
+     * -     * ┌──┴─┐  │    │
+     * -     * │    │  │    │
+     * -     * 5    6  │    │
+     * -     *      │  │    │
+     * -     *      └──┼────┘
+     * -     *         │
+     * -     *         7
      *
      * @return multiple fragment groups.
      */
@@ -1011,6 +1068,7 @@ public class Coordinator {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
+        Map<Integer, List<TRuntimeFilterProberParams>> idToProbePrams = new HashMap<>();
 
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
@@ -1028,7 +1086,7 @@ public class Coordinator {
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
                     broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
                 } else {
-                    topParams.runtimeFilterParams.putToId_to_prober_params(kv.getKey(), probeParamList);
+                    idToProbePrams.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 }
             }
 
@@ -1056,6 +1114,7 @@ public class Coordinator {
             }
             fragment.setRuntimeFilterMergeNodeAddresses(fragment.getPlanRoot(), mergeHost);
         }
+        topParams.runtimeFilterParams.setId_to_prober_params(idToProbePrams);
 
         broadcastGRFList.forEach(rf -> rf.setBroadcastGRFDestinations(
                 mergeGRFProbers(broadcastGRFProbersMap.get(rf.getFilterId()))));
@@ -2622,32 +2681,6 @@ public class Coordinator {
             }
         }
 
-        private WorkGroup chooseWorkGroup(Set<Long> dbIds) {
-            WorkGroup workgroup = null;
-            if (connectContext != null && connectContext.getSessionVariable().isEnableResourceGroup()) {
-                SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-                // First try to use the resource group specified by the variable
-                if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
-                    String rgName = sessionVariable.getResourceGroup();
-                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroupByName(rgName);
-                }
-
-                // Second if the specified resource group not exist try to use the default one
-                if (workgroup == null) {
-                    workgroup = GlobalStateMgr.getCurrentState().getWorkGroupMgr().chooseWorkGroup(
-                            connectContext, WorkGroupClassifier.QueryType.SELECT, dbIds);
-                }
-
-                if (workgroup != null) {
-                    connectContext.getAuditEventBuilder().setResourceGroup(workgroup.getName());
-                    connectContext.setWorkGroup(workgroup);
-                }
-            }
-
-            return workgroup;
-        }
-
         /**
          * Set the common fields of all the fragment instances to the destination common thrift params.
          *
@@ -2655,12 +2688,10 @@ public class Coordinator {
          * @param destHost               The destination host to delivery these instances.
          * @param descTable              The descriptor table, empty for the non-first instance
          *                               when enable pipeline and disable multi fragments in one request.
-         * @param workgroup              The workgroup for this query, used when enable pipeline and enable resource group.
          * @param isEnablePipelineEngine Whether enable pipeline engine.
          */
         private void toThriftForCommonParams(TExecPlanFragmentParams commonParams,
                                              TNetworkAddress destHost, TDescriptorTable descTable,
-                                             WorkGroup workgroup,
                                              boolean isEnablePipelineEngine) {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
@@ -2700,18 +2731,8 @@ public class Coordinator {
 
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
-                    if (enableResourceGroup) {
-                        // session variable workgroup_id is just for verification of resource isolation.
-                        long workgroupId = connectContext.getSessionVariable().getWorkGroupId();
-                        if (workgroupId > 0) {
-                            TWorkGroup wg = new TWorkGroup();
-                            wg.setName("");
-                            wg.setId(connectContext.getSessionVariable().getWorkGroupId());
-                            wg.setVersion(0);
-                            commonParams.setWorkgroup(wg);
-                        } else if (workgroup != null) {
-                            commonParams.setWorkgroup(workgroup.toThrift());
-                        }
+                    if (enableResourceGroup && resourceGroup != null) {
+                        commonParams.setWorkgroup(resourceGroup.toThrift());
                     }
                 }
             }
@@ -2828,7 +2849,6 @@ public class Coordinator {
                                                TDescriptorTable descTable,
                                                Set<Long> dbIds,
                                                boolean enablePipelineEngine) throws Exception {
-            WorkGroup workgroup = chooseWorkGroup(dbIds);
             setBucketSeqToInstanceForRuntimeFilters();
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
@@ -2839,8 +2859,7 @@ public class Coordinator {
                 }
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
-                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, workgroup,
-                        enablePipelineEngine);
+                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine);
                 toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine);
 
                 paramsList.add(params);
@@ -2850,14 +2869,11 @@ public class Coordinator {
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds,
-                boolean enablePipelineEngine) throws Exception {
-
-            WorkGroup workgroup = chooseWorkGroup(dbIds);
+                Set<Long> dbIds, boolean enablePipelineEngine) throws Exception {
             setBucketSeqToInstanceForRuntimeFilters();
 
             TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, destHost, descTable, workgroup, enablePipelineEngine);
+            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine);
             fillRequiredFieldsToThrift(commonParams);
 
             List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();

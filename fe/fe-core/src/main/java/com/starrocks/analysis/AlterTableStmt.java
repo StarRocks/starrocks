@@ -74,7 +74,7 @@ public class AlterTableStmt extends DdlStmt {
                     tbl.getTbl(), tbl.getTbl());
         }
 
-        CatalogUtils.checkOlapTableHasStarOSPartition(tbl.getDb(), tbl.getTbl());
+        CatalogUtils.checkIsLakeTable(tbl.getDb(), tbl.getTbl());
 
         if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tbl.getDb(), tbl.getTbl(),
                 PrivPredicate.ALTER)) {
