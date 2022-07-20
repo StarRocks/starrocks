@@ -40,11 +40,6 @@ struct HistogramState {
     std::vector<T> data;
 };
 
-template <typename T>
-struct CmpPair {
-    bool operator()(const std::pair<T, int>& lhs, const std::pair<T, int>& rhs) { return lhs.second > rhs.second; }
-};
-
 template <PrimitiveType PT, typename T = RunTimeCppType<PT>>
 class HistogramAggregationFunction final
         : public AggregateFunctionBatchHelper<HistogramState<T>, HistogramAggregationFunction<PT, T>> {
@@ -130,7 +125,10 @@ public:
         }
         frequency_vec.emplace_back(std::make_pair(last_value, count));
         //Sort by frequency
-        std::sort(frequency_vec.begin(), frequency_vec.end(), CmpPair<T>());
+        std::sort(frequency_vec.begin(), frequency_vec.end(),
+                  [](const std::pair<T, int>& lhs, const std::pair<T, int>& rhs) -> bool {
+                      return lhs.second > rhs.second;
+                  });
 
         int top_n_size = std::min((int)ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(3)),
                                   (int)frequency_vec.size());
