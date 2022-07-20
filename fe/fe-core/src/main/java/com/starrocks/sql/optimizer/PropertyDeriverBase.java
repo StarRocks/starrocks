@@ -121,6 +121,12 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
                 new HashDistributionDesc(partitionColumns, HashDistributionDesc.SourceType.SHUFFLE_AGG)));
     }
 
+    protected PhysicalPropertySet createLocalShuffleAggPropertySet() {
+        HashDistributionDesc desc = new HashDistributionDesc(HashDistributionDesc.SourceType.SHUFFLE_AGG, true);
+        DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(desc));
+        return new PhysicalPropertySet(property);
+    }
+
     protected PhysicalPropertySet createShuffleAggPropertySet(List<Integer> partitions) {
         HashDistributionDesc desc = new HashDistributionDesc(partitions, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(desc));

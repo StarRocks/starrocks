@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.EsScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.GenerateAggregateWithLocalShuffleRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
@@ -315,6 +316,10 @@ public class RuleSet {
 
     public void addJoinCommutativityWithOutInnerRule() {
         transformRules.add(JoinCommutativityWithOutInnerRule.getInstance());
+    }
+
+    public void addGenerateAggregateWithLocalShuffleRule() {
+        transformRules.add(GenerateAggregateWithLocalShuffleRule.getInstance());
     }
 
     public List<Rule> getTransformRules() {

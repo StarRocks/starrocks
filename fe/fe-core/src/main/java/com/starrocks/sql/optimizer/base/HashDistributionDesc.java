@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 
 import java.util.List;
 import java.util.Objects;
@@ -30,10 +31,19 @@ public class HashDistributionDesc {
     // Which operator produce this hash DistributionDesc
     private final SourceType sourceType;
 
+    private final boolean withLocalShuffle;
+
     public HashDistributionDesc(List<Integer> columns, SourceType sourceType) {
         this.columns = columns;
         this.sourceType = sourceType;
+        this.withLocalShuffle = false;
         Preconditions.checkState(!columns.isEmpty());
+    }
+
+    public HashDistributionDesc(SourceType sourceType, boolean withLocalShuffle) {
+        this.columns = Lists.newArrayList();
+        this.sourceType = sourceType;
+        this.withLocalShuffle = withLocalShuffle;
     }
 
     public List<Integer> getColumns() {
@@ -86,6 +96,10 @@ public class HashDistributionDesc {
         return this.sourceType == SourceType.SHUFFLE_AGG;
     }
 
+    public boolean isAggWithLocalShuffle() {
+        return isAggShuffle() && withLocalShuffle;
+    }
+
     public boolean isShuffleEnforce() {
         return this.sourceType == SourceType.SHUFFLE_ENFORCE;
     }
@@ -106,6 +120,10 @@ public class HashDistributionDesc {
 
         HashDistributionDesc other = (HashDistributionDesc) o;
         if (!sourceType.equals(other.sourceType)) {
+            return false;
+        }
+
+        if (withLocalShuffle != other.withLocalShuffle) {
             return false;
         }
 

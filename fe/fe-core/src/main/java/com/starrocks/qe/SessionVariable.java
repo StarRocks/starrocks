@@ -145,6 +145,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // them do the real work on core.
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
+    public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
+
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
@@ -275,6 +277,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
     private boolean enableDeliverBatchFragments = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOCAL_SHUFFLE_AGG)
+    private boolean enableLocalShuffleAgg = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -710,6 +715,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
     }
 
+    public boolean isAdoptedPipelineDop() {
+        return pipelineDop == 0;
+    }
+
     public void setParallelExecInstanceNum(int parallelExecInstanceNum) {
         this.parallelExecInstanceNum = parallelExecInstanceNum;
     }
@@ -904,6 +913,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableResourceGroup(boolean enableResourceGroup) {
         this.enableResourceGroup = enableResourceGroup;
+    }
+
+    public boolean isEnableLocalShuffleAgg() {
+        return enableLocalShuffleAgg;
+    }
+
+    public void setEnableLocalShuffleAgg(boolean enableLocalShuffleAgg) {
+        this.enableLocalShuffleAgg = enableLocalShuffleAgg;
     }
 
     public void setPipelineDop(int pipelineDop) {

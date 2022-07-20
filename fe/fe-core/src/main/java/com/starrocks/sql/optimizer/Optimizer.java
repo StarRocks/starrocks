@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.GenerateAggregateWithLocalShuffleRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -129,8 +130,12 @@ public class Optimizer {
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
 
-        // Join reorder
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (GenerateAggregateWithLocalShuffleRule.enable(sessionVariable)) {
+            context.getRuleSet().addGenerateAggregateWithLocalShuffleRule();
+        }
+
+        // Join reorder
         if (!sessionVariable.isDisableJoinReorder()
                 && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
             if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {

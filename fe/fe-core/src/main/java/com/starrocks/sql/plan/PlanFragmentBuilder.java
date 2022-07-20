@@ -1296,8 +1296,15 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
-                inputFragment.setEnableSharedScan(false);
-                inputFragment.setAssignScanRangesPerDriverSeq(true);
+                if (node.isWithLocalShuffleOperator()) {
+                    inputFragment.setEnableSharedScan(true);
+                    inputFragment.setAssignScanRangesPerDriverSeq(false);
+                    inputFragment.setNeedLocalShuffleOperator(true);
+                } else {
+                    inputFragment.setEnableSharedScan(false);
+                    inputFragment.setAssignScanRangesPerDriverSeq(true);
+                    inputFragment.setNeedLocalShuffleOperator(false);
+                }
             }
 
             inputFragment.setPlanRoot(aggregationNode);
