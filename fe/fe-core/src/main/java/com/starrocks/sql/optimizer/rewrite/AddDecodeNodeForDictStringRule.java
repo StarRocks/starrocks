@@ -125,6 +125,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
 
+        // if column ref is an applied optimized string column, return the dictionary column.
+        // else return column ref itself
+        ColumnRefOperator getMappedOperator(ColumnRefOperator columnRef) {
+            int id = columnRef.getId();
+            Integer mapped = stringColumnIdToDictColumnIds.getOrDefault(id, id);
+            return columnRefFactory.getColumnRef(mapped);
+        }
+
         public void clear() {
             stringColumnIdToDictColumnIds.clear();
             stringFunctions.clear();
@@ -473,6 +481,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     orderingList.add(orderDesc);
                 }
             }
+
+            List<ColumnRefOperator> partitionByColumns = null;
+            if (operator.getPartitionByColumns() != null) {
+                partitionByColumns =
+                        operator.getPartitionByColumns().stream().map(context::getMappedOperator)
+                                .collect(Collectors.toList());
+            }
+
             OrderSpec newOrderSpec = new OrderSpec(orderingList);
 
             ScalarOperator predicate = operator.getPredicate();
@@ -487,7 +503,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(),
                     operator.getOffset(),
-                    null,
+                    partitionByColumns,
                     Operator.DEFAULT_LIMIT,
                     operator.getSortPhase(),
                     operator.getTopNType(),
