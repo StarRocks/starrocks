@@ -335,6 +335,15 @@ public class Optimizer {
 
     private void rewriteSubquery(Memo memo, TaskContext rootTaskContext) {
         do {
+            // we want to push apply node and don't merge it, but it's hard on current framework, TopDownRewrite
+            // can't work on history node
+            //
+            // e.g.
+            //  Apply           Project
+            //    |                |
+            //  Apply    ==>     Apply
+            //    |                |
+            // Project           Apply
             rootTaskContext.resetRewriteNum();
             ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
         } while (rootTaskContext.hasRewrite());

@@ -120,7 +120,7 @@ public class SubqueryUtils {
         }
 
         // only un-correlation scalar subquery
-        return apply.getUnCorrelationSubqueryOuterColumns() != null &&
-                !apply.getUnCorrelationSubqueryOuterColumns().isEmpty();
+        return apply.getUnCorrelationSubqueryPredicateColumns() != null &&
+                !apply.getUnCorrelationSubqueryPredicateColumns().isEmpty();
     }
 }

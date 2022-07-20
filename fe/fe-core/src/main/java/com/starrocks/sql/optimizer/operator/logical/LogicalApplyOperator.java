@@ -54,9 +54,9 @@ public class LogicalApplyOperator extends LogicalOperator {
      * Record un-correlation subquery outer table column, use for push down apply node
      * e.g.
      * SQL: select * from t1 where t1.v1 > (....);
-     * OuterColumns: t1.v1
+     * OuterPredicateColumns: t1.v1
      */
-    private final ColumnRefSet unCorrelationSubqueryOuterColumns;
+    private final ColumnRefSet unCorrelationSubqueryPredicateColumns;
 
     private LogicalApplyOperator(Builder builder) {
         super(OperatorType.LOGICAL_APPLY, builder.getLimit(), builder.getPredicate(), builder.getProjection());
@@ -67,7 +67,7 @@ public class LogicalApplyOperator extends LogicalOperator {
         needCheckMaxRows = builder.needCheckMaxRows;
         useSemiAnti = builder.useSemiAnti;
         needOutputRightChildColumns = builder.needOutputRightChildColumns;
-        unCorrelationSubqueryOuterColumns = builder.unCorrelationSubqueryOuterColumns;
+        unCorrelationSubqueryPredicateColumns = builder.unCorrelationSubqueryPredicateColumns;
     }
 
     public ColumnRefOperator getOutput() {
@@ -106,8 +106,8 @@ public class LogicalApplyOperator extends LogicalOperator {
         return useSemiAnti;
     }
 
-    public ColumnRefSet getUnCorrelationSubqueryOuterColumns() {
-        return unCorrelationSubqueryOuterColumns;
+    public ColumnRefSet getUnCorrelationSubqueryPredicateColumns() {
+        return unCorrelationSubqueryPredicateColumns;
     }
 
     @Override
@@ -138,7 +138,7 @@ public class LogicalApplyOperator extends LogicalOperator {
         private boolean useSemiAnti = true;
         private boolean needCheckMaxRows = false;
         private boolean needOutputRightChildColumns = false;
-        private ColumnRefSet unCorrelationSubqueryOuterColumns = null;
+        private ColumnRefSet unCorrelationSubqueryPredicateColumns = null;
 
         public Builder setSubqueryOperator(ScalarOperator subqueryOperator) {
             this.subqueryOperator = subqueryOperator;
@@ -175,8 +175,8 @@ public class LogicalApplyOperator extends LogicalOperator {
             return this;
         }
 
-        public Builder setUnCorrelationSubqueryOuterColumns(ColumnRefSet unCorrelationSubqueryOuterColumns) {
-            this.unCorrelationSubqueryOuterColumns = unCorrelationSubqueryOuterColumns;
+        public Builder setUnCorrelationSubqueryPredicateColumns(ColumnRefSet unCorrelationSubqueryPredicateColumns) {
+            this.unCorrelationSubqueryPredicateColumns = unCorrelationSubqueryPredicateColumns;
             return this;
         }
 
@@ -195,7 +195,7 @@ public class LogicalApplyOperator extends LogicalOperator {
             needCheckMaxRows = applyOperator.needCheckMaxRows;
             useSemiAnti = applyOperator.useSemiAnti;
             needOutputRightChildColumns = applyOperator.needOutputRightChildColumns;
-            unCorrelationSubqueryOuterColumns = applyOperator.unCorrelationSubqueryOuterColumns;
+            unCorrelationSubqueryPredicateColumns = applyOperator.unCorrelationSubqueryPredicateColumns;
             return this;
         }
     }

@@ -60,7 +60,7 @@ public class PushDownApplyLeftRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
-        ColumnRefSet outerColumns = apply.getUnCorrelationSubqueryOuterColumns();
+        ColumnRefSet outerColumns = apply.getUnCorrelationSubqueryPredicateColumns();
 
         OptExpression left = input.getInputs().get(0);
 

@@ -334,7 +334,7 @@ public class SubqueryTransformer {
                     .setSubqueryOperator(subqueryOutput)
                     .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
                     .setUseSemiAnti(context.useSemiAnti)
-                    .setUnCorrelationSubqueryOuterColumns(outerUsedColumns)
+                    .setUnCorrelationSubqueryPredicateColumns(outerUsedColumns)
                     .setNeedCheckMaxRows(true).build();
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),

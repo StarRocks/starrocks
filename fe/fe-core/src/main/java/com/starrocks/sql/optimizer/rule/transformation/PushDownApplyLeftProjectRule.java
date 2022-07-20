@@ -44,7 +44,7 @@ public class PushDownApplyLeftProjectRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
-        ColumnRefSet outerColumns = apply.getUnCorrelationSubqueryOuterColumns();
+        ColumnRefSet outerColumns = apply.getUnCorrelationSubqueryPredicateColumns();
 
         OptExpression projectOpt = input.getInputs().get(0);
 
