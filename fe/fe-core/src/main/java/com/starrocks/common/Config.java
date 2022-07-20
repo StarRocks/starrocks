@@ -317,7 +317,7 @@ public class Config extends ConfigBase {
 
     /**
      * Set the maximum acceptable clock skew between non-leader FE to Leader FE host.
-     * This value is checked whenever a non-master FE establishes a connection to master FE via BDBJE.
+     * This value is checked whenever a non-leader FE establishes a connection to leader FE via BDBJE.
      * The connection is abandoned if the clock skew is larger than this value.
      */
     @ConfField
@@ -407,12 +407,12 @@ public class Config extends ConfigBase {
     public static String metadata_failure_recovery = "false";
 
     /**
-     * If true, non-master FE will ignore the meta data delay gap between Leader FE and its self,
+     * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
-     * Non-master FE will still offer read service.
+     * Non-leader FE will still offer read service.
      * <p>
      * This is helpful when you try to stop the Leader FE for a relatively long time for some reason,
-     * but still wish the non-master FE can offer read service.
+     * but still wish the non-leader FE can offer read service.
      */
     @ConfField(mutable = true)
     public static boolean ignore_meta_check = false;
