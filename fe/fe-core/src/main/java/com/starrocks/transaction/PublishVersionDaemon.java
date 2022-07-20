@@ -35,7 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.proto.PublishVersionRequest;
@@ -61,7 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-public class PublishVersionDaemon extends MasterDaemon {
+public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 

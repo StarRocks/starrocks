@@ -33,7 +33,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
@@ -55,7 +55,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
-public abstract class AlterHandler extends MasterDaemon {
+public abstract class AlterHandler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
 
     // tableId -> AlterJob

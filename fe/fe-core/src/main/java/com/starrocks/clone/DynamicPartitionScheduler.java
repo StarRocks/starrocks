@@ -45,7 +45,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -67,7 +67,7 @@ import java.util.Set;
  * Config.dynamic_partition_enable determine whether this feature is enable, Config.dynamic_partition_check_interval_seconds
  * determine how often the task is performed
  */
-public class DynamicPartitionScheduler extends MasterDaemon {
+public class DynamicPartitionScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(DynamicPartitionScheduler.class);
     public static final String LAST_SCHEDULER_TIME = "lastSchedulerTime";
     public static final String LAST_UPDATE_TIME = "lastUpdateTime";

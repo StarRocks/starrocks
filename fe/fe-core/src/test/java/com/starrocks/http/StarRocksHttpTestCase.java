@@ -216,7 +216,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.isMaster();
+                    globalStateMgr.isLeader();
                     minTimes = 0;
                     result = true;
 
@@ -283,7 +283,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.isMaster();
+                    globalStateMgr.isLeader();
                     minTimes = 0;
                     result = true;
 

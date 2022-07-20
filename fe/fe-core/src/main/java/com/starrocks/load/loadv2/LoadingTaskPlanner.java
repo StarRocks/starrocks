@@ -107,7 +107,6 @@ public class LoadingTaskPlanner {
         this.partialUpdate = partialUpdate;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
-        this.analyzer.setUDFAllowed(false);
     }
 
     public void plan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)

@@ -47,7 +47,7 @@ public class BDBStateChangeListener implements StateChangeListener {
     public synchronized void stateChange(StateChangeEvent sce) throws RuntimeException {
         switch (sce.getState()) {
             case MASTER: {
-                newType = FrontendNodeType.MASTER;
+                newType = FrontendNodeType.LEADER;
                 break;
             }
             case REPLICA: {

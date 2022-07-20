@@ -496,9 +496,8 @@ public class ShowStmtAnalyzer {
                     throw new SemanticException("expression %s cast to datetime error: %s",
                             subExpr.getChild(1).toString(), e.getMessage());
                 }
-            } else if (!leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_ID) &&
-                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_BUCKETS) &&
-                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_REPLICATION_NUM)) {
+            } else if (ShowPartitionsStmt.FILTER_COLUMNS.stream()
+                    .noneMatch(column -> column.equalsIgnoreCase(leftKey))) {
                 throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
                         "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
             }

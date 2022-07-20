@@ -29,8 +29,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -217,8 +215,6 @@ public abstract class QueryStmt extends StatementBase {
      */
     public abstract void collectTableRefs(List<TableRef> tblRefs);
 
-    abstract List<TupleId> collectTupleIds();
-
     public ArrayList<OrderByElement> getOrderByElements() {
         return orderByElements;
     }
@@ -358,14 +354,6 @@ public abstract class QueryStmt extends StatementBase {
 
     @Override
     public abstract QueryStmt clone();
-
-    public abstract void substituteSelectList(Analyzer analyzer, List<String> newColLabels)
-            throws AnalysisException, UserException;
-
-    public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
-            throws AnalysisException, UserException {
-        substituteSelectList(analyzer, newColLabels);
-    }
 
     public void setOutFileClause(OutFileClause outFileClause) {
         this.outFileClause = outFileClause;

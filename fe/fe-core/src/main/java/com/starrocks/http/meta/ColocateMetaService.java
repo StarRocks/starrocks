@@ -92,7 +92,7 @@ public class ColocateMetaService {
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
                 throws DdlException {
-            if (redirectToMaster(request, response)) {
+            if (redirectToLeader(request, response)) {
                 return;
             }
             checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
