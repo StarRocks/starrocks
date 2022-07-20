@@ -339,16 +339,22 @@ Status DeltaWriter::commit() {
     return Status::OK();
 }
 
-void DeltaWriter::abort(bool with_log) {
+void DeltaWriter::abort(bool with_log, bool wait_flush) {
     _set_state(kAborted);
     _with_rollback_log = with_log;
+
+    if (wait_flush) {
+        if (auto st = _flush_token->wait(); !st.ok()) {
+            LOG(WARNING) << st;
+        }
+    }
 }
 
 int64_t DeltaWriter::partition_id() const {
     return _opt.partition_id;
 }
 
-const char* DeltaWriter::_state_name(State state) const {
+const char* DeltaWriter::_state_name(State state) {
     switch (state) {
     case kUninitialized:
         return "kUninitialized";

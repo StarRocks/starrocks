@@ -65,7 +65,7 @@ public:
     // with_log is used to control whether to print the log when rollback txn.
     // with_log is false when there is no data load into one partition and abort
     // the related txn.
-    void abort(bool with_log = true);
+    void abort(bool with_log = true, bool wait_flush = false);
 
     int64_t txn_id() const { return _opt.txn_id; }
 
@@ -104,7 +104,7 @@ private:
     Status _init();
     Status _flush_memtable_async();
     Status _flush_memtable();
-    const char* _state_name(State state) const;
+    static const char* _state_name(State state) ;
 
     void _garbage_collection();
 

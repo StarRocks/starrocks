@@ -354,7 +354,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
             (void)tablet_id;
             if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
                 // no data load, abort txn without printing log
-                delta_writer->abort(false);
+                delta_writer->abort(false, false);
             } else {
                 auto cb = new WriteCallback(context.get());
                 delta_writer->commit(cb);
@@ -493,7 +493,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 
 void LocalTabletsChannel::cancel() {
     for (auto& it : _delta_writers) {
-        (void)it.second->abort();
+        (void)it.second->abort(false, true);
     }
 }
 

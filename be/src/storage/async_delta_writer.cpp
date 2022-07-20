@@ -108,8 +108,8 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     }
 }
 
-void AsyncDeltaWriter::abort(bool with_log) {
-    _writer->abort(with_log);
+void AsyncDeltaWriter::abort(bool with_log, bool wait_flush) {
+    _writer->abort(with_log, wait_flush);
 }
 
 } // namespace starrocks::vectorized
