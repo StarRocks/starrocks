@@ -341,7 +341,7 @@ showPartitionsStatement
     
 showOpenTableStatement
     : SHOW OPEN TABLES
-
+    ;
 recoverPartitionStatement
     : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
