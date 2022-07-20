@@ -13,6 +13,10 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.persist.ShardInfo;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.EmptyRpcCallback;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -78,6 +82,7 @@ public class ShardDeleter extends LeaderDaemon {
             LakeServiceClient client = new LakeServiceClient(address);
             DropTabletRequest request = new DropTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
+            RpcCallback<DropTabletResponse> callback = new EmptyRpcCallback<DropTabletResponse>();
 
             try {
                 Future<DropTabletResponse> responseFuture = client.dropTablet(request);

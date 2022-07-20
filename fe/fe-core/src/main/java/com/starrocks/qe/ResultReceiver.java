@@ -35,6 +35,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import io.netty.buffer.ByteBuf;
+import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -117,6 +118,7 @@ public class ResultReceiver {
                     if (buf != null) {
                         byte[] serialResult = new byte[buf.readableBytes()];
                         buf.readBytes(serialResult);
+                        ReferenceCountUtil.release(rpcContext.getResponseBinaryAttachment());
                         if (serialResult != null && serialResult.length > 0) {
                             TResultBatch resultBatch = new TResultBatch();
                             TDeserializer deserializer = new TDeserializer();

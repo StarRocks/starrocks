@@ -42,7 +42,7 @@ public class LakeServiceClient {
     }
 
     public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) throws RpcException {
-        RpcCallback<AbortTxnResponse> callback = new EmptyRpcCallback<AbortTxnResponse>();
+        RpcCallback<AbortTxnResponse> callback = new EmptyRpcCallback<AbortTxnResponse>()
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).abortTxn(request, callback));
     }
 
