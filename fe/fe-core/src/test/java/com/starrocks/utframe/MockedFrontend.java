@@ -28,6 +28,7 @@ import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalException;
@@ -243,11 +244,10 @@ public class MockedFrontend {
                     }
                 };
 
-                GlobalStateMgr.getCurrentState().initialize(args);
+                StateChangeExecution execution = GlobalStateMgr.getCurrentState().initialize(args);
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
-                StateChangeExecutor.getInstance().registerStateChangeExecution(
-                    GlobalStateMgr.getCurrentState().getStateChangeExecution());
+                StateChangeExecutor.getInstance().registerStateChangeExecution(execution);
                 StateChangeExecutor.getInstance().start();
                 StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
 

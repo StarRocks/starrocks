@@ -29,6 +29,7 @@ import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.JdkUtils;
+import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
@@ -110,13 +111,12 @@ public class StarRocksFE {
             ExecuteEnv.setup();
 
             // init globalStateMgr
-            GlobalStateMgr.getCurrentState().initialize(args);
+            StateChangeExecution execution = GlobalStateMgr.getCurrentState().initialize(args);
 
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
 
-            StateChangeExecutor.getInstance().registerStateChangeExecution(
-                    GlobalStateMgr.getCurrentState().getStateChangeExecution());
+            StateChangeExecutor.getInstance().registerStateChangeExecution(execution);
             // start state change executor
             StateChangeExecutor.getInstance().start();
 

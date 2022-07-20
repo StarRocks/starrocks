@@ -14,8 +14,8 @@ public class StateChangeExecutorTest {
     private class StateChangeExecutionTest implements StateChangeExecution {
         private FrontendNodeType type;
         @Override
-        public void transferToLeader(FrontendNodeType newType) {
-            type = newType;
+        public void transferToLeader() {
+            type = FrontendNodeType.LEADER;
         }
         @Override
         public void transferToNonLeader(FrontendNodeType newType) {

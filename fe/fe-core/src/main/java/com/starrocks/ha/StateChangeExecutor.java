@@ -83,7 +83,7 @@ public class StateChangeExecutor extends Daemon {
                     switch (newType) {
                         case LEADER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToLeader(newType);
+                                execution.transferToLeader();
                             }
                             break;
                         }
@@ -105,7 +105,7 @@ public class StateChangeExecutor extends Daemon {
                     switch (newType) {
                         case LEADER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToLeader(newType);
+                                execution.transferToLeader();
                             }
                             break;
                         }
@@ -125,7 +125,7 @@ public class StateChangeExecutor extends Daemon {
                     switch (newType) {
                         case LEADER: {
                             for (StateChangeExecution execution : executions) {
-                                execution.transferToLeader(newType);
+                                execution.transferToLeader();
                             }
                             break;
                         }

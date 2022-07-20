@@ -789,7 +789,7 @@ public class GlobalStateMgr {
         nodeMgr.setImageDir(imageDir);
     }
 
-    public void initialize(String[] args) throws Exception {
+    public StateChangeExecution initialize(String[] args) throws Exception {
         // set meta dir first.
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
@@ -830,6 +830,8 @@ public class GlobalStateMgr {
 
         // 6. start task cleaner thread
         createTaskCleaner();
+
+        return getStateChangeExecution();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -870,7 +872,7 @@ public class GlobalStateMgr {
         }
     }
 
-    public void transferToLeader(FrontendNodeType newType) {
+    private void transferToLeader() {
         FrontendNodeType oldType = feType;
         // stop replayer
         if (replayer != null) {
@@ -1046,7 +1048,7 @@ public class GlobalStateMgr {
         domainResolver.start();
     }
 
-    public void transferToNonLeader(FrontendNodeType newType) {
+    private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
 
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
@@ -3077,12 +3079,12 @@ public class GlobalStateMgr {
         }
     }
 
-    public StateChangeExecution getStateChangeExecution() {
+    private StateChangeExecution getStateChangeExecution() {
         GlobalStateMgr gsm = this;
         StateChangeExecution execution = new StateChangeExecution() {
             @Override
-            public void transferToLeader(FrontendNodeType newType) {
-                gsm.transferToLeader(newType);
+            public void transferToLeader() {
+                gsm.transferToLeader();
             }
 
             @Override
