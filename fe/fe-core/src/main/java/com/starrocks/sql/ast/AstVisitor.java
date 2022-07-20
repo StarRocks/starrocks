@@ -43,6 +43,7 @@ import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -411,6 +412,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitDropRepositoryStmt(DropRepositoryStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ----------------- Catalog Clause -------------
