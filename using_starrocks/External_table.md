@@ -347,7 +347,7 @@ select count(*) from profile_wos_p7;
 
 ### 缓存更新
 
-Hive的partition信息以及partition对应的文件信息都会缓存在starrocks中，缓存的刷新时间为hive_meta_cache_refresh_interval_s，默认7200，缓存的失效时间为hive_meta_cache_ttl_s，默认86400。
+Hive的partition信息以及partition对应的文件信息都会缓存在starrocks中。您可以在 fe.conf 文件中通过设置hive_meta_cache_refresh_interval_s参数修改缓存自动刷新的间隔时间（默认值为7200, 单位：秒），也可以通过设置hive_meta_cache_ttl_s参数修改缓存的失效时间（默认值为86400，单位：秒）。修改后需重启 FE 生效。
 
 **手动更新元数据缓存**
 
