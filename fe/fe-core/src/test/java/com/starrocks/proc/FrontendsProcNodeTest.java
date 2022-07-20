@@ -68,19 +68,19 @@ public class FrontendsProcNodeTest {
         Method isJoin = clazz.getDeclaredMethod("isJoin", new Class[]{List.class, Frontend.class});
         isJoin.setAccessible(true);
 
-        Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.MASTER,"test","127.0.0.1",1000);
+        Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.LEADER,"test","127.0.0.1",1000);
         boolean result1 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldFoundByIP);
         Assert.assertTrue(result1);
 
-        Frontend feCouldNotFoundByIP = new Frontend(FrontendNodeType.MASTER,"test","127.0.0.2",1000);
+        Frontend feCouldNotFoundByIP = new Frontend(FrontendNodeType.LEADER,"test","127.0.0.2",1000);
         boolean result2 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldNotFoundByIP);
         Assert.assertTrue(!result2);
 
-        Frontend feCouldFoundByHostName = new Frontend(FrontendNodeType.MASTER,"test","sandbox",1000);
+        Frontend feCouldFoundByHostName = new Frontend(FrontendNodeType.LEADER,"test","sandbox",1000);
         boolean result3 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldFoundByHostName);
         Assert.assertTrue(result3);
 
-        Frontend feCouldNotFoundByHostName = new Frontend(FrontendNodeType.MASTER,"test","sandbox1",1000);
+        Frontend feCouldNotFoundByHostName = new Frontend(FrontendNodeType.LEADER,"test","sandbox1",1000);
         boolean result4 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldNotFoundByHostName);
         Assert.assertTrue(!result4);
     }

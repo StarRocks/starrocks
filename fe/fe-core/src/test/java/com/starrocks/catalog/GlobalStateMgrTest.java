@@ -195,7 +195,7 @@ public class GlobalStateMgrTest {
         Field field1 = nodeMgr.getClass().getDeclaredField("frontends");
         field1.setAccessible(true);
         ConcurrentHashMap<String, Frontend> frontends = new ConcurrentHashMap<>();
-        Frontend fe1 = new Frontend(FrontendNodeType.MASTER, "testName", "127.0.0.1", 1000);
+        Frontend fe1 = new Frontend(FrontendNodeType.LEADER, "testName", "127.0.0.1", 1000);
         frontends.put("testName", fe1);
         field1.set(nodeMgr, frontends);
 
@@ -206,7 +206,7 @@ public class GlobalStateMgrTest {
 
         Field field3 = nodeMgr.getClass().getDeclaredField("role");
         field3.setAccessible(true);
-        field3.set(nodeMgr, FrontendNodeType.MASTER);
+        field3.set(nodeMgr, FrontendNodeType.LEADER);
 
         Field field4 = globalStateMgr.getClass().getDeclaredField("nodeMgr");
         field4.setAccessible(true);

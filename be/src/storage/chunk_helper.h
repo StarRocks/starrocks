@@ -62,6 +62,11 @@ public:
     // Padding char columns
     static void padding_char_columns(const std::vector<size_t>& char_column_indexes, const vectorized::Schema& schema,
                                      const TabletSchema& tschema, vectorized::Chunk* chunk);
+
+    // Reorder columns of `chunk` according to the order of |tuple_desc|.
+    static void reorder_chunk(const TupleDescriptor& tuple_desc, vectorized::Chunk* chunk);
+    // Reorder columns of `chunk` according to the order of |slots|.
+    static void reorder_chunk(const std::vector<SlotDescriptor*>& slots, vectorized::Chunk* chunk);
 };
 
 } // namespace starrocks

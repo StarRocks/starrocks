@@ -220,7 +220,7 @@ Status ExecNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.open(state));
     push_down_join_runtime_filter(state, &_runtime_filter_collector);
-    _runtime_filter_collector.wait();
+    _runtime_filter_collector.wait(is_scan_node());
     return Status::OK();
 }
 
