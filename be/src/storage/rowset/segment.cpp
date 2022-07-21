@@ -229,7 +229,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
 }
 
 Status Segment::_load_index(MemTracker* mem_tracker) {
-    return _load_index_once.call([this, mem_tracker] {
+    auto res = success_once(_load_index_once, [this, mem_tracker] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         // read and parse short key index page
         std::unique_ptr<fs::ReadableBlock> rblock;
@@ -258,6 +258,7 @@ Status Segment::_load_index(MemTracker* mem_tracker) {
 
         return st;
     });
+    return res.status();
 }
 
 Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
