@@ -35,6 +35,7 @@ struct RawHashTableIterator {
     bool operator==(const RawHashTableIterator& other) { return x == other.x && y == other.y; }
     bool operator!=(const RawHashTableIterator& other) { return !this->operator==(other); }
     inline void next();
+    // return alloc[x]->states[y]
     inline uint8_t* value();
     HashTableKeyAllocator* alloc;
     size_t x;
@@ -42,7 +43,9 @@ struct RawHashTableIterator {
 };
 
 struct HashTableKeyAllocator {
-    static auto constexpr link = 1024;
+    // number of states allocated consecutively in a single alloc
+    static auto constexpr alloc_batch_size = 1024;
+    // memory aligned when allocate
     static size_t constexpr aligned = 16;
     int aggregate_key_size = 0;
     std::vector<std::pair<void*, int>> vecs;
@@ -53,23 +56,21 @@ struct HashTableKeyAllocator {
     RawHashTableIterator end() { return {this, vecs.size(), 0}; }
 
     vectorized::AggDataPtr allocate() {
-        if (vecs.empty() || vecs.back().second == link) {
-            uint8_t* mem = pool->allocate_aligned(link * aggregate_key_size, aligned);
+        if (vecs.empty() || vecs.back().second == alloc_batch_size) {
+            uint8_t* mem = pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned);
             vecs.emplace_back(mem, 0);
         }
         return static_cast<vectorized::AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
     }
 
-    uint8_t* allocate_null_key_data() { return pool->allocate_aligned(link * aggregate_key_size, aligned); }
+    uint8_t* allocate_null_key_data() { return pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned); }
 };
 
 inline void RawHashTableIterator::next() {
-    if (y < alloc->vecs[x].second) {
-        y++;
-        if (y == alloc->vecs[x].second) {
-            y = 0;
-            x++;
-        }
+    y++;
+    if (y == alloc->vecs[x].second) {
+        y = 0;
+        x++;
     }
 }
 
