@@ -31,8 +31,10 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -90,4 +92,34 @@ public class SetExecutorTest {
 
         executor.execute();
     }
+
+    @Test
+    public void testSetSessionAndGlobal() throws Exception {
+        String globalSQL = "set global query_timeout = 10";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(globalSQL, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        Assert.assertEquals(null, ctx.getModifiedSessionVariables());
+        Assert.assertEquals(10, ctx.sessionVariable.getQueryTimeoutS());
+
+
+        String sessionSQL = "set query_timeout = 9";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(globalSQL, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
+        Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
+    }
+
+    @Test
+    public void testSetSessionVars() throws Exception {
+        String sql = "set global query_timeout = 10, time_zone = 'Asia/Chongqing'";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
+        executor.setSessionVars();
+        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
+        Assert.assertEquals(10, ctx.sessionVariable.getQueryTimeoutS());
+        Assert.assertEquals("Asia/Chongqing", ctx.sessionVariable.getTimeZone());
+
+     }
 }

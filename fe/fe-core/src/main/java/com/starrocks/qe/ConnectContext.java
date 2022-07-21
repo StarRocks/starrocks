@@ -24,6 +24,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
@@ -271,7 +272,9 @@ public class ConnectContext {
 
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
-        modifiedSessionVariables.add(setVar);
+        if (! setVar.getType().equals(SetType.GLOBAL)) {
+            modifiedSessionVariables.add(setVar);
+        }
     }
 
     public SetStmt getModifiedSessionVariables() {
