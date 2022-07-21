@@ -65,7 +65,7 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DropReplicaTask;
-import com.starrocks.task.MasterTask;
+import com.starrocks.task.LeaderTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.StorageMediaMigrationTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
@@ -262,7 +262,7 @@ public class ReportHandler extends Daemon {
         return tabletMap;
     }
 
-    private class ReportTask extends MasterTask {
+    private class ReportTask extends LeaderTask {
 
         public long beId;
         public ReportType type;

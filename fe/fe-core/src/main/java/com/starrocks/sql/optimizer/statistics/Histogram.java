@@ -2,6 +2,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import java.util.List;
+import java.util.Map;
 
 public class Histogram {
     private double min;
@@ -9,9 +10,11 @@ public class Histogram {
     private double max;
     private boolean containMax;
     private final List<Bucket> buckets;
+    private Map<Double, Long> topN;
 
-    public Histogram(List<Bucket> buckets) {
+    public Histogram(List<Bucket> buckets, Map<Double, Long> topN) {
         this.buckets = buckets;
+        this.topN = topN;
         this.min = Double.MIN_VALUE;
         this.containMin = false;
         this.max = Double.MAX_VALUE;
@@ -54,5 +57,9 @@ public class Histogram {
 
     public List<Bucket> getBuckets() {
         return buckets;
+    }
+
+    public Map<Double, Long> getTopN() {
+        return topN;
     }
 }

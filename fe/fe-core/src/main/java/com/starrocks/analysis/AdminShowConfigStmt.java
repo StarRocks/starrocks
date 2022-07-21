@@ -25,14 +25,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.AdminSetConfigStmt.ConfigType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 // admin show frontend config;
@@ -55,20 +48,6 @@ public class AdminShowConfigStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        if (type != ConfigType.FRONTEND) {
-            throw new AnalysisException("Only support setting Frontend configs now");
-        }
     }
 
     @Override

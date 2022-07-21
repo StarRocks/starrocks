@@ -22,7 +22,6 @@
 #include "service/backend_base.h"
 
 #include <arrow/record_batch.h>
-#include <gperftools/heap-profiler.h>
 #include <thrift/concurrency/ThreadFactory.h>
 #include <thrift/processor/TMultiplexedProcessor.h>
 #include <thrift/protocol/TDebugProtocol.h>
@@ -34,18 +33,17 @@
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/TStarrocksExternalService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
-#include "runtime/primitive_type.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "service_be/backend_service.h"
+#include "service_cn/compute_service.h"
 #include "storage/storage_engine.h"
 #include "util/arrow/row_batch.h"
 #include "util/blocking_queue.hpp"
@@ -54,13 +52,27 @@
 
 namespace starrocks {
 
-using apache::thrift::TException;
-using apache::thrift::TProcessor;
-using apache::thrift::TMultiplexedProcessor;
-using apache::thrift::transport::TTransportException;
 using apache::thrift::concurrency::ThreadFactory;
 
 BackendServiceBase::BackendServiceBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+
+template <class Service>
+std::unique_ptr<ThriftServer> BackendServiceBase::create(ExecEnv* exec_env, int port) {
+    auto handler = std::make_shared<Service>(exec_env);
+    // TODO: do we want a BoostThreadFactory?
+    // TODO: we want separate thread factories here, so that fe requests can't starve
+    // cn requests
+    auto thread_factory = std::make_shared<ThreadFactory>();
+    auto processor = std::make_shared<BackendServiceProcessor>(handler);
+
+    LOG(INFO) << "StarRocksInternalService listening on " << port;
+    // TODO: May be rename be_service_threads to thrift_service_threads ?
+    return std::make_unique<ThriftServer>("BackendService", processor, port, exec_env->metrics(),
+                                          config::be_service_threads);
+}
+
+template std::unique_ptr<ThriftServer> BackendServiceBase::create<ComputeService>(ExecEnv* exec_env, int port);
+template std::unique_ptr<ThriftServer> BackendServiceBase::create<BackendService>(ExecEnv* exec_env, int port);
 
 void BackendServiceBase::exec_plan_fragment(TExecPlanFragmentResult& return_val,
                                             const TExecPlanFragmentParams& params) {

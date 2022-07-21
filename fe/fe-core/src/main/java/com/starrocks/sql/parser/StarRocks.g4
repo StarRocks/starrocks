@@ -104,6 +104,13 @@ statement
     | alterResourceGroupStatement                                                               #alterResourceGroup
     | showResourceGroupStatement                                                                #showResourceGroup
 
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+    | dropFunctionStatement                                                                 #dropFunctionst
+    | createFunctionStatement                                                               #createFunction
+
+
+
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
@@ -120,6 +127,7 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+    | ALTER USER user authOption                                                            #alterUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -583,6 +591,24 @@ showResourceGroupStatement
 
 classifier
     : '(' expression (',' expression)* ')'
+    ;
+
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+dropFunctionStatement
+    : DROP FUNCTION qualifiedName '(' typeList ')'
+    ;
+
+createFunctionStatement
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    ;
+
+typeList
+    : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -1192,6 +1218,11 @@ number
     | INTEGER_VALUE  #integerValue
     ;
 
+authOption
+    : IDENTIFIED BY PASSWORD? string                            # authWithoutPlugin
+    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
+    ;
+
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
@@ -1221,4 +1252,5 @@ nonReserved
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WORK | WRITE
     | YEAR
+    | DOTDOTDOT
     ;

@@ -126,7 +126,7 @@ public class NodeMgr {
     }
 
     public void startHearbeat(long epoch) {
-        heartbeatMgr.setMaster(clusterId, token, epoch);
+        heartbeatMgr.setLeader(clusterId, token, epoch);
         heartbeatMgr.start();
     }
 
@@ -547,7 +547,7 @@ public class NodeMgr {
                      */
                     throw new AnalysisException(
                             "Do not specify the helper node to FE itself. "
-                                    + "Please specify it to the existing running Master or Follower FE");
+                                    + "Please specify it to the existing running Leader or Follower FE");
                 }
                 helperNodes.add(helperHostPort);
             }

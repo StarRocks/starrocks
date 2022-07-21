@@ -259,7 +259,7 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
         auto expr = expr_ctx->root();
-        rewrite_expr(expr_ctx, expr, slot_ids[i]);
+        RETURN_IF_ERROR(rewrite_expr(expr_ctx, expr, slot_ids[i]));
     }
     return Status::OK();
 }

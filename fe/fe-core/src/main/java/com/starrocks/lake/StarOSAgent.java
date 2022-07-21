@@ -49,20 +49,28 @@ public class StarOSAgent {
 
     public StarOSAgent() {
         serviceId = -1;
-        // check if Config.starmanager_address == FE address
-        if (Config.integrate_starmgr) {
-            String[] starMgrAddr = Config.starmgr_address.split(":");
-            if (!starMgrAddr[0].equals("127.0.0.1")) {
-                LOG.warn("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
-                System.exit(-1);
-            }
-        }
-        client = new StarClient();
-        client.connectServer(Config.starmgr_address);
-
         workerToId = Maps.newHashMap();
         workerToBackend = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
+    }
+
+    public boolean init() {
+        if (Config.integrate_starmgr) {
+            if (!Config.use_staros) {
+                LOG.error("integrate_starmgr is true but use_staros is false!");
+                return false;
+            }
+            // check if Config.starmanager_address == FE address
+            String[] starMgrAddr = Config.starmgr_address.split(":");
+            if (!starMgrAddr[0].equals("127.0.0.1")) {
+                LOG.error("Config.starmgr_address not equal 127.0.0.1, it is {}", starMgrAddr[0]);
+                return false;
+            }
+        }
+
+        client = new StarClient();
+        client.connectServer(Config.starmgr_address);
+        return true;
     }
 
     private void prepare() {
@@ -98,13 +106,13 @@ public class StarOSAgent {
     }
 
 
-    public void registerAndBootstrapService() {
+    public boolean registerAndBootstrapService() {
         try {
             client.registerService("starrocks");
         } catch (StarClientException e) {
             if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                LOG.warn("Failed to register service from starMgr. Error: {}", e);
-                System.exit(-1);
+                LOG.error("Failed to register service from starMgr. Error: {}", e);
+                return false;
             }
         }
 
@@ -114,13 +122,14 @@ public class StarOSAgent {
                 LOG.info("get serviceId: {} by bootstrapService to starMgr", serviceId);
             } catch (StarClientException e) {
                 if (e.getCode() != StatusCode.ALREADY_EXIST) {
-                    LOG.warn("Failed to bootstrap service from starMgr. Error: {}", e);
-                    System.exit(-1);
+                    LOG.error("Failed to bootstrap service from starMgr. Error: {}", e);
+                    return false;
                 } else {
                     getServiceId();
                 }
             }
         }
+        return true;
     }
 
     // for ut only

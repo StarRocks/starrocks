@@ -11,6 +11,7 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -29,6 +30,7 @@ import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -40,6 +42,7 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
@@ -77,6 +80,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -375,12 +379,29 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitAlterUserStatement(AlterUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitRecoverPartitionStmt(RecoverPartitionStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
     public R visitShowPartitionsStmt(ShowPartitionsStmt statement, C context) {
         return visitShowStatement(statement, context);
+
+    }
+
+    public R visitShowFunctions(ShowFunctionsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitDropFunction(DropFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateFunction(CreateFunctionStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
@@ -648,7 +669,6 @@ public abstract class AstVisitor<R, C> {
     public R visitCloneExpr(CloneExpr node, C context) {
         return visitExpression(node, context);
     }
-
     // ----------------- AST ---------------
 
     public R visitLimitElement(LimitElement node, C context) {

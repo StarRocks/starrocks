@@ -22,13 +22,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Replica.ReplicaStatus;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
@@ -55,50 +48,6 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
         this.properties = properties;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        checkProperties();
-    }
-
-    private void checkProperties() throws AnalysisException {
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String key = entry.getKey();
-            String val = entry.getValue();
-
-            if (key.equalsIgnoreCase(TABLET_ID)) {
-                try {
-                    tabletId = Long.valueOf(val);
-                } catch (NumberFormatException e) {
-                    throw new AnalysisException("Invalid tablet id format: " + val);
-                }
-            } else if (key.equalsIgnoreCase(BACKEND_ID)) {
-                try {
-                    backendId = Long.valueOf(val);
-                } catch (NumberFormatException e) {
-                    throw new AnalysisException("Invalid backend id format: " + val);
-                }
-            } else if (key.equalsIgnoreCase(STATUS)) {
-                status = ReplicaStatus.valueOf(val.toUpperCase());
-                if (status != ReplicaStatus.BAD && status != ReplicaStatus.OK) {
-                    throw new AnalysisException("Do not support setting replica status as " + val);
-                }
-            } else {
-                throw new AnalysisException("Unknown property: " + key);
-            }
-        }
-
-        if (tabletId == -1 || backendId == -1 || status == null) {
-            throw new AnalysisException("Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
-        }
-    }
-
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -113,6 +62,18 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
 
     public ReplicaStatus getStatus() {
         return status;
+    }
+
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
+
+    public void setStatus(ReplicaStatus status) {
+        this.status = status;
     }
 
     @Override

@@ -49,7 +49,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
 
         initDefaultJob();
 
-        if (Config.enable_collect_full_statistics) {
+        if (Config.enable_collect_full_statistic) {
             List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                     new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                             AnalyzeType.FULL, ScheduleType.SCHEDULE,

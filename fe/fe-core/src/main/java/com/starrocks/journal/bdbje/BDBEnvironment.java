@@ -66,7 +66,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 
 /* this class contains the reference to bdb environment.
@@ -91,11 +90,6 @@ public class BDBEnvironment {
     private TransactionConfig txnConfig;
     private CloseSafeDatabase epochDB = null;  // used for fencing
     private ReplicationGroupAdmin replicationGroupAdmin = null;
-    // NOTE: never call System.exit() in lock, because shutdown hook will call BDBEnvironment.close() function which needs lock too.
-    //      System.exit() will wait shutdown hook complete, but its thread has already obtains the lock,
-    //      so BDBEnvironment.close() will never complete, and it falls into deadlock.
-    private ReentrantReadWriteLock lock;
-    private List<CloseSafeDatabase> openedDatabases;
 
     // mark whether environment is closing, if true, all calling to environment will fail
     private volatile boolean closing = false;
@@ -159,8 +153,6 @@ public class BDBEnvironment {
         this.selfNodeHostPort = selfNodeHostPort;
         this.helperHostPort = helperHostPort;
         this.isElectable = isElectable;
-        openedDatabases = new ArrayList<>();
-        this.lock = new ReentrantReadWriteLock(true);
     }
 
     // The setup() method opens the environment and database
@@ -467,100 +459,29 @@ public class BDBEnvironment {
         return replicatedEnvironment;
     }
 
-    // return the database reference with the given name
-    // also try to close previous opened database.
+    /**
+     * open database and return a CloseSafeDatabase instance
+     * We should make sure no database conflict from upper level
+     */
     public CloseSafeDatabase openDatabase(String dbName) {
-        CloseSafeDatabase db = null;
-        lock.writeLock().lock();
-        try {
-            if (closing) {
-                return null;
-            }
-            // find if the specified database is already opened. find and return it.
-            for (java.util.Iterator<CloseSafeDatabase> iter = openedDatabases.iterator(); iter.hasNext(); ) {
-                CloseSafeDatabase openedDb = iter.next();
-                try {
-                    if (openedDb.getDb().getDatabaseName() == null) {
-                        openedDb.close();
-                        iter.remove();
-                        continue;
-                    }
-                } catch (Exception e) {
-                    /*
-                     * In the case when 3 FE (1 master and 2 followers) start at same time,
-                     * We may catch com.sleepycat.je.rep.DatabasePreemptedException which said that
-                     * "Database xx has been forcibly closed in order to apply a replicated remove operation."
-                     *
-                     * Because when Master FE finished to save image, it try to remove old journals,
-                     * and also remove the databases these old journals belongs to.
-                     * So after Master removed the database from replicatedEnvironment,
-                     * call db.getDatabaseName() will throw DatabasePreemptedException,
-                     * because it has already been destroyed.
-                     *
-                     * The reason why Master can safely remove a database is because it knows that all
-                     * non-master FE have already load the journal ahead of this database. So remove the
-                     * database is safe.
-                     *
-                     * Here we just try to close the useless database(which may be removed by Master),
-                     * so even we catch the exception, just ignore it is OK.
-                     */
-                    LOG.warn("get exception when try to close previously opened bdb database. ignore it", e);
-                    iter.remove();
-                    continue;
-                }
-
-                if (openedDb.getDb().getDatabaseName().equals(dbName)) {
-                    return openedDb;
-                }
-            }
-
-            // open the specified database.
-            // the first parameter null means auto-commit
-            try {
-                db = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));
-                openedDatabases.add(db);
-                LOG.info("successfully open new db {}", db);
-            } catch (Exception e) {
-                LOG.warn("catch an exception when open database {}", dbName, e);
-            }
-        } finally {
-            lock.writeLock().unlock();
-        }
-        return db;
+        return new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, dbName, dbConfig));
     }
 
-    // close and remove the database whose name is dbName
+    /**
+     * Remove the database whose name is dbName
+     * We should make sure no database conflict from upper level
+     **/
     public void removeDatabase(String dbName) {
-        lock.writeLock().lock();
+        if (closing) {
+            return;
+        }
+
         try {
-            if (closing) {
-                return;
-            }
-            String targetDbName = null;
-            int index = 0;
-            for (CloseSafeDatabase db : openedDatabases) {
-                String name = db.getDb().getDatabaseName();
-                if (dbName.equals(name)) {
-                    db.close();
-                    LOG.info("database {} has been closed", name);
-                    targetDbName = name;
-                    break;
-                }
-                index++;
-            }
-            if (targetDbName != null) {
-                LOG.info("begin to remove database {} from openedDatabases", targetDbName);
-                openedDatabases.remove(index);
-            }
-            try {
-                LOG.info("begin to remove database {} from replicatedEnviroment", dbName);
-                // the first parameter null means auto-commit
-                replicatedEnvironment.removeDatabase(null, dbName);
-            } catch (DatabaseNotFoundException e) {
-                LOG.warn("catch an exception when remove db:{}, this db does not exist", dbName, e);
-            }
-        } finally {
-            lock.writeLock().unlock();
+            // the first parameter null means auto-commit
+            replicatedEnvironment.removeDatabase(null, dbName);
+            LOG.info("remove database {} from replicatedEnviroment successfully", dbName);
+        } catch (DatabaseNotFoundException e) {
+            LOG.warn("Exception: {} does not exist", dbName, e);
         }
     }
 
@@ -613,21 +534,8 @@ public class BDBEnvironment {
     // Close the store and environment
     public boolean close() {
         boolean closeSuccess = true;
-        lock.writeLock().lock();
         try {
             closing = true;
-
-            LOG.info("start to close log databases");
-            for (CloseSafeDatabase db : openedDatabases) {
-                try {
-                    db.close();
-                } catch (DatabaseException exception) {
-                    LOG.error("Error closing db {}", db.getDatabaseName(), exception);
-                    closeSuccess = false;
-                }
-            }
-            LOG.info("close log databases end");
-            openedDatabases.clear();
 
             LOG.info("start to close epoch database");
             if (epochDB != null) {
@@ -653,7 +561,6 @@ public class BDBEnvironment {
             LOG.info("close replicated environment end");
         } finally {
             closing = false;
-            lock.writeLock().unlock();
         }
         return closeSuccess;
     }

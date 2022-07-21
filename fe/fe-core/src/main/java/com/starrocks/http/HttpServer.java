@@ -162,7 +162,7 @@ public class HttpServer {
         QueryDumpAction.registerAction(controller);
 
         // meta service action
-        File imageDir = MetaHelper.getMasterImageDir();
+        File imageDir = MetaHelper.getLeaderImageDir();
         ImageAction.registerAction(controller, imageDir);
         InfoAction.registerAction(controller, imageDir);
         VersionAction.registerAction(controller, imageDir);

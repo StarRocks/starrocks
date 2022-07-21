@@ -18,6 +18,7 @@
 package com.starrocks.load;
 
 import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TUniqueId;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,7 +27,11 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 public class EtlJobStatusTest {
@@ -41,21 +46,36 @@ public class EtlJobStatusTest {
 
         TEtlState state = TEtlState.FINISHED;
         String trackingUrl = "http://localhost:9999/xxx?job_id=zzz";
-        Map<String, String> stats = new TreeMap<String, String>();
         Map<String, String> counters = new TreeMap<String, String>();
         for (int count = 0; count < 5; ++count) {
-            String statsKey = "statsKey" + count;
-            String statsValue = "statsValue" + count;
             String countersKey = "countersKey" + count;
             String countersValue = "countersValue" + count;
-            stats.put(statsKey, statsValue);
             counters.put(countersKey, countersValue);
         }
 
         etlJobStatus.setState(state);
         etlJobStatus.setTrackingUrl(trackingUrl);
-        etlJobStatus.setStats(stats);
         etlJobStatus.setCounters(counters);
+        etlJobStatus.setLoadFileInfo(10, 1000);
+        TUniqueId loadId = new TUniqueId();
+        loadId.setHi(1);
+        loadId.setLo(2);
+        TUniqueId fragId1 = new TUniqueId();
+        fragId1.setHi(3);
+        fragId1.setLo(4);
+        TUniqueId fragId2 = new TUniqueId();
+        fragId2.setHi(5);
+        fragId2.setLo(6);
+        Set<TUniqueId> fragIds = new HashSet<>();
+        fragIds.add(fragId1);
+        fragIds.add(fragId2);
+        Long backendId = 90000L;
+        List<Long> backendIds = Arrays.asList(backendId);
+
+        etlJobStatus.getLoadStatistic().initLoad(loadId, fragIds, backendIds);
+        etlJobStatus.getLoadStatistic().updateLoadProgress(backendId, loadId, fragId1, 1000, true);
+        etlJobStatus.getLoadStatistic().updateLoadProgress(backendId, loadId, fragId2, 999, true);
+        String showInfoStr = etlJobStatus.getLoadStatistic().toShowInfoStr();
         etlJobStatus.write(dos);
         // stats.clear();
         // counters.clear();
@@ -66,21 +86,18 @@ public class EtlJobStatusTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         EtlStatus etlJobStatus1 = new EtlStatus();
         etlJobStatus1.readFields(dis);
-        stats = etlJobStatus1.getStats();
         counters = etlJobStatus1.getCounters();
 
         Assert.assertEquals(etlJobStatus1.getState().name(), "FINISHED");
         for (int count = 0; count < 5; ++count) {
-            String statsKey = "statsKey" + count;
-            String statsValue = "statsValue" + count;
             String countersKey = "countersKey" + count;
             String countersValue = "countersValue" + count;
-            Assert.assertEquals(stats.get(statsKey), statsValue);
             Assert.assertEquals(counters.get(countersKey), countersValue);
         }
 
         Assert.assertTrue(etlJobStatus.equals(etlJobStatus1));
         Assert.assertEquals(trackingUrl, etlJobStatus1.getTrackingUrl());
+        Assert.assertEquals(showInfoStr, etlJobStatus.getLoadStatistic().toShowInfoStr());
 
         dis.close();
         file.delete();
