@@ -311,9 +311,12 @@ public class StmtExecutor {
                 }
 
                 if (optHints != null) {
+                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
                     for (String key : optHints.keySet()) {
-                        context.modifySessionVariable(new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
+                                true);
                     }
+                    context.setSessionVariable(sessionVariable);
                 }
             }
 

@@ -553,7 +553,7 @@ public class VariableMgr {
     }
 
     public static boolean shouldForwardToLeader(String name) {
-        return (getVarContext(name).getFlag() & DISABLE_FORWARD_TO_LEADER) != 0;
+        return (getVarContext(name).getFlag() & DISABLE_FORWARD_TO_LEADER) == 0;
     }
 
     @Retention(RetentionPolicy.RUNTIME)
