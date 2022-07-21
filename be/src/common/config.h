@@ -770,9 +770,6 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 CONF_String(dependency_librdkafka_debug, "all");
 
 // max loop count when be waiting its fragments finish
-CONF_Int64(be_loop_count_wait_fragments_finish, "0");
-
-// max loop count when cn waiting its fragments finish
-CONF_Int64(cn_loop_count_wait_fragments_finish, "0");
+CONF_Int64(loop_count_wait_fragments_finish, "0");
 
 } // namespace starrocks::config

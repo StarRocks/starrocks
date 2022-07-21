@@ -20,6 +20,7 @@
 // under the License.
 
 #include "service/internal_service.h"
+
 #include <atomic>
 
 #include "brpc/errno.pb.h"

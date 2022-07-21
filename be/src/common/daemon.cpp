@@ -54,7 +54,7 @@
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
-// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject 
+// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
 // all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
 // After all existing fragments executed, BE will exit.
 std::atomic<bool> k_starrocks_exit = false;
