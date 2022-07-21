@@ -130,7 +130,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // for the normal backend assignment (not colocate, bucket, and replicated join).
     protected boolean assignScanRangesPerDriverSeq = false;
 
-    protected boolean needLocalShuffleOperator = false;
+    protected boolean withLocalShuffle = false;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
@@ -263,12 +263,12 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.assignScanRangesPerDriverSeq = assignScanRangesPerDriverSeq;
     }
 
-    public boolean isNeedLocalShuffleOperator() {
-        return needLocalShuffleOperator;
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
     }
 
-    public void setNeedLocalShuffleOperator(boolean needLocalShuffleOperator) {
-        this.needLocalShuffleOperator = needLocalShuffleOperator;
+    public void setWithLocalShuffle(boolean withLocalShuffle) {
+        this.withLocalShuffle = withLocalShuffle;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {

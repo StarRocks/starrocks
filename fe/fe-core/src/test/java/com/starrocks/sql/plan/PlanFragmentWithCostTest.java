@@ -1149,56 +1149,47 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         try {
             // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
             String sql = "select sum(v2) from t0 group by v2";
-            ExecPlan plan = getExecPlan(sql);
-            String explain = plan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(explain, "1:AGGREGATE (update finalize)\n" +
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
-            PlanFragment fragment = plan.getFragments().get(1);
-            Assert.assertTrue(fragment.isNeedLocalShuffleOperator());
 
             // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
             sql = "select sum(v1) from t0 group by v1";
-            plan = getExecPlan(sql);
-            explain = plan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(explain, "1:AGGREGATE (update finalize)\n" +
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(1: v1)\n" +
                     "  |  group by: 1: v1\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
-            fragment = plan.getFragments().get(1);
-            Assert.assertFalse(fragment.isNeedLocalShuffleOperator());
 
             // case 3: use two-phase aggregation for non-grouping agg.
             sql = "select sum(v2) from t0";
-            plan = getExecPlan(sql);
-            explain = plan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(explain, "1:AGGREGATE (update serialize)\n" +
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: \n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
-            assertContains(explain, "3:AGGREGATE (merge finalize)\n" +
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
                     "  |  group by: \n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
-            fragment = plan.getFragments().get(1);
-            Assert.assertFalse(fragment.isNeedLocalShuffleOperator());
 
             // case 4: use two-phase aggregation for multiple BEs.
             sql = "select sum(v2) from t0 group by v2";
-            plan = getExecPlan(sql);
-            explain = plan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(explain, "1:AGGREGATE (update serialize)\n" +
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
-            assertContains(explain, "3:AGGREGATE (merge finalize)\n" +
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
@@ -1206,15 +1197,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             sql = "select sum(v2) from t0 group by v2";
-            plan = getExecPlan(sql);
-            explain = plan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(explain, "1:AGGREGATE (update serialize)\n" +
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
-            assertContains(explain, "3:AGGREGATE (merge finalize)\n" +
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
                     "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
