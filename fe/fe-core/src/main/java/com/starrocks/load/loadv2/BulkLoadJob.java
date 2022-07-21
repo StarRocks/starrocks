@@ -225,7 +225,7 @@ public abstract class BulkLoadJob extends LoadJob {
                 // retry task
                 idToTasks.remove(loadTask.getSignature());
                 if (loadTask instanceof LoadLoadingTask) {
-                    loadStatistic.removeLoad(((LoadLoadingTask) loadTask).getLoadId());
+                    loadingStatus.getLoadStatistic().removeLoad(((LoadLoadingTask) loadTask).getLoadId());
                 }
                 loadTask.updateRetryInfo();
                 idToTasks.put(loadTask.getSignature(), loadTask);
