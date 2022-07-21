@@ -52,8 +52,6 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.monitor.unit.ByteSizeValue;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -67,9 +65,6 @@ import java.util.stream.Collectors;
  * show [temp] partitions' detail info within a table
  */
 public class PartitionsProcDir implements ProcDirInterface {
-
-    private static final Logger LOG = LogManager.getLogger(PartitionsProcDir.class);
-
     private final PartitionType partitionType;
     private ImmutableList<String> titleNames;
     private Database db;
