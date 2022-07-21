@@ -160,6 +160,7 @@ import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
@@ -1416,6 +1417,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return ret;
     }
     // ------------------------------------------- Routine Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitStopRoutineLoadStatement(StarRocksParser.StopRoutineLoadStatementContext context) {
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        return new StopRoutineLoadStmt(new LabelName(database, name));
+    }
 
     @Override
     public ParseNode visitResumeRoutineLoadStatement(StarRocksParser.ResumeRoutineLoadStatementContext context) {

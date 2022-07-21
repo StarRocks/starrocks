@@ -37,6 +37,7 @@ import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.common.AnalysisException;
@@ -391,6 +392,12 @@ public class Analyzer {
         @Override
         public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
             RecoverPartitionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext session) {
+            StopRoutineLoadAnalyzer.analyze(statement, session);
             return null;
         }
 

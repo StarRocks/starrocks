@@ -105,6 +105,7 @@ import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
@@ -360,6 +361,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
