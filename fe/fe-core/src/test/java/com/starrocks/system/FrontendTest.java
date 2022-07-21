@@ -16,4 +16,13 @@ public class FrontendTest {
         Assert.assertEquals("modifiedHost", fe.getHost());
         Assert.assertTrue(fe.getEditLogPort() == 2110);
     }
+
+    @Test
+    public void testHbStatusBadNeedSync() {
+        FrontendHbResponse hbResponse = new FrontendHbResponse("BAD", "");
+        
+        Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "name", "testHost", 1110);
+        boolean needSync = fe.handleHbResponse(hbResponse, true);
+        Assert.assertTrue(needSync);
+    }
 }
