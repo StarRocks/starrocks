@@ -22,12 +22,9 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.common.collect.Table;
-import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.AuthorizationInfo;
@@ -47,7 +44,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
@@ -136,11 +132,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
 
-    protected LoadStatistic loadStatistic = new LoadStatistic();
-
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
+<<<<<<< HEAD
     public static class LoadStatistic {
         // number of rows processed on BE, this number will be updated periodically by query report.
         // A load job may has several load tasks(queries), and each task has several fragments.
@@ -211,6 +206,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             return newMap;
         }
     }
+=======
+>>>>>>> f931637a6 ([BugFix] Persist `LoadStatistic` in `EtlStatus` (#8689))
 
     // only for log replay
     public LoadJob() {
@@ -288,16 +285,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
-        loadStatistic.initLoad(loadId, fragmentIds, relatedBackendIds);
+        loadingStatus.getLoadStatistic().initLoad(loadId, fragmentIds, relatedBackendIds);
     }
 
     public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, long scannedRows, boolean isDone) {
-        loadStatistic.updateLoadProgress(beId, loadId, fragmentId, scannedRows, isDone);
+        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, scannedRows, isDone);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {
-        this.loadStatistic.fileNum = fileNum;
-        this.loadStatistic.totalFileSizeB = fileSize;
+        loadingStatus.setLoadFileInfo(fileNum, fileSize);
     }
 
     public TUniqueId getRequestId() {
@@ -780,7 +776,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             jobInfo.add(TimeUtils.longToTimeString(finishTimestamp));
             // tracking url
             jobInfo.add(loadingStatus.getTrackingUrl());
-            jobInfo.add(loadStatistic.toJson());
+            jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             return jobInfo;
         } finally {
             readUnlock();
