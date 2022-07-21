@@ -495,6 +495,10 @@ public class StmtExecutor {
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         } finally {
+            if (context.getState().isError() && coord != null) {
+                coord.cancel();
+            }
+
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 // The transaction of an insert operation begin at analyze phase.
