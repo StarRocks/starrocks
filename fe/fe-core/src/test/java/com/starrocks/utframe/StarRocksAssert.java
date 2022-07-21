@@ -97,7 +97,7 @@ public class StarRocksAssert {
         }
 
         CreateDbStmt createDbStmt =
-                (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt("create database " + dbName + ";", ctx);
+                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database " + dbName + ";", ctx);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         return this;
     }
