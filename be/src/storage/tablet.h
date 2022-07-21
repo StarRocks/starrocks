@@ -304,7 +304,7 @@ private:
 
     TimestampedVersionTracker _timestamped_version_tracker;
 
-    StarRocksCallOnce<Status> _init_once;
+    OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
     // it will be used in econ-mode in the future
     std::shared_mutex _meta_store_lock;
@@ -362,7 +362,7 @@ private:
 };
 
 inline bool Tablet::init_succeeded() {
-    return _init_once.has_called() && _init_once.stored_result().ok();
+    return invoked(_init_once);
 }
 
 inline bool Tablet::is_used() {
