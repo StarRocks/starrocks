@@ -65,6 +65,13 @@ public:
     // with_log is used to control whether to print the log when rollback txn.
     // with_log is false when there is no data load into one partition and abort
     // the related txn.
+    //
+    // wait_flush is used to control whether to wait the flush of memtablea.
+    // MemTable is asynchronous flush, if the sender actively cancel,
+    // the target end of load will not wait for memtable flush to complete,
+    // it will destroy LoadChannel, and some data structures will be destroyed at this time,
+    // such as RowsetWriter, MemTableSink, MemTracker for Load, etc.
+    // The items will be used in memtable flush, so it will be crash because of heap-use-after-free
     void abort(bool with_log = true, bool wait_flush = false);
 
     int64_t txn_id() const { return _opt.txn_id; }

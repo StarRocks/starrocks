@@ -493,6 +493,10 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
 
 void LocalTabletsChannel::cancel() {
     for (auto& it : _delta_writers) {
+        // MemTable is asynchronous flush, if the sender actively cancel, it will destroy LoadChannel,
+        // and some data structures will be destroyed at this time,
+        // such as RowsetWriter, MemTableSink, MemTracker for Load, etc.
+        // But The items will be used in memtable flush, so we should wait flush to avoid heap-use-after-free.
         (void)it.second->abort(true, true);
     }
 }
@@ -607,7 +611,7 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
 
 scoped_refptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
                                                         MemTracker* mem_tracker) {
-    return scoped_refptr<TabletsChannel>(new LocalTabletsChannel(load_channel, key, mem_tracker));
+    return {new LocalTabletsChannel(load_channel, key, mem_tracker)};
 }
 
 } // namespace starrocks
