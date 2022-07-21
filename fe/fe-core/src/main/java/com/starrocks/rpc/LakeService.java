@@ -5,6 +5,8 @@ package com.starrocks.rpc;
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
+import com.starrocks.lake.proto.CompactRequest;
+import com.starrocks.lake.proto.CompactResponse;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
@@ -19,7 +21,10 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = 5000)
     Future<AbortTxnResponse> abortTxnAsync(AbortTxnRequest request);
 
+    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = 1800000)
+    Future<CompactResponse> compactAsync(CompactRequest request);
+
     @ProtobufRPC(serviceName = "LakeService", methodName = "drop_tablet", onceTalkTimeout = 5000)
-    Future<DropTabletResponse> dropTablet(DropTabletRequest request);
+    Future<DropTabletResponse> dropTabletAsync(DropTabletRequest request);
 }
 
