@@ -255,7 +255,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         int64_t latest_offset;
 
         //When all kafka brokers are down,  query_watermark_offsets would block until timeout, which make the bthread unable to be preemptive.
-        // Here, we make 2 attempt to query_watermark_offsets. 
+        // Here, we make 2 attempt to query_watermark_offsets.
         // When all brokers are down, the 1st query_watermark_offsets with 1s timeout would fail quickly and return RdKafka::ERR__ALL_BROKERS_DOWN.
         // When the 1st query_watermark_offsets fails but not due to all brokers are down, the 2nd query_watermark_offsets would try with timeout config::routine_load_kafka_timeout_second.
 
@@ -270,8 +270,8 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
                 return Status::ServiceUnavailable("failed to query watermark offset, err: " + RdKafka::err2str(err));
             }
 
-            LOG(WARNING) << "failed to query watermark offset in fast path, topic: " << _topic
-                         << " partition: " << p_id << ", timeout: 1s"
+            LOG(WARNING) << "failed to query watermark offset in fast path, topic: " << _topic << " partition: " << p_id
+                         << ", timeout: 1s"
                          << " , err: " << RdKafka::err2str(err);
 
             // slow path
