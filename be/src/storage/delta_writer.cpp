@@ -344,9 +344,8 @@ void DeltaWriter::abort(bool with_log, bool wait_flush) {
     _with_rollback_log = with_log;
 
     if (wait_flush) {
-        if (auto st = _flush_token->wait(); !st.ok()) {
-            LOG(WARNING) << st;
-        }
+        // Any queued tasks not yet running are destroyed. If tasks are in flight, cancel() will wait
+        _flush_token->cancel();
     }
 }
 
