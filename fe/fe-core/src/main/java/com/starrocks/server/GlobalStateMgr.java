@@ -848,6 +848,12 @@ public class GlobalStateMgr {
 
         // 6. start task cleaner thread
         createTaskCleaner();
+
+        // 7. init starosAgent
+        if (Config.use_staros && !starOSAgent.init()) {
+            LOG.error("init starOSAgent failed");
+            System.exit(-1);
+        }
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -986,7 +992,9 @@ public class GlobalStateMgr {
     private void startLeaderOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
             // register service to starMgr
-            getStarOSAgent().registerAndBootstrapService();
+            if (!getStarOSAgent().registerAndBootstrapService()) {
+                System.exit(-1);
+            }
         }
 
         // start checkpoint thread
