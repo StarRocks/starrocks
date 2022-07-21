@@ -44,11 +44,11 @@ public class GlobalDictMetaService {
                 return;
             }
             checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
-            executeInMasterWithAdmin(request, response);
+            executeInLeaderWithAdmin(request, response);
         }
 
         // implement in derived classes
-        protected void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        protected void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
             throw new DdlException("Not implemented");
         }
@@ -65,7 +65,7 @@ public class GlobalDictMetaService {
         }
 
         @Override
-        public void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        public void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
             HttpMethod method = request.getRequest().method();
             if (method.equals(HttpMethod.POST)) {

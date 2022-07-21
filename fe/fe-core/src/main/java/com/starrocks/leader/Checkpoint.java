@@ -198,7 +198,7 @@ public class Checkpoint extends LeaderDaemon {
         try {
             cleaner.clean();
         } catch (IOException e) {
-            LOG.error("Master delete old image file fail.", e);
+            LOG.error("Leader delete old image file fail.", e);
         }
 
     }

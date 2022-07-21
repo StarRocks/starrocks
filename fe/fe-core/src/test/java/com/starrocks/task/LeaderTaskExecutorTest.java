@@ -24,16 +24,16 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class MasterTaskExecutorTest {
-    private static final Logger LOG = LoggerFactory.getLogger(MasterTaskExecutorTest.class);
+public class LeaderTaskExecutorTest {
+    private static final Logger LOG = LoggerFactory.getLogger(LeaderTaskExecutorTest.class);
     private static final int THREAD_NUM = 1;
     private static final long SLEEP_MS = 10L;
 
-    private MasterTaskExecutor executor;
+    private LeaderTaskExecutor executor;
 
     @Before
     public void setUp() {
-        executor = new MasterTaskExecutor("master_task_executor_test", THREAD_NUM, false);
+        executor = new LeaderTaskExecutor("master_task_executor_test", THREAD_NUM, false);
         executor.start();
     }
 
@@ -47,7 +47,7 @@ public class MasterTaskExecutorTest {
     @Test
     public void testSubmit() {
         // submit task
-        MasterTask task1 = new TestMasterTask(1L);
+        LeaderTask task1 = new TestLeaderTask(1L);
         Assert.assertTrue(executor.submit(task1));
         Assert.assertEquals(1, executor.getTaskNum());
         // submit same running task error
@@ -55,7 +55,7 @@ public class MasterTaskExecutorTest {
         Assert.assertEquals(1, executor.getTaskNum());
 
         // submit another task
-        MasterTask task2 = new TestMasterTask(2L);
+        LeaderTask task2 = new TestLeaderTask(2L);
         Assert.assertTrue(executor.submit(task2));
         Assert.assertEquals(2, executor.getTaskNum());
 
@@ -70,9 +70,9 @@ public class MasterTaskExecutorTest {
         }
     }
 
-    private class TestMasterTask extends MasterTask {
+    private class TestLeaderTask extends LeaderTask {
 
-        public TestMasterTask(long signature) {
+        public TestLeaderTask(long signature) {
             this.signature = signature;
         }
 

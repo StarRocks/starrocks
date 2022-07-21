@@ -225,7 +225,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
-import com.starrocks.task.MasterTaskExecutor;
+import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -363,8 +363,8 @@ public class GlobalStateMgr {
     private TabletChecker tabletChecker;
 
     // Thread pools for pending and loading task, separately
-    private MasterTaskExecutor pendingLoadTaskScheduler;
-    private MasterTaskExecutor loadingLoadTaskScheduler;
+    private LeaderTaskExecutor pendingLoadTaskScheduler;
+    private LeaderTaskExecutor loadingLoadTaskScheduler;
 
     private LoadJobScheduler loadJobScheduler;
 
@@ -536,11 +536,11 @@ public class GlobalStateMgr {
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
-                new MasterTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
+                new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
         // One load job will be split into multiple loading tasks, the queue size is not determined, so set Integer.MAX_VALUE.
         this.loadingLoadTaskScheduler =
-                new MasterTaskExecutor("loading_load_task_scheduler", Config.async_load_task_pool_size,
+                new LeaderTaskExecutor("loading_load_task_scheduler", Config.async_load_task_pool_size,
                         Integer.MAX_VALUE, !isCheckpointCatalog);
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
@@ -925,7 +925,7 @@ public class GlobalStateMgr {
 
         journalWriter.startDaemon();
 
-        // Set the feType to MASTER before writing edit log, because the feType must be Master when writing edit log.
+        // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
         feType = FrontendNodeType.LEADER;
         try {
@@ -957,9 +957,9 @@ public class GlobalStateMgr {
             nodeMgr.setLeaderInfo();
 
             // start all daemon threads that only running on MASTER FE
-            startMasterOnlyDaemonThreads();
+            startLeaderOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
-            startNonMasterDaemonThreads();
+            startNonLeaderDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
@@ -980,7 +980,7 @@ public class GlobalStateMgr {
     }
 
     // start all daemon threads only running on Master
-    private void startMasterOnlyDaemonThreads() {
+    private void startLeaderOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
             // register service to starMgr
             getStarOSAgent().registerAndBootstrapService();
@@ -1044,7 +1044,7 @@ public class GlobalStateMgr {
     }
 
     // start threads that should running on all FE
-    private void startNonMasterDaemonThreads() {
+    private void startNonLeaderDaemonThreads() {
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
@@ -1092,7 +1092,7 @@ public class GlobalStateMgr {
             replayer.start();
         }
 
-        startNonMasterDaemonThreads();
+        startNonLeaderDaemonThreads();
 
         MetricRepo.init();
 
@@ -2363,11 +2363,11 @@ public class GlobalStateMgr {
         return loadManager;
     }
 
-    public MasterTaskExecutor getPendingLoadTaskScheduler() {
+    public LeaderTaskExecutor getPendingLoadTaskScheduler() {
         return pendingLoadTaskScheduler;
     }
 
-    public MasterTaskExecutor getLoadingLoadTaskScheduler() {
+    public LeaderTaskExecutor getLoadingLoadTaskScheduler() {
         return loadingLoadTaskScheduler;
     }
 

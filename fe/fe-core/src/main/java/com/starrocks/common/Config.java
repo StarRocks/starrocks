@@ -250,7 +250,7 @@ public class Config extends ConfigBase {
     public static int edit_log_port = 9010;
 
     /**
-     * Master FE will save image every *edit_log_roll_num* meta journals.
+     * Leader FE will save image every *edit_log_roll_num* meta journals.
      */
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
@@ -272,7 +272,7 @@ public class Config extends ConfigBase {
     public static int meta_delay_toleration_second = 300;    // 5 min
 
     /**
-     * Master FE sync policy of bdbje.
+     * Leader FE sync policy of bdbje.
      * If you only deploy one Follower FE, set this to 'SYNC'. If you deploy more than 3 Follower FE,
      * you can set this and the following 'replica_sync_policy' to WRITE_NO_SYNC.
      * more info, see: http://docs.oracle.com/cd/E17277_02/html/java/com/sleepycat/je/Durability.SyncPolicy.html
@@ -316,8 +316,8 @@ public class Config extends ConfigBase {
     public static int bdbje_lock_timeout_second = 1;
 
     /**
-     * Set the maximum acceptable clock skew between non-master FE to Master FE host.
-     * This value is checked whenever a non-master FE establishes a connection to master FE via BDBJE.
+     * Set the maximum acceptable clock skew between non-leader FE to Leader FE host.
+     * This value is checked whenever a non-leader FE establishes a connection to leader FE via BDBJE.
      * The connection is abandoned if the clock skew is larger than this value.
      */
     @ConfField
@@ -399,7 +399,7 @@ public class Config extends ConfigBase {
 
     /**
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes info)
-     * and is supposed to start as Master.
+     * and is supposed to start as Leader.
      * If all the electable nodes can not start, we can copy the meta data
      * to another node and set this config to true to try to restart the FE.
      */
@@ -407,12 +407,12 @@ public class Config extends ConfigBase {
     public static String metadata_failure_recovery = "false";
 
     /**
-     * If true, non-master FE will ignore the meta data delay gap between Master FE and its self,
+     * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
-     * Non-master FE will still offer read service.
+     * Non-leader FE will still offer read service.
      * <p>
-     * This is helpful when you try to stop the Master FE for a relatively long time for some reason,
-     * but still wish the non-master FE can offer read service.
+     * This is helpful when you try to stop the Leader FE for a relatively long time for some reason,
+     * but still wish the non-leader FE can offer read service.
      */
     @ConfField(mutable = true)
     public static boolean ignore_meta_check = false;
