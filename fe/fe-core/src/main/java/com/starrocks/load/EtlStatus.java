@@ -22,18 +22,29 @@
 package com.starrocks.load;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Table;
+import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.dpp.DppResult;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.collections.map.HashedMap;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class EtlStatus implements Writable {
@@ -41,7 +52,17 @@ public class EtlStatus implements Writable {
 
     private TEtlState state;
     private String trackingUrl;
-    private Map<String, String> stats;
+
+    /**
+     * This field is useless in RUNTIME
+     * It only used for persisting LoadStatistic in consideration of compatibility
+     * It has only one k-v pair:
+     *   the key is LOAD_STATISTIC; the value is json string of loadStatistic
+     */
+    private Map<String, String> stats = new HashedMap();
+    private LoadStatistic loadStatistic = new LoadStatistic();
+    private static final String LOAD_STATISTIC = "STARROCKS_LOAD_STATISTIC";
+
     private Map<String, String> counters;
     private Map<Long, Map<String, Long>> tableCounters;
     // not persist
@@ -56,7 +77,6 @@ public class EtlStatus implements Writable {
     public EtlStatus() {
         this.state = TEtlState.RUNNING;
         this.trackingUrl = DEFAULT_TRACKING_URL;
-        this.stats = Maps.newHashMap();
         this.counters = Maps.newHashMap();
         this.tableCounters = Maps.newHashMap();
         this.fileMap = Maps.newHashMap();
@@ -78,20 +98,16 @@ public class EtlStatus implements Writable {
         return true;
     }
 
+    public LoadStatistic getLoadStatistic() {
+        return loadStatistic;
+    }
+
     public String getTrackingUrl() {
         return trackingUrl;
     }
 
     public void setTrackingUrl(String trackingUrl) {
         this.trackingUrl = Strings.nullToEmpty(trackingUrl);
-    }
-
-    public Map<String, String> getStats() {
-        return stats;
-    }
-
-    public void setStats(Map<String, String> stats) {
-        this.stats = stats;
     }
 
     public Map<String, String> getCounters() {
@@ -183,7 +199,9 @@ public class EtlStatus implements Writable {
         Text.writeString(out, state.name());
         Text.writeString(out, trackingUrl);
 
-        int statsCount = (stats == null) ? 0 : stats.size();
+        // persist load statics in stat counter
+        stats.put(LOAD_STATISTIC, loadStatistic.toJson());
+        int statsCount = stats.size();
         out.writeInt(statsCount);
         for (Map.Entry<String, String> entry : stats.entrySet()) {
             Text.writeString(out, entry.getKey());
@@ -211,6 +229,10 @@ public class EtlStatus implements Writable {
             String value = Text.readString(in);
             stats.put(key, value);
         }
+        // restore load statics from stat counter
+        if (stats.containsKey(LOAD_STATISTIC)) {
+            loadStatistic = LoadStatistic.fromJson(stats.get(LOAD_STATISTIC));
+        }
 
         int countersCount = in.readInt();
         for (int i = 0; i < countersCount; ++i) {
@@ -222,6 +244,11 @@ public class EtlStatus implements Writable {
         // if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_93) {
         //     tableCounters = GsonUtils.GSON.fromJson(Text.readString(in), tableCounters.getClass());
         // }
+    }
+
+    public void setLoadFileInfo(int filenum, long filesize) {
+        this.loadStatistic.fileNum = filenum;
+        this.loadStatistic.totalFileSizeB = filesize;
     }
 
     public boolean equals(Object obj) {
@@ -271,4 +298,87 @@ public class EtlStatus implements Writable {
 
         return state.equals(etlTaskStatus.state) && trackingUrl.equals(etlTaskStatus.trackingUrl);
     }
+
+    public static class LoadStatistic {
+        @SerializedName("counterTbl")
+        // number of rows processed on BE, this number will be updated periodically by query report.
+        // A load job may has several load tasks(queries), and each task has several fragments.
+        // each fragment will report independently.
+        // load task id -> fragment id -> rows count
+        private Table<String, String, Long> counterTbl = HashBasedTable.create();
+
+        // load task id -> unfinished backend id list
+        @SerializedName("unfinishedBackendIds")
+        private Map<String, List<Long>> unfinishedBackendIds = Maps.newHashMap();
+        // load task id -> all backend id list
+        @SerializedName("allBackendIds")
+        private Map<String, List<Long>> allBackendIds = Maps.newHashMap();
+
+        // number of file to be loaded
+        @SerializedName("fileNum")
+        public int fileNum = 0;
+        @SerializedName("totalFileSizeB")
+        public long totalFileSizeB = 0;
+
+
+        // init the statistic of specified load task
+        public synchronized void initLoad(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
+            String loadStr = DebugUtil.printId(loadId);
+            counterTbl.rowMap().remove(loadStr);
+            for (TUniqueId fragId : fragmentIds) {
+                counterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+            }
+            allBackendIds.put(loadStr, relatedBackendIds);
+            // need to get a copy of relatedBackendIds, so that when we modify the "relatedBackendIds" in
+            // allBackendIds, the list in unfinishedBackendIds will not be changed.
+            unfinishedBackendIds.put(loadStr, Lists.newArrayList(relatedBackendIds));
+        }
+
+        public synchronized void removeLoad(TUniqueId loadId) {
+            String loadStr = DebugUtil.printId(loadId);
+            counterTbl.rowMap().remove(loadStr);
+            unfinishedBackendIds.remove(loadStr);
+            allBackendIds.remove(loadStr);
+        }
+
+        public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
+                                                    long rows, boolean isDone) {
+            String loadStr = DebugUtil.printId(loadId);
+            String fragmentStr = DebugUtil.printId(fragmentId);
+            if (counterTbl.contains(loadStr, fragmentStr)) {
+                counterTbl.put(loadStr, fragmentStr, rows);
+            }
+            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
+                unfinishedBackendIds.get(loadStr).remove(backendId);
+            }
+        }
+
+        // used for `show load`
+        public synchronized String toShowInfoStr() {
+            long total = 0;
+            for (long rows : counterTbl.values()) {
+                total += rows;
+            }
+
+            Map<String, Object> details = Maps.newHashMap();
+            details.put("ScannedRows", total);
+            details.put("FileNumber", fileNum);
+            details.put("FileSize", totalFileSizeB);
+            details.put("TaskNumber", counterTbl.rowMap().size());
+            details.put("Unfinished backends", unfinishedBackendIds);
+            details.put("All backends", allBackendIds);
+            Gson gson = new Gson();
+            return gson.toJson(details);
+        }
+
+        public String toJson() throws IOException {
+            return GsonUtils.GSON.toJson(this);
+        }
+
+        public static LoadStatistic fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, LoadStatistic.class);
+        }
+
+    }
+
 }
