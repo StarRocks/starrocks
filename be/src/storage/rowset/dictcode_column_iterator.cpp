@@ -3,9 +3,50 @@
 #include "storage/rowset/dictcode_column_iterator.h"
 
 #include "column/column_helper.h"
+#include "gutil/casts.h"
 #include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
+
+Status GlobalDictCodeColumnIterator::decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
+    const auto& code_data =
+            down_cast<const vectorized::Int32Column*>(vectorized::ColumnHelper::get_data_column(&codes))->get_data();
+    const size_t size = code_data.size();
+
+    LowCardDictColumn::Container* container =
+            &down_cast<LowCardDictColumn*>(vectorized::ColumnHelper::get_data_column(words))->get_data();
+    bool output_nullable = words->is_nullable();
+
+    auto& res_data = *container;
+    res_data.resize(size);
+#ifndef NDEBUG
+    for (size_t i = 0; i < size; ++i) {
+        DCHECK(code_data[i] <= vectorized::DICT_DECODE_MAX_SIZE);
+        if (code_data[i] < 0) {
+            DCHECK(output_nullable);
+        }
+    }
+#endif
+    {
+        using namespace vectorized;
+        // res_data[i] = _local_to_global[code_data[i]];
+        SIMDGather::gather(res_data.data(), _local_to_global, code_data.data(), DICT_DECODE_MAX_SIZE, size);
+    }
+
+    if (output_nullable) {
+        // reserve null data
+        down_cast<vectorized::NullableColumn*>(words)->null_column_data().resize(size);
+        const auto& null_data = down_cast<const vectorized::NullableColumn&>(codes).immutable_null_column_data();
+        if (codes.has_null()) {
+            // assign code 0 if input data is null
+            for (size_t i = 0; i < size; ++i) {
+                res_data[i] = null_data[i] == 0 ? res_data[i] : 0;
+            }
+        }
+    }
+
+    return Status::OK();
+}
 
 Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator* file_column_iter,
                                                             GlobalDictMap* global_dict,
