@@ -85,7 +85,6 @@ private:
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
     size_t _buffer_unplug_threshold() const;
-    size_t _buffer_submit_threshold() const;
 
     inline void _set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);

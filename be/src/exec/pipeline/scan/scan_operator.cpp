@@ -103,11 +103,6 @@ size_t ScanOperator::_buffer_unplug_threshold() const {
     threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
     return threshold;
 }
-size_t ScanOperator::_buffer_submit_threshold() const {
-    size_t threshold = buffer_capacity() / _dop / 4;
-    threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
-    return threshold;
-}
 
 bool ScanOperator::has_output() const {
     if (_is_finished) {
@@ -231,7 +226,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
-    if (_unpluging && num_buffered_chunks() >= _buffer_submit_threshold()) {
+    if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
         return Status::OK();
     }
 
