@@ -276,6 +276,11 @@ private:
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
+<<<<<<< HEAD
+=======
+    void _init_schema() const;
+
+>>>>>>> 47e04baa4 ([Refactor] Extract common logics to success_once (#8952))
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
 
@@ -293,6 +298,12 @@ private:
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
 
     bool _has_bf_fpp = false;
+<<<<<<< HEAD
+=======
+
+    mutable std::unique_ptr<starrocks::vectorized::Schema> _schema;
+    mutable std::once_flag _init_schema_once_flag;
+>>>>>>> 47e04baa4 ([Refactor] Extract common logics to success_once (#8952))
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

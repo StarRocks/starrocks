@@ -100,17 +100,17 @@ public:
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
     uint32_t num_rows_per_block() const {
-        DCHECK(_load_index_once.has_called() && _load_index_once.stored_result().ok());
+        DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->num_rows_per_block();
     }
 
     ShortKeyIndexIterator lower_bound(const Slice& key) const {
-        DCHECK(_load_index_once.has_called() && _load_index_once.stored_result().ok());
+        DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->lower_bound(key);
     }
 
     ShortKeyIndexIterator upper_bound(const Slice& key) const {
-        DCHECK(_load_index_once.has_called() && _load_index_once.stored_result().ok());
+        DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->upper_bound(key);
     }
 
@@ -118,7 +118,7 @@ public:
     // NOTE: Before call this function , client should assure that
     // this segment is not empty.
     uint32_t last_block() const {
-        DCHECK(_load_index_once.has_called() && _load_index_once.stored_result().ok());
+        DCHECK(invoked(_load_index_once));
         DCHECK(num_rows() > 0);
         return _sk_index_decoder->num_items() - 1;
     }
@@ -183,7 +183,7 @@ private:
     std::vector<std::unique_ptr<ColumnReader>> _column_readers;
 
     // used to guarantee that short key index will be loaded at most once in a thread-safe way
-    StarRocksCallOnce<Status> _load_index_once;
+    OnceFlag _load_index_once;
     // used to hold short key index page in memory
     PageHandle _sk_index_handle;
     // short key index decoder

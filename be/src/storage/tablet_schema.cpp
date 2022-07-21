@@ -439,6 +439,23 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     return partial_tablet_schema;
 }
 
+<<<<<<< HEAD
+=======
+void TabletSchema::_init_schema() const {
+    starrocks::vectorized::Fields fields;
+    for (ColumnId cid = 0; cid < num_columns(); ++cid) {
+        auto f = ChunkHelper::convert_field_to_format_v2(cid, column(cid));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+    }
+    _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type());
+}
+
+vectorized::Schema* TabletSchema::schema() const {
+    std::call_once(_init_schema_once_flag, [this] { return _init_schema(); });
+    return _schema.get();
+}
+
+>>>>>>> 47e04baa4 ([Refactor] Extract common logics to success_once (#8952))
 TabletSchema::~TabletSchema() {
     if (_schema_map != nullptr) {
         _schema_map->erase(_id);

@@ -227,7 +227,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
 }
 
 Status Segment::load_index(MemTracker* mem_tracker) {
-    return _load_index_once.call([this, mem_tracker] {
+    auto res = success_once(_load_index_once, [this, mem_tracker] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         // read and parse short key index page
         ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
@@ -255,8 +255,16 @@ Status Segment::load_index(MemTracker* mem_tracker) {
 
         return st;
     });
+    return res.status();
 }
 
+<<<<<<< HEAD
+=======
+bool Segment::has_loaded_index() const {
+    return invoked(_load_index_once);
+}
+
+>>>>>>> 47e04baa4 ([Refactor] Extract common logics to success_once (#8952))
 Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
