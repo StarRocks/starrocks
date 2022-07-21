@@ -42,7 +42,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             if (partition.getRowCount() == 0) {
                 partitionSize = columns.size();
             } else {
-                partitionSize = (int) (Config.statistics_collect_max_row_count_per_query
+                partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
                         / (partition.getRowCount() * columns.size()) + 1);
             }
 

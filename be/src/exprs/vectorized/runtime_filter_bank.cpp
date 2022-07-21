@@ -489,8 +489,8 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
                     VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
                               << ", plan_node_id = " << _plan_node_id
                               << ", finst_id  = " << _runtime_state->fragment_instance_id();
+                    (*it)->set_shared_runtime_filter(t);
                     rf = t.get();
-                    (*it)->set_runtime_filter(rf);
                 }
             }
             if (rf != nullptr) {

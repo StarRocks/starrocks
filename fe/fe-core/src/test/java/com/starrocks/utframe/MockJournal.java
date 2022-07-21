@@ -174,14 +174,6 @@ public class MockJournal implements Journal {
         }
 
         @Override
-        public void transferToMaster() {
-        }
-
-        @Override
-        public void transferToNonMaster() {
-        }
-
-        @Override
         public boolean isLeader() {
             return true;
         }
