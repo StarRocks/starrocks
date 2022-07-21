@@ -24,29 +24,32 @@ public class JoinReorderLeftDeep extends JoinOrder {
             double diff = b.bestExprInfo.cost - a.bestExprInfo.cost;
             return (diff < 0 ? -1 : (diff > 0 ? 1 : 0));
         });
+
+        boolean useHeuristic = true;
         boolean[] used = new boolean[atomSize];
-        used[0] = true;
         GroupInfo leftGroup = atoms.get(0);
+        used[0] = true;
         int next = 1;
         while (next < atomSize) {
             if (used[next]) {
                 next++;
                 continue;
             }
-
-            // search the next group which:
-            // 1. has never been used
-            // 2. can inner join with leftGroup
             int index = next;
             Preconditions.checkState(!used[index]);
-            for (; index < atomSize; ++index) {
-                if (!used[index] && canBuildInnerJoinPredicate(leftGroup, atoms.get(index))) {
-                    break;
+            if (useHeuristic) {
+                // search the next group which:
+                // 1. has never been used
+                // 2. can inner join with leftGroup
+                for (; index < atomSize; ++index) {
+                    if (!used[index] && canBuildInnerJoinPredicate(leftGroup, atoms.get(index))) {
+                        break;
+                    }
                 }
-            }
-            // if not found, fallback to old strategy
-            if (index == atomSize) {
-                index = next;
+                // if not found, fallback to old strategy
+                if (index == atomSize) {
+                    index = next;
+                }
             }
             Preconditions.checkState(!used[index]);
             used[index] = true;
