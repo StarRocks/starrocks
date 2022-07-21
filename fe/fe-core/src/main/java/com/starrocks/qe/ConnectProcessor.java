@@ -569,6 +569,7 @@ public class ConnectProcessor {
         try {
             // set session variables first
             if (request.isSetModified_variables_sql()) {
+                LOG.info("Set session variables first: {}", request.modified_variables_sql);
                 new StmtExecutor(ctx, new OriginStatement(request.modified_variables_sql, 0), true).execute();
             }
             // 0 for compatibility.

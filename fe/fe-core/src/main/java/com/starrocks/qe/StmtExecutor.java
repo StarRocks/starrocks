@@ -312,7 +312,7 @@ public class StmtExecutor {
 
                 if (optHints != null) {
                     for (String key : optHints.keySet()) {
-                        context.modifySessionVariable(new SetVar(key, new StringLiteral(optHints.get(key))));
+                        context.modifySessionVariable(new SetVar(key, new StringLiteral(optHints.get(key))), true);
                     }
                 }
             }

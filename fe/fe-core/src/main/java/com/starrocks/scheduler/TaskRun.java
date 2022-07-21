@@ -93,7 +93,7 @@ public class TaskRun implements Comparable<TaskRun> {
         if (properties != null) {
             for (String key : properties.keySet()) {
                 try {
-                    runCtx.modifySessionVariable(new SetVar(key, new StringLiteral(properties.get(key))));
+                    runCtx.modifySessionVariable(new SetVar(key, new StringLiteral(properties.get(key))), true);
                 } catch (DdlException e) {
                     // not session variable
                     taskRunContextProperties.put(key, properties.get(key));

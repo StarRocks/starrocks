@@ -54,7 +54,7 @@ public class SetExecutor {
             // do nothing
             return;
         } else {
-            VariableMgr.setVar(ctx.getSessionVariable(), var, false);
+            ctx.modifySessionVariable(var, false);
         }
     }
 
@@ -78,7 +78,7 @@ public class SetExecutor {
     public void setSessionVars() throws DdlException {
         for (SetVar var : stmt.getSetVars()) {
             if (isSessionVar(var)) {
-                VariableMgr.setVar(ctx.getSessionVariable(), var, true);
+                ctx.modifySessionVariable(var, true);
             }
         }
     }
