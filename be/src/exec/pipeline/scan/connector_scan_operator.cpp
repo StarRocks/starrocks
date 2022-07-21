@@ -31,14 +31,14 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node);
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, dop, _scan_node);
 }
 
 // ==================== ConnectorScanOperator ====================
 
-ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
+ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                                              ScanNode* scan_node)
-        : ScanOperator(factory, id, driver_sequence, scan_node) {}
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -75,10 +75,10 @@ bool ConnectorScanOperator::has_shared_chunk_source() const {
     return !active_inputs.empty();
 }
 
-bool ConnectorScanOperator::has_buffer_output() const {
+size_t ConnectorScanOperator::num_buffered_chunks() const {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();
-    return !buffer.empty(_driver_sequence);
+    return buffer.size(_driver_sequence);
 }
 
 ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {

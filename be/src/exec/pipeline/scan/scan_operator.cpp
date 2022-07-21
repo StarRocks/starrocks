@@ -18,9 +18,11 @@ namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                           ScanNode* scan_node)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
+          _dop(dop),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
@@ -100,23 +102,31 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-    if (has_buffer_output()) {
+    // Try to buffer enough chunks for exec thread, to reduce scheduling overhead
+    // The default threshould is BufferCapacity/DOP/4, and its range is [1, 16]
+    // The overall strategy:
+    // 1. If enough buffered chunks: pull_chunk, so return true
+    // 2. If not enough buffered chunks
+    //   2.1 Enough running io-tasks and buffer not full: wait some time for more chunks, so return false
+    //   2.1 Enough running io-tasks but buffer is full: pull_chunks, so return true
+    //   2.2 Not enough running io-tasks: submit io tasks, so return true
+    //   2.3 No more tasks: pull_chunk, so return true
+    size_t threshould = buffer_capacity() / _dop / 4;
+    threshould = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshould));
+    if (num_buffered_chunks() >= threshould) {
         return true;
     }
-
+    if (is_buffer_full() && num_buffered_chunks() > 0) {
+        return true;
+    }
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator || is_buffer_full()) {
         return false;
     }
 
-    // Because committing i/o task is trigger ONLY in pull_chunk,
-    // return true if more i/o tasks can be committed.
-
-    // Can pick up more morsels.
+    // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         return true;
     }
-
-    // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
@@ -124,7 +134,7 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    return false;
+    return num_buffered_chunks() > 0;
 }
 
 bool ScanOperator::pending_finish() const {
@@ -152,7 +162,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Remain some data in the buffer
-    if (has_buffer_output()) {
+    if (num_buffered_chunks() > 0) {
         return false;
     }
 
@@ -303,7 +313,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
                 // Read chunk
                 Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                        kIOTaskBatchSize, state, &num_read_chunks, worker_id, _workgroup);
                 if (!status.ok() && !status.is_end_of_file()) {
                     _set_scan_status(status);
                 }
@@ -341,7 +351,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
                 Status status =
-                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(kIOTaskBatchSize, state);
                 if (!status.ok() && !status.is_end_of_file()) {
                     _set_scan_status(status);
                 }

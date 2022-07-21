@@ -18,11 +18,11 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ScanOperator : public SourceOperator {
 public:
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
 
     ~ScanOperator() override;
 
-    static size_t max_buffer_capacity() { return config::pipeline_io_buffer_size; }
+    static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
 
     Status prepare(RuntimeState* state) override;
 
@@ -57,15 +57,15 @@ public:
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
 protected:
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
+    static constexpr size_t kIOTaskBatchSize = 64;
 
     // TODO: remove this to the base ScanContext.
     /// Shared scan
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
-    virtual bool has_buffer_output() const = 0;
     virtual ChunkPtr get_chunk_from_buffer() = 0;
+    virtual size_t num_buffered_chunks() const = 0;
     virtual size_t buffer_size() const = 0;
     virtual size_t buffer_capacity() const = 0;
     virtual size_t default_buffer_capacity() const = 0;
@@ -99,6 +99,7 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    const int32_t _dop;
     int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
