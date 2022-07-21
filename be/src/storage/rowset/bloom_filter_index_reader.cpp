@@ -32,30 +32,8 @@ namespace starrocks {
 
 StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
                                             bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
-    while (true) {
-        auto curr_state = _state.load(std::memory_order_acquire);
-        if (curr_state == kLoaded) {
-            return false;
-        }
-        if (curr_state == kUnloaded && _state.compare_exchange_weak(curr_state, kLoading, std::memory_order_release)) {
-            auto st = do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker);
-            if (st.ok()) {
-                _state.store(kLoaded, std::memory_order_release);
-                int r = bthread::futex_wake_private(&_state, INT_MAX);
-                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
-                return true;
-            } else {
-                _state.store(kUnloaded, std::memory_order_release);
-                int r = bthread::futex_wake_private(&_state, 1);
-                PLOG_IF(ERROR, r < 0) << " bthread::futex_wake_private";
-                return st;
-            }
-        }
-        if (curr_state == kLoading) {
-            int r = bthread::futex_wait_private(&_state, curr_state, nullptr);
-            PLOG_IF(ERROR, r != 0 && errno != EAGAIN) << " bthread::futex_wait_private";
-        }
-    }
+    return success_once(_load_once,
+                        [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker); });
 }
 
 Status BloomFilterIndexReader::do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
