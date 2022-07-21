@@ -1,6 +1,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -13,6 +14,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -79,13 +81,13 @@ public class MvTaskRunProcessorTest {
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
                 .withNewMaterializedView("create materialized view test.mv1\n" +
-                        "partition by date_trunc('week',k1) \n" +
+                        "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2)\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
                 .withNewMaterializedView("create materialized view test.mv_inactive\n" +
-                        "partition by date_trunc('week',k1) \n" +
+                        "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2)\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
@@ -167,6 +169,38 @@ public class MvTaskRunProcessorTest {
         }
     }
 
+
+    @Test
+    public void testCollectNeedRefreshPartitionNames() {
+
+        MaterializedView materializedView1 = new MaterializedView();
+        materializedView1.addPartitionNameRef("p1","m1");
+        materializedView1.addPartitionNameRef("p1","m2");
+        materializedView1.addPartitionNameRef("p2","m2");
+        materializedView1.addPartitionNameRef("p3","m2");
+        materializedView1.addPartitionNameRef("p3","m3");
+        materializedView1.addPartitionNameRef("p3","m4");
+        Set<String> needRefreshMvPartitionNames1 = Sets.newHashSet();
+        Set<String> needRefreshTablePartitionNames1 = Sets.newHashSet();
+        Deencapsulation.invoke(new MvTaskRunProcessor(), "collectNeedRefreshPartitionNames", materializedView1,
+                "m2", needRefreshMvPartitionNames1, needRefreshTablePartitionNames1);
+        Assert.assertEquals(4, needRefreshMvPartitionNames1.size());
+        Assert.assertEquals(3, needRefreshTablePartitionNames1.size());
+
+
+        MaterializedView materializedView2 = new MaterializedView();
+        materializedView2.addPartitionNameRef("p1","m1");
+        materializedView2.addPartitionNameRef("p2","m2");
+        materializedView2.addPartitionNameRef("p3","m3");
+        Set<String> needRefreshMvPartitionNames2 = Sets.newHashSet();
+        Set<String> needRefreshTablePartitionNames2 = Sets.newHashSet();
+        Deencapsulation.invoke(new MvTaskRunProcessor(), "collectNeedRefreshPartitionNames", materializedView2,
+                "m2", needRefreshMvPartitionNames2, needRefreshTablePartitionNames2);
+        Assert.assertEquals(1, needRefreshMvPartitionNames2.size());
+        Assert.assertEquals(1, needRefreshTablePartitionNames2.size());
+
+    }
+
     private void testBaseTablePartitionInsertData(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p0, p0 insert data after collect and before insert overwrite
@@ -243,6 +277,7 @@ public class MvTaskRunProcessorTest {
         setPartitionVersion(tbl1.getPartition("p1"), 2);
         try {
             taskRun.executeTaskRun();
+            Assert.fail("should not be here. testBaseTablePartitionRename will throw exception");
         } catch (SemanticException e) {
             Assert.assertEquals(
                     "Refresh materialized view failed: Base table: " + tbl1.getId() +
@@ -390,6 +425,7 @@ public class MvTaskRunProcessorTest {
         setPartitionVersion(tbl1.getPartition("p4"),2);
         try {
             taskRun.executeTaskRun();
+            Assert.fail("should not be here. testBaseTableDropPartition will throw exception");
         } catch (SemanticException e) {
             Assert.assertEquals(
                     "Refresh materialized view failed: Base table: " + tbl1.getId() +

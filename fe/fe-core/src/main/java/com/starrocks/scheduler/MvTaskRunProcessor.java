@@ -248,10 +248,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             materializedView.addBasePartition(baseTableId, needAddPartition);
             Range<PartitionKey> basePartitionRange = baseRangePartitionInfo.getRange(basePartitionId);
             List<Column> basePartitionColumns = baseRangePartitionInfo.getPartitionColumns();
-            int basePartitionIndex = -1;
+            int basePartitionColumnIndex = -1;
             for (int i = 0; i < basePartitionColumns.size(); i++) {
                 if (basePartitionColumns.get(i).equals(partitionColumn)) {
-                    basePartitionIndex = i;
+                    basePartitionColumnIndex = i;
                     break;
                 }
             }
@@ -262,7 +262,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             Range<PartitionKey> mvPartitionKeyRange = ExpressionPartitionUtil
                     .getPartitionKeyRange(partitionExpr, partitionColumn,
                             expressionRangePartitionInfo.getIdToRange(false).values(),
-                            basePartitionRange, basePartitionIndex);
+                            basePartitionRange, basePartitionColumnIndex);
             if (mvPartitionKeyRange != null) {
                 addPartition(database, materializedView, mvPartitionKeyRange, partitionProperties, distributionDesc);
             }
@@ -384,7 +384,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                     Set<String> newNeedRefreshMvPartitionNames = Sets.newHashSet();
                     needRefreshTablePartitionNames = Sets.newHashSet();
                     for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
-                        collectNeedRefreshPartitionNames(materializedView, olapTable, needRefreshMvPartitionName,
+                        collectNeedRefreshPartitionNames(materializedView, needRefreshMvPartitionName,
                                 newNeedRefreshMvPartitionNames, needRefreshTablePartitionNames);
                     }
                     needRefreshMvPartitionNames = newNeedRefreshMvPartitionNames;
@@ -425,8 +425,8 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 collectPartitionInfo(olapTables, tableNamePartitionNames));
     }
 
-    private void collectNeedRefreshPartitionNames(MaterializedView materializedView, OlapTable olapTable,
-                                                  String mvPartitionName, Set<String> needRefreshMvPartitionNames,
+    private void collectNeedRefreshPartitionNames(MaterializedView materializedView, String mvPartitionName,
+                                                  Set<String> needRefreshMvPartitionNames,
                                                   Set<String> needRefreshTablePartitionNames) {
         if (needRefreshMvPartitionNames.contains(mvPartitionName)) {
             return;
@@ -440,8 +440,8 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             needRefreshTablePartitionNames.add(tablePartitionName);
             Set<String> mvPartitionNames = materializedView.getMvPartitionNamesByTable(tablePartitionName);
             for (String partitionName : mvPartitionNames) {
-                collectNeedRefreshPartitionNames(materializedView, olapTable, partitionName,
-                        needRefreshMvPartitionNames, needRefreshTablePartitionNames);
+                collectNeedRefreshPartitionNames(materializedView, partitionName, needRefreshMvPartitionNames,
+                        needRefreshTablePartitionNames);
             }
         }
     }
