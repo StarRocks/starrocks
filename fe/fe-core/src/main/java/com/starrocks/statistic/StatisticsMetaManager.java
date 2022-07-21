@@ -342,7 +342,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
-        trySleep(Config.statistics_manager_sleep_time_sec * 1000);
+        trySleep(Config.statistic_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {
             if (createDatabase()) {
                 break;

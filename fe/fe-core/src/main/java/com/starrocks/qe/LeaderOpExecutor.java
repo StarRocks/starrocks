@@ -131,7 +131,7 @@ public class LeaderOpExecutor {
         params.setQuery_options(queryOptions);
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        LOG.info("Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
+        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         result = FrontendServiceProxy.call(thriftAddress,
                 thriftTimeoutMs,

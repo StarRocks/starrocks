@@ -184,16 +184,6 @@ public class BDBHA implements HAProtocol {
     }
 
     @Override
-    public void transferToMaster() {
-
-    }
-
-    @Override
-    public void transferToNonMaster() {
-
-    }
-
-    @Override
     public boolean isLeader() {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         String leaderName = replicationGroupAdmin.getMasterNodeName();

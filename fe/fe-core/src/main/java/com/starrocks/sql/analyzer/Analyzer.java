@@ -10,6 +10,7 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
@@ -232,6 +233,12 @@ public class Analyzer {
         @Override
         public Void visitDeleteStatement(DeleteStmt node, ConnectContext context) {
             DeleteAnalyzer.analyze(node, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterUserStatement(AlterUserStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
 

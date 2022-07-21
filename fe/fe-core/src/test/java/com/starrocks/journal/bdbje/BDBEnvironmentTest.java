@@ -25,7 +25,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
@@ -96,6 +95,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry newvalue = new DatabaseEntry();
         db.get(null, key, newvalue, LockMode.READ_COMMITTED);
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+        db.close();
         environment.close();
     }
 
@@ -171,6 +171,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
+        masterDb.close();
 
         Thread.sleep(1000);
 
@@ -183,6 +184,7 @@ public class BDBEnvironmentTest {
             DatabaseEntry newvalue = new DatabaseEntry();
             followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
             Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+            followerDb.close();
         }
 
         // add observer
@@ -202,6 +204,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry newvalue = new DatabaseEntry();
         observerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+        observerDb.close();
 
         // close
         masterEnvironment.close();
@@ -228,6 +231,7 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(i + 1, masterEnvironment.getDatabaseNames().size());
             Assert.assertEquals(DB_INDEX_ARR[i], masterEnvironment.getDatabaseNames().get(i));
             masterDb.put(null, key, value);
+            masterDb.close();
 
             Thread.sleep(1000);
 
@@ -240,6 +244,7 @@ public class BDBEnvironmentTest {
                 DatabaseEntry newvalue = new DatabaseEntry();
                 followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
                 Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+                followerDb.close();
             }
         }
 
@@ -280,6 +285,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
+        masterDb.close();
         Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
         Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
 
@@ -293,6 +299,7 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
             Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
             Assert.assertEquals(DB_INDEX_OLD, followerEnvironment.getDatabaseNames().get(0));
+            followerDb.close();
         }
 
         // manually backup follower's meta dir
@@ -309,6 +316,7 @@ public class BDBEnvironmentTest {
         for (int i = 0; i < Config.txn_rollback_limit * 2; i++) {
             masterDb.put(null, randomEntry(), randomEntry());
         }
+        masterDb.close();
         Assert.assertEquals(2, masterEnvironment.getDatabaseNames().size());
         Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
         Assert.assertEquals(DB_INDEX_NEW, masterEnvironment.getDatabaseNames().get(1));

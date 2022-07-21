@@ -26,11 +26,6 @@
 namespace starrocks {
 
 class AgentServer;
-class ExecEnv;
-class ThriftServer;
-class TAgentResult;
-class TAgentTaskRequest;
-class TAgentPublishRequest;
 
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
@@ -39,9 +34,6 @@ public:
     explicit BackendService(ExecEnv* exec_env);
 
     ~BackendService() override;
-
-    // NOTE: now we do not support multiple backend in one process
-    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
 
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
 

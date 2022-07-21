@@ -11,6 +11,7 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -375,6 +376,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterUserStatement(AlterUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
