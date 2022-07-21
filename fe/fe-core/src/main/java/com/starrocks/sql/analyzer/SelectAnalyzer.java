@@ -18,7 +18,6 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
