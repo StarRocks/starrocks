@@ -126,7 +126,7 @@ ALTER TABLE tbl SET ("colocate_with" = "group_name");
 您也可以通过以下命令，删除一个表的 Colocation 属性：
 
 ~~~SQL
-ALTER TABLE tbl SET ("colocate_with" = "group_name");
+ALTER TABLE tbl SET ("colocate_with" = "");
 ~~~
 
 <br/>
