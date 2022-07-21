@@ -5,12 +5,14 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.sql.optimizer.statistics.MockDictManager;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Optional;
 
 public class LowCardinalityTest extends PlanTestBase {
     @BeforeClass
@@ -829,7 +831,8 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
-        sql =  "select count(*) from supplier l join [broadcast] (select max(id_int) as id_int from table_int) r on l.S_ADDRESS = r.id_int where l.S_ADDRESS not like '%key%'";
+        sql =
+                "select count(*) from supplier l join [broadcast] (select max(id_int) as id_int from table_int) r on l.S_ADDRESS = r.id_int where l.S_ADDRESS not like '%key%'";
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
@@ -1189,13 +1192,20 @@ public class LowCardinalityTest extends PlanTestBase {
     @Test
     public void testHasGlobalDictButNotFound() throws Exception {
         IDictManager dictManager = IDictManager.getInstance();
-        MockDictManager instance = (MockDictManager) dictManager;
-        instance.setOnlyReturnEmptyDict(true);
+
+        new Expectations(dictManager) {
+            {
+                dictManager.hasGlobalDict(anyLong, "S_ADDRESS", anyLong);
+                result = true;
+                dictManager.getGlobalDict(anyLong, "S_ADDRESS");
+                result = Optional.empty();
+            }
+        };
+
         String sql = "select S_ADDRESS from supplier group by S_ADDRESS";
         // Check No Exception
         String plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
-        instance.setOnlyReturnEmptyDict(false);
     }
 
 }
