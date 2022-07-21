@@ -37,6 +37,9 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    if (_flush_token != nullptr) {
+        _flush_token->cancel();
+    }
     switch (_get_state()) {
     case kUninitialized:
     case kCommitted:
@@ -327,6 +330,11 @@ Status DeltaWriter::commit() {
 void DeltaWriter::abort(bool with_log) {
     _set_state(kAborted);
     _with_rollback_log = with_log;
+    if (_flush_token != nullptr) {
+        // Wait until all background tasks finished/cancelled.
+        // https://github.com/StarRocks/starrocks/issues/8906
+        _flush_token->cancel();
+    }
 }
 
 int64_t DeltaWriter::partition_id() const {
