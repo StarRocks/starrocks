@@ -71,19 +71,20 @@ starrocksSparkRDD.collect()
 
 ### 通用配置项
 
-| Key                                  | Default Value     | Comment                                                      |
+| 配置项                               | 默认值            | 说明                                                         |
 | ------------------------------------ | ----------------- | ------------------------------------------------------------ |
-| starrocks.fenodes                    | --                | StarRocks FE http 地址，支持多个地址，使用逗号分隔            |
-| starrocks.table.identifier           | --                | StarRocks 表名，如：db1.tbl1                                 |
-| starrocks.request.retries            | 3                 | 向StarRocks发送请求的重试次数                                    |
-| starrocks.request.connect.timeout.ms | 30000             | 向StarRocks发送请求的连接超时时间                                |
-| starrocks.request.read.timeout.ms    | 30000             | 向StarRocks发送请求的读取超时时间                                |
-| starrocks.request.query.timeout.s    | 3600              | 查询StarRocks的超时时间，默认值为1小时，-1表示无超时限制             |
-| starrocks.request.tablet.size        | Integer.MAX_VALUE | 一个RDD Partition对应的StarRocks Tablet个数。此数值设置越小，则会生成越多的Partition。从而提升Spark侧的并行度，但同时会对StarRocks造成更大的压力。 |
-| starrocks.batch.size                 | 1024              | 一次从BE读取数据的最大行数。增大此数值可减少Spark与StarRocks之间建立连接的次数。从而减轻网络延迟所带来的的额外时间开销。 |
-| starrocks.exec.mem.limit             | 2147483648        | 单个查询的内存限制。默认为 2GB，单位为字节                      |
-| starrocks.deserialize.arrow.async    | false             | 是否支持异步转换Arrow格式到spark-starrocks-connector迭代所需的RowBatch                 |
-| starrocks.deserialize.queue.size     | 64                | 异步转换Arrow格式的内部处理队列，当starrocks.deserialize.arrow.async为true时生效        |
+| starrocks.fenodes                    | --                | StarRocks FE 的 http 地址，支持多个地址，使用逗号 (,) 分隔。 |
+| starrocks.table.identifier           | --                | StarRocks 表名，如 db1.tbl1。                                |
+| starrocks.request.retries            | 3                 | 向 StarRocks 发送请求的重试次数。                            |
+| starrocks.request.connect.timeout.ms | 30000             | 向 StarRocks 发送请求的连接超时时间。                        |
+| starrocks.request.read.timeout.ms    | 30000             | 向 StarRocks 发送请求的读取超时时间。                        |
+| starrocks.request.query.timeout.s    | 3600              | 查询 StarRocks 的超时时间，默认值为 1 小时，-1 表示无超时限制。 |
+| starrocks.request.tablet.size        | Integer.MAX_VALUE | 一个 Spark RDD分区 对应的 StarRocks Tablet 个数。参数设置越小，生成的分区越多，进而提升 Spark 侧的并行度，但同时会对 StarRocks 造成更大的压力。 |
+| starrocks.batch.size                 | 1024              | 单次从 BE 读取数据的最大行数。调大参数取值可减少 Spark 与 StarRocks 之间建立连接的次数，从而减轻网络延迟所带来的的额外时间开销。 |
+| starrocks.exec.mem.limit             | 2147483648        | 单个查询的内存限制。默认为 2 GB，单位为字节。                |
+| starrocks.deserialize.arrow.async    | false             | 是否支持异步转换 Arrow 格式到 spark-starrocks-connector 迭代所需的 RowBatch。 |
+| starrocks.deserialize.queue.size     | 64                | 异步转换 Arrow 格式的内部处理队列，当 starrocks.deserialize.arrow.async 为 true 时生效。 |
+| starrocks.filter.query               | --                | 过滤读取数据的表达式，此表达式透传给 StarRocks。StarRocks 使用此表达式完成源端数据过滤。 |
 
 ### SQL 和 Dataframe 专有配置
 
@@ -100,7 +101,6 @@ starrocksSparkRDD.collect()
 | starrocks.request.auth.user     | --            | 访问StarRocks的用户名                                            |
 | starrocks.request.auth.password | --            | 访问StarRocks的密码                                              |
 | starrocks.read.field            | --            | 读取StarRocks表的列名列表，多列之间使用逗号分隔                  |
-| starrocks.filter.query          | --            | 过滤读取数据的表达式，此表达式透传给StarRocks。StarRocks使用此表达式完成源端数据过滤。 |
 
 ## StarRocks 和 Spark 列类型映射关系
 
