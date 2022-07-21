@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -23,9 +24,33 @@ public class JoinReorderLeftDeep extends JoinOrder {
             double diff = b.bestExprInfo.cost - a.bestExprInfo.cost;
             return (diff < 0 ? -1 : (diff > 0 ? 1 : 0));
         });
-
+        boolean[] used = new boolean[atomSize];
+        used[0] = true;
         GroupInfo leftGroup = atoms.get(0);
-        for (int index = 1; index < atomSize; ++index) {
+        int next = 1;
+        while (next < atomSize) {
+            if (used[next]) {
+                next++;
+                continue;
+            }
+
+            // search the next group which:
+            // 1. has never been used
+            // 2. can inner join with leftGroup
+            int index = next;
+            Preconditions.checkState(!used[index]);
+            for (; index < atomSize; ++index) {
+                if (!used[index] && canBuildInnerJoinPredicate(leftGroup, atoms.get(index))) {
+                    break;
+                }
+            }
+            // if not found, fallback to old strategy
+            if (index == atomSize) {
+                index = next;
+            }
+            Preconditions.checkState(!used[index]);
+            used[index] = true;
+
             GroupInfo rightGroup = atoms.get(index);
             ExpressionInfo joinExpr = buildJoinExpr(leftGroup, atoms.get(index));
             joinExpr.expr.deriveLogicalPropertyItself();
