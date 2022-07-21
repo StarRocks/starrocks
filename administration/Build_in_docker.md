@@ -41,7 +41,6 @@ StarRocks 版本分支与开发环境镜像版本的对应关系如下所示：
   git checkout {branch-name}
 
   docker run -it -v /{local-path}/.m2:/root/.m2 -v /{local-path}/starrocks:/root/starrocks --name {container-name} -d starrocks/dev-env:{branch-name}
-  docker exec -it {container-name} /root/starrocks/build.sh
   
   docker exec -it {container-name} /root/starrocks/build.sh
   ```
