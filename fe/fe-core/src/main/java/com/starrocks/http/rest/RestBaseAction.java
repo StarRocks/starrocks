@@ -79,7 +79,6 @@ public class RestBaseAction extends BaseAction {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
         ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCluster(authInfo.cluster);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }
@@ -121,13 +120,13 @@ public class RestBaseAction extends BaseAction {
         writeResponse(request, response, HttpResponseStatus.TEMPORARY_REDIRECT);
     }
 
-    public boolean redirectToMaster(BaseRequest request, BaseResponse response) throws DdlException {
+    public boolean redirectToLeader(BaseRequest request, BaseResponse response) throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (globalStateMgr.isMaster()) {
+        if (globalStateMgr.isLeader()) {
             return false;
         }
         redirectTo(request, response,
-                new TNetworkAddress(globalStateMgr.getMasterIp(), globalStateMgr.getMasterHttpPort()));
+                new TNetworkAddress(globalStateMgr.getLeaderIp(), globalStateMgr.getLeaderHttpPort()));
         return true;
     }
 }

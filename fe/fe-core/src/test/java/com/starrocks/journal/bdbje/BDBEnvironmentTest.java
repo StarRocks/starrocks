@@ -9,6 +9,8 @@ import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,6 +43,10 @@ public class BDBEnvironmentTest {
         // give master time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
+        // set timeout to a really long time so that ut can pass even when IO load is very high
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
     }
 
     @After
@@ -481,5 +487,50 @@ public class BDBEnvironmentTest {
             Thread.sleep(1000);
             LOG.warn("==============> getDatabasesNames() {}", masterEnvironment.getDatabaseNames());
         }
+    }
+
+    @Test
+    public void testGetDatabase() throws Exception {
+        String selfNodeHostPort = findUnbindHostPort();
+        BDBEnvironment environment = new BDBEnvironment(
+                createTmpDir(),
+                "standalone",
+                selfNodeHostPort,
+                selfNodeHostPort,
+                true);
+        environment.setup();
+
+        new MockUp<ReplicatedEnvironment>() {
+            @Mock
+            public List<String> getDatabaseNames() {
+                List<String> list = new ArrayList<>();
+                list.add("1001");
+                list.add("2001");
+                list.add("aaa_3001");
+                list.add("aaa_4001");
+                list.add("aaa_bbb_");
+                return list;
+            }
+        };
+
+        List<Long> l1 = environment.getDatabaseNamesWithPrefix("");
+        Assert.assertEquals(2, l1.size());
+        Assert.assertEquals((Long) 1001L, l1.get(0));
+        Assert.assertEquals((Long) 2001L, l1.get(1));
+
+        List<Long> l2 = environment.getDatabaseNamesWithPrefix("aaa_");
+        Assert.assertEquals(2, l2.size());
+        Assert.assertEquals((Long) 3001L, l2.get(0));
+        Assert.assertEquals((Long) 4001L, l2.get(1));
+
+        // prefix not fully match
+        List<Long> l3 = environment.getDatabaseNamesWithPrefix("aaa");
+        Assert.assertEquals(0, l3.size());
+
+        // prefix not match
+        List<Long> l4 = environment.getDatabaseNamesWithPrefix("bbb_");
+        Assert.assertEquals(0, l4.size());
+
+        environment.close();
     }
 }

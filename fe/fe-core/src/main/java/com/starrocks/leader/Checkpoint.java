@@ -19,11 +19,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.master;
+package com.starrocks.leader;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.MetaCleaner;
@@ -42,7 +42,7 @@ import java.util.List;
 /**
  * Checkpoint daemon is running on master node. handle the checkpoint work for starrocks.
  */
-public class Checkpoint extends MasterDaemon {
+public class Checkpoint extends LeaderDaemon {
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;
@@ -120,7 +120,7 @@ public class Checkpoint extends MasterDaemon {
             otherNodesCount = allFrontends.size() - 1; // skip master itself
             for (Frontend fe : allFrontends) {
                 String host = fe.getHost();
-                if (host.equals(GlobalStateMgr.getServingState().getMasterIp())) {
+                if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
                     // skip master itself
                     continue;
                 }
@@ -149,7 +149,7 @@ public class Checkpoint extends MasterDaemon {
             if (successPushed > 0) {
                 for (Frontend fe : allFrontends) {
                     String host = fe.getHost();
-                    if (host.equals(GlobalStateMgr.getServingState().getMasterIp())) {
+                    if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
                         // skip master itself
                         continue;
                     }
@@ -198,7 +198,7 @@ public class Checkpoint extends MasterDaemon {
         try {
             cleaner.clean();
         } catch (IOException e) {
-            LOG.error("Master delete old image file fail.", e);
+            LOG.error("Leader delete old image file fail.", e);
         }
 
     }

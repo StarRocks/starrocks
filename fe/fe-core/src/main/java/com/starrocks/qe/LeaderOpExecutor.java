@@ -29,6 +29,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -38,8 +39,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
 
-public class MasterOpExecutor {
-    private static final Logger LOG = LogManager.getLogger(MasterOpExecutor.class);
+public class LeaderOpExecutor {
+    private static final Logger LOG = LogManager.getLogger(LeaderOpExecutor.class);
 
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
@@ -50,11 +51,11 @@ public class MasterOpExecutor {
     // the total time of thrift connectTime add readTime and writeTime
     private int thriftTimeoutMs;
 
-    public MasterOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
+    public LeaderOpExecutor(OriginStatement originStmt, ConnectContext ctx, RedirectStatus status) {
         this(null, originStmt, ctx, status);
     }
 
-    public MasterOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
+    public LeaderOpExecutor(StatementBase parsedStmt, OriginStatement originStmt,
                             ConnectContext ctx, RedirectStatus status) {
         this.originStmt = originStmt;
         this.ctx = ctx;
@@ -104,13 +105,13 @@ public class MasterOpExecutor {
         }
     }
 
-    // Send request to Master
+    // Send request to Leader
     private void forward() throws Exception {
-        String masterHost = ctx.getGlobalStateMgr().getMasterIp();
-        int masterRpcPort = ctx.getGlobalStateMgr().getMasterRpcPort();
-        TNetworkAddress thriftAddress = new TNetworkAddress(masterHost, masterRpcPort);
+        String leaderHost = ctx.getGlobalStateMgr().getLeaderIp();
+        int leaderRpcPort = ctx.getGlobalStateMgr().getLeaderRpcPort();
+        TNetworkAddress thriftAddress = new TNetworkAddress(leaderHost, leaderRpcPort);
         TMasterOpRequest params = new TMasterOpRequest();
-        params.setCluster(ctx.getClusterName());
+        params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         params.setSql(originStmt.originStmt);
         params.setStmtIdx(originStmt.idx);
         params.setUser(ctx.getQualifiedUser());
@@ -130,7 +131,7 @@ public class MasterOpExecutor {
         params.setQuery_options(queryOptions);
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        LOG.info("Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
+        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         result = FrontendServiceProxy.call(thriftAddress,
                 thriftTimeoutMs,

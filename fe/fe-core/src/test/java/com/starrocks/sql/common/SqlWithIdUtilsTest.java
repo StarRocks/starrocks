@@ -153,7 +153,7 @@ public class SqlWithIdUtilsTest {
             starRocksAssert.dropTable("tbl1");
             SqlWithIdUtils.decode(encode, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals(e.getMessage(),"Can not find table id: 10005 in db: default_cluster:test");
+            Assert.assertEquals(e.getMessage(),"Can not find table id: 10005 in db: test");
         } finally {
             starRocksAssert.useDatabase("test")
                     .withTable("CREATE TABLE test.tbl1\n" +

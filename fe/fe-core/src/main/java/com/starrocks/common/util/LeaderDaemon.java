@@ -26,20 +26,20 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /*
- * MasterDaemon is a kind of thread only master FE will start.
+ * LeaderDaemon is a kind of thread only master FE will start.
  * And it will wait master FE to be ready before running.
  */
-public class MasterDaemon extends Daemon {
-    private static final Logger LOG = LogManager.getLogger(MasterDaemon.class);
+public class LeaderDaemon extends Daemon {
+    private static final Logger LOG = LogManager.getLogger(LeaderDaemon.class);
 
-    public MasterDaemon() {
+    public LeaderDaemon() {
     }
 
-    public MasterDaemon(String name) {
+    public LeaderDaemon(String name) {
         super(name);
     }
 
-    public MasterDaemon(String name, long intervalMs) {
+    public LeaderDaemon(String name, long intervalMs) {
         super(name, intervalMs);
     }
 
@@ -52,12 +52,11 @@ public class MasterDaemon extends Daemon {
             try {
                 // not return, but sleep a while. to avoid some thread with large running interval will
                 // wait for a long time to start again.
-                Thread.sleep(10 * 1000);
+                Thread.sleep(100);
             } catch (InterruptedException e) {
                 LOG.warn("interrupted exception. thread: {}", getName(), e);
             }
         }
-
         runAfterCatalogReady();
     }
 

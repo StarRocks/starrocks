@@ -39,6 +39,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"

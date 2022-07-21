@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -29,6 +30,7 @@ public class PrivilegeCheckerTest {
     private static UserIdentity testUser;
     private static UserIdentity testUser2;
     private static Auth auth;
+    private static UserIdentity rootUser;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -40,23 +42,51 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withTable(createTblStmtStr);
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        rootUser = starRocksAssert.getCtx().getCurrentUserIdentity();
+    }
 
+    @Before
+    public void beforeMethod() throws Exception {
+        starRocksAssert.getCtx().setCurrentUserIdentity(rootUser);
+        dropUsers();
+        createUsers();
+    }
+
+    private void createUsers() throws Exception {
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
         testUser = new UserIdentity("test", "%");
-        testUser.analyze("default_cluster");
+        testUser.analyze();
 
         createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
         testUser2 = new UserIdentity("test2", "%");
-        testUser2.analyze("default_cluster");
+        testUser2.analyze();
     }
 
+    @Test
+    public void testAlterUser() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        String sql = "ALTER USER 'root' IDENTIFIED BY ''";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+    private void dropUsers() throws Exception {
+        if (testUser != null) {
+            auth.replayDropUser(testUser);
+        }
+        if (testUser2 != null) {
+            auth.replayDropUser(testUser2);
+        }
+
+    }
 
     @Test
     public void testShowCreateDb() throws Exception {
@@ -66,7 +96,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "show create database db1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -89,7 +119,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern globalPattern = new TablePattern("*", "*");
-        globalPattern.analyze("default_cluster");
+        globalPattern.analyze();
         auth.grantPrivs(testUser, globalPattern, PrivPredicate.ADMIN.getPrivs(), true);
         String sql = "alter database db1 set data quota 1000K";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -120,7 +150,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         String sql = "create database if not exists db1 ";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -143,7 +173,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.DROP_PRIV), true);
         String sql = "drop database if exists db1 force";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -166,7 +196,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
         String sql = "alter database db1 rename db01";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -189,7 +219,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         String sql = "recover database db1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -209,7 +239,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "recover table db1.test";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -234,7 +264,7 @@ public class PrivilegeCheckerTest {
                 () -> UtFrameUtils.parseStmtWithNewParser(sql1, starRocksAssert.getCtx()));
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
 
         starRocksAssert.useDatabase("db1");
@@ -276,7 +306,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         String sql = "create table db1.table1 (col1 int, col2 varchar(10)) engine=olap duplicate key(col1, col2) distributed by hash(col1) buckets 10";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -297,7 +327,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
         String sql = "alter table db1.tbl1 rename table2";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -313,7 +343,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testTableAs() throws Exception {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "select count(*) from db1.tbl1 as a";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -323,7 +353,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testInlineView() throws Exception {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "select count(*) from (select count(*) from db1.tbl1) as a";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -334,7 +364,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testWithNormal() throws Exception {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "with tmp as (select * from db1.tbl1) select count(*) from tmp;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -344,7 +374,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testWithNested() throws Exception {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
         String sql = "with tmp as (select * from db1.tbl1) " +
                 "select a.k1, b.k2, b.k1 from (select k1, k2 from tmp) a " +
@@ -361,7 +391,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "select count(*) from db1.tbl1 as a";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -376,6 +406,7 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowUserProperty() throws Exception {
         starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         String sql = "SHOW PROPERTY FOR 'test' LIKE '%load_cluster%'";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         Assert.assertThrows(SemanticException.class,
@@ -399,7 +430,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "insert into db1.tbl1 select 1,2,3,4";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -419,7 +450,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "create view db1.v as select 1,2,3";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -445,7 +476,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         String sql = "drop table if exists db1.tbl1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
@@ -470,7 +501,7 @@ public class PrivilegeCheckerTest {
         Config.enable_experimental_mv = true;
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "create materialized view db1.abc " +
                 "distributed by hash(k1) " +
@@ -498,7 +529,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setDatabase("default_cluster:db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "drop materialized view mv1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -521,7 +552,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setDatabase("default_cluster:db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "alter materialized view mv1 rename mv2;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -544,7 +575,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setDatabase("default_cluster:db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "refresh materialized view mv1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -567,7 +598,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setDatabase("default_cluster:db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "cancel refresh materialized view mv1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -589,7 +620,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
         starRocksAssert.getCtx().setDatabase("default_cluster:db1");
         TablePattern db1TablePattern = new TablePattern("*", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         // Here we hack `create role` statement because it was still in old framework
         auth.createRole(new CreateRoleStmt("default_cluster:test_role"));
@@ -613,7 +644,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("*", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String adminSetConfigsql = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
         String adminSetReplicaStatusSql = "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");";
@@ -639,7 +670,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("*", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String adminShowConfigsql = "admin show frontend config like '%parallel%';";
         String adminShowReplicaDistributionsql = "ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1;";
@@ -667,13 +698,11 @@ public class PrivilegeCheckerTest {
 
         String createPrimaryTblStmtStr = "CREATE TABLE db2.tbl2 (k1 int, k2 int, k3 varchar(32)) PRIMARY KEY(k1) "
                 + "DISTRIBUTED BY HASH(k1) BUCKETS 8 properties('replication_num' = '1');";
-        StarRocksAssert starRocksAssert = new StarRocksAssert();
-        starRocksAssert.withDatabase("db2");
+        starRocksAssert.getCtx().setDatabase("db2");
         starRocksAssert.withTable(createPrimaryTblStmtStr);
 
-        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db2TablePattern = new TablePattern("db2", "*");
-        db2TablePattern.analyze("default_cluster");
+        db2TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -697,7 +726,7 @@ public class PrivilegeCheckerTest {
     public void testDeleteTable() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -716,7 +745,7 @@ public class PrivilegeCheckerTest {
     public void testGrantImpersonate() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern pattern = new TablePattern("*", "*");
-        pattern.analyze("default_cluster");
+        pattern.analyze();
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setDatabase("default_cluster:db1");
 
@@ -749,7 +778,7 @@ public class PrivilegeCheckerTest {
     public void testShowCreateTable() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -767,10 +796,11 @@ public class PrivilegeCheckerTest {
     public void testShowAlterTable() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
+
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "SHOW ALTER TABLE COLUMN FROM db1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -781,10 +811,70 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testShowFunctions() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        String sql = "show functions from db1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testDropFunction() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+
+        String sql = "drop function db1.abc(string);";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testCreateFunction() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+        starRocksAssert.getCtx().setDatabase("testDb");
+
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+
+        String sql = "create function abc(string) returns int;";
+        StatementBase statementBase =
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
     public void testAnalyzeStatement() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -826,7 +916,7 @@ public class PrivilegeCheckerTest {
     public void testShowDelete() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -844,7 +934,7 @@ public class PrivilegeCheckerTest {
     public void testDescTable() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -866,7 +956,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("*", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         String sql = "SHOW TABLET FROM db1.tbl1";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -886,7 +976,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
         String sql = "cancel alter table rollup from db1.tbl2 (1, 2, 3)";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -906,7 +996,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ALTER_PRIV), true);
         String sql = "ALTER TABLE db1.tbl1 SET (\"default.replication_num\" = \"2\")";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -926,7 +1016,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
         String sql = "TRUNCATE TABLE db1.test";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -942,7 +1032,7 @@ public class PrivilegeCheckerTest {
     public void testShowIndex() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
@@ -964,7 +1054,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
 
         String sql = "CREATE TABLE db1.table2 LIKE db1.tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -976,14 +1066,13 @@ public class PrivilegeCheckerTest {
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.CREATE_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
-
     }
 
     @Test
     public void testShowPartitions() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
-        db1TablePattern.analyze("default_cluster");
+        db1TablePattern.analyze();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");

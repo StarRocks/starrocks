@@ -1315,7 +1315,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Materialized view do not support table: tbl3 " +
-                    "do not exist in database: default_cluster:test", e.getMessage());
+                    "do not exist in database: test", e.getMessage());
         }
     }
 

@@ -672,7 +672,7 @@ public class AlterTest {
                 ");";
         createTable(createOlapTblStmt);
         String alterStmt = "alter table test." + tableName + " set (\"dynamic_partition.enable\" = \"true\");";
-        String errorMsg = "Table default_cluster:test.no_dynamic_table is not a dynamic partition table. " +
+        String errorMsg = "Table test.no_dynamic_table is not a dynamic partition table. " +
                 "Use command `HELP ALTER TABLE` to see how to change a normal table to a dynamic partition table.";
         alterTableWithMewParserAndExceptionMsg(alterStmt, errorMsg);
         // test set dynamic properties in a no dynamic partition table
@@ -1417,7 +1417,7 @@ public class AlterTest {
         auth.grant(grantUserStmt);
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
-        testUser.analyze("default_cluster");
+        testUser.analyze();
 
         starRocksAssert.getCtx().setQualifiedUser("testuser");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);

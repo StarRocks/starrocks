@@ -74,9 +74,6 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
-import com.starrocks.utframe.MockedFrontend.FeStartException;
-import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.File;
@@ -130,7 +127,6 @@ public class UtFrameUtils {
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() throws IOException {
         ConnectContext ctx = new ConnectContext(null);
-        ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -149,6 +145,23 @@ public class UtFrameUtils {
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
+            if (e.getMessage() == null) {
+                throw e;
+            } else {
+                throw new AnalysisException(e.getMessage(), e);
+            }
+        }
+
+        return statementBase;
+    }
+
+    public static StatementBase parseStmtWithNewParserNotIncludeAnalyzer(String originStmt, ConnectContext ctx)
+            throws Exception {
+        StatementBase statementBase;
+        try {
+            statementBase =
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+        } catch (ParsingException e) {
             if (e.getMessage() == null) {
                 throw e;
             } else {
@@ -205,8 +218,7 @@ public class UtFrameUtils {
         return statementBases;
     }
 
-    private static void startFEServer(String runningDir, boolean startBDB) throws EnvVarNotSetException, IOException,
-            FeStartException, NotInitException {
+    private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {

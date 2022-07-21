@@ -666,7 +666,7 @@ public:
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
         } else if (name == "histogram") {
-            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
+            return AggregateFactory::MakeHistogramAggregationFunction<ImmediateHistogramResultPT<ArgPT>>();
         }
         return nullptr;
     }

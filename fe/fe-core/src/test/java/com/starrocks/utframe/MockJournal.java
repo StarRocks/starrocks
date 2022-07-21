@@ -10,7 +10,6 @@ import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.map.HashedMap;
 
 import java.io.ByteArrayInputStream;
@@ -111,6 +110,11 @@ public class MockJournal implements Journal {
         staggingEntityMap.clear();
     }
 
+    @Override
+    public String getPrefix() {
+        return "";
+    }
+
     private static class MockJournalCursor implements JournalCursor {
         private final MockJournal instance;
         private long start;
@@ -167,14 +171,6 @@ public class MockJournal implements Journal {
         @Override
         public List<InetSocketAddress> getNoneLeaderNodes() {
             return Lists.newArrayList();
-        }
-
-        @Override
-        public void transferToMaster() {
-        }
-
-        @Override
-        public void transferToNonMaster() {
         }
 
         @Override

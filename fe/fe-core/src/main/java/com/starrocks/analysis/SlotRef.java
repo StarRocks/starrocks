@@ -134,17 +134,6 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public void vectorizedAnalyze(Analyzer analyzer) {
-        computeOutputColumn(analyzer);
-    }
-
-    @Override
-    public void computeOutputColumn(Analyzer analyzer) {
-        outputColumn = desc.getSlotOffset();
-        LOG.debug("SlotRef: " + debugString() + " outputColumn: " + outputColumn);
-    }
-
-    @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 

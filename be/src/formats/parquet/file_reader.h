@@ -75,7 +75,7 @@ private:
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                          const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
-                                         vectorized::ColumnPtr* max_column);
+                                         vectorized::ColumnPtr* max_column, bool* decode_ok);
     static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
                                        const tparquet::ColumnOrder* column_order);
     // statistics.min_value max_value
@@ -91,8 +91,8 @@ private:
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
 
-    RandomAccessFile* _file;
-    uint64_t _file_size;
+    RandomAccessFile* _file = nullptr;
+    uint64_t _file_size = 0;
 
     std::shared_ptr<FileMetaData> _file_metadata;
     vector<std::shared_ptr<GroupReader>> _row_group_readers;
@@ -107,7 +107,7 @@ private:
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
-    vectorized::HdfsScannerContext* _scanner_ctx;
+    vectorized::HdfsScannerContext* _scanner_ctx = nullptr;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
 };

@@ -39,12 +39,6 @@ public interface HAProtocol {
     // get all the nodes except leader in the current group
     public List<InetSocketAddress> getNoneLeaderNodes();
 
-    // transfer from nonMaster(unknown, follower or init) to master
-    public void transferToMaster();
-
-    // transfer to non-master
-    public void transferToNonMaster();
-
     // check if the current node is leader
     public boolean isLeader();
 

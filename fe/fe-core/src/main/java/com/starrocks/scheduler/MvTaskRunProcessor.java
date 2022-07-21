@@ -42,6 +42,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
@@ -72,9 +73,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Database database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
         MaterializedView materializedView = (MaterializedView) database.getTable(mvId);
         if (!materializedView.isActive()) {
-            LOG.warn("Materialized view: {} is not active, " +
-                    "skip sync partition and data with base tables", mvId);
-            return;
+            String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
+                    "skip sync partition and data with base tables", materializedView.getName(), mvId);
+            LOG.warn(errorMsg);
+            throw new DmlException(errorMsg);
         }
         Set<Long> baseTableIds = materializedView.getBaseTableIds();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
@@ -341,10 +343,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
-        String insertIntoSql = "insert overwrite " +
-                materializedView.getName() + " " +
-                context.getDefinition();
-        execInsertStmt(insertIntoSql, context, materializedView);
+        execInsertStmt(context.getDefinition(), context, materializedView);
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView, OlapTable olapTable,

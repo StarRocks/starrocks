@@ -260,10 +260,10 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
-    auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
-    auto status = fragment_executor->prepare(_exec_env, t_common_param, t_unique_request);
+    pipeline::FragmentExecutor fragment_executor;
+    auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
-        return fragment_executor->execute(_exec_env);
+        return fragment_executor.execute(_exec_env);
     } else {
         return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
     }

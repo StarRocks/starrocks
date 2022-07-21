@@ -32,11 +32,10 @@ import org.junit.Test;
 import java.util.Arrays;
 
 public class ShowPartitionsStmtTest {
-
     private ConnectContext ctx;
-
     private static StarRocksAssert starRocksAssert;
 
+    private Analyzer analyzer;
     @Before
     public void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
@@ -78,6 +77,19 @@ public class ShowPartitionsStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(
                 "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` LIKE '%p2019%'",
+                stmt.toString());
+    }
+
+    @Test
+    public void testShowPartitionsStmtWithEqualPredicate() {
+        SlotRef slotRef = new SlotRef(null, "PartitionName");
+        StringLiteral stringLiteral = new StringLiteral("p1");
+        BinaryPredicate equalPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef, stringLiteral);
+        ShowPartitionsStmt stmt =
+                new ShowPartitionsStmt(new TableName("testDb", "testTable"), equalPredicate, null, null, false);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals(
+                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` = 'p1'",
                 stmt.toString());
     }
 

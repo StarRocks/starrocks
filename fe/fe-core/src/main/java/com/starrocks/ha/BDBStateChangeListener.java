@@ -26,7 +26,6 @@ import com.sleepycat.je.rep.StateChangeEvent;
 import com.sleepycat.je.rep.StateChangeListener;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.EditLog;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -47,7 +46,7 @@ public class BDBStateChangeListener implements StateChangeListener {
     public synchronized void stateChange(StateChangeEvent sce) throws RuntimeException {
         switch (sce.getState()) {
             case MASTER: {
-                newType = FrontendNodeType.MASTER;
+                newType = FrontendNodeType.LEADER;
                 break;
             }
             case REPLICA: {
@@ -70,7 +69,7 @@ public class BDBStateChangeListener implements StateChangeListener {
             }
         }
         Preconditions.checkNotNull(newType);
-        GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(newType);
+        StateChangeExecutor.getInstance().notifyNewFETypeTransfer(newType);
     }
 
 }

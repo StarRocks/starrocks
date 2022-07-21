@@ -2241,11 +2241,6 @@ show_param ::=
     {:
         RESULT = new ShowMaterializedViewStmt(db);
     :}
-    /* show processlist */
-    | opt_full KW_PROCESSLIST
-    {:
-        RESULT = new ShowProcesslistStmt(parser.isVerbose);
-    :}
     /* routine */
     | procedure_or_function KW_STATUS opt_wild_where
     {:
@@ -4705,29 +4700,13 @@ integer_list ::=
     ;
 
 admin_stmt ::=
-    KW_ADMIN KW_SHOW KW_REPLICA KW_STATUS KW_FROM base_table_ref:table_ref opt_wild_where
-    {:
-        RESULT = new AdminShowReplicaStatusStmt(table_ref, parser.where);
-    :}
-    | KW_ADMIN KW_SHOW KW_REPLICA KW_DISTRIBUTION KW_FROM base_table_ref:table_ref
-    {:
-        RESULT = new AdminShowReplicaDistributionStmt(table_ref);
-    :}
-    | KW_ADMIN KW_SET KW_REPLICA KW_STATUS KW_PROPERTIES LPAREN key_value_map:prop RPAREN
-    {:
-        RESULT = new AdminSetReplicaStatusStmt(prop);
-    :}
-    | KW_ADMIN KW_REPAIR KW_TABLE base_table_ref:table_ref
+    KW_ADMIN KW_REPAIR KW_TABLE base_table_ref:table_ref
     {:
         RESULT = new AdminRepairTableStmt(table_ref);
     :}
     | KW_ADMIN KW_CANCEL KW_REPAIR KW_TABLE base_table_ref:table_ref
     {:
         RESULT = new AdminCancelRepairTableStmt(table_ref);
-    :}
-    | KW_ADMIN KW_SHOW KW_FRONTEND KW_CONFIG opt_wild_where
-    {:
-        RESULT = new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, parser.wild);
     :}
     | KW_ADMIN KW_CHECK KW_TABLET LPAREN integer_list:tabletIds RPAREN opt_properties:properties
     {:
@@ -4962,8 +4941,6 @@ keyword ::=
     | KW_PLUGINS:id
     {: RESULT = id; :}
     | KW_PROC:id
-    {: RESULT = id; :}
-    | KW_PROCESSLIST:id
     {: RESULT = id; :}
     | KW_PROPERTIES:id
     {: RESULT = id; :}

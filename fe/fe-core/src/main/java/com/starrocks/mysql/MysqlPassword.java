@@ -24,7 +24,6 @@ import com.starrocks.common.ErrorReport;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -152,7 +151,7 @@ public class MysqlPassword {
     public static byte[] scramble(byte[] seed, String password) {
         byte[] scramblePassword = null;
         try {
-            byte[] passBytes = password.getBytes("UTF-8");
+            byte[] passBytes = password.getBytes(StandardCharsets.UTF_8);
             MessageDigest md = MessageDigest.getInstance("SHA-1");
             byte[] hashStage1 = md.digest(passBytes);
             md.reset();
@@ -160,9 +159,6 @@ public class MysqlPassword {
             md.reset();
             md.update(seed);
             scramblePassword = xorCrypt(hashStage1, md.digest(hashStage2));
-        } catch (UnsupportedEncodingException e) {
-            // no UTF-8 character set
-            LOG.warn("No UTF-8 character set when compute password.");
         } catch (NoSuchAlgorithmException e) {
             // No SHA-1 algorithm
             LOG.warn("No SHA-1 Algorithm when compute password.");
@@ -174,16 +170,13 @@ public class MysqlPassword {
     // Convert password to hash code to set password
     private static byte[] twoStageHash(String password) {
         try {
-            byte[] passBytes = password.getBytes("UTF-8");
+            byte[] passBytes = password.getBytes(StandardCharsets.UTF_8);
             MessageDigest md = MessageDigest.getInstance("SHA-1");
             byte[] hashStage1 = md.digest(passBytes);
             md.reset();
             byte[] hashStage2 = md.digest(hashStage1);
 
             return hashStage2;
-        } catch (UnsupportedEncodingException e) {
-            // no UTF-8 character set
-            LOG.warn("No UTF-8 character set when compute password.");
         } catch (NoSuchAlgorithmException e) {
             // No SHA-1 algorithm
             LOG.warn("No SHA-1 Algorithm when compute password.");
