@@ -100,15 +100,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, null);
+                             short replicationNum, boolean isInMemory, StorageInfo storageInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, StorageInfo storageInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageInfo);
-        setRangeInternal(partitionId, isTemp, range);
+                             short replicationNum, boolean isInMemory) {
+        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, isInMemory, null);
     }
 
     public Range<PartitionKey> checkAndCreateRange(SingleRangePartitionDesc desc, boolean isTemp) throws DdlException {

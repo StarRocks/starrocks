@@ -1327,7 +1327,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
                         replicationNum, isInMemory, storageInfo);
-
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
