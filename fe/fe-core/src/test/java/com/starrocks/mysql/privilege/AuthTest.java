@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -1723,11 +1724,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password by '654321'
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "654321", true);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        String sql = "alter user lisi identified with mysql_native_password by '654321'";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1748,12 +1748,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(),
-                "*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9", false);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        sql = "alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1774,11 +1772,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), null, false);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        sql = "alter user lisi identified with mysql_native_password";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
