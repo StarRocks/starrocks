@@ -17,8 +17,10 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.AstVisitor;
 
 /*
   Resume routine load job by name
@@ -28,7 +30,7 @@ import com.starrocks.common.UserException;
  */
 public class ResumeRoutineLoadStmt extends DdlStmt {
 
-    private final LabelName labelName;
+    private LabelName labelName;
 
     public ResumeRoutineLoadStmt(LabelName labelName) {
         this.labelName = labelName;
@@ -42,9 +44,33 @@ public class ResumeRoutineLoadStmt extends DdlStmt {
         return labelName.getDbName();
     }
 
+    public void setLabelName(LabelName labelName) {
+        this.labelName = labelName;
+    }
+
+    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
         labelName.analyze(analyzer);
+    }
+
+
+    @Override
+    public String toSql() {
+        String dbName = labelName.getDbName();
+        String routineName = labelName.getLabelName();
+        dbName = ClusterNamespace.getNameFromFullName(dbName);
+        return "RESUME ROUTINE LOAD FOR " + dbName + "." + routineName;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitResumeRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

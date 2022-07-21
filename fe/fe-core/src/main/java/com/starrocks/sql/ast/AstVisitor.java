@@ -65,6 +65,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAlterStmt;
@@ -308,6 +309,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, C context) {
