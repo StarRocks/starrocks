@@ -74,11 +74,11 @@ public class CatalogMgr {
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
+            GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
         } finally {
             writeUnLock();
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
     }
 
     public synchronized void dropCatalog(DropCatalogStmt stmt) {
@@ -94,12 +94,11 @@ public class CatalogMgr {
         writeLock();
         try {
             catalogs.remove(catalogName);
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
+            GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
         } finally {
             writeUnLock();
         }
-
-        DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
-        GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
     }
 
 
