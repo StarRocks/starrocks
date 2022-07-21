@@ -44,10 +44,10 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public void collect() throws Exception {
-        long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY,
+        long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 
-        int partitionSize = (int) (Config.statistics_collect_max_row_count_per_query
+        int partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
                 / (sampleRowCount * columns.size()) + 1);
 
         for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {

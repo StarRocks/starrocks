@@ -111,9 +111,9 @@ public class StatisticsCollectJobFactory {
                 return;
             }
 
-            double statisticAutoCollectRatio = job.getProperties().get(StatsConstants.PRO_AUTO_COLLECT_STATISTICS_RATIO) != null ?
-                    Double.parseDouble(job.getProperties().get(StatsConstants.PRO_AUTO_COLLECT_STATISTICS_RATIO)) :
-                    Config.statistics_auto_collect_ratio;
+            double statisticAutoCollectRatio = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
+                    Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
+                    Config.statistic_auto_collect_ratio;
             if (basicStatsMeta.getHealthy() > statisticAutoCollectRatio) {
                 return;
             }
