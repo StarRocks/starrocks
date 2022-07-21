@@ -2936,6 +2936,49 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
+        // check colocate_mv property
+        // Check the validity of the base tables
+        // All tables either belong to the same group or none of them are colcoate tables
+        boolean isColocateMvValid = false;
+        ColocateTableIndex.GroupId groupId = null;
+        try {
+            boolean colocateMV = PropertyAnalyzer.analyzeColocateMV(properties);
+            if (colocateMV) {
+                isColocateMvValid = true;
+                ColocateGroupSchema tempMVGroupSchema = new ColocateGroupSchema(null,
+                        ((HashDistributionInfo) (distributionInfo)).getDistributionColumns(), distributionInfo.getBucketNum(),
+                        materializedView.getDefaultReplicationNum());
+
+                Set<Long> baseTableids = stmt.getBaseTableIds();
+                for (Long baseTableid : baseTableids) {
+                    Table baseTable = db.getTable(baseTableid);
+                    if (baseTable.isOlapTable()) {
+                        tempMVGroupSchema.checkColocateSchema((OlapTable) baseTable);
+                        if (colocateTableIndex.isColocateTable(baseTableid)) {
+                            ColocateTableIndex.GroupId baseTableGroupId = colocateTableIndex.getGroup(baseTableid);
+                            if (groupId == null) {
+                                groupId = baseTableGroupId;
+                            } else if (!groupId.equals(baseTableGroupId)) {
+                                isColocateMvValid = false;
+                                break;
+                            }
+                        }
+
+                    } else {
+                        isColocateMvValid = false;
+                        ErrorReport
+                                .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
+                                        "the type of base table " + baseTable.getName() + " is " +
+                                                baseTable.getType() + "which is must be OLAP");
+                        break;
+                    }
+
+                }
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
         // set storage medium
         DataProperty dataProperty;
         try {
@@ -3002,64 +3045,34 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
+        // colocate mv
+        if (createMvSuccess && isColocateMvValid) {
 
-        // colocate mv index
-        // check colocation properties
-        if (createMvSuccess) {
-            try {
-                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-                if (!Strings.isNullOrEmpty(colocateGroup)) {
-                    String fullGroupName = db.getId() + "_" + colocateGroup;
-                    ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
-                    if (groupSchema != null) {
-                        // group already exist, check if this mv and base tables can be added to this group
-                        groupSchema.checkColocateSchema(materializedView);
-                        Set<Long> baseTableids = stmt.getBaseTableIds();
-                        for (Long baseTableid : baseTableids) {
-                            Table baseTable = db.getTable(baseTableid);
-                            if (baseTable.isOlapTable()) {
-                                groupSchema.checkColocateSchema((OlapTable) baseTable);
-                            } else {
-                                ErrorReport
-                                        .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
-                                                "the type of base table " + baseTable.getName() + " is " +
-                                                        baseTable.getType() + "which is must be OLAP");
-                            }
-
-                        }
-
-                    }
-                    // add mv to this group, if group does not exist, create a new one
-                    colocateTableIndex.addTableToGroup(db.getId(), materializedView, colocateGroup,
-                            null /* generate group id inside */);
-                    materializedView.setColocateGroup(colocateGroup);
-
-                    // add base tables to this group and persist
-                    Set<Long> baseTableids = stmt.getBaseTableIds();
-                    ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(mvId);
-                    List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
-
-                    ColocatePersistInfo info =
-                            ColocatePersistInfo.createForAddTable(groupId, mvId, backendsPerBucketSeq);
-                    editLog.logColocateAddTable(info);
-
-                    for (Long baseTableid : baseTableids) {
-                        OlapTable baseTable = (OlapTable) db.getTable(baseTableid);
-                        if (!colocateTableIndex.isSameGroup(materializedView.getBaseIndexId(), baseTableid)) {
-                            colocateTableIndex.addTableToGroup(db.getId(), baseTable, colocateGroup,
-                                    null /* generate group id inside */);
-                            baseTable.setColocateGroup(colocateGroup);
-                            info = ColocatePersistInfo.createForAddTable(groupId, baseTableid, backendsPerBucketSeq);
-                            editLog.logColocateAddTable(info);
-                        }
-
-                    }
-
-                }
-            } catch (AnalysisException e) {
-                throw new DdlException(e.getMessage());
+            String colocateGroupName = dbName + ":" + mvName;
+            if (groupId != null) {
+                colocateGroupName = colocateTableIndex.getGroupNameByGroupId(db.getId(), groupId);
             }
-            LOG.info("add the MaterializedView to colocateTableIndex");
+            // Add mv and base tables to this group
+            // Persist them
+            groupId = colocateTableIndex.addTableToGroup(db.getId(), materializedView, colocateGroupName,
+                    null /* generate group id inside */);
+            materializedView.setColocateGroup(colocateGroupName);
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo info =
+                    ColocatePersistInfo.createForAddTable(groupId, mvId, backendsPerBucketSeq);
+            editLog.logColocateAddTable(info);
+
+            Set<Long> baseTableids = stmt.getBaseTableIds();
+            for (Long baseTableid : baseTableids) {
+                OlapTable baseTable = (OlapTable) db.getTable(baseTableid);
+                colocateTableIndex.addTableToGroup(db.getId(), baseTable, colocateGroupName,
+                        null /* generate group id inside */);
+                baseTable.setColocateGroup(colocateGroupName);
+                info = ColocatePersistInfo.createForAddTable(groupId, baseTableid, backendsPerBucketSeq);
+                editLog.logColocateAddTable(info);
+            }
+
+            LOG.info("Add the MaterializedView to colocateTableIndex successfully");
         }
 
         // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
