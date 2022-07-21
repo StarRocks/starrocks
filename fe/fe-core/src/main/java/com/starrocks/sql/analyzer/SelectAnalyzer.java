@@ -204,7 +204,7 @@ public class SelectAnalyzer {
                 }
 
                 for (Field field : fields) {
-                    if (field.getType().getPrimitiveType().equals(PrimitiveType.INVALID_TYPE)) {
+                    if (field.getType().isInvalid()) {
                         throw new SemanticException("table column type ["
                                 + field.getType() + "] transform failed.");
                     }
