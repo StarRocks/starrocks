@@ -4104,9 +4104,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
                 if (copiedTbl.isLakeTable()) {
-                    // for debug
-                    LOG.info("lake table, we need to set storage info for partitionInfo");
-                    LOG.info("oldPartitionId is {}, newPartitionId is {}", oldPartitionId, newPartitionId);
                     partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
                 }
 
@@ -4198,8 +4195,6 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Partition newPartition : newPartitions) {
             Partition oldPartition = newPartition;
             if (olapTable.isLakeTable()) {
-                // for debug
-                LOG.info("isLakeTable in truncateTableInternal");
                 oldPartition = olapTable.replacePartition(newPartition, true);
             } else {
                 oldPartition = olapTable.replacePartition(newPartition, false);

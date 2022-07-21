@@ -1083,13 +1083,9 @@ public class ShowExecutor {
     }
 
     private void handleShowPartitions() throws AnalysisException {
-        // for debug
-        LOG.info("enter handleShowPartitions");
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) stmt;
         ProcNodeInterface procNodeI = showStmt.getNode();
         Preconditions.checkNotNull(procNodeI);
-        // for debug
-        LOG.info("procNodeI is not null");
         List<List<String>> rows = ((PartitionsProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                 showStmt.getOrderByPairs(), showStmt.getLimitElement()).getRows();
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);

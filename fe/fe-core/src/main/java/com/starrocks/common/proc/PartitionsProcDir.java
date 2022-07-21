@@ -163,9 +163,6 @@ public class PartitionsProcDir implements ProcDirInterface {
 
     public ProcResult fetchResultByFilter(Map<String, Expr> filterMap, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
-
-        // for debug
-        LOG.info("enter fetchResultByFilter");
         List<List<Comparable>> partitionInfos = getPartitionInfos();
         List<List<Comparable>> filterPartitionInfos;
         //where
@@ -229,8 +226,6 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        // for debug
-        LOG.info("enter getPartitionInfos");
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(olapTable);
         Preconditions.checkState(olapTable.isNativeTable());
@@ -296,9 +291,6 @@ public class PartitionsProcDir implements ProcDirInterface {
                 long dataSize = partition.getDataSize();
                 ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
                 if (olapTable.isLakeTable()) {
-                    // for debug
-                    LOG.info("isLakeTable in getPartitionInfos");
-                    LOG.info("partitionId is {}", partitionId);
                     StorageInfo storageInfo = tblPartitionInfo.getStorageInfo(partitionId);
                     partitionInfo.add(storageInfo.isEnableStorageCache());
                     partitionInfo.add(storageInfo.getStorageCacheTtlS());

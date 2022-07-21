@@ -145,8 +145,6 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     }
 
     public void setStorageInfo(long partitionId, StorageInfo storageInfo) {
-        // for debug
-        LOG.info("set {} : {} in setStorageInfo", partitionId, storageInfo);
         idToStorageInfo.put(partitionId, storageInfo);
     }
 
