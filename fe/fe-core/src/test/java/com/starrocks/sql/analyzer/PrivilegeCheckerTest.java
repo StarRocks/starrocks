@@ -69,6 +69,15 @@ public class PrivilegeCheckerTest {
         testUser2.analyze();
     }
 
+    @Test
+    public void testAlterUser() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        String sql = "ALTER USER 'root' IDENTIFIED BY ''";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
     private void dropUsers() throws Exception {
         if (testUser != null) {
             auth.replayDropUser(testUser);
