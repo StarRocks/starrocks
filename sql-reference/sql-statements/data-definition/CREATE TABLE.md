@@ -295,7 +295,7 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 ``` sql
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
-    [ "storage_cooldown_time" = "yyyy-MM-dd HH: mm: ss", ]
+    [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
     [ "replication_num" = "3" ]
 )
 ```
@@ -309,7 +309,7 @@ PROPERTIES (
 **storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在 SSD 上的存储到期时间。
 
 * 默认存放 30 天。
-* 格式为："yyyy-MM-dd HH: mm: ss"
+* 格式为："yyyy-MM-dd HH:mm:ss"
 
 **replication_num**：指定分区的副本数。
 
@@ -437,7 +437,7 @@ DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
 PROPERTIES(
     "storage_type" = "column",
     "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2015-06-04 00: 00: 00"
+    "storage_cooldown_time" = "2015-06-04 00:00:00"
 );
 ```
 
@@ -457,7 +457,7 @@ DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
 PROPERTIES(
     "storage_type" = "column",
     "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2015-06-04 00: 00: 00"
+    "storage_cooldown_time" = "2015-06-04 00:00:00"
 );
 ```
 
@@ -474,7 +474,7 @@ CREATE TABLE example_db.table_range
     k2 INT,
     k3 SMALLINT,
     v1 VARCHAR(2048),
-    v2 DATETIME DEFAULT "2014-02-04 15: 36: 00"
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
 ENGINE = olap
 DUPLICATE KEY(k1, k2, k3)
@@ -486,7 +486,7 @@ PARTITION BY RANGE (k1)
 )
 DISTRIBUTED BY HASH(k2) BUCKETS 32
 PROPERTIES(
-    "storage_medium" = "SSD", "storage_cooldown_time" = "2015-06-04 00: 00: 00"
+    "storage_medium" = "SSD", "storage_cooldown_time" = "2015-06-04 00:00:00"
 );
 ```
 
@@ -510,7 +510,7 @@ CREATE TABLE table_range
     k2 INT,
     k3 SMALLINT,
     v1 VARCHAR(2048),
-    v2 DATETIME DEFAULT "2014-02-04 15: 36: 00"
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
 ENGINE = olap
 DUPLICATE KEY(k1, k2, k3)
@@ -545,7 +545,7 @@ PROPERTIES
     "password" = "mysql_passwd",
     "database" = "mysql_db_test",
     "table" = "mysql_table_test"
-)
+);
 ```
 
 ### 创建一张含有 HLL 列的表
@@ -582,9 +582,9 @@ DISTRIBUTED BY HASH(k1) BUCKETS 32
 PROPERTIES ("storage_type" = "column");
 ```
 
-### 创建两张支持 Colocat Join 的表
+### 创建两张支持 Colocate Join 的表
 
-创建 t1 和 t2 两个表，两表可进行 Colocat Join。两表的属性中的 `colocate_with` 属性的值需保持一致。
+创建 t1 和 t2 两个表，两表可进行 Colocate Join。两表的属性中的 `colocate_with` 属性的值需保持一致。
 
 ``` sql
 CREATE TABLE `t1` (
@@ -646,7 +646,7 @@ CREATE TABLE example_db.dynamic_partition
     k2 INT,
     k3 SMALLINT,
     v1 VARCHAR(2048),
-    v2 DATETIME DEFAULT "2014-02-04 15: 36: 00"
+    v2 DATETIME DEFAULT "2014-02-04 15:36:00"
 )
 ENGINE = olap
 DUPLICATE KEY(k1, k2, k3)
@@ -667,7 +667,7 @@ PROPERTIES(
 );
 ```
 
-### Create a table with rollup index
+### 创建一个带有 rollup 的表
 
 ``` sql
 CREATE TABLE example_db.rolup_index_table
@@ -718,9 +718,9 @@ CREATE TABLE example_db.table_hive
 ENGINE = hive
 PROPERTIES
 (
+    "resource" = "hive0",
     "database" = "hive_db_name",
     "table" = "hive_table_name",
-    "hive.metastore.uris" = "thrift://127.0.0.1: 9083"
 );
 ```
 
