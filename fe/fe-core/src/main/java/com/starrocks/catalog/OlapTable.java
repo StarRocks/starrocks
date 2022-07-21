@@ -1325,20 +1325,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
-            if (isLakeTable) {
-                rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
+            rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
                         replicationNum, isInMemory, storageInfo);
-            } else {
-                rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                        replicationNum, isInMemory);
-            }
+
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            if (isLakeTable) {
-                partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
-            } else {
-                partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory);
-            }
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
         }
 
         return oldPartition;
