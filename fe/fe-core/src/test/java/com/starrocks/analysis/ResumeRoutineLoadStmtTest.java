@@ -5,7 +5,6 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 public class ResumeRoutineLoadStmtTest {
