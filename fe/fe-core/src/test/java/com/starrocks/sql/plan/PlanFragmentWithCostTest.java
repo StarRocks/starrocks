@@ -42,7 +42,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(table2, NUM_TABLE2_ROWS);
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
-        setTableStatistics(t0, NUM_TABLE2_ROWS);
+        setTableStatistics(t0, NUM_TABLE0_ROWS);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE test_mv\n" +
@@ -1150,6 +1150,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
             String sql = "select sum(v2) from t0 group by v2";
             String plan = getFragmentPlan(sql);
+            System.out.println(plan);
             assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
