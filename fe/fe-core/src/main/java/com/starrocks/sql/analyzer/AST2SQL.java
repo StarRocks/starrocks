@@ -74,15 +74,15 @@ public class AST2SQL {
             StringBuilder sb = new StringBuilder();
             sb.append("SET ");
             int idx = 0;
-            for (SetVar var : stmt.getSetVars()) {
+            for (SetVar setVar : stmt.getSetVars()) {
                 if (idx != 0) {
                     sb.append(", ");
                 }
                 // `SET DEFAULT` is not supported
-                if (! var.getType().equals(SetType.DEFAULT)) {
-                    sb.append(var.getType().toString() + " ");
+                if (! setVar.getType().equals(SetType.DEFAULT)) {
+                    sb.append(setVar.getType().toString() + " ");
                 }
-                sb.append(var.getVariable() + " = " + var.getValue().toSql());
+                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
                 idx++;
             }
             return sb.toString();

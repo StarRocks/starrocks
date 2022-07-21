@@ -75,10 +75,14 @@ public class SetExecutor {
         }
     }
 
+    /**
+     * This method is only called after a set statement is forward to the leader.
+     * In this case, the follower should change this session variable as well.
+     */
     public void setSessionVars() throws DdlException {
         for (SetVar var : stmt.getSetVars()) {
             if (isSessionVar(var)) {
-                ctx.modifySessionVariable(var, true);
+                VariableMgr.setVar(ctx.getSessionVariable(), var, true);
             }
         }
     }

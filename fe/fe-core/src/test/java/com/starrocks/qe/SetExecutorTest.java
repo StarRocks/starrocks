@@ -19,11 +19,11 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SetNamesVar;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -31,6 +31,10 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -41,7 +45,6 @@ import org.junit.Test;
 import java.util.List;
 
 public class SetExecutorTest {
-    private Analyzer analyzer;
     private ConnectContext ctx;
 
     @Mocked
@@ -49,7 +52,6 @@ public class SetExecutorTest {
 
     @Before
     public void setUp() throws DdlException {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
         ctx = new ConnectContext(null);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("root");
@@ -87,14 +89,22 @@ public class SetExecutorTest {
         vars.add(new SetVar("query_timeout", new IntLiteral(10L)));
 
         SetStmt stmt = new SetStmt(vars);
-        stmt.analyze(analyzer);
+        stmt.analyze();
         SetExecutor executor = new SetExecutor(ctx, stmt);
 
         executor.execute();
     }
 
     @Test
-    public void testSetSessionAndGlobal() throws Exception {
+    public void testSetSessionAndGlobal(@Mocked EditLog editLog) throws Exception {
+        new Expectations(editLog) {
+            {
+                editLog.logGlobalVariableV2((GlobalVarPersistInfo)any);
+                minTimes = 1;
+            }
+        };
+        GlobalStateMgr.getCurrentState().setEditLog(editLog);
+
         String globalSQL = "set global query_timeout = 10";
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(globalSQL, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
@@ -102,24 +112,11 @@ public class SetExecutorTest {
         Assert.assertEquals(null, ctx.getModifiedSessionVariables());
         Assert.assertEquals(10, ctx.sessionVariable.getQueryTimeoutS());
 
-
         String sessionSQL = "set query_timeout = 9";
-        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(globalSQL, ctx);
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sessionSQL, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
         Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
     }
-
-    @Test
-    public void testSetSessionVars() throws Exception {
-        String sql = "set global query_timeout = 10, time_zone = 'Asia/Chongqing'";
-        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        SetExecutor executor = new SetExecutor(ctx, stmt);
-        executor.setSessionVars();
-        Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
-        Assert.assertEquals(10, ctx.sessionVariable.getQueryTimeoutS());
-        Assert.assertEquals("Asia/Chongqing", ctx.sessionVariable.getTimeZone());
-
-     }
 }
