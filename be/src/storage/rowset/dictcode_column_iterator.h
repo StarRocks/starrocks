@@ -125,39 +125,10 @@ public:
         return Status::NotSupported("GlobalDictCodeColumnIterator does not support next_dict_codes");
     }
 
+    Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) override;
+
     Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
-        LowCardDictColumn::Container* container = nullptr;
-        bool output_nullable = words->is_nullable();
-
-        if (output_nullable) {
-            vectorized::ColumnPtr& data_column = down_cast<vectorized::NullableColumn*>(words)->data_column();
-            container = &down_cast<LowCardDictColumn*>(data_column.get())->get_data();
-        } else {
-            container = &down_cast<LowCardDictColumn*>(words)->get_data();
-        }
-
-        auto& res_data = *container;
-        res_data.resize(size);
-#ifndef NDEBUG
-        for (size_t i = 0; i < size; ++i) {
-            DCHECK(codes[i] <= vectorized::DICT_DECODE_MAX_SIZE);
-            if (codes[i] < 0) {
-                DCHECK(output_nullable);
-            }
-        }
-#endif
-        {
-            using namespace vectorized;
-            // res_data[i] = _local_to_global[codes[i]];
-            SIMDGather::gather(res_data.data(), _local_to_global, codes, DICT_DECODE_MAX_SIZE, size);
-        }
-
-        if (output_nullable) {
-            auto& null_data = down_cast<vectorized::NullableColumn*>(words)->null_column_data();
-            null_data.resize(size);
-        }
-
-        return Status::OK();
+        return Status::NotSupported("unsupport decode_dict_codes in GlobalDictCodeColumnIterator");
     }
 
     Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
