@@ -292,6 +292,7 @@ public class FileSystemManager {
                 // it is a corner case
                 return null;
             }
+            UserGroupInformation ugi = null;
             if (fileSystem.getDFSFileSystem() == null) {
                 logger.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -326,7 +327,8 @@ public class FileSystemManager {
                                 "keytab is required for kerberos authentication");
                     }
                     UserGroupInformation.setConfiguration(conf);
-                    UserGroupInformation.loginUserFromKeytab(principal, keytab);
+ 
+                    ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {
                         try {
                             File file = new File(tmpFilePath);
@@ -390,7 +392,9 @@ public class FileSystemManager {
                 if (authentication.equals(AUTHENTICATION_SIMPLE) &&
                     properties.containsKey(USER_NAME_KEY) && !Strings.isNullOrEmpty(username)) {
                     // Use the specified 'username' as the login name
-                    UserGroupInformation ugi = UserGroupInformation.createRemoteUser(username);
+                    ugi = UserGroupInformation.createRemoteUser(username);
+                }
+                if (ugi != null) {
                     dfsFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
                         @Override
                         public FileSystem run() throws Exception {
