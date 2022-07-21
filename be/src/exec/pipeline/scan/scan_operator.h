@@ -84,6 +84,7 @@ private:
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
+    size_t buffer_unplug_threshold() const;
 
     inline void _set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
@@ -100,7 +101,7 @@ private:
 protected:
     ScanNode* _scan_node = nullptr;
     const int32_t _dop;
-    int _io_tasks_per_scan_operator;
+    const int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -119,6 +120,7 @@ private:
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
     int32_t _chunk_source_idx = -1;
+    mutable bool _unpluging = false;
 
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
@@ -137,6 +139,7 @@ private:
     // The number of morsels picked up by this scan operator.
     // A tablet may be divided into multiple morsels.
     RuntimeProfile::Counter* _morsels_counter = nullptr;
+    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

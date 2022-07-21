@@ -13,6 +13,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
@@ -47,8 +48,10 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(buffer_unplug_threshold()));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
+    _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -94,6 +97,12 @@ void ScanOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
+size_t ScanOperator::buffer_unplug_threshold() const {
+    size_t threshold = buffer_capacity() / _dop / 2;
+    threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
+    return threshold;
+}
+
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
@@ -102,8 +111,10 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-    // Try to buffer enough chunks for exec thread, to reduce scheduling overhead
-    // The default threshould is BufferCapacity/DOP/4, and its range is [1, 16]
+
+    // Try to buffer enough chunks for exec thread, to reduce scheduling overhead.
+    // It's like the Linux Block-Scheduler's Unplug algorithm, so we just name it unplug.
+    // The default threshould of unpluging is BufferCapacity/DOP/4, and its range is [1, 16]
     // The overall strategy:
     // 1. If enough buffered chunks: pull_chunk, so return true
     // 2. If not enough buffered chunks
@@ -111,9 +122,15 @@ bool ScanOperator::has_output() const {
     //   2.1 Enough running io-tasks but buffer is full: pull_chunks, so return true
     //   2.2 Not enough running io-tasks: submit io tasks, so return true
     //   2.3 No more tasks: pull_chunk, so return true
-    size_t threshould = buffer_capacity() / _dop / 4;
-    threshould = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshould));
-    if (num_buffered_chunks() >= threshould) {
+    if (_unpluging) {
+        if (num_buffered_chunks() > 0) {
+            return true;
+        }
+        _unpluging = false;
+    }
+    if (num_buffered_chunks() >= buffer_unplug_threshold()) {
+        COUNTER_UPDATE(_buffer_unplug_counter, 1);
+        _unpluging = true;
         return true;
     }
     if (is_buffer_full() && num_buffered_chunks() > 0) {
