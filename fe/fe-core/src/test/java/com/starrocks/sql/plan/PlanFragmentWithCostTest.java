@@ -288,9 +288,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
-                + "  |  output: multi_distinct_count(2: v2)\n"
-                + "  |  group by: 3: v3"));
+        Assert.assertTrue(planFragment.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2)\n" +
+                "  |  group by: 3: v3"));
     }
 
     @Test

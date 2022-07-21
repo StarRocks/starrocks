@@ -26,11 +26,13 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * EnforceAndCostTask costs a physical expression.
@@ -323,6 +325,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
+        List<CallOperator> distinctAggCallOperator = aggregate.getAggregations().values().stream()
+                .filter(CallOperator::isDistinct).collect(Collectors.toList());
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
@@ -332,7 +336,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                     childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
                 return false;
             }
-            // 1.2 disable one stage agg with multi group by columns
+            // 1.2 disable one stage agg with distinct aggregate
+            if (distinctAggCallOperator.size() > 0) {
+                return false;
+            }
+            // 1.3 disable one stage agg with multi group by columns
             return aggregate.getGroupBys().size() <= 1;
         }
         return true;
