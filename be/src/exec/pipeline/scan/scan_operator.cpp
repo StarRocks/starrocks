@@ -48,10 +48,11 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
-    _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(buffer_unplug_threshold()));
+    _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(_buffer_unplug_threshold()));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
+    _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -97,8 +98,13 @@ void ScanOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-size_t ScanOperator::buffer_unplug_threshold() const {
+size_t ScanOperator::_buffer_unplug_threshold() const {
     size_t threshold = buffer_capacity() / _dop / 2;
+    threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
+    return threshold;
+}
+size_t ScanOperator::_buffer_submit_threshold() const {
+    size_t threshold = buffer_capacity() / _dop / 4;
     threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
     return threshold;
 }
@@ -128,7 +134,7 @@ bool ScanOperator::has_output() const {
         }
         _unpluging = false;
     }
-    if (num_buffered_chunks() >= buffer_unplug_threshold()) {
+    if (num_buffered_chunks() >= _buffer_unplug_threshold()) {
         COUNTER_UPDATE(_buffer_unplug_counter, 1);
         _unpluging = true;
         return true;
@@ -225,14 +231,15 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
+    if (_unpluging && num_buffered_chunks() >= _buffer_submit_threshold()) {
+        return Status::OK();
+    }
 
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
     while (--cnt >= 0) {
-        if (++_chunk_source_idx >= _io_tasks_per_scan_operator) {
-            _chunk_source_idx = 0;
-        }
+        _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
             continue;
@@ -299,6 +306,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         return Status::OK();
     }
 
+    COUNTER_UPDATE(_submit_task_counter, 1);
     _chunk_sources[chunk_source_index]->pin_chunk_token(std::move(buffer_token));
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;

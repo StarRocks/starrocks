@@ -84,7 +84,8 @@ private:
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
-    size_t buffer_unplug_threshold() const;
+    size_t _buffer_unplug_threshold() const;
+    size_t _buffer_submit_threshold() const;
 
     inline void _set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
@@ -140,6 +141,7 @@ private:
     // A tablet may be divided into multiple morsels.
     RuntimeProfile::Counter* _morsels_counter = nullptr;
     RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
+    RuntimeProfile::Counter* _submit_task_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
