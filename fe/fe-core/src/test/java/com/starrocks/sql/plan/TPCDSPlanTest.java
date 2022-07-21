@@ -3,14 +3,30 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Map;
+
 public class TPCDSPlanTest extends TPCDSPlanTestBase {
+    Map<String, Long> tpcdsStats = null;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
+    }
+
+    @Before
+    public void setUp() {
+        tpcdsStats = getTPCDSTableStats();
+    }
+
+    @After
+    public void tearDown() {
+        setTPCDSTableStats(tpcdsStats);
     }
 
     @Test
@@ -618,5 +634,12 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan,
                 "PREDICATES: 14: ss_sales_price >= 50.00, 14: ss_sales_price <= 200.00, 23: ss_net_profit >= 50, 23: ss_net_profit <= 300");
+    }
+
+    @Test
+    public void testQuery20LeftDeepJoinReorderNoCrossJoin() throws Exception {
+        setTPCDSFactor(1);
+        String plan = getFragmentPlan(Q20);
+        assertNotContains(plan, "CROSS JOIN");
     }
 }
