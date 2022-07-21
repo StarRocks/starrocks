@@ -39,6 +39,7 @@ import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
@@ -55,6 +56,7 @@ import com.starrocks.analysis.DropBackendClause;
 import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
@@ -63,6 +65,7 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
+import com.starrocks.analysis.FunctionArgsDef;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
@@ -119,6 +122,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -2034,6 +2038,63 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new BinaryPredicate(op, (Expr) visit(context.booleanExpression()), subquery);
     }
 
+    @Override
+    public ParseNode visitShowFunctionsStatement(StarRocksParser.ShowFunctionsStatementContext context) {
+        boolean isBuiltIn = context.BUILTIN() != null;
+        boolean isVerbose = context.FULL() != null;
+
+        String dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db).toString();
+        }
+
+        String pattern = null;
+        if (context.pattern != null) {
+            pattern = ((StringLiteral) visit(context.pattern)).getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowFunctionsStmt(dbName, isBuiltIn, isVerbose, pattern, where);
+    }
+
+    @Override
+    public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        return new DropFunctionStmt(FunctionName.createFnName(functionName),
+                getFunctionArgsDef(context.typeList()));
+    }
+
+    @Override
+    public ParseNode visitCreateFunctionStatement(StarRocksParser.CreateFunctionStatementContext context) {
+        String functionType = "SCALAR";
+        if (context.functionType != null) {
+            functionType = context.functionType.getText();
+        }
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+
+        TypeDef returnTypeDef = new TypeDef(getType(context.returnType));
+        TypeDef intermediateType = null;
+        if (context.intermediateType != null) {
+            intermediateType = new TypeDef(getType(context.intermediateType));
+        }
+
+        Map<String, String> properties = null;
+        if (context.properties() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
+                getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
+    }
+
     // ------------------------------------------- Other Statement -----------------------------------------------------
 
     @Override
@@ -3271,6 +3332,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return null;
         }
+    }
+
+    private FunctionArgsDef getFunctionArgsDef(StarRocksParser.TypeListContext typeList) {
+        List<TypeDef> typeDefList = new ArrayList<>();
+        for (StarRocksParser.TypeContext typeContext : typeList.type()) {
+            typeDefList.add(new TypeDef(getType(typeContext)));
+        }
+        boolean isVariadic = typeList.DOTDOTDOT() != null;
+        return new FunctionArgsDef(typeDefList, isVariadic);
     }
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {

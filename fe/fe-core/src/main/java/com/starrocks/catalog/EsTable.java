@@ -40,7 +40,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -299,36 +299,30 @@ public class EsTable extends Table {
     public int getSignature(int signatureVersion) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
-        String charsetName = "UTF-8";
 
-        try {
-            // name
-            adler32.update(name.getBytes(charsetName));
-            // type
-            adler32.update(type.name().getBytes(charsetName));
-            if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
-                for (Map.Entry<String, String> entry : tableContext.entrySet()) {
-                    adler32.update(entry.getValue().getBytes(charsetName));
-                }
-            } else {
-                // host
-                adler32.update(hosts.getBytes(charsetName));
-                // username
-                adler32.update(userName.getBytes(charsetName));
-                // passwd
-                adler32.update(passwd.getBytes(charsetName));
-                // index name
-                adler32.update(indexName.getBytes(charsetName));
-                // mappingType
-                if (mappingType != null) {
-                    adler32.update(mappingType.getBytes(charsetName));
-                }
-                // transport
-                adler32.update(transport.getBytes(charsetName));
+        // name
+        adler32.update(name.getBytes(StandardCharsets.UTF_8));
+        // type
+        adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_68) {
+            for (Map.Entry<String, String> entry : tableContext.entrySet()) {
+                adler32.update(entry.getValue().getBytes(StandardCharsets.UTF_8));
             }
-        } catch (UnsupportedEncodingException e) {
-            LOG.error("encoding error", e);
-            return -1;
+        } else {
+            // host
+            adler32.update(hosts.getBytes(StandardCharsets.UTF_8));
+            // username
+            adler32.update(userName.getBytes(StandardCharsets.UTF_8));
+            // passwd
+            adler32.update(passwd.getBytes(StandardCharsets.UTF_8));
+            // index name
+            adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
+            // mappingType
+            if (mappingType != null) {
+                adler32.update(mappingType.getBytes(StandardCharsets.UTF_8));
+            }
+            // transport
+            adler32.update(transport.getBytes(StandardCharsets.UTF_8));
         }
 
         return Math.abs((int) adler32.getValue());

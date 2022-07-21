@@ -77,7 +77,7 @@ public class ShowProcAction extends RestBaseAction {
             ConnectContext context = ConnectContext.get();
             LeaderOpExecutor leaderOpExecutor = new LeaderOpExecutor(new OriginStatement(showProcStmt, 0), context,
                     RedirectStatus.FORWARD_NO_SYNC);
-            LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
+            LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
 
             try {
                 leaderOpExecutor.execute();

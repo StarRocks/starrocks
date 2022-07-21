@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
 
@@ -49,7 +50,20 @@ public class BinaryPredicateStatisticCalculator {
             predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
         }
 
-        return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
+
+        Statistics estimatePredicateRange =
+                estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
+
+        Map<Double, Long> histogramTopN;
+        if (columnStatistic.getHistogram() != null) {
+            histogramTopN = columnStatistic.getHistogram().getTopN();
+
+            if (histogramTopN.containsKey(constant.getAsDouble())) {
+                return Statistics.buildFrom(estimatePredicateRange)
+                        .setOutputRowCount(histogramTopN.get(constant.getAsDouble())).build();
+            }
+        }
+        return estimatePredicateRange;
     }
 
     private static Statistics estimateColumnNotEqualToConstant(Optional<ColumnRefOperator> columnRefOperator,

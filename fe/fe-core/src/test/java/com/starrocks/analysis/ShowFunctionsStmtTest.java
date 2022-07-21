@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -35,22 +36,21 @@ public class ShowFunctionsStmtTest extends DDLTestBase {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
-    public void testNormal() throws UserException {
-        ShowFunctionsStmt stmt = new ShowFunctionsStmt(null, true, true, "%year%", null);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("SHOW FULL BUILTIN FUNCTIONS FROM `default_cluster:testDb1` LIKE `%year%`",
-                stmt.toString());
+    public void testNormal() throws Exception {
+        String originSql = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(originSql, ctx);
+        Assert.assertEquals(originSql, stmt.toSql());
+
     }
 
     @Test
-    public void testUnsupportFilter() throws UserException {
-        SlotRef slotRef = new SlotRef(null, "Signature");
-        StringLiteral stringLiteral = new StringLiteral("year(DATETIME)");
-        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, slotRef, stringLiteral);
-        ShowFunctionsStmt stmt = new ShowFunctionsStmt(null, true, true, null, binaryPredicate);
+    public void testUnsupportFilter() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Only support like 'function_pattern' syntax.");
-        stmt.analyze(analyzer);
+
+        String showSQL = "SHOW FULL BUILTIN FUNCTIONS FROM `testDb` where a = 1";
+        ShowFunctionsStmt stmt = (ShowFunctionsStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
     }
 
 }

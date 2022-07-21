@@ -1527,9 +1527,9 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  16:NESTLOOP JOIN\n" +
+        assertContains(plan, " 28:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0\n");
+                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
     }
 }

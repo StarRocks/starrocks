@@ -80,7 +80,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         this.heartbeatFlags = new HeartbeatFlags();
     }
 
-    public void setMaster(int clusterId, String token, long epoch) {
+    public void setLeader(int clusterId, String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
         tMasterInfo.setToken(token);

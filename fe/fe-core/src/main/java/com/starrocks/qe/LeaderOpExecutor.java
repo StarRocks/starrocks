@@ -137,7 +137,7 @@ public class LeaderOpExecutor {
         if (setStmt != null) {
             params.setModified_variables_sql(AST2SQL.toString(setStmt));
         }
-        LOG.info("Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
+        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         result = FrontendServiceProxy.call(thriftAddress,
                 thriftTimeoutMs,
