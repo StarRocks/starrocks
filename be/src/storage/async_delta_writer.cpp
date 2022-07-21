@@ -10,12 +10,7 @@
 namespace starrocks::vectorized {
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
-    if (_queue_id.value != kInvalidQueueId) {
-        int r = bthread::execution_queue_stop(_queue_id);
-        LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
-        r = bthread::execution_queue_join(_queue_id);
-        LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
-    }
+    _close();
     _writer.reset();
 }
 
@@ -26,6 +21,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     auto writer = static_cast<DeltaWriter*>(meta);
     for (; iter; ++iter) {
         Status st;
+        if (iter->abort) {
+            writer->abort(iter->abort_with_log);
+            continue;
+        }
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
         }
@@ -109,7 +108,31 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
 }
 
 void AsyncDeltaWriter::abort(bool with_log) {
-    _writer->abort(with_log);
+    Task task;
+    task.abort = true;
+    task.abort_with_log = with_log;
+
+    bthread::TaskOptions options;
+    options.high_priority = true;
+    int r = bthread::execution_queue_execute(_queue_id, task, &options);
+    LOG_IF(WARNING, r != 0) << "Fail to execution_queue_execute: " << r;
+
+    // Wait until all background tasks finished
+    // https://github.com/StarRocks/starrocks/issues/8906
+    _close();
+}
+
+void AsyncDeltaWriter::_close() {
+    bool value = _closed.load(std::memory_order_acquire);
+    if (value) {
+        return;
+    }
+    if (_closed.compare_exchange_strong(value, true, std::memory_order_acq_rel) && _queue_id.value != kInvalidQueueId) {
+        int r = bthread::execution_queue_stop(_queue_id);
+        LOG_IF(WARNING, r != 0) << "Fail to stop execution queue: " << r;
+        r = bthread::execution_queue_join(_queue_id);
+        LOG_IF(WARNING, r != 0) << "Fail to join execution queue: " << r;
+    }
 }
 
 } // namespace starrocks::vectorized
