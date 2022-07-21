@@ -170,12 +170,7 @@ public class SetVar implements ParseNode {
     }
 
     public String toSql() {
-        String sql = "";
-        if (type.equals(SetType.GLOBAL)) {
-            sql += type.toSql() + " ";
-        }
-        sql += variable + " = " + value.toSql();
-        return sql;
+        return type.toSql() + " " + variable + " = " + value.toSql();
     }
 
     @Override

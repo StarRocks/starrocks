@@ -59,7 +59,7 @@ public class SetStmtTest {
 
         stmt.analyze();
 
-        Assert.assertEquals("SET DEFAULT times = 100, GLOBAL names = 'utf-8'", stmt.toString());
+        Assert.assertEquals("SET SESSION times = 100, GLOBAL names = 'utf-8'", stmt.toString());
         Assert.assertEquals(vars, stmt.getSetVars());
     }
 
@@ -78,7 +78,7 @@ public class SetStmtTest {
 
         var = new SetVar("times", new IntLiteral(100L));
         var.analyze();
-        Assert.assertEquals("DEFAULT times = 100", var.toString());
+        Assert.assertEquals("SESSION times = 100", var.toString());
     }
 
     @Test(expected = SemanticException.class)
@@ -155,19 +155,19 @@ public class SetStmtTest {
 
             SetVar var = new SetVar(SetType.DEFAULT, field, new StringLiteral("0"));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = '0'", field), var.toString());
+            Assert.assertEquals(String.format("SESSION %s = '0'", field), var.toString());
 
             var = new SetVar(SetType.DEFAULT, field, new StringLiteral("10"));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = '10'", field), var.toString());
+            Assert.assertEquals(String.format("SESSION %s = '10'", field), var.toString());
 
             var = new SetVar(SetType.DEFAULT, field, new IntLiteral(0));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = 0", field), var.toString());
+            Assert.assertEquals(String.format("SESSION %s = 0", field), var.toString());
 
             var = new SetVar(SetType.DEFAULT, field, new IntLiteral(10));
             var.analyze();
-            Assert.assertEquals(String.format("DEFAULT %s = 10", field), var.toString());
+            Assert.assertEquals(String.format("SESSION %s = 10", field), var.toString());
         }
     }
 
