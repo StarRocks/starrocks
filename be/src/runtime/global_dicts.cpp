@@ -274,6 +274,7 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
+<<<<<<< HEAD:be/src/runtime/global_dicts.cpp
         DictOptimizeContext dict_ctx;
         _check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
         if (dict_ctx.could_apply_dict_optimize) {
@@ -292,6 +293,10 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
             expr_ctx->open(state);
             _expr_close_list.emplace_back(expr_ctx);
         }
+=======
+        auto expr = expr_ctx->root();
+        RETURN_IF_ERROR(rewrite_expr(expr_ctx, expr, slot_ids[i]));
+>>>>>>> daec44738 ([Bugfix] Fix wrong result when process 'is null' in condition expr in dictionary optimization (#8869)):be/src/runtime/global_dict/parser.cpp
     }
     return Status::OK();
 }
