@@ -1750,6 +1750,11 @@ public class LocalMetastore implements ConnectorMetadata {
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
+        if (!olapTable.checkPersistentIndex()) {
+            throw new DdlException("PrimaryKey table using persistent index don't support varchar(char) as key so far," +
+                                   " and key length should be no more than 64 Bytes");
+        }
+
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
             tabletType = PropertyAnalyzer.analyzeTabletType(properties);
