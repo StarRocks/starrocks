@@ -1351,7 +1351,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         info.isInMemory());
             } else {
                 partitionInfo.addPartition(
-                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
+                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory(), null);
             }
             if (!isCheckpointThread()) {
                 // add to inverted index
@@ -4193,12 +4193,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // use new partitions to replace the old ones.
         Set<Long> oldTabletIds = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
-            Partition oldPartition = newPartition;
-            if (olapTable.isLakeTable()) {
-                oldPartition = olapTable.replacePartition(newPartition, true);
-            } else {
-                oldPartition = olapTable.replacePartition(newPartition, false);
-            }
+            Partition oldPartition = olapTable.replacePartition(newPartition);
             // save old tablets to be removed
             for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 index.getTablets().stream().forEach(t -> {

@@ -101,7 +101,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
                              short replicationNum, boolean isInMemory) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, null);
         setRangeInternal(partitionId, isTemp, range);
     }
 

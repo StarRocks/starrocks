@@ -42,7 +42,7 @@ public class ConsistencyCheckerTest {
         materializedIndex.addTablet(tablet, tabletMeta, true);
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList());
         Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
         partition.setVisibleVersion(2L, System.currentTimeMillis());

@@ -104,7 +104,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 1, false, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
@@ -252,7 +252,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
-        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
+        partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(3, Lists.newArrayList());
         Partition partition = new Partition(partitionId, "partition", materializedIndex, distributionInfo);
         OlapTable table = new OlapTable(tableId, "table", Lists.newArrayList(), KeysType.AGG_KEYS, partitionInfo,
@@ -420,9 +420,9 @@ public class DiskAndTabletLoadReBalancerTest {
 
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty1 = new DataProperty(TStorageMedium.HDD);
-        partitionInfo.addPartition(partitionId1, dataProperty1, (short) 1, false);
+        partitionInfo.addPartition(partitionId1, dataProperty1, (short) 1, false, null);
         DataProperty dataProperty2 = new DataProperty(TStorageMedium.SSD);
-        partitionInfo.addPartition(partitionId2, dataProperty2, (short) 1, false);
+        partitionInfo.addPartition(partitionId2, dataProperty2, (short) 1, false, null);
         DistributionInfo distributionInfo = new HashDistributionInfo(6, Lists.newArrayList());
         Partition partition1 = new Partition(partitionId1, "partition1", materializedIndex, distributionInfo);
         Partition partition2 = new Partition(partitionId2, "partition2", materializedIndex, distributionInfo);

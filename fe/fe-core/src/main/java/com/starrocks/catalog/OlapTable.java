@@ -1309,7 +1309,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
      *
      * return the old partition.
      */
-    public Partition replacePartition(Partition newPartition, boolean isLakeTable) {
+    public Partition replacePartition(Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
         idToPartition.remove(oldPartition.getId());
 
