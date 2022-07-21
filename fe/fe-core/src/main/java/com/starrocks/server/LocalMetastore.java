@@ -4103,6 +4103,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
+                if (copiedTbl.isLakeTable()) {
+                    // for debug
+                    LOG.info("lake table, we need to set storage info for partitionInfo");
+                    LOG.info("oldPartitionId is {}, newPartitionId is {}", oldPartitionId, newPartitionId);
+                    partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
+                }
+
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
@@ -4112,6 +4119,11 @@ public class LocalMetastore implements ConnectorMetadata {
             // create partition failed, remove all newly created tablets
             for (Long tabletId : tabletIdSet) {
                 GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            }
+            // lake table need to delete shard
+            if (copiedTbl.isLakeTable()) {
+                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                editLog.logAddUnusedShard(tabletIdSet);
             }
             throw e;
         }
@@ -4184,7 +4196,14 @@ public class LocalMetastore implements ConnectorMetadata {
         // use new partitions to replace the old ones.
         Set<Long> oldTabletIds = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
-            Partition oldPartition = olapTable.replacePartition(newPartition);
+            Partition oldPartition = newPartition;
+            if (olapTable.isLakeTable()) {
+                // for debug
+                LOG.info("isLakeTable in truncateTableInternal");
+                oldPartition = olapTable.replacePartition(newPartition, true);
+            } else {
+                oldPartition = olapTable.replacePartition(newPartition, false);
+            }
             // save old tablets to be removed
             for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 index.getTablets().stream().forEach(t -> {
@@ -4229,12 +4248,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
-                                partitionId, indexId, schemaHash, medium);
+                                partitionId, indexId, schemaHash, medium, olapTable.isLakeTable());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                invertedIndex.addReplica(tabletId, replica);
+                            if (olapTable.isOlapTable()) {
+                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
                             }
                         }
                     }
