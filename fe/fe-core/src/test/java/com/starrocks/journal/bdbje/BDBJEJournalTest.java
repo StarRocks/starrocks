@@ -114,8 +114,8 @@ public class BDBJEJournalTest {
     @Test
     public void testWrieNoMock() throws Exception {
         BDBEnvironment environment = initBDBEnv("testWrieNormal");
-        CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
-        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
 
         String data = "petals on a wet black bough";
         Writable writable = new Writable() {
@@ -154,7 +154,7 @@ public class BDBJEJournalTest {
 
         // 5. check by read
         for (int i = 1; i != 4; i ++) {
-            String value = readDBStringValue(i, database.getDb());
+            String value = readDBStringValue(i, journal.currentJournalDB.getDb());
             Assert.assertEquals(data, value);
         }
 
@@ -171,7 +171,17 @@ public class BDBJEJournalTest {
         journal.batchWriteBegin();
         journal.batchWriteAppend(4, buffer);
         journal.batchWriteAbort();
-        Assert.assertFalse(checkKeyExists(4, database.getDb()));
+        Assert.assertFalse(checkKeyExists(4, journal.currentJournalDB.getDb()));
+
+        Assert.assertEquals(Arrays.asList(1L), journal.getDatabaseNames());
+        Assert.assertEquals(3, journal.getMaxJournalId());
+        journal.rollJournal(4);
+        Assert.assertEquals(3, journal.getMaxJournalId());
+        Assert.assertEquals(Arrays.asList(1L, 4L), journal.getDatabaseNames());
+        journal.deleteJournals(4);
+        Assert.assertEquals(Arrays.asList(4L), journal.getDatabaseNames());
+
+        journal.close();
     }
 
     @Test
@@ -498,8 +508,16 @@ public class BDBJEJournalTest {
             }
         };
 
+        new Expectations(database) {
+            {
+                database.close();
+                times = 1;
+            }
+        };
+
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        journal.close();
     }
 
 
@@ -535,6 +553,7 @@ public class BDBJEJournalTest {
 
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        Assert.fail();
     }
 
     @Test(expected = JournalException.class)
@@ -556,6 +575,7 @@ public class BDBJEJournalTest {
 
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        Assert.fail();
     }
 
     @Test
@@ -581,8 +601,18 @@ public class BDBJEJournalTest {
                 result = database;
             }
         };
+
+
+        new Expectations(database) {
+            {
+                database.close();
+                times = 1;
+            }
+        };
+
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        journal.close();
     }
 
     @Test
@@ -614,6 +644,7 @@ public class BDBJEJournalTest {
             }
         };
         journal.deleteJournals(45);
+        journal.close();  // no db will closed
     }
 
     @Test
@@ -666,9 +697,13 @@ public class BDBJEJournalTest {
                 database.count();
                 times = 1;
                 result = 10;
+
+                database.close();
+                times = 1;
             }
         };
         Assert.assertEquals(54, journal.getMaxJournalId());
+        journal.close();  // no db will closed
     }
 
     @Test(expected = JournalException.class)
@@ -680,6 +715,9 @@ public class BDBJEJournalTest {
                 closeSafeDatabase.getDb();
                 minTimes = 0;
                 result = database;
+
+                closeSafeDatabase.close();
+                minTimes = 0;
             }
         };
         BDBJEJournal journal = new BDBJEJournal(environment, closeSafeDatabase);
@@ -755,7 +793,7 @@ public class BDBJEJournalTest {
 
         Assert.assertEquals(2, journal.getFinalizedJournalId());
         Assert.assertEquals(4, journal.getMaxJournalId());
-        Assert.assertEquals(1, journal.getMinJournalId());
+        journal.close();
      }
 
     @Test

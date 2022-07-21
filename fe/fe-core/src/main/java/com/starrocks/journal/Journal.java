@@ -32,15 +32,13 @@ public interface Journal {
     // Get the newest journal id 
     public long getMaxJournalId();
 
-    // Get the oldest journal id
-    public long getMinJournalId();
-
     // Close the environment
     public void close();
 
     // Get all the journals whose id: fromKey <= id <= toKey
     // toKey = -1 means toKey = Long.Max_Value
-    public JournalCursor read(long fromKey, long toKey) throws JournalException;
+    public JournalCursor read(long fromKey, long toKey)
+            throws JournalException, JournalInconsistentException, InterruptedException;
 
     // Delete journals whose max id is less than deleteToJournalId
     public void deleteJournals(long deleteJournalToId);

@@ -43,11 +43,6 @@ public class MockJournal implements Journal {
     }
 
     @Override
-    public long getMinJournalId() {
-        return 1;
-    }
-
-    @Override
     public void close() {
     }
 
@@ -58,10 +53,6 @@ public class MockJournal implements Journal {
 
     @Override
     public JournalCursor read(long fromKey, long toKey) throws JournalException {
-        if (toKey < fromKey || fromKey < 0) {
-            return null;
-        }
-
         return new MockJournalCursor(this, fromKey, toKey);
     }
 
@@ -118,7 +109,7 @@ public class MockJournal implements Journal {
     private static class MockJournalCursor implements JournalCursor {
         private final MockJournal instance;
         private long start;
-        private final long end;
+        private long end;
 
         public MockJournalCursor(MockJournal instance, long start, long end) {
             this.instance = instance;
@@ -127,8 +118,11 @@ public class MockJournal implements Journal {
         }
 
         @Override
+        public void refresh() {}
+
+        @Override
         public JournalEntity next() {
-            if (start > end) {
+            if (end > 0 && start > end) {
                 return null;
             }
             JournalEntity je = instance.read(start);
