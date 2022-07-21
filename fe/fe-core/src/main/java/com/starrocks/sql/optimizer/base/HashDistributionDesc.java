@@ -31,6 +31,10 @@ public class HashDistributionDesc {
     // Which operator produce this hash DistributionDesc
     private final SourceType sourceType;
 
+    // Whether the local shuffle node is applied between the current node and the child node.
+    // It's used by SHUFFLE_AGG to generate ScanNode->LocalShuffleNode->OnePhaseAggNode.
+    // Required SHUFFLE_AGG with local shuffle and child LOCAL always satisfies regardless of
+    // the differences between grouping keys and scan distribution keys.
     private final boolean withLocalShuffle;
 
     public HashDistributionDesc(List<Integer> columns, SourceType sourceType) {

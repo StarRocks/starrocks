@@ -16,7 +16,7 @@ import java.util.List;
 
 /**
  * If there is only one BE and one fragment instance, we could generate one-phase local aggregation
- * with the local shuffle operator (Scan->OnePhaseAgg->LocalShuffle) regardless of the differences
+ * with the local shuffle operator (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences
  * between grouping keys and scan distribution keys.
  */
 public class GenerateAggregateWithLocalShuffleRule extends TransformationRule {

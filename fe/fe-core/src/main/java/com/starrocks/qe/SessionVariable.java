@@ -145,6 +145,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // them do the real work on core.
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
+    /**
+     * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
+     * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
+     * and scan distribution keys, when there is only one BE and one fragment instance.
+     */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
