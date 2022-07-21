@@ -1146,7 +1146,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.addPartition(
                         partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
             }
-            replayMvAddPartition(info, olapTable, partition);
             if (!isCheckpointThread()) {
                 // add to inverted index
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -1166,12 +1165,6 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } finally {
             db.writeUnlock();
-        }
-    }
-
-    private void replayMvAddPartition(PartitionPersistInfo info, OlapTable olapTable, Partition partition) {
-        if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW && !info.isTempPartition()) {
-            ((MaterializedView) olapTable).addPartitionRef(partition);
         }
     }
 
@@ -1238,9 +1231,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
-                if (olapTable.getType() == Table.TableType.MATERIALIZED_VIEW) {
-                    ((MaterializedView) olapTable).dropPartitionNameRef(info.getPartitionName());
-                }
             }
         } finally {
             db.writeUnlock();
@@ -3239,9 +3229,6 @@ public class LocalMetastore implements ConnectorMetadata {
             OlapTable table = (OlapTable) db.getTable(tableId);
             Partition partition = table.getPartition(partitionId);
             table.renamePartition(partition.getName(), newPartitionName);
-            if (table.getType() == Table.TableType.MATERIALIZED_VIEW) {
-                ((MaterializedView) table).addPartitionRef(partition);
-            }
             LOG.info("replay rename partition[{}] to {}", partition.getName(), newPartitionName);
         } finally {
             db.writeUnlock();

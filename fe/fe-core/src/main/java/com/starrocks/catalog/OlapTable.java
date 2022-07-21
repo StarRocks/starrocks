@@ -650,6 +650,18 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return partitionInfo;
     }
 
+    // partition Name -> Range
+    public Map<String, Range<PartitionKey>> getRangePartitionMap() {
+        Preconditions.checkArgument(partitionInfo.getType() == PartitionType.RANGE);
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
+        Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
+        for (long partitionId : idToPartition.keySet()) {
+            rangePartitionMap.put(idToPartition.get(partitionId).getName(), rangePartitionInfo.getRange(partitionId));
+        }
+        return rangePartitionMap;
+    }
+
     public Set<String> getPartitionColumnNames() {
         Set<String> partitionColumnNames = Sets.newHashSet();
         if (partitionInfo instanceof SinglePartitionInfo) {
