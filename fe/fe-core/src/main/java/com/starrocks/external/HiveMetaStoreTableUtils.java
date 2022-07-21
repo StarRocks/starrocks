@@ -162,6 +162,8 @@ public class HiveMetaStoreTableUtils {
                 }
                 return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
                         ((ArrayType) type).getItemType());
+            case "BINARY":
+                return primitiveType == PrimitiveType.INVALID_TYPE;
             default:
                 return false;
         }
@@ -216,7 +218,7 @@ public class HiveMetaStoreTableUtils {
                     return type;
                 }
             default:
-                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+                primitiveType = PrimitiveType.INVALID_TYPE;
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
