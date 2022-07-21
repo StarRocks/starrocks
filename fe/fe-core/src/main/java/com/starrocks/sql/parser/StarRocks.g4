@@ -77,6 +77,7 @@ statement
     | deleteStatement                                                                       #delete
 
     //Routine Statement
+    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
     | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
     | showRoutineLoadStatement                                                              #showRoutineLoad
 
@@ -573,6 +574,10 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+resumeRoutineLoadStatement
+    : RESUME ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
 
 pauseRoutineLoadStatement
     : PAUSE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
