@@ -46,11 +46,7 @@ public enum SetType {
     }
 
     public String toSql() {
-        if (this == SetType.GLOBAL) {
-            return desc;
-        }
-        // SET DEFAULT is not supported
-        return SetType.SESSION.desc;
+        return desc;
     }
 
     @Override
