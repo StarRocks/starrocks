@@ -154,7 +154,7 @@ StarRocks 提供 Flink CDC connector、flink-connector-starrocks 和 StarRocks-m
     flink.starrocks.sink.properties.format=json
     ```
 
-  > Flink.starrocks.sink 的参数可以参考[上文](/#使用步骤)，比如可以给不同的规则配置不同的导入频率等参数。
+  > Flink.starrocks.sink 的参数可以参考[参数说明](/loading/Flink-connector-starrocks.md#参数说明)，比如可以给不同的规则配置不同的导入频率等参数。
 
 * 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入StarRocks的一张表中进行分析。
 
