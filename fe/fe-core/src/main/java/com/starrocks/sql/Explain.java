@@ -820,11 +820,11 @@ public class Explain {
         if (optExpression.getStatistics().getColumnStatistics().values().stream()
                 .allMatch(ColumnStatistic::isUnknown)) {
             buildOperatorProperty(sb, "Estimates: {" +
-                    "row: " + (int) optExpression.getStatistics().getOutputRowCount() +
+                    "row: " + (long) optExpression.getStatistics().getOutputRowCount() +
                     ", cpu: ?, memory: ?, network: ?}", step);
         } else {
             buildOperatorProperty(sb, "Estimates: {" +
-                    "row: " + (int) optExpression.getStatistics().getOutputRowCount() +
+                    "row: " + (long) optExpression.getStatistics().getOutputRowCount() +
                     ", cpu: " + String.format("%.2f", cost.getCpuCost()) +
                     ", memory: " + String.format("%.2f", cost.getMemoryCost()) +
                     ", network: " + String.format("%.2f", cost.getNetworkCost()) +
