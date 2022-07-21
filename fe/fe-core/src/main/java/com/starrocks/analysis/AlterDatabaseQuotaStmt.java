@@ -21,15 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.ParseUtil;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class AlterDatabaseQuotaStmt extends DdlStmt {
@@ -72,26 +63,6 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
 
     public QuotaType getQuotaType() {
         return quotaType;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, analyzer.getQualifiedUser(), dbName);
-        }
-
-        if (Strings.isNullOrEmpty(dbName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-        }
-        dbName = ClusterNamespace.getFullName(dbName);
-        if (quotaType == QuotaType.DATA) {
-            quota = ParseUtil.analyzeDataVolumn(quotaValue);
-        } else if (quotaType == QuotaType.REPLICA) {
-            quota = ParseUtil.analyzeReplicaNumber(quotaValue);
-        }
-
     }
 
     @Override
