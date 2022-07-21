@@ -1292,9 +1292,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3 days
 
-    @ConfField(mutable = true)
-    public static long statistic_analyze_status_keep_second = 3 * 24 * 3600; // 3 days
-
     // The statistic
     @ConfField
     public static long statistic_cache_columns = 100000;
