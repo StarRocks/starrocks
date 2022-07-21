@@ -192,6 +192,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
@@ -6215,6 +6216,26 @@ public class Catalog {
         }
     }
 
+    public void replayModifyTableColumn(short opCode, ModifyTableColumnOperationLog info) {
+        if (info.getDbName() == null) {
+            return;
+        }
+        String hiveExternalDb = info.getDbName();
+        String hiveExternalTable = info.getTableName();
+        LOG.info("replayModifyTableColumn hiveDb:{},hiveTable:{}", hiveExternalDb, hiveExternalTable);
+        List<Column> columns = info.getColumns();
+        Database db = getDb(hiveExternalDb);
+        HiveTable table;
+        db.readLock();
+        try {
+            Table tbl = db.getTable(hiveExternalTable);
+            table = (HiveTable) tbl;
+            table.setNewFullSchema(columns);
+        } finally {
+            db.readUnlock();
+        }
+    }
+
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -6878,7 +6899,7 @@ public class Catalog {
         if (partitions != null && partitions.size() > 0) {
             table.refreshPartCache(partitions);
         } else {
-            table.refreshTableCache();
+            table.refreshTableCache(dbName, tableName);
         }
     }
 

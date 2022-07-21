@@ -1379,4 +1379,8 @@ public class EditLog {
     public void logRemoveAnalyzeJob(AnalyzeJob job) {
         logEdit(OperationType.OP_REMOVE_ANALYZER_JOB, job);
     }
+
+    public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_HIVE_TABLE_COLUMN, log);
+    }
 }

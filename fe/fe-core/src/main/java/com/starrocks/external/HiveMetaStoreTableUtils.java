@@ -8,17 +8,24 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.external.hive.Utils;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
@@ -102,5 +109,83 @@ public class HiveMetaStoreTableUtils {
             }
         }
         return numRows;
+    }
+
+    public static Map<String, FieldSchema> getAllHiveColumns(Table table) {
+        List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        for (FieldSchema hiveColumn : partHiveColumns) {
+            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
+        }
+        return allHiveColumns;
+    }
+
+    public static List<FieldSchema> getAllColumns(Table table) {
+        List<FieldSchema> allColumns = table.getSd().getCols();
+        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
+        allColumns.addAll(partHiveColumns);
+        return allColumns;
+    }
+
+    public static Type convertColumnType(String hiveType) throws DdlException {
+        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        PrimitiveType primitiveType;
+        switch (typeUpperCase) {
+            case "TINYINT":
+                primitiveType = PrimitiveType.TINYINT;
+                break;
+            case "SMALLINT":
+                primitiveType = PrimitiveType.SMALLINT;
+                break;
+            case "INT":
+            case "INTEGER":
+                primitiveType = PrimitiveType.INT;
+                break;
+            case "BIGINT":
+                primitiveType = PrimitiveType.BIGINT;
+                break;
+            case "FLOAT":
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case "DOUBLE":
+            case "DOUBLE PRECISION":
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case "DECIMAL":
+            case "NUMERIC":
+                primitiveType = PrimitiveType.DECIMAL32;
+                break;
+            case "TIMESTAMP":
+                primitiveType = PrimitiveType.DATETIME;
+                break;
+            case "DATE":
+                primitiveType = PrimitiveType.DATE;
+                break;
+            case "STRING":
+                return ScalarType.createDefaultString();
+            case "VARCHAR":
+                return ScalarType.createVarcharType(Utils.getVarcharLength(hiveType));
+            case "CHAR":
+                return ScalarType.createCharType(Utils.getCharLength(hiveType));
+            case "BOOLEAN":
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case "ARRAY":
+                Type type = Utils.convertToArrayType(hiveType);
+                if (type.isArrayType()) {
+                    return type;
+                }
+            default:
+                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+        }
+
+        if (primitiveType != PrimitiveType.DECIMAL32) {
+            return ScalarType.createType(primitiveType);
+        } else {
+            int[] parts = Utils.getPrecisionAndScale(hiveType);
+            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
+        }
     }
 }
