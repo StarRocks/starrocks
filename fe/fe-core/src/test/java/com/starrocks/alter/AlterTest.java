@@ -32,9 +32,13 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.MultiItemListPartitionDesc;
+import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -46,6 +50,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
@@ -61,6 +67,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -1426,6 +1439,380 @@ public class AlterTest {
         String renameDb = "alter database test rename test0";
         AlterDatabaseRename renameDbStmt =
                 (AlterDatabaseRename) UtFrameUtils.parseAndAnalyzeStmt(renameDb, starRocksAssert.getCtx());
+    }
+
+    @Test
+    public void testAddMultiItemListPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (dt,province) (\n" +
+                "     PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")),\n" +
+                "     PARTITION p2 VALUES IN ((\"2022-04-01\", \"shanghai\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        List<String> values = Lists.newArrayList("2022-04-01", "shandong");
+        List<List<String>> multiValues = Lists.newArrayList();
+        multiValues.add(values);
+        PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p3", multiValues, new HashMap<>());
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+                .getTable("test_partition");
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+        Map<Long, List<List<String>>> idToValues = partitionInfo.getIdToMultiValues();
+
+        long id3 = table.getPartition("p3").getId();
+        List<List<String>> list3 = idToValues.get(id3);
+        Assert.assertEquals("2022-04-01", list3.get(0).get(0));
+        Assert.assertEquals("shandong", list3.get(0).get(1));
+
+        String dropSQL = "drop table test_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+
+    }
+
+    @Test
+    public void testAddSingleItemListPartition() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        List<String> values = Lists.newArrayList("shanxi", "shanghai");
+        PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+                .getTable("test_partition");
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+        Map<Long, List<String>> idToValues = partitionInfo.getIdToValues();
+
+        long id3 = table.getPartition("p3").getId();
+        List<String> list3 = idToValues.get(id3);
+        Assert.assertEquals("shanxi", list3.get(0));
+        Assert.assertEquals("shanghai", list3.get(1));
+
+        String dropSQL = "drop table test_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+
+    }
+
+    @Test
+    public void testSingleItemPartitionPersistInfo() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        OlapTable table = (OlapTable) db.getTable("test_partition");
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+
+        long dbId = db.getId();
+        long tableId = table.getId();
+        Partition partition = table.getPartition("p1");
+        long partitionId = partition.getId();
+        List<String> values = partitionInfo.getIdToValues().get(partitionId);
+        DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
+        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
+        boolean isTempPartition = false;
+        ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
+                dataProperty, replicationNum, isInMemory, isTempPartition, values, new ArrayList<>());
+
+        // write log
+        File file = new File("./test_serial.log");
+        if (file.exists()) {
+            file.delete();
+        }
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+        partitionPersistInfoOut.write(out);
+
+        // read log
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
+
+        Assert.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
+        Assert.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
+        Assert.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
+        Assert.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
+        Assert.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
+        Assert.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
+        Assert.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
+        Assert.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
+
+        List<String> assertValues = partitionPersistInfoIn.asListPartitionPersistInfo().getValues();
+        Assert.assertEquals(values.size(), assertValues.size());
+        for (int i = 0; i < values.size(); i++) {
+            Assert.assertEquals(values.get(i), assertValues.get(i));
+        }
+
+        // replay log
+        partitionInfo.setValues(partitionId, null);
+        GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
+        Assert.assertNotNull(partitionInfo.getIdToValues().get(partitionId));
+
+        String dropSQL = "drop table test_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        file.delete();
+    }
+
+    @Test
+    public void testMultiItemPartitionPersistInfo() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (dt , province) (\n" +
+                "     PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        OlapTable table = (OlapTable) db.getTable("test_partition");
+        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+
+        long dbId = db.getId();
+        long tableId = table.getId();
+        Partition partition = table.getPartition("p1");
+        long partitionId = partition.getId();
+        List<List<String>> multiValues = partitionInfo.getIdToMultiValues().get(partitionId);
+        DataProperty dataProperty = partitionInfo.getDataProperty(partitionId);
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
+        boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
+        boolean isTempPartition = false;
+        ListPartitionPersistInfo partitionPersistInfoOut = new ListPartitionPersistInfo(dbId, tableId, partition,
+                dataProperty, replicationNum, isInMemory, isTempPartition, new ArrayList<>(), multiValues);
+
+        // write log
+        File file = new File("./test_serial.log");
+        if (file.exists()) {
+            file.delete();
+        }
+        file.createNewFile();
+        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
+        partitionPersistInfoOut.write(out);
+
+        // replay log
+        DataInputStream in = new DataInputStream(new FileInputStream(file));
+        PartitionPersistInfoV2 partitionPersistInfoIn = PartitionPersistInfoV2.read(in);
+
+        Assert.assertEquals(dbId, partitionPersistInfoIn.getDbId().longValue());
+        Assert.assertEquals(tableId, partitionPersistInfoIn.getTableId().longValue());
+        Assert.assertEquals(partitionId, partitionPersistInfoIn.getPartition().getId());
+        Assert.assertEquals(partition.getName(), partitionPersistInfoIn.getPartition().getName());
+        Assert.assertEquals(replicationNum, partitionPersistInfoIn.getReplicationNum());
+        Assert.assertEquals(isInMemory, partitionPersistInfoIn.isInMemory());
+        Assert.assertEquals(isTempPartition, partitionPersistInfoIn.isTempPartition());
+        Assert.assertEquals(dataProperty, partitionPersistInfoIn.getDataProperty());
+
+        List<List<String>> assertMultiValues = partitionPersistInfoIn.asListPartitionPersistInfo().getMultiValues();
+        Assert.assertEquals(multiValues.size(), assertMultiValues.size());
+        for (int i = 0; i < multiValues.size(); i++) {
+            List<String> valueItem = multiValues.get(i);
+            List<String> assertValueItem = assertMultiValues.get(i);
+            for (int j = 0; j < valueItem.size(); j++) {
+                Assert.assertEquals(valueItem.get(i), assertValueItem.get(i));
+            }
+        }
+
+        // replay log
+        partitionInfo.setMultiValues(partitionId, null);
+        GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
+        Assert.assertNotNull(partitionInfo.getIdToMultiValues().get(partitionId));
+
+        String dropSQL = "drop table test_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        file.delete();
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition_1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        List<String> values = Lists.newArrayList("shanxi", "heilongjiang");
+        PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p1", values, new HashMap<>());
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_1", addPartitionClause);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAddMultiListPartitionSamePartitionNameShouldThrowError() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition_2 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (dt,province) (\n" +
+                "     PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")),\n" +
+                "     PARTITION p2 VALUES IN ((\"2022-04-01\", \"shanghai\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        List<String> values1 = Lists.newArrayList("2022-04-01", "beijing");
+        List<String> values2 = Lists.newArrayList("2022-04-01", "chongqing");
+        List<List<String>> multiValues = Lists.newArrayList();
+        multiValues.add(values1);
+        multiValues.add(values2);
+        PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p1", multiValues, new HashMap<>());
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_2", addPartitionClause);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAddSingleListPartitionSamePartitionValueShouldThrowError() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition_3 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
+                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        List<String> values = Lists.newArrayList("beijing", "chongqing");
+        PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_3", addPartitionClause);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAddMultiItemListPartitionSamePartitionValueShouldThrowError() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test.test_partition_4 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (dt, province) (\n" +
+                "     PARTITION p1 VALUES IN ((\"2022-04-01\", \"beijing\"),(\"2022-04-01\", \"chongqing\")),\n" +
+                "     PARTITION p2 VALUES IN ((\"2022-04-01\", \"shanghai\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        List<String> values = Lists.newArrayList("2022-04-01", "shanghai");
+        List<List<String>> multiValues = Lists.newArrayList();
+        multiValues.add(values);
+        PartitionDesc partitionDesc = new MultiItemListPartitionDesc(false, "p3", multiValues, new HashMap<>());
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_4", addPartitionClause);
     }
 
 }

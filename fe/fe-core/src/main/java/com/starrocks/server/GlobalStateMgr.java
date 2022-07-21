@@ -192,6 +192,7 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
@@ -1783,6 +1784,10 @@ public class GlobalStateMgr {
     }
 
     public void replayAddPartition(PartitionPersistInfo info) throws DdlException {
+        localMetastore.replayAddPartition(info);
+    }
+
+    public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
         localMetastore.replayAddPartition(info);
     }
 
