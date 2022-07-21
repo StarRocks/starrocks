@@ -428,7 +428,7 @@ public class ConnectProcessor {
     // use to return result packet to user
     private void finalizeCommand() throws IOException {
         ByteBuffer packet = null;
-        if (executor != null && executor.isForwardToMaster()) {
+        if (executor != null && executor.isForwardToLeader()) {
             // for ERR State, set packet to remote packet(executor.getOutputPacket())
             //      because remote packet has error detail
             // but for not ERR (OK or EOF) State, we should check whether stmt is ShowStmt,
@@ -559,7 +559,7 @@ public class ConnectProcessor {
             // return error directly.
             TMasterOpResult result = new TMasterOpResult();
             ctx.getState().setError(
-                    "Missing current user identity. You need to upgrade this Frontend to the same version as Master Frontend.");
+                    "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
             result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
             result.setPacket(getResultPacket());
             return result;

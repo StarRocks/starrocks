@@ -53,7 +53,7 @@ public class HeartbeatResponse implements Writable {
 
     /**
      * msg and hbTime are no need to be synchronized to other Frontends,
-     * and only Master Frontend has these info
+     * and only Leader Frontend has these info
      */
     protected String msg;
     protected long hbTime;
