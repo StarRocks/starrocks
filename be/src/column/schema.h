@@ -15,6 +15,8 @@ namespace starrocks::vectorized {
 class Schema {
 public:
     Schema() = default;
+    Schema(Schema&&) = default;
+    Schema& operator=(Schema&&) = default;
 
 #ifdef BE_TEST
     explicit Schema(Fields fields);
