@@ -152,6 +152,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
         return;
     }
 
@@ -171,6 +172,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
         cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec multi plan fragment because of exit";
         return;
     }
 
