@@ -26,7 +26,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -73,9 +72,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     public static void getFrontendsInfo(GlobalStateMgr globalStateMgr, List<List<String>> infos) {
-        String masterIp = GlobalStateMgr.getCurrentState().getMasterIp();
-        if (masterIp == null) {
-            masterIp = "";
+        String leaderIp = GlobalStateMgr.getCurrentState().getLeaderIp();
+        if (leaderIp == null) {
+            leaderIp = "";
         }
 
         // get all node which are joined in bdb group
@@ -100,12 +99,11 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            // set Role and isMaster field
-            if (fe.getHost().equals(masterIp)) {
-                info.add(FrontendNodeType.MASTER.name());
+            info.add(fe.getRole().name());
+
+            if (fe.getHost().equals(leaderIp)) {
                 info.add("true");
             } else {
-                info.add(fe.getRole().name());
                 info.add("false");
             }
 

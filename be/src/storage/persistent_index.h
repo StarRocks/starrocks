@@ -41,6 +41,9 @@ struct IndexValue {
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
 
+static constexpr size_t kIndexValueSize = 8;
+static_assert(sizeof(IndexValue) == kIndexValueSize);
+
 class ImmutableIndexShard;
 
 uint64_t key_index_hash(const void* data, size_t len);
@@ -241,9 +244,9 @@ public:
     std::string path() const { return _path; }
 
     size_t key_size() const { return _key_size; }
+    size_t kv_pair_size() const { return _kv_pair_size; }
 
     size_t size() const { return _size; }
-    size_t kv_size = key_size() + sizeof(IndexValue);
     size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
     size_t memory_usage() const { return _l0 ? _l0->memory_usage() : 0; }
 
@@ -359,6 +362,7 @@ private:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
+    size_t _kv_pair_size = 0;
     size_t _size = 0;
     EditVersion _version;
     // _l1_version is used to get l1 file name, update in on_committed

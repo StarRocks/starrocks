@@ -20,6 +20,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -62,6 +63,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.common.ErrorCode.ERR_UNSUPPORTED_SQL_PATTERN;
 
 public class ShowStmtAnalyzer {
 
@@ -114,6 +117,25 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            } else {
+                dbName = ClusterNamespace.getFullName(dbName);
+            }
+            node.setDbName(dbName);
+
+            if (node.getExpr() != null) {
+                ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
+            }
             return null;
         }
 
@@ -496,9 +518,8 @@ public class ShowStmtAnalyzer {
                     throw new SemanticException("expression %s cast to datetime error: %s",
                             subExpr.getChild(1).toString(), e.getMessage());
                 }
-            } else if (!leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_ID) &&
-                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_BUCKETS) &&
-                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_REPLICATION_NUM)) {
+            } else if (ShowPartitionsStmt.FILTER_COLUMNS.stream()
+                    .noneMatch(column -> column.equalsIgnoreCase(leftKey))) {
                 throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
                         "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
             }

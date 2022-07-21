@@ -16,8 +16,6 @@ public:
     using const_reference = const T&;
     using size_type = typename Container::size_type;
 
-    ~PriorityQueue() = default;
-
     // Checks if the container has no elements
     [[nodiscard]] bool empty() const noexcept;
 

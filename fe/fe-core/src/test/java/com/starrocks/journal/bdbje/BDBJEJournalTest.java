@@ -38,6 +38,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class BDBJEJournalTest {
     private static final Logger LOG = LogManager.getLogger(BDBJEJournalTest.class);
@@ -113,8 +114,8 @@ public class BDBJEJournalTest {
     @Test
     public void testWrieNoMock() throws Exception {
         BDBEnvironment environment = initBDBEnv("testWrieNormal");
-        CloseSafeDatabase database = environment.openDatabase("testWrieNormal");
-        BDBJEJournal journal = new BDBJEJournal(environment, database);
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.open();
 
         String data = "petals on a wet black bough";
         Writable writable = new Writable() {
@@ -153,7 +154,7 @@ public class BDBJEJournalTest {
 
         // 5. check by read
         for (int i = 1; i != 4; i ++) {
-            String value = readDBStringValue(i, database.getDb());
+            String value = readDBStringValue(i, journal.currentJournalDB.getDb());
             Assert.assertEquals(data, value);
         }
 
@@ -170,7 +171,17 @@ public class BDBJEJournalTest {
         journal.batchWriteBegin();
         journal.batchWriteAppend(4, buffer);
         journal.batchWriteAbort();
-        Assert.assertFalse(checkKeyExists(4, database.getDb()));
+        Assert.assertFalse(checkKeyExists(4, journal.currentJournalDB.getDb()));
+
+        Assert.assertEquals(Arrays.asList(1L), journal.getDatabaseNames());
+        Assert.assertEquals(3, journal.getMaxJournalId());
+        journal.rollJournal(4);
+        Assert.assertEquals(3, journal.getMaxJournalId());
+        Assert.assertEquals(Arrays.asList(1L, 4L), journal.getDatabaseNames());
+        journal.deleteJournals(4);
+        Assert.assertEquals(Arrays.asList(4L), journal.getDatabaseNames());
+
+        journal.close();
     }
 
     @Test
@@ -487,7 +498,7 @@ public class BDBJEJournalTest {
 
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = new ArrayList();
 
@@ -497,8 +508,16 @@ public class BDBJEJournalTest {
             }
         };
 
+        new Expectations(database) {
+            {
+                database.close();
+                times = 1;
+            }
+        };
+
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        journal.close();
     }
 
 
@@ -508,7 +527,7 @@ public class BDBJEJournalTest {
 
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -526,7 +545,7 @@ public class BDBJEJournalTest {
     public void testOpenGetNamesFails(@Mocked BDBEnvironment environment) throws Exception {
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = null;
             }
@@ -534,6 +553,7 @@ public class BDBJEJournalTest {
 
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        Assert.fail();
     }
 
     @Test(expected = JournalException.class)
@@ -547,7 +567,7 @@ public class BDBJEJournalTest {
         };
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = BDBJEJournal.RETRY_TIME;
                 result = new DatabaseNotFoundException("mock mock");
             }
@@ -555,6 +575,7 @@ public class BDBJEJournalTest {
 
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        Assert.fail();
     }
 
     @Test
@@ -569,7 +590,7 @@ public class BDBJEJournalTest {
         };
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 3;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -580,8 +601,18 @@ public class BDBJEJournalTest {
                 result = database;
             }
         };
+
+
+        new Expectations(database) {
+            {
+                database.close();
+                times = 1;
+            }
+        };
+
         BDBJEJournal journal = new BDBJEJournal(environment);
         journal.open();
+        journal.close();
     }
 
     @Test
@@ -591,7 +622,7 @@ public class BDBJEJournalTest {
         // failed to get database names; do nothing
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = null;
             }
@@ -602,7 +633,7 @@ public class BDBJEJournalTest {
         // current db (3, 23, 45) checkpoint is made on 44, should remove 3, 23
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -613,6 +644,7 @@ public class BDBJEJournalTest {
             }
         };
         journal.deleteJournals(45);
+        journal.close();  // no db will closed
     }
 
     @Test
@@ -624,7 +656,7 @@ public class BDBJEJournalTest {
         // failed to get database names; return -1
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = null;
             }
@@ -634,7 +666,7 @@ public class BDBJEJournalTest {
         // no databases; return -1
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = new ArrayList<>();
             }
@@ -644,7 +676,7 @@ public class BDBJEJournalTest {
         // db 3, 23, 45; open 45 get its size 10
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 1;
                 result = Arrays.asList(3L, 23L, 45L);
 
@@ -665,9 +697,13 @@ public class BDBJEJournalTest {
                 database.count();
                 times = 1;
                 result = 10;
+
+                database.close();
+                times = 1;
             }
         };
         Assert.assertEquals(54, journal.getMaxJournalId());
+        journal.close();  // no db will closed
     }
 
     @Test(expected = JournalException.class)
@@ -679,6 +715,9 @@ public class BDBJEJournalTest {
                 closeSafeDatabase.getDb();
                 minTimes = 0;
                 result = database;
+
+                closeSafeDatabase.close();
+                minTimes = 0;
             }
         };
         BDBJEJournal journal = new BDBJEJournal(environment, closeSafeDatabase);
@@ -754,6 +793,66 @@ public class BDBJEJournalTest {
 
         Assert.assertEquals(2, journal.getFinalizedJournalId());
         Assert.assertEquals(4, journal.getMaxJournalId());
-        Assert.assertEquals(1, journal.getMinJournalId());
+        journal.close();
      }
+
+    @Test
+    public void testJournalWithPrefix() throws Exception {
+        String data = "petals on a wet black bough";
+        Writable writable = new Writable() {
+            @Override
+            public void write(DataOutput out) throws IOException {
+                Text.writeString(out, data);
+            }
+        };
+        DataOutputBuffer buffer = new DataOutputBuffer();
+        writable.write(buffer);
+
+        BDBEnvironment environment = initBDBEnv("testJournalWithPrefix");
+
+        // test journal with prefix works fine
+        {
+            BDBJEJournal journalWithPrefix = new BDBJEJournal(environment, "aaa_");
+            Assert.assertEquals("aaa_", journalWithPrefix.getPrefix());
+            journalWithPrefix.open();
+            journalWithPrefix.batchWriteBegin();
+            journalWithPrefix.batchWriteAppend(1, buffer);
+            journalWithPrefix.batchWriteAppend(2, buffer);
+            journalWithPrefix.batchWriteCommit();
+
+            journalWithPrefix.rollJournal(3);
+            journalWithPrefix.open();
+            journalWithPrefix.batchWriteBegin();
+            journalWithPrefix.batchWriteAppend(3, buffer);
+            journalWithPrefix.batchWriteAppend(4, buffer);
+            journalWithPrefix.batchWriteCommit();
+
+            List<Long> l = journalWithPrefix.getDatabaseNames();
+            Assert.assertEquals(2, l.size());
+            Assert.assertEquals((Long) 1L, l.get(0));
+            Assert.assertEquals((Long) 3L, l.get(1));
+        }
+
+        // test journal without prefix works fine at the same time
+        {
+            BDBJEJournal journalWithoutPrefix = new BDBJEJournal(environment);
+            journalWithoutPrefix.open();
+            journalWithoutPrefix.batchWriteBegin();
+            journalWithoutPrefix.batchWriteAppend(1, buffer);
+            journalWithoutPrefix.batchWriteAppend(2, buffer);
+            journalWithoutPrefix.batchWriteCommit();
+
+            journalWithoutPrefix.rollJournal(3);
+            journalWithoutPrefix.open();
+            journalWithoutPrefix.batchWriteBegin();
+            journalWithoutPrefix.batchWriteAppend(3, buffer);
+            journalWithoutPrefix.batchWriteAppend(4, buffer);
+            journalWithoutPrefix.batchWriteCommit();
+
+            List<Long> l = journalWithoutPrefix.getDatabaseNames();
+            Assert.assertEquals(2, l.size());
+            Assert.assertEquals((Long) 1L, l.get(0));
+            Assert.assertEquals((Long) 3L, l.get(1));
+        }
+    }
 }

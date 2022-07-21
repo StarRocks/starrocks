@@ -33,6 +33,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,13 +50,14 @@ import java.util.List;
  */
 public class BDBJEJournal implements Journal {
     public static final Logger LOG = LogManager.getLogger(BDBJEJournal.class);
-    private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
     static int RETRY_TIME = 3;
     static int SLEEP_INTERVAL_SEC = 5;
 
     private BDBEnvironment bdbEnvironment = null;
-    private CloseSafeDatabase currentJournalDB;
+    protected CloseSafeDatabase currentJournalDB = null;
     protected Transaction currentTrasaction = null;
+    // used to distinguish different module's db in BDB, must be empty or end with '_'
+    private final String prefix;
 
     // store uncommitted kv, used for rebuilding txn on commit fails
     private List<Pair<DatabaseEntry, DatabaseEntry>> uncommitedDatas = new ArrayList<>();
@@ -64,10 +66,21 @@ public class BDBJEJournal implements Journal {
     public BDBJEJournal(BDBEnvironment bdbEnvironment, CloseSafeDatabase currentJournalDB) {
         this.bdbEnvironment = bdbEnvironment;
         this.currentJournalDB = currentJournalDB;
+        this.prefix = "";
     }
 
     public BDBJEJournal(BDBEnvironment bdbEnvironment) {
+        this(bdbEnvironment, "" /* prefix */);
+    }
+
+    public BDBJEJournal(BDBEnvironment bdbEnvironment, String prefix) {
         this.bdbEnvironment = bdbEnvironment;
+        assert prefix.isEmpty() || prefix.charAt(prefix.length() - 1) == '_';
+        this.prefix = prefix;
+    }
+
+    public String getPrefix() {
+        return prefix;
     }
 
     /*
@@ -84,11 +97,17 @@ public class BDBJEJournal implements Journal {
         }
 
         String currentDbName = currentJournalDB.getDb().getDatabaseName();
-        long currentName = Long.parseLong(currentDbName);
+        String currentIdStr = currentDbName;
+        if (!prefix.isEmpty()) { // remove prefix
+            currentIdStr = currentDbName.substring(prefix.length());
+        }
+        long currentName = Long.parseLong(currentIdStr);
         long newNameVerify = currentName + currentJournalDB.getDb().count();
         if (newName == newNameVerify) {
-            LOG.info("roll edit log. new db name is {}", newName);
-            currentJournalDB = bdbEnvironment.openDatabase(Long.toString(newName));
+            String newDbName = getFullDatabaseName(newName);
+            LOG.info("roll edit log. new db name is {}", newDbName);
+            currentJournalDB.close();
+            currentJournalDB = bdbEnvironment.openDatabase(newDbName);
         } else {
             String msg = String.format("roll journal error! journalId and db journal numbers is not match. "
                             + "journal id: %d, current db: %s, expected db count: %d",
@@ -99,8 +118,9 @@ public class BDBJEJournal implements Journal {
     }
 
     @Override
-    public JournalCursor read(long fromKey, long toKey) throws JournalException {
-        return BDBJournalCursor.getJournalCursor(bdbEnvironment, fromKey, toKey);
+    public JournalCursor read(long fromKey, long toKey)
+            throws JournalException, JournalInconsistentException, InterruptedException {
+        return BDBJournalCursor.getJournalCursor(bdbEnvironment, prefix, fromKey, toKey);
     }
 
     @Override
@@ -109,45 +129,31 @@ public class BDBJEJournal implements Journal {
         if (bdbEnvironment == null) {
             return ret;
         }
-        List<Long> dbNames = bdbEnvironment.getDatabaseNames();
+        List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
         if (dbNames == null || dbNames.size() == 0) {
             return ret;
         }
 
         int index = dbNames.size() - 1;
-        String dbName = dbNames.get(index).toString();
+        String dbName = getFullDatabaseName(dbNames.get(index));
         long dbNumberName = dbNames.get(index);
+        // open database temporarily and close after count
         Database database = bdbEnvironment.openDatabase(dbName).getDb();
-        ret = dbNumberName + database.count() - 1;
+        try {
+            ret = dbNumberName + database.count() - 1;
+        } finally {
+            database.close();
+        }
 
         return ret;
     }
 
     @Override
-    public long getMinJournalId() {
-        long ret = -1;
-        if (bdbEnvironment == null) {
-            return ret;
-        }
-        List<Long> dbNames = bdbEnvironment.getDatabaseNames();
-        if (dbNames == null || dbNames.size() == 0) {
-            return ret;
-        }
-
-        String dbName = dbNames.get(0).toString();
-        Database database = bdbEnvironment.openDatabase(dbName).getDb();
-        // The database is empty
-        if (database.count() == 0) {
-            return ret;
-        }
-
-        return dbNames.get(0);
-    }
-
-    @Override
     public void close() {
-        bdbEnvironment.close();
-        bdbEnvironment = null;
+        if (currentJournalDB != null) {
+            currentJournalDB.close();
+            currentJournalDB = null;
+        }
     }
 
     /**
@@ -156,7 +162,7 @@ public class BDBJEJournal implements Journal {
      * So there's no need to catch RestartRequiredException
      */
     @Override
-    public synchronized void open() throws InterruptedException, JournalException {
+    public void open() throws InterruptedException, JournalException {
         // Open a new journal database or get last existing one as current journal database
         List<Long> dbNames = null;
         JournalException exception = null;
@@ -167,11 +173,10 @@ public class BDBJEJournal implements Journal {
                     Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
                 }
 
-                dbNames = bdbEnvironment.getDatabaseNames();
+                dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
                 if (dbNames == null) {  // bdb environment is closing
                     throw new JournalException("fail to get dbNames while open bdbje journal. will exit");
                 }
-
                 String dbName = null;
                 if (dbNames.size() == 0) {
                     /*
@@ -180,13 +185,16 @@ public class BDBJEJournal implements Journal {
                      *  here we should open database with name image max journal id + 1.
                      *  (default GlobalStateMgr.getCurrentState().getReplayedJournalId() is 0)
                      */
-                    dbName = Long.toString(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    dbName = getFullDatabaseName(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
                     LOG.info("the very first time to open bdb, dbname is {}", dbName);
                 } else {
                     // get last database as current journal database
-                    dbName = dbNames.get(dbNames.size() - 1).toString();
+                    dbName = getFullDatabaseName(dbNames.get(dbNames.size() - 1));
                 }
 
+                if (currentJournalDB != null) {
+                    currentJournalDB.close();
+                }
                 currentJournalDB = bdbEnvironment.openDatabase(dbName);
                 if (currentJournalDB == null) {
                     LOG.warn("fail to open database {}. retried {} times", dbName, i);
@@ -205,9 +213,12 @@ public class BDBJEJournal implements Journal {
         throw exception;
     }
 
+    /**
+     * delete all journals that < deleteToJournalId
+     */
     @Override
     public void deleteJournals(long deleteToJournalId) {
-        List<Long> dbNames = bdbEnvironment.getDatabaseNames();
+        List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
         if (dbNames == null) {
             LOG.info("delete database names is null.");
             return;
@@ -223,9 +234,9 @@ public class BDBJEJournal implements Journal {
         for (int i = 1; i < dbNames.size(); i++) {
             if (deleteToJournalId >= dbNames.get(i)) {
                 long name = dbNames.get(i - 1);
-                String stringName = Long.toString(name);
-                LOG.info("delete database name {}", stringName);
-                bdbEnvironment.removeDatabase(stringName);
+                String dbName = getFullDatabaseName(name);
+                LOG.info("delete database name {}", dbName);
+                bdbEnvironment.removeDatabase(dbName);
             } else {
                 LOG.info("database name {} is larger than deleteToJournalId {}, not delete",
                         dbNames.get(i), deleteToJournalId);
@@ -236,7 +247,7 @@ public class BDBJEJournal implements Journal {
 
     @Override
     public long getFinalizedJournalId() {
-        List<Long> dbNames = bdbEnvironment.getDatabaseNames();
+        List<Long> dbNames = bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
         assert (dbNames != null);
 
         String msg = "database names: ";
@@ -258,7 +269,7 @@ public class BDBJEJournal implements Journal {
             return null;
         }
 
-        return bdbEnvironment.getDatabaseNames();
+        return bdbEnvironment.getDatabaseNamesWithPrefix(prefix);
     }
 
     public BDBEnvironment getBdbEnvironment() {
@@ -459,4 +470,7 @@ public class BDBJEJournal implements Journal {
         }
     }
 
+    private String getFullDatabaseName(long dbId) {
+        return prefix + Long.toString(dbId);
+    }
 }

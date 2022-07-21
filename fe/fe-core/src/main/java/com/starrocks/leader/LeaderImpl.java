@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.master;
+package com.starrocks.leader;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
@@ -137,19 +137,19 @@ import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
-public class MasterImpl {
-    private static final Logger LOG = LogManager.getLogger(MasterImpl.class);
+public class LeaderImpl {
+    private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
 
     private ReportHandler reportHandler = new ReportHandler();
 
-    public MasterImpl() {
+    public LeaderImpl() {
         reportHandler.start();
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
@@ -800,7 +800,7 @@ public class MasterImpl {
     public TMasterResult report(TReportRequest request) throws TException {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
@@ -1080,8 +1080,8 @@ public class MasterImpl {
     }
 
     public TNetworkAddress masterAddr() {
-        String masterHost = GlobalStateMgr.getCurrentState().getMasterIp();
-        int masterRpcPort = GlobalStateMgr.getCurrentState().getMasterRpcPort();
+        String masterHost = GlobalStateMgr.getCurrentState().getLeaderIp();
+        int masterRpcPort = GlobalStateMgr.getCurrentState().getLeaderRpcPort();
         return new TNetworkAddress(masterHost, masterRpcPort);
     }
 
@@ -1090,7 +1090,7 @@ public class MasterImpl {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         // if current node is follower, forward it to leader
-        if (!globalStateMgr.isMaster()) {
+        if (!globalStateMgr.isLeader()) {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("beginRemoteTxn as follower, forward it to master. Label: {}, master: {}",
@@ -1146,7 +1146,7 @@ public class MasterImpl {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         // if current node is follower, forward it to leader
-        if (!globalStateMgr.isMaster()) {
+        if (!globalStateMgr.isLeader()) {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("commitRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",
@@ -1211,7 +1211,7 @@ public class MasterImpl {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         // if current node is follower, forward it to leader
-        if (!globalStateMgr.isMaster()) {
+        if (!globalStateMgr.isLeader()) {
             TNetworkAddress addr = masterAddr();
             try {
                 LOG.info("abortRemoteTxn as follower, forward it to master. txn_id: {}, master: {}",

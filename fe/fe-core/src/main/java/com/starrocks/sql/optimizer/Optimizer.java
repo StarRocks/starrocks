@@ -196,7 +196,7 @@ public class Optimizer {
         }
 
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
-        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
+        rewriteSubquery(memo, rootTaskContext);
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
 
         // Add full cte required columns, and save orig required columns
@@ -331,6 +331,25 @@ public class Optimizer {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOlapScanOperator(tree.getGroupExpression(), list);
         rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
+    }
+
+    private void rewriteSubquery(Memo memo, TaskContext rootTaskContext) {
+        do {
+            // we want to push apply node and don't merge it, but it's hard on current framework, TopDownRewrite
+            // can't work on history node
+            //
+            // e.g.
+            //  Apply           Project
+            //    |                |
+            //  Apply    ==>     Apply
+            //    |                |
+            // Project           Apply
+            rootTaskContext.resetRewriteNum();
+            ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
+        } while (rootTaskContext.hasRewrite());
+        rootTaskContext.resetRewriteNum();
+
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
     }
 
     void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {

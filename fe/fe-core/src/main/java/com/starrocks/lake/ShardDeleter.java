@@ -8,7 +8,7 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.persist.ShardInfo;
@@ -29,7 +29,7 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class ShardDeleter extends MasterDaemon {
+public class ShardDeleter extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ShardDeleter.class);
 
     @SerializedName(value = "shardIds")

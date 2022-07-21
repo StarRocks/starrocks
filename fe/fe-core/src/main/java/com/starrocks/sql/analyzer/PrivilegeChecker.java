@@ -10,16 +10,19 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -33,6 +36,7 @@ import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -51,12 +55,12 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
@@ -458,6 +462,16 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitAlterUserStatement(AlterUserStmt statement, ConnectContext context) {
+            // check if current user has GRANT priv on GLOBAL or DATABASE level.
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkHasPriv(context, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth.PrivLevel.DATABASE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext session) {
             // check if current user has GRANT priv on GLOBAL level.
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
@@ -575,19 +589,19 @@ public class PrivilegeChecker {
                 for (Long dbId : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                     if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            ClusterNamespace.getNameFromFullName(db.getFullName()),
+                            db.getOriginName(),
                             PrivPredicate.SELECT)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SELECT",
                                 session.getQualifiedUser(), session.getRemoteIP(),
-                                ClusterNamespace.getNameFromFullName(db.getFullName()));
+                                db.getOriginName());
                     }
 
                     if (!checkDbPriv(session, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            ClusterNamespace.getNameFromFullName(db.getFullName()),
+                            db.getOriginName(),
                             PrivPredicate.LOAD)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "LOAD",
                                 session.getQualifiedUser(), session.getRemoteIP(),
-                                ClusterNamespace.getNameFromFullName(db.getFullName()));
+                                db.getOriginName());
                     }
                 }
             } else if (StatsConstants.DEFAULT_ALL_ID == statement.getTableId()
@@ -640,6 +654,26 @@ public class PrivilegeChecker {
             if (!checkTblPriv(session, tableName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
                         session.getQualifiedUser(), session.getRemoteIP(), tableName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+            // check operation privilege
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+            // check operation privilege
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }
@@ -700,6 +734,17 @@ public class PrivilegeChecker {
                                     Privilege.ADMIN_PRIV),
                             CompoundPredicate.Operator.OR))) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowFunctions(ShowFunctionsStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_DB_ACCESS_DENIED, ConnectContext.get().getQualifiedUser(), dbName);
             }
             return null;
         }

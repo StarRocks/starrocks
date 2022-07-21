@@ -1253,4 +1253,19 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n");
     }
+
+    @Test
+    public void testDisableOneStageAggWithDistinct() throws Exception {
+        String sql = "select count(distinct L_ORDERKEY) from lineitem group by L_PARTKEY";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY");
+
+        sql = "select count(distinct P_NAME) from part";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: P_NAME");
+    }
 }

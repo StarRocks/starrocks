@@ -98,7 +98,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
     public Map<String, String> getHaInfo() {
         HashMap<String, String> feInfo = new HashMap<String, String>();
         feInfo.put("role", GlobalStateMgr.getCurrentState().getFeType().toString());
-        if (GlobalStateMgr.getCurrentState().isMaster()) {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
             feInfo.put("current_journal_id",
                     String.valueOf(GlobalStateMgr.getCurrentState().getMaxJournalId()));
         } else {

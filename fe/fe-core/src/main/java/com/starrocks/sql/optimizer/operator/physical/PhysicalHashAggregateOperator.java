@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -153,7 +152,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
-        Preconditions.checkState(!childDictColumns.isEmpty());
         ColumnRefSet dictSet = new ColumnRefSet();
         for (Integer id : childDictColumns) {
             dictSet.union(id);

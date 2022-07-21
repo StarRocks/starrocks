@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -253,21 +252,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         msg.setOpcode(opcode);
         msg.setVector_opcode(vectorOpcode);
         msg.setChild_type(getChild(0).getType().getPrimitiveType().toThrift());
-    }
-
-    @Override
-    public void vectorizedAnalyze(Analyzer analyzer) {
-        super.vectorizedAnalyze(analyzer);
-        Function match = null;
-
-        try {
-            match = getBuiltinFunction(analyzer, op.name, collectChildReturnTypes(),
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        } catch (AnalysisException e) {
-            Preconditions.checkState(false);
-        }
-        Preconditions.checkState(match != null);
-        Preconditions.checkState(match.getReturnType().getPrimitiveType() == PrimitiveType.BOOLEAN);
     }
 
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {

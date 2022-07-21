@@ -280,7 +280,7 @@ private:
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
-    Status _init_schema() const;
+    void _init_schema() const;
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
@@ -301,8 +301,7 @@ private:
     bool _has_bf_fpp = false;
 
     mutable std::unique_ptr<starrocks::vectorized::Schema> _schema;
-
-    mutable StarRocksCallOnce<Status> _schema_init;
+    mutable std::once_flag _init_schema_once_flag;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

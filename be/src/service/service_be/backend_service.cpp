@@ -21,52 +21,16 @@
 
 #include "backend_service.h"
 
-#include <arrow/record_batch.h>
-#include <thrift/concurrency/ThreadFactory.h>
-#include <thrift/processor/TMultiplexedProcessor.h>
-
-#include <memory>
-
 #include "agent/agent_server.h"
-#include "common/config.h"
-#include "common/logging.h"
-#include "common/status.h"
-#include "gen_cpp/TStarrocksExternalService.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/exec_env.h"
-#include "runtime/external_scan_context_mgr.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_queue_mgr.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "util/blocking_queue.hpp"
-#include "util/thrift_server.h"
 
 namespace starrocks {
-
-using apache::thrift::TProcessor;
-using apache::thrift::concurrency::ThreadFactory;
 
 BackendService::BackendService(ExecEnv* exec_env)
         : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
 
 BackendService::~BackendService() = default;
-
-std::unique_ptr<ThriftServer> BackendService::create(ExecEnv* exec_env, int port) {
-    std::shared_ptr<BackendService> handler(new BackendService(exec_env));
-    // TODO: do we want a BoostThreadFactory?
-    // TODO: we want separate thread factories here, so that fe requests can't starve
-    // be requests
-    std::shared_ptr<ThreadFactory> thread_factory(new ThreadFactory());
-
-    std::shared_ptr<TProcessor> be_processor(new BackendServiceProcessor(handler));
-
-    LOG(INFO) << "StarRocksInternalService listening on " << port;
-    return std::make_unique<ThriftServer>("backend", be_processor, port, exec_env->metrics(),
-                                          config::be_service_threads);
-}
 
 void BackendService::get_tablet_stat(TTabletStatResult& result) {
     StorageEngine::instance()->tablet_manager()->get_tablet_stat(&result);

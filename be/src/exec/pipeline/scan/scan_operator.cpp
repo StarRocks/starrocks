@@ -12,6 +12,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -280,34 +281,43 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
+    starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
+    query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task =
-                workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index](int worker_id) {
-                    if (auto sp = wp.lock()) {
-                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index,
+                                                                    query_trace_ctx, driver_id](int worker_id) {
+            if (auto sp = wp.lock()) {
+                // Set driver_id here to share some driver-local contents.
+                // Current it's used by ExprContext's driver-local state
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
+                auto& chunk_source = _chunk_sources[chunk_source_index];
+                size_t num_read_chunks = 0;
+                int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+                int64_t prev_scan_rows = chunk_source->get_scan_rows();
+                int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
-                        auto& chunk_source = _chunk_sources[chunk_source_index];
-                        size_t num_read_chunks = 0;
-                        int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
-                        int64_t prev_scan_rows = chunk_source->get_scan_rows();
-                        int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+                // Read chunk
+                Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
+                        _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                if (!status.ok() && !status.is_end_of_file()) {
+                    _set_scan_status(status);
+                }
 
-                        // Read chunk
-                        Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
-                                _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
-                        if (!status.ok() && !status.is_end_of_file()) {
-                            _set_scan_status(status);
-                        }
+                int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+                _workgroup->increment_real_runtime_ns(delta_cpu_time);
+                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
 
-                        int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
-                        _workgroup->increment_real_runtime_ns(delta_cpu_time);
-                        _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-
-                        _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
-                                                  chunk_source->get_scan_rows() - prev_scan_rows,
-                                                  chunk_source->get_scan_bytes() - prev_scan_bytes);
-                    }
-                });
+                _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                          chunk_source->get_scan_rows() - prev_scan_rows,
+                                          chunk_source->get_scan_bytes() - prev_scan_bytes);
+                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+            }
+        });
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
             offer_task_success = ExecEnv::GetInstance()->connector_scan_executor()->submit(std::move(task));
         } else {
@@ -315,10 +325,16 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id]() {
             if (auto sp = wp.lock()) {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                // Set driver_id here to share some driver-local contents.
+                // Current it's used by ExprContext's driver-local state
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
 
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
                 auto& chunk_source = _chunk_sources[chunk_source_index];
                 int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
                 int64_t prev_scan_rows = chunk_source->get_scan_rows();
@@ -334,6 +350,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                           chunk_source->get_scan_rows() - prev_scan_rows,
                                           chunk_source->get_scan_bytes() - prev_scan_bytes);
+                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
             }
         };
         // TODO(by satanson): set a proper priority

@@ -47,7 +47,7 @@ public class CancelStreamLoad extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
 
-        if (redirectToMaster(request, response)) {
+        if (redirectToLeader(request, response)) {
             return;
         }
 

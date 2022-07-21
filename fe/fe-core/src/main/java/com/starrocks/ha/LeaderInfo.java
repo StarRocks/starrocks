@@ -24,19 +24,19 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class MasterInfo implements Writable {
+public class LeaderInfo implements Writable {
 
     private String ip;
     private int httpPort;
     private int rpcPort;
 
-    public MasterInfo() {
+    public LeaderInfo() {
         this.ip = "";
         this.httpPort = 0;
         this.rpcPort = 0;
     }
 
-    public MasterInfo(String ip, int httpPort, int rpcPort) {
+    public LeaderInfo(String ip, int httpPort, int rpcPort) {
         this.ip = ip;
         this.httpPort = httpPort;
         this.rpcPort = rpcPort;

@@ -307,14 +307,14 @@ numNodes=0
 select v1 from t0 group by v1 having sum(v3) < (100 + 5) * (select max(v4) from t1);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [4: sum < multiply(105, 8: max)])
-    AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
-        EXCHANGE GATHER
-            AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
-                SCAN (columns[5: v4] predicate[null])
+    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
+        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(3: v3)}] group by [[1: v1]] having [null]
+            SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
-            AGGREGATE ([LOCAL] aggregate [{4: sum=sum(3: v3)}] group by [[1: v1]] having [null]
-                SCAN (columns[1: v1, 3: v3] predicate[null])
+        AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[]] having [null]
+            EXCHANGE GATHER
+                AGGREGATE ([LOCAL] aggregate [{8: max=max(5: v4)}] group by [[]] having [null]
+                    SCAN (columns[5: v4] predicate[null])
 [end]
 
 [sql]
@@ -360,13 +360,13 @@ CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: column_0 
 select v3 from t0 group by v3 having sum(v2) > (select * from (values(2)) t);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [4: sum > cast(5: column_0 as bigint(20))])
-    ASSERT LE 1
-        VALUES (2)
+    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[3: v3]] having [null]
+        EXCHANGE SHUFFLE[3]
+            AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[3: v3]] having [null]
+                SCAN (columns[2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[3: v3]] having [null]
-            EXCHANGE SHUFFLE[3]
-                AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[3: v3]] having [null]
-                    SCAN (columns[2: v2, 3: v3] predicate[null])
+        ASSERT LE 1
+            VALUES (2)
 [end]
 
 [sql]

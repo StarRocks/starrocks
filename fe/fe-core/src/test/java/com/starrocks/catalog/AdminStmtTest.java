@@ -99,7 +99,7 @@ public class AdminStmtTest {
         String adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'bad');";
         AdminSetReplicaStatusStmt stmt =
-                (AdminSetReplicaStatusStmt) UtFrameUtils.parseAndAnalyzeStmt(adminStmt, connectContext);
+                (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
         GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertTrue(replica.isBad());
@@ -107,7 +107,7 @@ public class AdminStmtTest {
         // set replica to ok
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'ok');";
-        stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseAndAnalyzeStmt(adminStmt, connectContext);
+        stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
         GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
         replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertFalse(replica.isBad());

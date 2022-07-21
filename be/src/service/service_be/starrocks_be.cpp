@@ -32,13 +32,13 @@ DECLARE_int64(socket_max_unwritten_bytes);
 } // namespace brpc
 
 void start_be() {
-    using starrocks::Status;
+    using starrocks::BackendService;
 
     auto* exec_env = starrocks::ExecEnv::GetInstance();
 
     // Begin to start services
     // 1. Start thrift server with 'be_port'.
-    auto thrift_server = starrocks::BackendService::create(exec_env, starrocks::config::be_port);
+    auto thrift_server = BackendService::create<BackendService>(exec_env, starrocks::config::be_port);
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << starrocks::config::be_port << ": "
                    << status;

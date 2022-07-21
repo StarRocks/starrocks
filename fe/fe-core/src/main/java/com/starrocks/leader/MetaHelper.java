@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.master;
+package com.starrocks.leader;
 
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -39,7 +39,7 @@ public class MetaHelper {
     private static final int BUFFER_BYTES = 8 * 1024;
     private static final int CHECKPOINT_LIMIT_BYTES = 30 * 1024 * 1024;
 
-    public static File getMasterImageDir() {
+    public static File getLeaderImageDir() {
         String metaDir = GlobalStateMgr.getCurrentState().getImageDir();
         return new File(metaDir);
     }
