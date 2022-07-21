@@ -21,20 +21,16 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.sql.ast.AstVisitor;
+>>>>>>> cf0fb08a7 ([Refactor] Remove some unused code in old parser for admin stmt (#8963))
 
 // admin show replica distribution from tbl [partition(p1, p2, ...)]
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
@@ -47,6 +43,7 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         this.tblRef = tblRef;
     }
 
+<<<<<<< HEAD
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
         super.analyze(analyzer);
@@ -71,6 +68,8 @@ public class AdminShowReplicaDistributionStmt extends ShowStmt {
         CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblRef.getName().getTbl());
     }
 
+=======
+>>>>>>> cf0fb08a7 ([Refactor] Remove some unused code in old parser for admin stmt (#8963))
     public String getDbName() {
         return tblRef.getName().getDb();
     }

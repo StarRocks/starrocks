@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -23,7 +25,11 @@ public class AdminSetTest {
 
     @Test
     public void TestAdminSetReplicaStatus() {
-        analyzeSuccess("admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");");
+        AdminSetReplicaStatusStmt stmt = (AdminSetReplicaStatusStmt)analyzeSuccess(
+                "admin set replica status properties(\"tablet_id\" = \"10003\",\"backend_id\" = \"10001\",\"status\" = \"ok\");");
+        Assert.assertEquals(10003, stmt.getTabletId());
+        Assert.assertEquals(10001, stmt.getBackendId());
+        Assert.assertEquals("OK", stmt.getStatus().name());
 
         analyzeFail("admin set replica status properties(\"backend_id\" = \"10001\",\"status\" = \"ok\");",
                 "Should add following properties: TABLET_ID, BACKEND_ID and STATUS");
