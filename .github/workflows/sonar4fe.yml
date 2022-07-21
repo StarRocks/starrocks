@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - 'branch*'
   pull_request:
     paths:
       - 'fe/**.java'
