@@ -29,6 +29,7 @@ import com.starrocks.thrift.TAnalyticWindowBoundaryType;
 import com.starrocks.thrift.TAnalyticWindowType;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 /**
  * Windowing clause of an analytic expr
@@ -202,6 +203,11 @@ public class AnalyticWindow {
             return type == o.type && exprEqual;
         }
 
+        @Override
+        public int hashCode() {
+            return Objects.hash(type, expr, offsetValue);
+        }
+
         public Boundary converse() {
             Boundary result = new Boundary(type.converse(),
                     (expr != null) ? expr.clone() : null);
@@ -344,6 +350,11 @@ public class AnalyticWindow {
         return type_ == o.type_
                 && leftBoundary_.equals(o.leftBoundary_)
                 && rightBoundaryEqual;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type_, leftBoundary_, rightBoundary_);
     }
 
     @Override
