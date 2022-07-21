@@ -225,7 +225,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     }
     // we need to allocate contiguous memory, so we need some alignment operations
     _max_agg_state_align_size = std::max(_max_agg_state_align_size, HashTableKeyAllocator::aligned);
-    _agg_states_total_size = (_agg_states_total_size + _max_agg_state_align_size) / _max_agg_state_align_size *
+    _agg_states_total_size = (_agg_states_total_size + _max_agg_state_align_size - 1) / _max_agg_state_align_size *
                              _max_agg_state_align_size;
     _state_allocator.aggregate_key_size = _agg_states_total_size;
     _state_allocator.pool = _mem_pool.get();

@@ -52,12 +52,12 @@ struct HashTableKeyAllocator {
 
     RawHashTableIterator end() { return {this, vecs.size(), 0}; }
 
-    uint8_t* allocate() {
+    vectorized::AggDataPtr allocate() {
         if (vecs.empty() || vecs.back().second == link) {
             uint8_t* mem = pool->allocate_aligned(link * aggregate_key_size, aligned);
             vecs.emplace_back(mem, 0);
         }
-        return static_cast<uint8_t*>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
+        return static_cast<vectorized::AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
     }
 
     uint8_t* allocate_null_key_data() { return pool->allocate_aligned(link * aggregate_key_size, aligned); }
