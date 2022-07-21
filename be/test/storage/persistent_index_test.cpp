@@ -32,7 +32,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
         keys.emplace_back(i);
         values.emplace_back(i * 2);
     }
-    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key)));
+    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key), "./PersistentIndexTest_test_mutable_index"));
 
     // test insert
     ASSERT_OK(idx->insert(keys.size(), keys.data(), values.data()));
@@ -227,7 +227,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
         keys[i] = i;
         values[i] = i * 2;
     }
-    auto rs = MutableIndex::create(sizeof(Key));
+    auto rs = MutableIndex::create(sizeof(Key), "./PersistentIndexTest_test_mutable_flush_to_immutable");
     ASSERT_TRUE(rs.ok());
     std::unique_ptr<MutableIndex> idx = std::move(rs).value();
 
