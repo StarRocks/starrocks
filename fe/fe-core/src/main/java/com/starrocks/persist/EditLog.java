@@ -185,6 +185,14 @@ public class EditLog {
                     globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
                     break;
                 }
+                case OperationType.OP_ADD_PARTITION_V2: {
+                    PartitionPersistInfoV2 info = (PartitionPersistInfoV2) journal.getData();
+                    LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
+                            + " table = " + info.getTableId()
+                            + " partitionName = " + info.getPartition().getName());
+                    globalStateMgr.replayAddPartition(info);
+                    break;
+                }
                 case OperationType.OP_ADD_PARTITION: {
                     PartitionPersistInfo info = (PartitionPersistInfo) journal.getData();
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
@@ -1035,6 +1043,10 @@ public class EditLog {
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logAddPartition(PartitionPersistInfoV2 info) {
+        logEdit(OperationType.OP_ADD_PARTITION_V2, info);
     }
 
     public void logAddPartition(PartitionPersistInfo info) {
