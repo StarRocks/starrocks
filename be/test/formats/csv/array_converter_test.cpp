@@ -370,6 +370,22 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         EXPECT_EQ("a", arr[1].get_slice());
         EXPECT_TRUE(arr[2].is_null());
     }
+    {
+        // ARRAY<VARCHAR>
+        TypeDescriptor t(TYPE_ARRAY);
+        t.children.emplace_back(TYPE_VARCHAR);
+        t.children.back().len = 5000;
+
+        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto col = ColumnHelper::create_column(t, false);
+
+        // []
+        EXPECT_TRUE(conv->read_string(col.get(), "", Converter::Options()));
+        EXPECT_EQ(1, col->size());
+
+        auto arr = col->get(0).get_array();
+        EXPECT_EQ(0, arr.size());
+    }
 }
 
 // NOLINTNEXTLINE

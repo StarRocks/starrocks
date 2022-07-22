@@ -651,7 +651,7 @@ public class HiveMetaClient {
     public TextFileFormatDesc getTextFileFormatDesc(StorageDescriptor sd) {
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
-        // https://github.com/apache/hive/blob/master/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
+        // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
         return new TextFileFormatDesc(
                 sd.getSerdeInfo().getParameters().getOrDefault("field.delim", "\001"),
                 sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"),

@@ -73,6 +73,7 @@ protected:
     }
 };
 
+char get_collection_delimiter(char mapkey_delimiter, size_t nested_array_level);
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable);
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable, char collection_delimiter,
                                          char mapkey_delimiter, size_t nested_array_level = 1);
