@@ -44,6 +44,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.StringDeserializer;  
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -108,8 +109,11 @@ public class KafkaUtil {
         public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                    ImmutableMap<String, String> properties,
                                                    List<Integer> partitions) throws UserException {
+
             final Properties props = new Properties();
             props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());  
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());  
 
             final Consumer<String, String> consumer = new KafkaConsumer<>(props);
 
@@ -119,7 +123,7 @@ public class KafkaUtil {
             }
             final Map<TopicPartition, Long> endOffsets = consumer.endOffsets(topicPartitions);
 
-            Map<Integer, Long> latestOffset = new HashMap<>();
+            final Map<Integer, Long> latestOffset = new HashMap<>();
             for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
                 latestOffset.put(entry.getKey().partition(), entry.getValue());
             }
