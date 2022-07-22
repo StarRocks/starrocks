@@ -2149,8 +2149,8 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                if (!profileDoneSignal.await(1, TimeUnit.HOURS)) {
-                    LOG.warn("failed to get profile within 1 hour");
+                if (!profileDoneSignal.await(1, TimeUnit.MINUTES)) {
+                    LOG.warn("failed to get profile within 1 minute");
                 }
             } catch (InterruptedException e) {
                 LOG.warn("signal await error", e);
