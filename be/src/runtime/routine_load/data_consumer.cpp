@@ -228,7 +228,10 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             if (!queue->blocking_put(msg.get())) {
                 done = true;
             } else if (_eof_count == _partition_count) {
+                msg.release();
                 done = true;
+            } else {
+                msg.release();
             }
             break;
         }
