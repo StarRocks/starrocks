@@ -2149,6 +2149,8 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
+                // Waiting for other fragment instances to finish execution
+                // Ideally, it should wait indefinitely, but out of defense, set timeout to 1 minute
                 if (!profileDoneSignal.await(1, TimeUnit.MINUTES)) {
                     LOG.warn("failed to get profile within 1 minute");
                 }
