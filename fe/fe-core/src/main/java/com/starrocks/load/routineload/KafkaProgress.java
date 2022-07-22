@@ -155,12 +155,12 @@ public class KafkaProgress extends RoutineLoadProgress {
 
         if (beginningPartitions.size() > 0) {
             Map<Integer, Long> partOffsets = KafkaUtil
-                    .getBeginningOffsets(brokerList, topic, ImmutableMap.copyOf(properties), beginningPartitions);
+                    .getBeginningOffsets(brokerList, topic, beginningPartitions);
             partitionIdToOffset.putAll(partOffsets);
         }
         if (endPartitions.size() > 0) {
             Map<Integer, Long> partOffsets =
-                    KafkaUtil.getLatestOffsets(brokerList, topic, ImmutableMap.copyOf(properties), endPartitions);
+                    KafkaUtil.getEndOffsets(brokerList, topic, endPartitions);
             partitionIdToOffset.putAll(partOffsets);
         }
     }

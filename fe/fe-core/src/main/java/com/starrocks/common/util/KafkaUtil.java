@@ -22,19 +22,6 @@
 package com.starrocks.common.util;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
-import com.starrocks.proto.PKafkaLoadInfo;
-import com.starrocks.proto.PKafkaMetaProxyRequest;
-import com.starrocks.proto.PKafkaOffsetBatchProxyRequest;
-import com.starrocks.proto.PKafkaOffsetProxyRequest;
-import com.starrocks.proto.PKafkaOffsetProxyResult;
-import com.starrocks.proto.PProxyRequest;
-import com.starrocks.proto.PProxyResult;
-import com.starrocks.proto.PStringPair;
-import com.starrocks.rpc.BackendServiceClient;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TStatusCode;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -46,13 +33,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 
 public class KafkaUtil {
