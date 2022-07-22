@@ -88,7 +88,10 @@ public:
     // execute external query, all query info are packed in TScanOpenParams
     Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
                                        std::vector<TScanColumnDesc>* selected_columns);
-    size_t running_fragment_count() const { return _fragment_map.size(); }
+    size_t running_fragment_count() const {
+        std::lock_guard<std::mutex> lock(_lock);
+        return _fragment_map.size();
+    }
 
 private:
     void exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb);
@@ -96,7 +99,7 @@ private:
     // This is input params
     ExecEnv* _exec_env;
 
-    std::mutex _lock;
+    mutable std::mutex _lock;
 
     // Make sure that remove this before no data reference FragmentExecState
     std::unordered_map<TUniqueId, std::shared_ptr<FragmentExecState>> _fragment_map;
