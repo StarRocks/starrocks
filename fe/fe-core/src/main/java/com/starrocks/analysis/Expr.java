@@ -265,15 +265,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public boolean isFilter() {
         return isFilter;
     }
-
-    public boolean isOnClauseConjunct() {
-        return isOnClauseConjunct_;
-    }
-
-    public void setIsOnClauseConjunct(boolean b) {
-        isOnClauseConjunct_ = b;
-    }
-
     public boolean isAuxExpr() {
         return isAuxExpr;
     }
@@ -639,31 +630,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
         for (Expr e : exprs) {
             e.getIds(tupleIds, slotIds);
-        }
-    }
-
-    public void vectorizedAnalyze(Analyzer analyzer) {
-        for (Expr child : children) {
-            child.vectorizedAnalyze(analyzer);
-        }
-    }
-
-    public void computeOutputColumn(Analyzer analyzer) {
-        for (Expr child : children) {
-            child.computeOutputColumn(analyzer);
-            LOG.info("child " + child.debugString() + " outputColumn: " + child.getOutputColumn());
-        }
-
-        if (!isConstant() && !isFilter) {
-            List<TupleId> tupleIds = Lists.newArrayList();
-            getIds(tupleIds, null);
-            Preconditions.checkArgument(tupleIds.size() == 1);
-
-            int currentOutputColumn = analyzer.getCurrentOutputColumn(tupleIds.get(0));
-            this.outputColumn = currentOutputColumn;
-            LOG.info(debugString() + " outputColumn: " + this.outputColumn);
-            ++currentOutputColumn;
-            analyzer.setCurrentOutputColumn(tupleIds.get(0), currentOutputColumn);
         }
     }
 
@@ -1324,18 +1290,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return subqueries.get(0);
     }
 
-    public boolean isCorrelatedPredicate(List<TupleId> tupleIdList) {
-        if (this instanceof SlotRef && !this.isBoundByTupleIds(tupleIdList)) {
-            return true;
-        }
-        for (Expr child : this.getChildren()) {
-            if (child.isCorrelatedPredicate(tupleIdList)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         throw new IOException("Not implemented serializable ");
@@ -1512,7 +1466,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
         ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
         // Add cast and constant fold
-        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.CAST_AND_FOLD_RULES);
+        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
         return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
                 new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
     }

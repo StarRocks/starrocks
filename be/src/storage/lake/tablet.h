@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "common/statusor.h"
 #include "storage/lake/metadata_iterator.h"
@@ -17,7 +18,7 @@ class TabletSchema;
 
 namespace starrocks::vectorized {
 class Schema;
-}
+} // namespace starrocks::vectorized
 
 namespace starrocks::lake {
 
@@ -30,8 +31,7 @@ using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 
 class Tablet {
 public:
-    // group: the URI of the storage group for this tablet, e.g, "s3://bucket/serviceID/groupID/"
-    explicit Tablet(TabletManager* mgr, std::string group, int64_t id) : _mgr(mgr), _root(std::move(group)), _id(id) {}
+    explicit Tablet(TabletManager* mgr, int64_t id) : _mgr(mgr), _id(id) {}
 
     ~Tablet() = default;
 
@@ -43,11 +43,9 @@ public:
     Tablet(Tablet&&) = default;
     Tablet& operator=(Tablet&&) = default;
 
-    int64_t id() const { return _id; }
+    [[nodiscard]] int64_t id() const { return _id; }
 
-    std::string root() const { return _root; }
-
-    std::string root_location() const;
+    [[nodiscard]] std::string root_location() const;
 
     Status put_metadata(const TabletMetadata& metadata);
 
@@ -55,11 +53,7 @@ public:
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
-    StatusOr<TabletMetadataIter> list_metadata();
-
     Status delete_metadata(int64_t version);
-
-    Status delete_metadata();
 
     Status put_txn_log(const TxnLog& log);
 
@@ -77,16 +71,17 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(int64_t version);
 
-    std::string metadata_path(int64_t version) const;
+    StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
+                                      bool fill_cache);
 
-    std::string txn_log_path(int64_t txn_id) const;
+    [[nodiscard]] std::string metadata_location(int64_t version) const;
 
-    std::string segment_path_assemble(const std::string& segment_name) const;
+    [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
+
+    [[nodiscard]] std::string segment_location(std::string_view segment_name) const;
 
 private:
     TabletManager* _mgr;
-    // TODO: remove this variable.
-    std::string _root;
     int64_t _id;
 };
 

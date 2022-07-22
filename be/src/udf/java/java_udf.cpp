@@ -18,6 +18,7 @@
 #include "jni.h"
 #include "runtime/primitive_type.h"
 #include "udf/java/java_native_method.h"
+#include "udf/java/utils.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h"
 #include "util/defer_op.h"
@@ -446,10 +447,14 @@ DirectByteBuffer::DirectByteBuffer(void* ptr, int capacity) {
 
 DirectByteBuffer::~DirectByteBuffer() {
     if (_handle != nullptr) {
-        auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
-        env->DeleteGlobalRef(_handle);
-        _handle = nullptr;
+        auto ret = call_hdfs_scan_function_in_pthread([this]() {
+            auto& helper = JVMFunctionHelper::getInstance();
+            JNIEnv* env = helper.getEnv();
+            env->DeleteGlobalRef(_handle);
+            _handle = nullptr;
+            return Status::OK();
+        });
+        ret->get_future().get();
     }
 }
 
@@ -459,8 +464,12 @@ JavaGlobalRef::~JavaGlobalRef() {
 
 void JavaGlobalRef::clear() {
     if (_handle) {
-        JVMFunctionHelper::getInstance().getEnv()->DeleteGlobalRef(_handle);
-        _handle = nullptr;
+        auto ret = call_hdfs_scan_function_in_pthread([this]() {
+            JVMFunctionHelper::getInstance().getEnv()->DeleteGlobalRef(_handle);
+            _handle = nullptr;
+            return Status::OK();
+        });
+        ret->get_future().get();
     }
 }
 

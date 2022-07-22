@@ -33,6 +33,8 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.common.UserException;
 import com.starrocks.external.elasticsearch.EsShardPartitions;
 import com.starrocks.external.elasticsearch.EsShardRouting;
+import com.starrocks.external.elasticsearch.QueryBuilders;
+import com.starrocks.external.elasticsearch.QueryConverter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TEsScanNode;
@@ -237,23 +239,38 @@ public class EsScanNode extends ScanNode {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
 
-        if (!conjuncts.isEmpty()) {
+        if (conjuncts.isEmpty()) {
+            output.append(prefix).append("PREDICATES: ").append(
+                    getExplainString(conjuncts)).append("\n");
+            output.append(prefix).append("ES_QUERY_DSL: ").append("{\"match_all\": {}}").append("\n");
+        } else {
+            QueryConverter queryConverter = new QueryConverter();
+            QueryBuilders.QueryBuilder queryBuilder = queryConverter.convert(getConjuncts());
             output.append(prefix).append("PREDICATES: ").append(
                     getExplainString(conjuncts)).append("\n");
             // reserved for later using: LOCAL_PREDICATES is processed by StarRocks EsScanNode
-            output.append(prefix).append("LOCAL_PREDICATES: ").append(" ").append("\n");
-            // reserved for later using: REMOTE_PREDICATES is processed by remote ES Cluster
-            output.append(prefix).append("REMOTE_PREDICATES: ").append(" ").append("\n");
-            // reserved for later using: translate predicates to ES queryDSL
-            output.append(prefix).append("ES_QUERY_DSL: ").append(" ").append("\n");
-        } else {
-            output.append(prefix).append("ES_QUERY_DSL: ").append("{\"match_all\": {}}").append("\n");
+            output.append(prefix).append("LOCAL_PREDICATES: ")
+                    .append(getExplainString(queryConverter.localConjuncts()))
+                    .append("\n");
+            output.append(prefix).append("REMOTE_PREDICATES: ")
+                    .append(getExplainString(queryConverter.remoteConjuncts()))
+                    .append("\n");
+            output.append(prefix)
+                    .append("ES_QUERY_DSL: ")
+                    .append(queryBuilder.toString())
+                    .append("\n");
         }
         String indexName = table.getIndexName();
         String typeName = table.getMappingType();
-        output.append(prefix)
-                .append(String.format("ES index/type: %s/%s", indexName, typeName))
-                .append("\n");
+        if (typeName == null) {
+            output.append(prefix)
+                    .append(String.format("ES index: %s", indexName))
+                    .append("\n");
+        } else {
+            output.append(prefix)
+                    .append(String.format("ES index/type: %s/%s", indexName, typeName))
+                    .append("\n");
+        }
         return output.toString();
     }
 

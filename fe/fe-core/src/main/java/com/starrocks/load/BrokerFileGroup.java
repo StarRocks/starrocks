@@ -119,7 +119,7 @@ public class BrokerFileGroup implements Writable {
         Table table = db.getTable(dataDescription.getTableName());
         if (table == null) {
             throw new DdlException("Unknown table " + dataDescription.getTableName()
-                    + " in database " + db.getFullName());
+                    + " in database " + db.getOriginName());
         }
         if (!(table instanceof OlapTable)) {
             throw new DdlException("Table " + table.getName() + " is not OlapTable");
@@ -184,7 +184,7 @@ public class BrokerFileGroup implements Writable {
             // src table should be hive table
             Table srcTable = db.getTable(srcTableName);
             if (srcTable == null) {
-                throw new DdlException("Unknown table " + srcTableName + " in database " + db.getFullName());
+                throw new DdlException("Unknown table " + srcTableName + " in database " + db.getOriginName());
             }
             if (!(srcTable instanceof HiveTable)) {
                 throw new DdlException("Source table " + srcTableName + " is not HiveTable");

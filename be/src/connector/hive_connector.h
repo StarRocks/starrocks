@@ -54,7 +54,7 @@ private:
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
-    void _decompose_conjunct_ctxs();
+    Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
 
@@ -100,7 +100,7 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
-    const LakeTableDescriptor* _lake_table = nullptr;
+    const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================
     // The following are profile metrics

@@ -108,7 +108,7 @@ public class LoadLoadingTask extends LoadTask {
     @Override
     protected void executeTask() throws Exception {
         LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}. left retry: {}",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getFullName(), table.getName(), retryTime);
+                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName(), retryTime);
         retryTime--;
         executeOnce();
     }
@@ -116,7 +116,7 @@ public class LoadLoadingTask extends LoadTask {
     private void executeOnce() throws Exception {
         // New one query id,
         Coordinator curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
-                planner.getFragments(), planner.getScanNodes(), db.getClusterName(),
+                planner.getFragments(), planner.getScanNodes(),
                 planner.getTimezone(), planner.getStartTime());
         curCoordinator.setQueryType(TQueryType.LOAD);
         curCoordinator.setExecMemoryLimit(execMemLimit);

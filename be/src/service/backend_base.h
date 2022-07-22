@@ -21,8 +21,6 @@
 
 #pragma once
 
-#include <thrift/protocol/TDebugProtocol.h>
-
 #include <ctime>
 #include <map>
 #include <memory>
@@ -43,16 +41,8 @@ class TMiniLoadEtlStatusRequest;
 class TDeleteEtlFilesRequest;
 class TExecPlanFragmentParams;
 class TExecPlanFragmentResult;
-class TInsertResult;
-class TReportExecStatusParams;
-class TReportExecStatusResult;
 class TCancelPlanFragmentResult;
 class TTransmitDataResult;
-class TNetworkAddress;
-class TClientRequest;
-class TExecRequest;
-class TSessionState;
-class TQueryOptions;
 class TExportTaskRequest;
 class TExportStatusResult;
 
@@ -63,6 +53,10 @@ public:
     explicit BackendServiceBase(ExecEnv* exec_env);
 
     ~BackendServiceBase() override = default;
+
+    // NOTE: now we do not support multiple backend in one process
+    template <class Service>
+    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, int port);
 
     // Agent service
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override {

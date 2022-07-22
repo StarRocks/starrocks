@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowDynamicPartitionStmt extends ShowStmt {
     private String db;
@@ -46,12 +47,16 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
                     .addColumn(new Column("LastDropPartitionMsg", ScalarType.createVarchar(20)))
                     .build();
 
-    ShowDynamicPartitionStmt(String db) {
+    public ShowDynamicPartitionStmt(String db) {
         this.db = db;
     }
 
     public String getDb() {
         return db;
+    }
+
+    public void setDb(String db) {
+        this.db = db;
     }
 
     @Override
@@ -87,5 +92,15 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return SHOW_DYNAMIC_PARTITION_META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowDynamicPartitionStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

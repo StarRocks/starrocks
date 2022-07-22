@@ -43,7 +43,7 @@ import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -59,7 +59,7 @@ import java.util.stream.Collectors;
  * This checker is responsible for checking all unhealthy tablets.
  * It does not responsible for any scheduler of tablet repairing or balance
  */
-public class TabletChecker extends MasterDaemon {
+public class TabletChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
@@ -246,6 +246,10 @@ public class TabletChecker extends MasterDaemon {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
+                    if (table.isLakeTable()) {
+                        // replicas are managed by StarOS and cloud storage.
+                        continue;
+                    }
 
                     if ((checkInPrios && !isTableInPrios(dbId, table.getId())) ||
                             (!checkInPrios && isTableInPrios(dbId, table.getId()))) {
@@ -254,11 +258,6 @@ public class TabletChecker extends MasterDaemon {
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
-                        if (partition.isUseStarOS()) {
-                            // replicas are managed by StarOS and cloud storage.
-                            continue;
-                        }
-
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
@@ -293,7 +292,6 @@ public class TabletChecker extends MasterDaemon {
                                 Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
                                         localTablet.getHealthStatusWithPriority(
                                                 infoService,
-                                                db.getClusterName(),
                                                 partition.getVisibleVersion(),
                                                 replicaNum,
                                                 aliveBeIdsInCluster);
@@ -316,7 +314,6 @@ public class TabletChecker extends MasterDaemon {
 
                                 TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                         TabletSchedCtx.Type.REPAIR,
-                                        db.getClusterName(),
                                         db.getId(), olapTbl.getId(),
                                         partition.getId(), idx.getId(), tablet.getId(),
                                         System.currentTimeMillis());

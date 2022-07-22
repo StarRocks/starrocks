@@ -37,7 +37,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -55,7 +55,7 @@ import java.util.stream.IntStream;
 /**
  * ColocateTableBalancer is responsible for tablets' repair and balance of colocated tables.
  */
-public class ColocateTableBalancer extends MasterDaemon {
+public class ColocateTableBalancer extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ColocateTableBalancer.class);
 
     private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
@@ -144,12 +144,7 @@ public class ColocateTableBalancer extends MasterDaemon {
             if (db == null) {
                 continue;
             }
-
-            Map<String, ClusterLoadStatistic> statisticMap = globalStateMgr.getTabletScheduler().getStatisticMap();
-            if (statisticMap == null) {
-                continue;
-            }
-            ClusterLoadStatistic statistic = statisticMap.get(db.getClusterName());
+            ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getLoadStatistic();
             if (statistic == null) {
                 continue;
             }
@@ -159,7 +154,7 @@ public class ColocateTableBalancer extends MasterDaemon {
             }
 
             Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
-            List<Long> availableBeIds = getAvailableBeIds(db.getClusterName(), infoService);
+            List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
                     statistic, balancedBackendsPerBucketSeq)) {
@@ -234,7 +229,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                             st);
 
                                     TabletSchedCtx tabletCtx = new TabletSchedCtx(
-                                            TabletSchedCtx.Type.REPAIR, db.getClusterName(),
+                                            TabletSchedCtx.Type.REPAIR,
                                             db.getId(), tableId, partition.getId(), index.getId(), tablet.getId(),
                                             System.currentTimeMillis());
                                     // the tablet status will be set again when being scheduled
@@ -518,7 +513,7 @@ public class ColocateTableBalancer extends MasterDaemon {
         return unavailableBeIds;
     }
 
-    private List<Long> getAvailableBeIds(String cluster, SystemInfoService infoService) {
+    private List<Long> getAvailableBeIds(SystemInfoService infoService) {
         // get all backends to allBackendIds, and check be availability using checkBackendAvailable
         // backend stopped for a short period of time is still considered available
         List<Long> allBackendIds = infoService.getBackendIds(false);

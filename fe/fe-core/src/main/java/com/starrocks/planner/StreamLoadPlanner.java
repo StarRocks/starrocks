@@ -89,9 +89,6 @@ public class StreamLoadPlanner {
 
     private void resetAnalyzer() {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), null);
-        // TODO(cmy): currently we do not support UDF in stream load command.
-        // Because there is no way to check the privilege of accessing UDF..
-        analyzer.setUDFAllowed(false);
         descTable = analyzer.getDescTbl();
     }
 
@@ -136,9 +133,7 @@ public class StreamLoadPlanner {
                     IDictManager.getInstance().hasGlobalDict(destTable.getId(),
                             col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
-                if (dict != null && dict.isPresent()) {
-                    globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
-                }
+                dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
         if (isPrimaryKey) {

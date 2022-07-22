@@ -29,9 +29,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AdminShowConfigStmt;
 import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
 import com.starrocks.analysis.AdminShowReplicaStatusStmt;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
@@ -74,7 +76,8 @@ import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -113,12 +116,14 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
+import com.starrocks.common.proc.LakeTabletsProcNode;
+import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
-import com.starrocks.common.proc.TabletsProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -138,6 +143,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -273,8 +279,8 @@ public class ShowExecutor {
             handleShowBasicStatsMeta();
         } else if (stmt instanceof ShowHistogramStatsMetaStmt) {
             handleShowHistogramStatsMeta();
-        } else if (stmt instanceof ShowWorkGroupStmt) {
-            handleShowWorkGroup();
+        } else if (stmt instanceof ShowResourceGroupStmt) {
+            handleShowResourceGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
         } else if (stmt instanceof ShowCatalogsStmt) {
@@ -285,7 +291,8 @@ public class ShowExecutor {
             handleEmtpy();
         }
 
-        return resultSet;
+        List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
+        return new ShowResultSet(resultSet.getMetaData(), rows);
     }
 
     private void handleShowComputeNodes() {
@@ -776,7 +783,7 @@ public class ShowExecutor {
             Table table = db.getTable(showStmt.getTableName().getTbl());
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        db.getFullName() + "." + showStmt.getTableName().toString());
+                        db.getOriginName() + "." + showStmt.getTableName().toString());
             } else if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
@@ -1136,7 +1143,7 @@ public class ShowExecutor {
                     }
                     indexName = olapTable.getIndexNameById(indexId);
 
-                    if (partition.isUseStarOS()) {
+                    if (table.isLakeTable()) {
                         break;
                     }
 
@@ -1227,9 +1234,14 @@ public class ShowExecutor {
                         if (indexId > -1 && index.getId() != indexId) {
                             continue;
                         }
-                        TabletsProcDir procDir = new TabletsProcDir(db, partition, index);
-                        tabletInfos.addAll(procDir.fetchComparableResult(
-                                showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                        if (olapTable.isLakeTable()) {
+                            LakeTabletsProcNode procNode = new LakeTabletsProcNode(db, (LakeTable) olapTable, index);
+                            tabletInfos.addAll(procNode.fetchComparableResult());
+                        } else {
+                            LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
+                            tabletInfos.addAll(procDir.fetchComparableResult(
+                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                        }
                         if (sizeLimit > -1 && tabletInfos.size() >= sizeLimit) {
                             stop = true;
                             break;
@@ -1552,6 +1564,7 @@ public class ShowExecutor {
                 // pass
             }
         }
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1567,6 +1580,7 @@ public class ShowExecutor {
                 // pass
             }
         }
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1581,6 +1595,7 @@ public class ShowExecutor {
                 // pass
             }
         }
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
@@ -1595,13 +1610,15 @@ public class ShowExecutor {
                 // pass
             }
         }
+
+        rows = doPredicate(stmt, stmt.getMetaData(), rows);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowWorkGroup() throws AnalysisException {
-        ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
-        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
+    private void handleShowResourceGroup() throws AnalysisException {
+        ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
+        resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 
     private void handleShowCatalogs() {
@@ -1617,4 +1634,28 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 
+    private List<List<String>> doPredicate(ShowStmt showStmt,
+                                           ShowResultSetMetaData showResultSetMetaData,
+                                           List<List<String>> rows) {
+        Predicate predicate = showStmt.getPredicate();
+        if (predicate == null) {
+            return rows;
+        }
+
+        SlotRef slotRef = (SlotRef) predicate.getChild(0);
+        StringLiteral stringLiteral = (StringLiteral) predicate.getChild(1);
+        List<List<String>> returnRows = new ArrayList<>();
+        BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+
+        int idx = showResultSetMetaData.getColumnIdx(slotRef.getColumnName());
+        if (binaryPredicate.getOp().isEquivalence()) {
+            for (List<String> row : rows) {
+                if (row.get(idx).equals(stringLiteral.getStringValue())) {
+                    returnRows.add(row);
+                }
+            }
+        }
+
+        return returnRows;
+    }
 }

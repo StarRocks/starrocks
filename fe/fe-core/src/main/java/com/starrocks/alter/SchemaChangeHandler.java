@@ -1486,7 +1486,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                     .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
                         } catch (DdlException e) {
                             // This table is not a dynamic partition table and didn't supply all dynamic partition properties
-                            throw new DdlException("Table " + db.getFullName() + "." +
+                            throw new DdlException("Table " + db.getOriginName() + "." +
                                     olapTable.getName() +
                                     " is not a dynamic partition table. Use command `HELP ALTER TABLE` " +
                                     "to see how to change a normal table to a dynamic partition table.");

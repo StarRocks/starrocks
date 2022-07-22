@@ -29,7 +29,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.master.MetaHelper;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -177,7 +177,7 @@ public class MetaService {
             long version = checkLongParam(versionStr);
 
             // for master node, reject image put
-            if (GlobalStateMgr.getCurrentState().isMaster()) {
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
                 response.appendContent("this node is master, reject image put");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 LOG.error("this node is master, but receive image put from host{}, reject it", machine);

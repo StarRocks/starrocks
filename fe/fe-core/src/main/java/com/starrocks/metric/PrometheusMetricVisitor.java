@@ -216,8 +216,8 @@ public class PrometheusMetricVisitor extends MetricVisitor {
                                 .count())
                 .append("\n");
 
-        // only master FE has this metrics, to help the Grafana knows who is the master
-        if (GlobalStateMgr.getCurrentState().isMaster()) {
+        // only master FE has this metrics, to help the Grafana knows who is the leader
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
             sb.append(NODE_INFO).append("{type=\"is_master\"} ").append(1).append("\n");
         }
         return;

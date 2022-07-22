@@ -2,9 +2,53 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.OlapTable;
 import org.junit.BeforeClass;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class TPCDSPlanTestBase extends PlanTestBase {
+    final static protected String[] tpcdsTables =
+            {"call_center", "catalog_page", "catalog_returns", "catalog_sales", "customer", "customer_address",
+                    "customer_demographics", "date_dim", "household_demographics", "income_band", "inventory", "item",
+                    "promotion", "reason", "ship_mode", "store", "store_returns", "store_sales", "time_dim",
+                    "warehouse", "web_page", "web_returns", "web_sales", "web_site"};
+    final static protected int[] tpcdsTablesRowCount =
+            {6, 11718, 144067, 1441548, 100000, 50000, 1920800, 73049, 7200, 20, 11745000, 18000, 300, 35, 20, 12,
+                    287514, 2880404, 86400, 5, 60, 71763, 719384, 30};
+
+    public void setTPCDSFactor(int factor) {
+        for (int i = 0; i < tpcdsTables.length; i++) {
+            String t = tpcdsTables[i];
+            long v = tpcdsTablesRowCount[i];
+            OlapTable table = getOlapTable(t);
+            setTableStatistics(table, v * factor);
+        }
+    }
+
+    public Map<String, Long> getTPCDSTableStats() {
+        Map<String, Long> m = new HashMap<>();
+        for (int i = 0; i < tpcdsTables.length; i++) {
+            String t = tpcdsTables[i];
+            long v = tpcdsTablesRowCount[i];
+            OlapTable table = getOlapTable(t);
+            m.put(t, table.getRowCount());
+        }
+        return m;
+    }
+
+    public void setTPCDSTableStats(Map<String, Long> m) {
+        for (int i = 0; i < tpcdsTables.length; i++) {
+            String t = tpcdsTables[i];
+            if (m.containsKey(t)) {
+                long v = m.get(t);
+                OlapTable table = getOlapTable(t);
+                setTableStatistics(table, v);
+            }
+        }
+    }
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();

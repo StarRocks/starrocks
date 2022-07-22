@@ -8,7 +8,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-public class StatisticAutoCollector extends MasterDaemon {
+public class StatisticAutoCollector extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
     private static final StatisticExecutor statisticExecutor = new StatisticExecutor();
@@ -49,7 +49,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         initDefaultJob();
 
-        if (Config.enable_collect_full_statistics) {
+        if (Config.enable_collect_full_statistic) {
             List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                     new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                             AnalyzeType.FULL, ScheduleType.SCHEDULE,
@@ -61,6 +61,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
+            allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
                 analyzeJob.run(statisticExecutor);
             }

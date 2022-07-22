@@ -65,8 +65,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -107,15 +107,8 @@ public abstract class BaseAction implements IAction {
         // HttpResponseStatus.CONTINUE));
         // }
 
-        FullHttpResponse responseObj = null;
-        try {
-            responseObj = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,
-                    Unpooled.wrappedBuffer(response.getContent().toString().getBytes("UTF-8")));
-        } catch (UnsupportedEncodingException e) {
-            LOG.warn("get exception.", e);
-            responseObj = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,
-                    Unpooled.wrappedBuffer(response.getContent().toString().getBytes()));
-        }
+        FullHttpResponse responseObj = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status,
+                Unpooled.wrappedBuffer(response.getContent().toString().getBytes(StandardCharsets.UTF_8)));
         Preconditions.checkNotNull(responseObj);
         HttpMethod method = request.getRequest().method();
 

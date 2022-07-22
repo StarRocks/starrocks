@@ -6,7 +6,8 @@
 
 namespace starrocks::pipeline {
 
-void DynamicChunkBufferLimiter::update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows) {
+void DynamicChunkBufferLimiter::update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows,
+                                                     size_t max_chunk_rows) {
     std::lock_guard<std::mutex> lock(_mutex);
 
     _sum_row_bytes += added_sum_row_bytes;
@@ -19,7 +20,7 @@ void DynamicChunkBufferLimiter::update_avg_row_bytes(size_t added_sum_row_bytes,
         return;
     }
 
-    size_t chunk_mem_usage = avg_row_bytes * _chunk_size;
+    size_t chunk_mem_usage = avg_row_bytes * max_chunk_rows;
     size_t new_capacity = std::max<size_t>(_mem_limit / chunk_mem_usage, 1);
     _capacity = std::min(new_capacity, _max_capacity);
 }

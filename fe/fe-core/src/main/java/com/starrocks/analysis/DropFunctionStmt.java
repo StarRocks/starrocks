@@ -22,15 +22,15 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class DropFunctionStmt extends DdlStmt {
     private final FunctionName functionName;
+
+    public FunctionArgsDef getArgsDef() {
+        return argsDef;
+    }
+
     private final FunctionArgsDef argsDef;
 
     // set after analyzed
@@ -49,32 +49,30 @@ public class DropFunctionStmt extends DdlStmt {
         return function;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        // analyze function name
-        functionName.analyze(analyzer);
-
-        // check operation privilege
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        // analyze arguments
-        argsDef.analyze(analyzer);
-        function = new FunctionSearchDesc(functionName, argsDef.getArgTypes(), argsDef.isVariadic());
+    public void setFunction(FunctionSearchDesc function) {
+        this.function = function;
     }
 
     @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("DROP FUNCTION ").append(functionName);
+        stringBuilder.append(argsDef.toSql());
         return stringBuilder.toString();
     }
 
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropFunction(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

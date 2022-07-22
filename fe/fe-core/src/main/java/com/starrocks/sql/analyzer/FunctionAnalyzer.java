@@ -171,6 +171,17 @@ public class FunctionAnalyzer {
             } else {
                 throw new SemanticException("mode argument must be numerical type");
             }
+
+            Expr windowArg = functionCallExpr.getChild(0);
+            if (windowArg instanceof IntLiteral) {
+                IntLiteral windowIntLiteral = (IntLiteral) windowArg;
+                long windowValue = windowIntLiteral.getValue();
+                if (windowValue < 0) {
+                    throw new SemanticException("window argument must >= 0");
+                }
+            } else {
+                throw new SemanticException("window argument must be numerical type");
+            }
         }
 
         // SUM and AVG cannot be applied to non-numeric types

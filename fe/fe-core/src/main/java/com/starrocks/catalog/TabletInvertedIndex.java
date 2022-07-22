@@ -138,7 +138,7 @@ public class TabletInvertedIndex {
                     Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
                     TabletMeta tabletMeta = tabletMetaMap.get(tabletId);
 
-                    if (tabletMeta.isUseStarOS()) {
+                    if (tabletMeta.isLakeTablet()) {
                         continue;
                     }
 
@@ -155,7 +155,7 @@ public class TabletInvertedIndex {
                                 }
 
                                 // check and set path
-                                // path info of replica is only saved in Master FE
+                                // path info of replica is only saved in Leader FE
                                 if (backendTabletInfo.isSetPath_hash() &&
                                         replica.getPathHash() != backendTabletInfo.getPath_hash()) {
                                     replica.setPathHash(backendTabletInfo.getPath_hash());

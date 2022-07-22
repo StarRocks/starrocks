@@ -21,21 +21,23 @@ public class StatsConstants {
     public static final int CROSS_JOIN_COST_PENALTY = 100000000;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 
-    // Sample ratio in total rows
-    public static final String PRO_SAMPLE_RATIO = "sample_ratio";
-
     //Statistics collection threshold
-    public static final String PRO_AUTO_COLLECT_STATISTICS_RATIO = "auto_collect_statistics_ratio";
+    public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";
+    public static final String STATISTIC_SAMPLE_COLLECT_ROWS = "statistic_sample_collect_rows";
 
-    public static final String PRO_BUCKET_NUM = "bucket_num";
-
-    public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
-    public static final String PROP_SAMPLE_COLLECT_ROWS_KEY = "sample_collect_rows";
+    //Histogram Statistics properties
+    public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
+    public static final String HISTOGRAM_TOPN_SIZE = "histogram_topn_size";
+    public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";
 
     /**
      * Deprecated stats properties
      */
+    public static final String PRO_SAMPLE_RATIO = "sample_ratio";
+    public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
     public static final String PROP_COLLECT_INTERVAL_SEC_KEY = "collect_interval_sec";
+
+    public static final String TABLE_PROPERTY_SEPARATOR = ",\n\"";
 
     public enum AnalyzeType {
         SAMPLE,

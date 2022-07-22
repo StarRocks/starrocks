@@ -51,7 +51,7 @@ import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -89,7 +89,7 @@ import java.util.stream.Collectors;
  * Case 2:
  * A new Backend is added to the cluster. Replicas should be transfer to that host to balance the cluster load.
  */
-public class TabletScheduler extends MasterDaemon {
+public class TabletScheduler extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
 
     // handle at most BATCH_NUM tablets in one loop
@@ -101,6 +101,9 @@ public class TabletScheduler extends MasterDaemon {
     private static final long SCHEDULE_INTERVAL_MS = 1000; // 1s
 
     public static final int BALANCE_SLOT_NUM_FOR_PATH = 2;
+
+    private static final int MAX_SLOT_PER_PATH = 64;
+    private static final int MIN_SLOT_PER_PATH = 2;
 
     /*
      * Tablet is added to pendingTablets as well it's id in allTabletIds.
@@ -122,11 +125,12 @@ public class TabletScheduler extends MasterDaemon {
 
     // be id -> #working slots
     private Map<Long, PathSlot> backendsWorkingSlots = Maps.newConcurrentMap();
-    // cluster name -> load statistic
-    private Map<String, ClusterLoadStatistic> statisticMap = Maps.newConcurrentMap();
+    private ClusterLoadStatistic loadStatistic;
     private long lastStatUpdateTime = 0;
 
     private long lastSlotAdjustTime = 0;
+
+    private int currentSlotPerPathConfig = 0;
 
     private GlobalStateMgr globalStateMgr;
     private SystemInfoService infoService;
@@ -180,10 +184,26 @@ public class TabletScheduler extends MasterDaemon {
         return stat;
     }
 
+    public void setLoadStatistic(ClusterLoadStatistic loadStatistic) {
+        this.loadStatistic = loadStatistic;
+    }
+
     /*
      * update working slots at the beginning of each round
      */
     private boolean updateWorkingSlots() {
+        // Compute delta that will be checked to update slot number per storage path and
+        // record new value of `Config.schedule_slot_num_per_path`.
+        int cappedVal = Config.schedule_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
+                (Config.schedule_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
+                        Config.schedule_slot_num_per_path);
+        int delta = 0;
+        int oldSlotPerPathConfig = currentSlotPerPathConfig;
+        if (currentSlotPerPathConfig != 0) {
+            delta = cappedVal - currentSlotPerPathConfig;
+        }
+        currentSlotPerPathConfig = cappedVal;
+
         ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
         for (Backend backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
@@ -202,7 +222,7 @@ public class TabletScheduler extends MasterDaemon {
                 List<Long> pathHashes = backends.get(beId).getDisks().values().stream()
                         .filter(v -> v.getState() == DiskState.ONLINE)
                         .map(DiskInfo::getPathHash).collect(Collectors.toList());
-                backendsWorkingSlots.get(beId).updatePaths(pathHashes);
+                backendsWorkingSlots.get(beId).updatePaths(pathHashes, currentSlotPerPathConfig);
             } else {
                 deletedBeIds.add(beId);
             }
@@ -219,10 +239,18 @@ public class TabletScheduler extends MasterDaemon {
             if (!backendsWorkingSlots.containsKey(be.getId())) {
                 List<Long> pathHashes =
                         be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
-                PathSlot slot = new PathSlot(pathHashes, Config.schedule_slot_num_per_path);
+                PathSlot slot = new PathSlot(pathHashes, currentSlotPerPathConfig);
                 backendsWorkingSlots.put(be.getId(), slot);
                 LOG.info("add new backend {} with slots num: {}", be.getId(), be.getDisks().size());
             }
+        }
+
+        if (delta != 0) {
+            LOG.info("Going to update slots per path. delta: {}, before: {}", delta, oldSlotPerPathConfig);
+            int finalDelta = delta;
+            backendsWorkingSlots.forEach((beId, pathSlot) -> {
+                pathSlot.updateSlot(finalDelta);
+            });
         }
 
         return true;
@@ -339,7 +367,7 @@ public class TabletScheduler extends MasterDaemon {
 
     private void updateClusterLoadStatisticsAndPriority() {
         updateClusterLoadStatistic();
-        rebalancer.updateLoadStatistic(statisticMap);
+        rebalancer.updateLoadStatistic(loadStatistic);
 
         adjustPriorities();
 
@@ -353,18 +381,14 @@ public class TabletScheduler extends MasterDaemon {
      * because we already limit the total number of running clone jobs in cluster by 'backend slots'
      */
     private void updateClusterLoadStatistic() {
-        Map<String, ClusterLoadStatistic> newStatisticMap = Maps.newConcurrentMap();
-        String clusterName = SystemInfoService.DEFAULT_CLUSTER;
         ClusterLoadStatistic clusterLoadStatistic = new ClusterLoadStatistic(infoService, invertedIndex);
         clusterLoadStatistic.init();
-        newStatisticMap.put(clusterName, clusterLoadStatistic);
-        LOG.info("update cluster {} load statistic:\n{}", clusterName, clusterLoadStatistic.getBrief());
-
-        this.statisticMap = newStatisticMap;
+        LOG.info("update cluster load statistic:\n{}", clusterLoadStatistic.getBrief());
+        this.loadStatistic = clusterLoadStatistic;
     }
 
-    public Map<String, ClusterLoadStatistic> getStatisticMap() {
-        return statisticMap;
+    public ClusterLoadStatistic getLoadStatistic() {
+        return loadStatistic;
     }
 
     /**
@@ -557,6 +581,9 @@ public class TabletScheduler extends MasterDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
+            if (tbl.isLakeTable()) {
+                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
+            }
 
             boolean isColocateTable = colocateTableIndex.isColocateTable(tbl.getId());
 
@@ -565,9 +592,6 @@ public class TabletScheduler extends MasterDaemon {
             Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(tbl, tabletCtx.getPartitionId());
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
-            }
-            if (partition.isUseStarOS()) {
-                throw new SchedException(Status.UNRECOVERABLE, "tablet is managed by StarOS");
             }
 
             short replicaNum =
@@ -612,7 +636,7 @@ public class TabletScheduler extends MasterDaemon {
             } else {
                 List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
                 statusPair = tablet.getHealthStatusWithPriority(
-                        infoService, tabletCtx.getCluster(),
+                        infoService,
                         partition.getVisibleVersion(),
                         replicaNum,
                         aliveBeIdsInCluster);
@@ -747,7 +771,7 @@ public class TabletScheduler extends MasterDaemon {
     private void handleReplicaVersionIncomplete(TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         stat.counterReplicaVersionMissingErr.incrementAndGet();
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -907,7 +931,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private boolean deleteReplicaOnSameHost(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
@@ -948,10 +972,6 @@ public class TabletScheduler extends MasterDaemon {
                 // this case should be handled in deleteBackendDropped()
                 return false;
             }
-            if (!be.getOwnerClusterName().equals(tabletCtx.getCluster())) {
-                deleteReplicaInternal(tabletCtx, replica, "not in cluster", force);
-                return true;
-            }
         }
         return false;
     }
@@ -970,7 +990,7 @@ public class TabletScheduler extends MasterDaemon {
     }
 
     private boolean deleteReplicaOnHighLoadBackend(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             return false;
         }
@@ -1172,7 +1192,7 @@ public class TabletScheduler extends MasterDaemon {
     // choose a path on a backend which is fit for the tablet
     private RootPathLoadStatistic chooseAvailableDestPath(TabletSchedCtx tabletCtx, boolean forColocate)
             throws SchedException {
-        ClusterLoadStatistic statistic = statisticMap.get(tabletCtx.getCluster());
+        ClusterLoadStatistic statistic = loadStatistic;
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
@@ -1496,29 +1516,30 @@ public class TabletScheduler extends MasterDaemon {
         }
 
         // update the path
-        public synchronized void updatePaths(List<Long> paths) {
+        public synchronized void updatePaths(List<Long> paths, int currentSlotPerPathConfig) {
             // delete non exist path
             pathSlots.entrySet().removeIf(entry -> !paths.contains(entry.getKey()));
 
             // add new path
             for (Long pathHash : paths) {
                 if (!pathSlots.containsKey(pathHash)) {
-                    pathSlots.put(pathHash, new Slot(Config.schedule_slot_num_per_path));
+                    pathSlots.put(pathHash, new Slot(currentSlotPerPathConfig));
                 }
             }
         }
 
-        // Update the total slots num of specified paths, increase or decrease
-        public synchronized void updateSlot(List<Long> pathHashs, int delta) {
-            for (Long pathHash : pathHashs) {
+        // Update the total slots num of every storage path on a specified BE based on new configuration.
+        public synchronized void updateSlot(int delta) {
+            for (Long pathHash : pathSlots.keySet()) {
                 Slot slot = pathSlots.get(pathHash);
                 if (slot == null) {
                     continue;
                 }
 
                 slot.total += delta;
+                slot.available += delta;
                 slot.rectify();
-                LOG.debug("decrease path {} slots num to {}", pathHash, pathSlots.get(pathHash).total);
+                LOG.debug("Update path {} slots num to {}", pathHash, slot.total);
             }
         }
 
@@ -1573,6 +1594,15 @@ public class TabletScheduler extends MasterDaemon {
             }
             slot.rectify();
             return slot.available;
+        }
+
+        public synchronized int getSlotTotal(long pathHash) {
+            Slot slot = pathSlots.get(pathHash);
+            if (slot == null) {
+                return -1;
+            }
+            slot.rectify();
+            return slot.total;
         }
 
         public synchronized int getTotalAvailSlotNum() {

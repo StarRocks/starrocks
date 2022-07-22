@@ -3,20 +3,35 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DescribeStmt;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LikePredicate;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowPartitionsStmt;
+import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -25,31 +40,44 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.proc.PartitionsProcDir;
+import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
+import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.common.ErrorCode.ERR_UNSUPPORTED_SQL_PATTERN;
+
 public class ShowStmtAnalyzer {
 
     public static void analyze(ShowStmt stmt, ConnectContext session) {
-        new ShowStmtAnalyzerVisitor().visit(stmt, session);
+        new ShowStmtAnalyzerVisitor().analyze(stmt, session);
     }
 
     static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+
+        private static final Logger logger = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
+
         public void analyze(ShowStmt statement, ConnectContext session) {
+            analyzeShowPredicate(statement);
             visit(statement, session);
         }
 
@@ -58,6 +86,12 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowTabletStmt(ShowTabletStmt node, ConnectContext context) {
+            ShowTabletStmtAnalyzer.analyze(node, context);
             return null;
         }
 
@@ -83,6 +117,25 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getFullDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            } else {
+                dbName = ClusterNamespace.getFullName(dbName);
+            }
+            node.setDbName(dbName);
+
+            if (node.getExpr() != null) {
+                ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
+            }
             return null;
         }
 
@@ -118,10 +171,24 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
+            ShowAlterStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getFullDatabaseName(dbName, context);
             node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getFullDatabaseName(dbName, context);
+            node.setDb(dbName);
             return null;
         }
 
@@ -313,5 +380,169 @@ public class ShowStmtAnalyzer {
             }
             return null;
         }
+
+        @Override
+        public Void visitShowProcStmt(ShowProcStmt node, ConnectContext context) {
+            String path = node.getPath();
+            if (Strings.isNullOrEmpty(path)) {
+                throw new SemanticException("Path is null");
+            }
+            try {
+                node.setNode(ProcService.getInstance().open(path));
+            } catch (AnalysisException e) {
+                throw new SemanticException(String.format("Unknown proc node path: ", path));
+            }
+            return null;
+        }
+
+        private void analyzeShowPredicate(ShowStmt showStmt) {
+            Predicate predicate = showStmt.getPredicate();
+            if (predicate == null) {
+                return;
+            }
+
+            if (!(predicate instanceof BinaryPredicate) || !((BinaryPredicate) predicate).getOp().isEquivalence()) {
+                throw new SemanticException("Only support equal predicate in show statement");
+            }
+
+            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
+            if (!(binaryPredicate.getChild(0) instanceof SlotRef && binaryPredicate.getChild(1) instanceof LiteralExpr)) {
+                throw new SemanticException("Only support column = \"string literal\" format predicate");
+            }
+        }
+
+        @Override
+        public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            dbName = getFullDatabaseName(dbName, context);
+            statement.setDbName(dbName);
+            final Map<String, Expr> filterMap = statement.getFilterMap();
+            if (statement.getWhereClause() != null) {
+                analyzeSubPredicate(filterMap, statement.getWhereClause());
+            }
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (db == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            final String tableName = statement.getTableName();
+            final boolean isTempPartition = statement.isTempPartition();
+            db.readLock();
+            try {
+                Table table = db.getTable(tableName);
+                if (!(table instanceof OlapTable)) {
+                    throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP table");
+                }
+
+                // build proc path
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append("/dbs/");
+                stringBuilder.append(db.getId());
+                stringBuilder.append("/").append(table.getId());
+                if (isTempPartition) {
+                    stringBuilder.append("/temp_partitions");
+                } else {
+                    stringBuilder.append("/partitions");
+                }
+
+                logger.debug("process SHOW PROC '{}';", stringBuilder);
+
+                try {
+                    statement.setNode(ProcService.getInstance().open(stringBuilder.toString()));
+                } catch (AnalysisException e) {
+                    throw new SemanticException("get the PROC Node by the path %s error: %s", stringBuilder,
+                            e.getMessage());
+                }
+
+                final List<OrderByPair> orderByPairs =
+                        analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
+                statement.setOrderByPairs(orderByPairs);
+            } finally {
+                db.readUnlock();
+            }
+            return null;
+        }
+
+        private void analyzeSubPredicate(Map<String, Expr> filterMap, Expr subExpr) {
+            if (subExpr == null) {
+                return;
+            }
+            if (subExpr instanceof CompoundPredicate) {
+                CompoundPredicate cp = (CompoundPredicate) subExpr;
+                if (cp.getOp() != CompoundPredicate.Operator.AND) {
+                    throw new SemanticException("Only allow compound predicate with operator AND");
+                }
+                analyzeSubPredicate(filterMap, cp.getChild(0));
+                analyzeSubPredicate(filterMap, cp.getChild(1));
+                return;
+            }
+
+            if (!(subExpr.getChild(0) instanceof SlotRef)) {
+                throw new SemanticException("Show filter by column");
+            }
+
+            String leftKey = ((SlotRef) subExpr.getChild(0)).getColumnName();
+            boolean filter = leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_NAME) ||
+                    leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_STATE);
+            if (subExpr instanceof BinaryPredicate) {
+                binaryPredicateHandler(subExpr, leftKey, filter);
+            } else if (subExpr instanceof LikePredicate) {
+                likePredicateHandler((LikePredicate) subExpr, filter);
+            } else {
+                throw new SemanticException("Only operator =|>=|<=|>|<|!=|like are supported.");
+            }
+            filterMap.put(leftKey.toLowerCase(), subExpr);
+        }
+
+        private void likePredicateHandler(LikePredicate subExpr, boolean filter) {
+            if (filter && subExpr.getOp() != LikePredicate.Operator.LIKE) {
+                throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
+            }
+            if (!filter) {
+                throw new SemanticException("Where clause : PartitionName|State like \"p20191012|NORMAL\"");
+            }
+        }
+
+        private void binaryPredicateHandler(Expr subExpr, String leftKey, boolean filter) {
+            BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
+            if (filter && binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
+                throw new SemanticException(String.format("Only operator =|like are supported for %s", leftKey));
+            }
+            if (leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_LAST_CONSISTENCY_CHECK_TIME)) {
+                if (!(subExpr.getChild(1) instanceof StringLiteral)) {
+                    throw new SemanticException("Where clause : LastConsistencyCheckTime =|>=|<=|>|<|!= "
+                            + "\"2019-12-22|2019-12-22 22:22:00\"");
+                }
+                try {
+                    subExpr.setChild(1, (subExpr.getChild(1)).castTo(Type.DATETIME));
+                } catch (AnalysisException e) {
+                    throw new SemanticException("expression %s cast to datetime error: %s",
+                            subExpr.getChild(1).toString(), e.getMessage());
+                }
+            } else if (ShowPartitionsStmt.FILTER_COLUMNS.stream()
+                    .noneMatch(column -> column.equalsIgnoreCase(leftKey))) {
+                throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
+                        "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
+            }
+        }
+
+        /**
+         * analyze order by clause if not null and init the orderByPairs
+         */
+        private List<OrderByPair> analyzeOrderBy(List<OrderByElement> orderByElements, ProcNodeInterface node) {
+            List<OrderByPair> orderByPairs = new ArrayList<>();
+            if (orderByElements != null && !orderByElements.isEmpty()) {
+                for (OrderByElement orderByElement : orderByElements) {
+                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                        throw new SemanticException("Should order by column");
+                    }
+                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                    int index = ((PartitionsProcDir) node).analyzeColumn(slotRef.getColumnName());
+                    OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
+                    orderByPairs.add(orderByPair);
+                }
+            }
+            return orderByPairs;
+        }
+
     }
 }

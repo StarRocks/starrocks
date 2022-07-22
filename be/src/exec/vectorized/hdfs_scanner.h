@@ -79,7 +79,7 @@ struct HdfsScannerParams {
     std::vector<const THdfsScanRange*> scan_ranges;
 
     // runtime bloom filter.
-    const RuntimeFilterProbeCollector* runtime_filter_collector;
+    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
     // should clone in scanner
     std::vector<ExprContext*> conjunct_ctxs;
@@ -92,7 +92,7 @@ struct HdfsScannerParams {
     // The file to scan
     std::string path;
 
-    const TupleDescriptor* tuple_desc;
+    const TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
@@ -111,9 +111,9 @@ struct HdfsScannerParams {
     // should clone in scanner
     std::vector<ExprContext*> min_max_conjunct_ctxs;
 
-    TupleDescriptor* min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = nullptr;
 
-    std::vector<std::string>* hive_column_names;
+    std::vector<std::string>* hive_column_names = nullptr;
 
     HdfsScanProfile* profile = nullptr;
 
@@ -129,7 +129,7 @@ struct HdfsScannerContext {
         SlotDescriptor* slot_desc;
     };
 
-    const TupleDescriptor* tuple_desc;
+    const TupleDescriptor* tuple_desc = nullptr;
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -145,7 +145,7 @@ struct HdfsScannerContext {
     std::vector<const THdfsScanRange*> scan_ranges;
 
     // min max slots
-    TupleDescriptor* min_max_tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = nullptr;
 
     // min max conjunct
     std::vector<ExprContext*> min_max_conjunct_ctxs;
@@ -193,7 +193,7 @@ public:
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void fianlize();
+    void finalize();
 
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }

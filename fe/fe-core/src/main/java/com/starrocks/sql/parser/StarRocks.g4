@@ -23,6 +23,7 @@ statement
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -36,10 +37,17 @@ statement
     | createIndexStatement                                                                  #createIndex
     | dropIndexStatement                                                                    #dropIndex
     | refreshTableStatement                                                                 #refreshTable
+    | showAlterStatement                                                                    #showAlter
     | showDeleteStatement                                                                   #showDelete
     | descTableStatement                                                                    #descTable
+    | createTableLikeStatement                                                              #createTableLike
     | showIndexStatement                                                                    #showIndex
     | recoverTableStatement                                                                 #recoverTable
+    | truncateTableStatement                                                                #truncateTable
+    | showTabletStatement                                                                   #showTablet
+    | cancelAlterTableStatement                                                             #cancelAlterTable
+    | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -55,6 +63,7 @@ statement
     | dropMaterializedViewStatement                                                         #dropMaterializedView
     | alterMaterializedViewStatement                                                        #alterMaterializedView
     | refreshMaterializedViewStatement                                                      #refreshMaterializedView
+    | cancelRefreshMaterializedViewStatement                                                #cancelRefreshMaterializedView
 
     // Catalog Statement
     | createExternalCatalogStatement                                                        #createCatalog
@@ -90,16 +99,28 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createWorkGroupStatement                                                              #createWorkGroup
-    | dropWorkGroupStatement                                                                #dropWorkGroup
-    | alterWorkGroupStatement                                                               #alterWorkGroup
-    | showWorkGroupStatement                                                                #showWorkGroup
+    | createResourceGroupStatement                                                              #createResourceGroup
+    | dropResourceGroupStatement                                                                #dropResourceGroup
+    | alterResourceGroupStatement                                                               #alterResourceGroup
+    | showResourceGroupStatement                                                                #showResourceGroup
+
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+    | dropFunctionStatement                                                                 #dropFunctionst
+    | createFunctionStatement                                                               #createFunction
+
+
 
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showProcesslistStatement                                                              #showProcesslist
+    | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
+    | setUserPropertyStatement                                                              #setUserProperty
+    | showStatusStatement                                                                   #showStatus
+    | showCharsetStatement                                                                  #showCharset
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -107,11 +128,14 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+    | ALTER USER user authOption                                                            #alterUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
-    ;
 
+    // proc
+    | showProcStatement                                                                      #showProc
+    ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
@@ -126,7 +150,7 @@ createDbStatement
 dropDbStatement
     : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
     ;
-    
+
 showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
@@ -145,6 +169,11 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -254,6 +283,11 @@ showTableStatement
     : SHOW FULL? TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showTabletStatement
+    : SHOW TABLET INTEGER_VALUE
+    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 showCreateTableStatement
     : SHOW CREATE (TABLE | VIEW | MATERIALIZED VIEW) table=qualifiedName
     ;
@@ -271,6 +305,13 @@ refreshTableStatement
     : REFRESH EXTERNAL TABLE qualifiedName (PARTITION '(' string (',' string)* ')')?
     ;
 
+showAlterStatement
+    : SHOW ALTER TABLE (COLUMN | ROLLUP) ((FROM | IN) db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
+              (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 showDeleteStatement
     : SHOW DELETE ((FROM | IN) db=qualifiedName)?
     ;
@@ -279,12 +320,35 @@ descTableStatement
     : (DESC | DESCRIBE) table=qualifiedName ALL?
     ;
 
+createTableLikeStatement
+    : CREATE (EXTERNAL)? TABLE (IF NOT EXISTS)? qualifiedName LIKE qualifiedName
+    ;
+
 showIndexStatement
     : SHOW (INDEX | INDEXES | KEY | KEYS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
     ;
 
 recoverTableStatement
     : RECOVER TABLE qualifiedName
+    ;
+
+truncateTableStatement
+    : TRUNCATE TABLE qualifiedName partitionNames?
+    ;
+
+cancelAlterTableStatement
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
+    ;
+
+showPartitionsStatement
+    : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
+    (WHERE expression)?
+    (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+recoverPartitionStatement
+    : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -340,6 +404,10 @@ refreshMaterializedViewStatement
     : REFRESH MATERIALIZED VIEW mvName=qualifiedName
     ;
 
+cancelRefreshMaterializedViewStatement
+    : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
 
 alterSystemStatement
@@ -377,6 +445,13 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | modifyTablePropertiesClause
+    | addPartitionClause
+    | modifyPartitionClause
+    ;
+
+addPartitionClause
+    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
     ;
 
 createIndexClause
@@ -397,6 +472,10 @@ tableRenameClause
 
 swapTableClause
     : SWAP WITH identifier
+    ;
+
+modifyTablePropertiesClause
+    : SET propertyList
     ;
 
 addBackendClause
@@ -431,6 +510,10 @@ dropComputeNodeClause
    : DROP COMPUTE NODE string (',' string)*
    ;
 
+modifyPartitionClause
+    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
@@ -450,7 +533,7 @@ deleteStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
-    : ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
 analyzeHistogramStatement
@@ -463,9 +546,9 @@ dropHistogramStatement
     ;
 
 createAnalyzeStatement
-    : CREATE ANALYZE FULL? ALL properties?
-    | CREATE ANALYZE FULL? DATABASE db=identifier properties?
-    | CREATE ANALYZE FULL? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
+    : CREATE ANALYZE (FULL | SAMPLE)? ALL properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? DATABASE db=identifier properties?
+    | CREATE ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
 dropAnalyzeJobStatement
@@ -473,42 +556,60 @@ dropAnalyzeJobStatement
     ;
 
 showAnalyzeStatement
-    : SHOW ANALYZE (JOB | STATUS)?
+    : SHOW ANALYZE (JOB | STATUS)? (WHERE expression)?
     ;
 
 showStatsMetaStatement
-    : SHOW STATS META
+    : SHOW STATS META (WHERE expression)?
     ;
 
 showHistogramMetaStatement
-    : SHOW HISTOGRAM META
+    : SHOW HISTOGRAM META (WHERE expression)?
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
 
-createWorkGroupStatement
+createResourceGroupStatement
     : CREATE RESOURCE GROUP (IF NOT EXISTS)? (OR REPLACE)? identifier
         TO classifier (',' classifier)*  WITH '(' property (',' property)* ')'
     ;
 
-dropWorkGroupStatement
+dropResourceGroupStatement
     : DROP RESOURCE GROUP identifier
     ;
 
-alterWorkGroupStatement
+alterResourceGroupStatement
     : ALTER RESOURCE GROUP identifier ADD classifier (',' classifier)*
     | ALTER RESOURCE GROUP identifier DROP '(' INTEGER_VALUE (',' INTEGER_VALUE)* ')'
     | ALTER RESOURCE GROUP identifier DROP ALL
     | ALTER RESOURCE GROUP identifier WITH '(' property (',' property)* ')'
     ;
 
-showWorkGroupStatement
+showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
     ;
 
 classifier
     : '(' expression (',' expression)* ')'
+    ;
+
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+dropFunctionStatement
+    : DROP FUNCTION qualifiedName '(' typeList ')'
+    ;
+
+createFunctionStatement
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    ;
+
+typeList
+    : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
@@ -522,8 +623,29 @@ showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
+    ;
+
+
+showUserPropertyStatement
+    : SHOW PROPERTY (FOR string)? (LIKE string)?
+    ;
+
 killStatement
     : KILL (CONNECTION? | QUERY) INTEGER_VALUE
+    ;
+
+setUserPropertyStatement
+    : SET PROPERTY (FOR string)? userPropertyList
+    ;
+
+showStatusStatement
+    : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement
@@ -692,6 +814,12 @@ tabletList
 showProcedureStatement
     : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
+
+// ------------------------------------------- Proc Statement ---------------------------------------------------------
+showProcStatement
+    : SHOW PROC path=string
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -969,6 +1097,10 @@ propertyList
     : '(' property (',' property)* ')'
     ;
 
+userPropertyList
+    : property (',' property)*
+    ;
+
 property
     : key=string '=' value=string
     ;
@@ -1091,6 +1223,11 @@ number
     | INTEGER_VALUE  #integerValue
     ;
 
+authOption
+    : IDENTIFIED BY PASSWORD? string                            # authWithoutPlugin
+    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
+    ;
+
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
@@ -1112,12 +1249,13 @@ nonReserved
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE | STRING
-    | STATS | SUBMIT | SYNC
+    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | START | SUM | STATUS | STOP | STORAGE
+    | STRING | STATS | SUBMIT | SYNC
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WORK | WRITE
     | YEAR
+    | DOTDOTDOT
     ;

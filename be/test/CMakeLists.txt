@@ -25,6 +25,7 @@ set(EXEC_FILES
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
+        ./fs/fs_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
@@ -154,8 +155,9 @@ set(EXEC_FILES
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
+        ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
-        storage/lake/location_provider_test.cpp
+        ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
@@ -237,6 +239,8 @@ set(EXEC_FILES
         ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./runtime/memory_scratch_sink_test_issue_8676.cpp
+        ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./simd/simd_test.cpp
@@ -270,7 +274,6 @@ set(EXEC_FILES
         ./util/path_trie_test.cpp
         ./util/path_util_test.cpp
         ./util/priority_queue_test.cpp
-        ./util/radix_sort_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp

@@ -24,6 +24,7 @@
 #include <fmt/format.h>
 #include <thrift/TProcessor.h>
 
+#include <atomic>
 #include <ctime>
 #include <fstream>
 
@@ -44,6 +45,7 @@ using std::vector;
 using apache::thrift::transport::TProcessor;
 
 namespace starrocks {
+extern std::atomic<bool> k_starrocks_exit;
 
 HeartbeatServer::HeartbeatServer() : _olap_engine(StorageEngine::instance()) {}
 
@@ -107,6 +109,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {
     static const char* LOCALHOST = "127.0.0.1";
+
+    // reject master's heartbeat when exit
+    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+        return Status::InternalError("BE is shutting down");
+    }
 
     MasterInfoPtr curr_master_info;
     if (!get_master_info(&curr_master_info)) {

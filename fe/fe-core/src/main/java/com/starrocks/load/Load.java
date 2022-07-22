@@ -871,15 +871,13 @@ public class Load {
         public String dbName;
         public Set<String> tblNames = Sets.newHashSet();
         public String label;
-        public String clusterName;
         public JobState state;
         public String failMsg;
         public String trackingUrl;
 
-        public JobInfo(String dbName, String label, String clusterName) {
+        public JobInfo(String dbName, String label) {
             this.dbName = dbName;
             this.label = label;
-            this.clusterName = clusterName;
         }
     }
 

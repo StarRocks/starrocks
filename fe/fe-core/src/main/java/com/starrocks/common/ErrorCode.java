@@ -260,9 +260,11 @@ public enum ErrorCode {
     ERR_BAD_CATALOG_ERROR(5078, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog '%s'"),
     ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown workgroup '%s' "),
+            "Unknown resource group '%s' "),
     ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown catalog.db '%s'");
+            "Unknown catalog.db '%s'"),
+    ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
+            "Only support like 'function_pattern' syntax.");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

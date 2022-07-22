@@ -3,6 +3,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -11,6 +12,7 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "util/debug/query_trace.h"
 
 namespace starrocks::pipeline {
 
@@ -19,10 +21,11 @@ namespace starrocks::pipeline {
 ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
-          _chunk_source_profiles(MAX_IO_TASKS_PER_OP),
-          _is_io_task_running(MAX_IO_TASKS_PER_OP),
-          _chunk_sources(MAX_IO_TASKS_PER_OP) {
-    for (auto i = 0; i < MAX_IO_TASKS_PER_OP; i++) {
+          _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _chunk_source_profiles(_io_tasks_per_scan_operator),
+          _is_io_task_running(_io_tasks_per_scan_operator),
+          _chunk_sources(_io_tasks_per_scan_operator) {
+    for (auto i = 0; i < _io_tasks_per_scan_operator; i++) {
         _chunk_source_profiles[i] = std::make_shared<RuntimeProfile>(strings::Substitute("ChunkSource$0", i));
     }
 }
@@ -43,6 +46,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
+    _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -68,15 +72,19 @@ void ScanOperator::close(RuntimeState* state) {
     set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
+        std::lock_guard guard(_task_mutex);
         if (!_is_io_task_running[i]) {
-            _close_chunk_source(state, i);
+            _close_chunk_source_unlocked(state, i);
         }
     }
 
-    auto* default_buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
-    COUNTER_SET(default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
-    auto* buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
-    COUNTER_SET(buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
+    _default_buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "DefaultChunkBufferCapacity", TUnit::UNIT);
+    COUNTER_SET(_default_buffer_capacity_counter, static_cast<int64_t>(default_buffer_capacity()));
+    _buffer_capacity_counter = ADD_COUNTER(_unique_metrics, "ChunkBufferCapacity", TUnit::UNIT);
+    COUNTER_SET(_buffer_capacity_counter, static_cast<int64_t>(buffer_capacity()));
+
+    _tablets_counter = ADD_COUNTER(_unique_metrics, "TabletCount", TUnit::UNIT);
+    COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
     _merge_chunk_source_profiles();
 
@@ -96,7 +104,7 @@ bool ScanOperator::has_output() const {
         return true;
     }
 
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP || is_buffer_full()) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator || is_buffer_full()) {
         return false;
     }
 
@@ -109,7 +117,7 @@ bool ScanOperator::has_output() const {
     }
 
     // Can trigger_next_scan for the picked-up morsel.
-    for (int i = 0; i < MAX_IO_TASKS_PER_OP; ++i) {
+    for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
             return true;
@@ -154,6 +162,7 @@ bool ScanOperator::is_finished() const {
 }
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
+    std::lock_guard guard(_task_mutex);
     _is_finished = true;
     return Status::OK();
 }
@@ -186,15 +195,15 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
-    if (_num_running_io_tasks >= MAX_IO_TASKS_PER_OP) {
+    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
 
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
-    int cnt = MAX_IO_TASKS_PER_OP;
+    int cnt = _io_tasks_per_scan_operator;
     while (--cnt >= 0) {
-        if (++_chunk_source_idx >= MAX_IO_TASKS_PER_OP) {
+        if (++_chunk_source_idx >= _io_tasks_per_scan_operator) {
             _chunk_source_idx = 0;
         }
         int i = _chunk_source_idx;
@@ -221,13 +230,17 @@ inline bool is_uninitialized(const std::weak_ptr<QueryContext>& ptr) {
     return !ptr.owner_before(wp{}) && !wp{}.owner_before(ptr);
 }
 
-void ScanOperator::_close_chunk_source(RuntimeState* state, int chunk_source_index) {
-    std::unique_lock guard(_task_mutex);
+void ScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int chunk_source_index) {
     if (_chunk_sources[chunk_source_index] != nullptr) {
         _chunk_sources[chunk_source_index]->close(state);
         _chunk_sources[chunk_source_index] = nullptr;
         detach_chunk_source(chunk_source_index);
     }
+}
+
+void ScanOperator::_close_chunk_source(RuntimeState* state, int chunk_source_index) {
+    std::lock_guard guard(_task_mutex);
+    _close_chunk_source_unlocked(state, chunk_source_index);
 }
 
 void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
@@ -238,11 +251,19 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
     _num_running_io_tasks--;
 
     DCHECK(_chunk_sources[chunk_source_index] != nullptr);
-    if (!_chunk_sources[chunk_source_index]->has_next_chunk()) {
-        _close_chunk_source(state, chunk_source_index);
-    }
 
-    _is_io_task_running[chunk_source_index] = false;
+    {
+        // - close() closes the chunk source which is not running.
+        // - _finish_chunk_source_task() closes the chunk source conditionally and then make it as not running.
+        // Therefore, closing chunk source and storing/loading `_is_finished` and `_is_io_task_running`
+        // must be protected by lock
+        std::lock_guard guard(_task_mutex);
+        if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+            _close_chunk_source_unlocked(state, chunk_source_index);
+        }
+
+        _is_io_task_running[chunk_source_index] = false;
+    }
 }
 
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
@@ -260,45 +281,60 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
+    starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
+    query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task =
-                workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index](int worker_id) {
-                    if (auto sp = wp.lock()) {
-                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index,
+                                                                    query_trace_ctx, driver_id](int worker_id) {
+            if (auto sp = wp.lock()) {
+                // Set driver_id here to share some driver-local contents.
+                // Current it's used by ExprContext's driver-local state
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
+                auto& chunk_source = _chunk_sources[chunk_source_index];
+                size_t num_read_chunks = 0;
+                int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+                int64_t prev_scan_rows = chunk_source->get_scan_rows();
+                int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
-                        auto& chunk_source = _chunk_sources[chunk_source_index];
-                        size_t num_read_chunks = 0;
-                        int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
-                        int64_t prev_scan_rows = chunk_source->get_scan_rows();
-                        int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+                // Read chunk
+                Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
+                        _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                if (!status.ok() && !status.is_end_of_file()) {
+                    _set_scan_status(status);
+                }
 
-                        // Read chunk
-                        Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
-                                _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
-                        if (!status.ok() && !status.is_end_of_file()) {
-                            _set_scan_status(status);
-                        }
+                int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+                _workgroup->increment_real_runtime_ns(delta_cpu_time);
+                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
 
-                        int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
-                        _workgroup->increment_real_runtime_ns(delta_cpu_time);
-                        _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-
-                        _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
-                                                  chunk_source->get_scan_rows() - prev_scan_rows,
-                                                  chunk_source->get_scan_bytes() - prev_scan_bytes);
-                    }
-                });
+                _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                          chunk_source->get_scan_rows() - prev_scan_rows,
+                                          chunk_source->get_scan_bytes() - prev_scan_bytes);
+                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+            }
+        });
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
-            offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
+            offer_task_success = ExecEnv::GetInstance()->connector_scan_executor()->submit(std::move(task));
         } else {
             offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
         }
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id]() {
             if (auto sp = wp.lock()) {
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                // Set driver_id here to share some driver-local contents.
+                // Current it's used by ExprContext's driver-local state
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
 
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
                 auto& chunk_source = _chunk_sources[chunk_source_index];
                 int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
                 int64_t prev_scan_rows = chunk_source->get_scan_rows();
@@ -314,6 +350,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                           chunk_source->get_scan_rows() - prev_scan_rows,
                                           chunk_source->get_scan_bytes() - prev_scan_bytes);
+                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
             }
         };
         // TODO(by satanson): set a proper priority
@@ -354,11 +391,13 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     if (morsel != nullptr) {
+        COUNTER_UPDATE(_morsels_counter, 1);
+
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
             _chunk_sources[chunk_source_index] = nullptr;
-            _is_finished = true;
+            set_finishing(state);
             return status;
         }
         need_detach = false;
@@ -414,6 +453,11 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     scan_operator->set_need_local_shuffle(morsel_queue_factory->is_shared());
 
     ops.emplace_back(std::move(scan_operator));
+
+    if (!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) {
+        ops.emplace_back(
+                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), scan_node->id()));
+    }
 
     size_t limit = scan_node->limit();
     if (limit != -1) {

@@ -38,7 +38,7 @@ public class CatalogRecycleBinTest {
         Assert.assertNull(recycledDb);
         recycledDb = bin.getDatabase(2);
         Assert.assertEquals(2L, recycledDb.getId());
-        Assert.assertEquals("db", recycledDb.getFullName());
+        Assert.assertEquals("db", recycledDb.getOriginName());
 
         List<Long> dbIds = bin.getAllDbIds();
         Assert.assertEquals(Lists.newArrayList(2L), dbIds);
@@ -205,7 +205,7 @@ public class CatalogRecycleBinTest {
         // Check
         TabletMeta tabletMeta1 = invertedIndex.getTabletMeta(tabletId);
         Assert.assertTrue(tabletMeta1 != null);
-        Assert.assertFalse(tabletMeta1.isUseStarOS());
+        Assert.assertFalse(tabletMeta1.isLakeTablet());
         Assert.assertEquals(TStorageMedium.SSD, tabletMeta1.getStorageMedium());
         Assert.assertEquals(replica1, invertedIndex.getReplica(tabletId, backendId));
         Assert.assertEquals(replica2, invertedIndex.getReplica(tabletId, backendId + 1));

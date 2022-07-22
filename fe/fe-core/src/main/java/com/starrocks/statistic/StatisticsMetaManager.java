@@ -24,7 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -37,9 +37,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.common.Config.statistics_manager_sleep_time_sec;
-
-public class StatisticsMetaManager extends MasterDaemon {
+public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     static {
@@ -343,7 +341,7 @@ public class StatisticsMetaManager extends MasterDaemon {
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
-        trySleep(statistics_manager_sleep_time_sec * 1000);
+        trySleep(Config.statistic_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
@@ -352,9 +350,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
 
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
-        if (Config.enable_collect_full_statistics) {
-            refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
-            refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
-        }
+        refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 }

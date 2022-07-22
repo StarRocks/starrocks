@@ -11,8 +11,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
@@ -61,13 +59,9 @@ public class StatisticExecutor {
 
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
-        if (Config.enable_collect_full_statistics) {
-            BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
-            if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-                sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
-            } else {
-                sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
-            }
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -136,7 +130,7 @@ public class StatisticExecutor {
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
-        String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+        String dbName = db.getOriginName();
         String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 

@@ -3,56 +3,48 @@
 #include "storage/lake/tablet.h"
 
 #include "column/schema.h"
+#include "fs/fs.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
-#include "storage/tablet_schema_map.h"
+#include "storage/rowset/segment.h"
 
 namespace starrocks::lake {
 
 Status Tablet::put_metadata(const TabletMetadata& metadata) {
-    return _mgr->put_tablet_metadata(_root, metadata);
+    return _mgr->put_tablet_metadata(metadata);
 }
 
 Status Tablet::put_metadata(TabletMetadataPtr metadata) {
-    return _mgr->put_tablet_metadata(_root, std::move(metadata));
+    return _mgr->put_tablet_metadata(std::move(metadata));
 }
 
 StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
-    return _mgr->get_tablet_metadata(_root, _id, version);
-}
-
-StatusOr<TabletMetadataIter> Tablet::list_metadata() {
-    return _mgr->list_tablet_metadata(_id, true);
+    return _mgr->get_tablet_metadata(_id, version);
 }
 
 Status Tablet::delete_metadata(int64_t version) {
-    return _mgr->delete_tablet_metadata(_root, _id, version);
-}
-
-Status Tablet::delete_metadata() {
-    return Status::NotSupported("Tablet::delete_metadata");
+    return _mgr->delete_tablet_metadata(_id, version);
 }
 
 Status Tablet::put_txn_log(const TxnLog& log) {
-    // TODO: Check log.tablet_id() == _id
-    return _mgr->put_txn_log(_root, log);
+    return _mgr->put_txn_log(log);
 }
 
 Status Tablet::put_txn_log(TxnLogPtr log) {
-    // TODO: Check log.tablet_id() == _id
-    return _mgr->put_txn_log(_root, std::move(log));
+    return _mgr->put_txn_log(std::move(log));
 }
 
 StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
-    return _mgr->get_txn_log(_root, _id, txn_id);
+    return _mgr->get_txn_log(_id, txn_id);
 }
 
 Status Tablet::delete_txn_log(int64_t txn_id) {
-    return _mgr->delete_txn_log(_root, _id, txn_id);
+    return _mgr->delete_txn_log(_id, txn_id);
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
@@ -65,26 +57,7 @@ StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, vect
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
-    auto tablet_schema_key = _mgr->tablet_schema_cache_key(_id);
-    auto ptr = _mgr->lookup_tablet_schema(tablet_schema_key);
-    RETURN_IF(ptr != nullptr, ptr);
-
-    ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, _mgr->list_tablet_metadata(_id, true));
-    if (!metadata_iter.has_next()) {
-        return Status::NotFound(fmt::format("tablet {} metadata not found", _id));
-    }
-    ASSIGN_OR_RETURN(auto metadata, metadata_iter.next());
-    auto result = GlobalTabletSchemaMap::Instance()->emplace(metadata->schema());
-    if (result.first == nullptr) {
-        return Status::InternalError(fmt::format("tablet schema {} failed to emplace in TabletSchemaMap", _id));
-    }
-    auto value_ptr = new std::shared_ptr<const TabletSchema>(result.first);
-    if (result.second == true) {
-        (void)_mgr->fill_metacache(tablet_schema_key, static_cast<void*>(value_ptr), result.first->mem_usage());
-    } else {
-        (void)_mgr->fill_metacache(tablet_schema_key, static_cast<void*>(value_ptr), 0);
-    }
-    return result.first;
+    return _mgr->get_tablet_schema(_id);
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -99,21 +72,37 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     return rowsets;
 }
 
-std::string Tablet::metadata_path(int64_t version) const {
-    return _mgr->tablet_metadata_path(_root, _id, version);
+StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
+                                          bool fill_cache) {
+    auto segment = _mgr->lookup_segment(segment_name);
+    if (segment != nullptr) {
+        return segment;
+    }
+    auto location = segment_location(segment_name);
+    ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+    ASSIGN_OR_RETURN(segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, location, seg_id,
+                                            std::move(tablet_schema), footer_size_hint));
+    if (fill_cache) {
+        _mgr->cache_segment(segment_name, segment);
+    }
+    return segment;
 }
 
-std::string Tablet::txn_log_path(int64_t txn_id) const {
-    return _mgr->txn_log_path(_root, _id, txn_id);
+std::string Tablet::metadata_location(int64_t version) const {
+    return _mgr->tablet_metadata_location(_id, version);
 }
 
-std::string Tablet::segment_path_assemble(const std::string& segment_name) const {
-    auto path = fmt::format("{}/{}", _root, segment_name);
-    return _mgr->path_assemble(path, _id);
+std::string Tablet::txn_log_location(int64_t txn_id) const {
+    return _mgr->txn_log_location(_id, txn_id);
+}
+
+std::string Tablet::segment_location(std::string_view segment_name) const {
+    return _mgr->segment_location(_id, segment_name);
 }
 
 std::string Tablet::root_location() const {
-    return _mgr->path_assemble(_root, _id);
+    return _mgr->tablet_root_location(_id);
 }
 
 } // namespace starrocks::lake

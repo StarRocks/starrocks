@@ -289,9 +289,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
-                + "  |  output: multi_distinct_count(2: v2)\n"
-                + "  |  group by: 3: v3"));
+        Assert.assertTrue(planFragment.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2)\n" +
+                "  |  group by: 3: v3"));
     }
 
     @Test
@@ -1038,6 +1038,29 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, " 1:Project\n" +
                 "  |  <slot 18> : datediff(CAST('1981-09-06t03:40:33' AS DATETIME), CAST(11: L_SHIPDATE AS DATETIME))\n" +
                 "  |  ");
+    }
+
+    @Test
+    public void testToDateToDays() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+        new Expectations(ss) {
+            {
+                ss.getColumnStatistic(t0, "id_datetime");
+                result = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 4, 3);
+            }
+        };
+        String sql = "select to_date(id_datetime) from test_all_type";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 11> : to_date(8: id_datetime)");
+
+
+        sql = "select to_days(id_datetime) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:Project\n" +
+                "  |  <slot 11> : to_days(CAST(8: id_datetime AS DATE))");
     }
 
     @Test

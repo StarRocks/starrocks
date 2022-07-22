@@ -33,6 +33,20 @@ bool OlapTableSinkOperator::is_finished() const {
 }
 
 bool OlapTableSinkOperator::pending_finish() const {
+    // sink's open not finish, we need check util finish
+    if (!_is_open_done) {
+        if (!_sink->is_open_done()) {
+            return true;
+        }
+        _is_open_done = true;
+        // since is_open_done(), open_wait will not block
+        auto st = _sink->open_wait();
+        if (!st.ok()) {
+            _fragment_ctx->cancel(st);
+            return false;
+        }
+    }
+
     if (!_sink->is_close_done()) {
         auto st = _sink->try_close(_fragment_ctx->runtime_state());
         if (!st.ok()) {
@@ -55,32 +69,35 @@ Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
 }
 
 Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
-    if (!_is_open_done) {
-        // _is_open_done indicates the reponse of open() is returned or not
-        RETURN_IF_ERROR(_sink->open_wait());
-        _is_open_done = true;
-    }
-
     _is_finished = true;
 
-    return _sink->try_close(state);
+    if (_is_open_done) {
+        // sink's open already finish, we can try_close
+        return _sink->try_close(state);
+    } else {
+        // sink's open not finish, we need check in pending_finish() before close
+        return Status::OK();
+    }
 }
 
 bool OlapTableSinkOperator::need_input() const {
     if (is_finished()) {
         return false;
     }
-    if (!_is_open_done) {
-        return _sink->is_open_done();
+
+    if (!_is_open_done && !_sink->is_open_done()) {
+        return false;
     }
+
     return !_sink->is_full();
 }
 
 Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     if (!_is_open_done) {
-        // _is_open_done indicates the reponse of open() is returned or not
-        RETURN_IF_ERROR(_sink->open_wait());
         _is_open_done = true;
+        // we can be here cause _sink->is_open_done() return true
+        // so that open_wait() will not block
+        RETURN_IF_ERROR(_sink->open_wait());
     }
 
     uint16_t num_rows = chunk->num_rows();

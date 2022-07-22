@@ -26,7 +26,7 @@ public class ColocateTableIndexTest {
 
         // create db1
         String createDbStmtStr = "create database db1;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
         // create table1_1->group1
@@ -35,7 +35,7 @@ public class ColocateTableIndexTest {
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         List<List<String>> infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         // group1->table1_1
@@ -51,7 +51,7 @@ public class ColocateTableIndexTest {
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
-        createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         // group1 -> table1_1, table1_2
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
@@ -63,7 +63,7 @@ public class ColocateTableIndexTest {
 
         // create db2
         createDbStmtStr = "create database db2;";
-        createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         // create table2_1 -> group2
         sql = "CREATE TABLE db2.table2_1 (k1 int, k2 int, k3 varchar(32))\n" +
@@ -71,7 +71,7 @@ public class ColocateTableIndexTest {
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group2\", \"replication_num\" = \"1\");\n";
-        createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         // group1 -> table1_1, table1_2
         // group2 -> table2_l
@@ -114,7 +114,7 @@ public class ColocateTableIndexTest {
 
         // drop db2
         sql = "DROP DATABASE db2;";
-        DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         // group1 -> table1_1*, table1_2*
         // group2 -> table2_l*

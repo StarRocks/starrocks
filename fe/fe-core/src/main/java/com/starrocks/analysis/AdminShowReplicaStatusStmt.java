@@ -21,23 +21,14 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
@@ -59,87 +50,6 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
     public AdminShowReplicaStatusStmt(TableRef tblRef, Expr where) {
         this.tblRef = tblRef;
         this.where = where;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        String dbName = null;
-        if (Strings.isNullOrEmpty(tblRef.getName().getDb())) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            dbName = ClusterNamespace.getFullName(tblRef.getName().getDb());
-        }
-
-        tblRef.getName().setDb(dbName);
-
-        CatalogUtils.checkOlapTableHasStarOSPartition(dbName, tblRef.getName().getTbl());
-
-        PartitionNames partitionNames = tblRef.getPartitionNames();
-        if (partitionNames != null) {
-            if (partitionNames.isTemp()) {
-                throw new AnalysisException("Do not support showing replica status of temporary partitions");
-            }
-            partitions.addAll(partitionNames.getPartitionNames());
-        }
-
-        if (!analyzeWhere()) {
-            throw new AnalysisException(
-                    "Where clause should looks like: status =/!= 'OK/DEAD/VERSION_ERROR/SCHEMA_ERROR/MISSING'");
-        }
-    }
-
-    private boolean analyzeWhere() throws AnalysisException {
-        // analyze where clause if not null
-        if (where == null) {
-            return true;
-        }
-
-        if (!(where instanceof BinaryPredicate)) {
-            return false;
-        }
-
-        BinaryPredicate binaryPredicate = (BinaryPredicate) where;
-        op = binaryPredicate.getOp();
-        if (op != Operator.EQ && op != Operator.NE) {
-            return false;
-        }
-
-        Expr leftChild = binaryPredicate.getChild(0);
-        if (!(leftChild instanceof SlotRef)) {
-            return false;
-        }
-
-        String leftKey = ((SlotRef) leftChild).getColumnName();
-        if (!leftKey.equalsIgnoreCase("status")) {
-            return false;
-        }
-
-        Expr rightChild = binaryPredicate.getChild(1);
-        if (!(rightChild instanceof StringLiteral)) {
-            return false;
-        }
-
-        try {
-            statusFilter = ReplicaStatus.valueOf(((StringLiteral) rightChild).getStringValue().toUpperCase());
-        } catch (Exception e) {
-            return false;
-        }
-
-        if (statusFilter == null) {
-            return false;
-        }
-
-        return true;
     }
 
     public TableRef getTblRef() {

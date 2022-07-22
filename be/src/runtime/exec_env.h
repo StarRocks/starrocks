@@ -138,7 +138,7 @@ public:
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
-    PriorityThreadPool* pipeline_hdfs_scan_io_thread_pool() { return _pipeline_hdfs_scan_io_thread_pool; }
+    PriorityThreadPool* pipeline_connector_scan_io_thread_pool() { return _pipeline_connector_scan_io_thread_pool; }
 
     size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
     size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
@@ -158,7 +158,7 @@ public:
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
 
     starrocks::workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    starrocks::workgroup::ScanExecutor* hdfs_scan_executor() { return _hdfs_scan_executor; }
+    starrocks::workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
@@ -241,7 +241,7 @@ private:
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
     PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_hdfs_scan_io_thread_pool = nullptr;
+    PriorityThreadPool* _pipeline_connector_scan_io_thread_pool = nullptr;
     std::atomic<size_t> _num_scan_operators{0};
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
@@ -255,7 +255,7 @@ private:
     LoadPathMgr* _load_path_mgr = nullptr;
 
     starrocks::workgroup::ScanExecutor* _scan_executor = nullptr;
-    starrocks::workgroup::ScanExecutor* _hdfs_scan_executor = nullptr;
+    starrocks::workgroup::ScanExecutor* _connector_scan_executor = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

@@ -3,13 +3,13 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -21,6 +21,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeJobStmt extends ShowStmt {
+    public ShowAnalyzeJobStmt(Predicate predicate) {
+        setPredicate(predicate);
+    }
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -50,7 +53,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 throw new MetaNotFoundException("No found database: " + dbId);
             }
 
-            row.set(1, ClusterNamespace.getNameFromFullName(db.getFullName()));
+            row.set(1, db.getOriginName());
 
             if (StatsConstants.DEFAULT_ALL_ID != tableId) {
                 Table table = db.getTable(tableId);
@@ -88,6 +91,11 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
         }
 
         return row;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowAnalyzeJobStatement(this, context);
     }
 
     @Override

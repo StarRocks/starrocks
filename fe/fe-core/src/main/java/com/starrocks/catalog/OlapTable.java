@@ -65,7 +65,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -301,6 +301,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 nameToPartition.clear();
                 nameToPartition.put(newName, partition);
             }
+        }
+
+        // change ExpressionRangePartitionInfo
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            expressionRangePartitionInfo.renameTableName(newName);
         }
     }
 
@@ -911,78 +918,71 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public int getSignature(int signatureVersion, List<String> partNames) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
-        final String charsetName = "UTF-8";
 
-        try {
-            // table name
-            adler32.update(name.getBytes(charsetName));
-            LOG.debug("signature. table name: {}", name);
-            // type
-            adler32.update(type.name().getBytes(charsetName));
-            LOG.debug("signature. table type: {}", type.name());
+        // table name
+        adler32.update(name.getBytes(StandardCharsets.UTF_8));
+        LOG.debug("signature. table name: {}", name);
+        // type
+        adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
+        LOG.debug("signature. table type: {}", type.name());
 
-            // all indices(should be in order)
-            Set<String> indexNames = Sets.newTreeSet();
-            indexNames.addAll(indexNameToId.keySet());
-            for (String indexName : indexNames) {
-                long indexId = indexNameToId.get(indexName);
-                adler32.update(indexName.getBytes(charsetName));
-                LOG.debug("signature. index name: {}", indexName);
-                MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
-                // schema hash
-                adler32.update(indexMeta.getSchemaHash());
-                LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
-                // short key column count
-                adler32.update(indexMeta.getShortKeyColumnCount());
-                LOG.debug("signature. index short key: {}", indexMeta.getShortKeyColumnCount());
-                // storage type
-                adler32.update(indexMeta.getStorageType().name().getBytes(charsetName));
-                LOG.debug("signature. index storage type: {}", indexMeta.getStorageType());
+        // all indices(should be in order)
+        Set<String> indexNames = Sets.newTreeSet();
+        indexNames.addAll(indexNameToId.keySet());
+        for (String indexName : indexNames) {
+            long indexId = indexNameToId.get(indexName);
+            adler32.update(indexName.getBytes(StandardCharsets.UTF_8));
+            LOG.debug("signature. index name: {}", indexName);
+            MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
+            // schema hash
+            adler32.update(indexMeta.getSchemaHash());
+            LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            // short key column count
+            adler32.update(indexMeta.getShortKeyColumnCount());
+            LOG.debug("signature. index short key: {}", indexMeta.getShortKeyColumnCount());
+            // storage type
+            adler32.update(indexMeta.getStorageType().name().getBytes(StandardCharsets.UTF_8));
+            LOG.debug("signature. index storage type: {}", indexMeta.getStorageType());
+        }
+
+        // bloom filter
+        if (bfColumns != null && !bfColumns.isEmpty()) {
+            for (String bfCol : bfColumns) {
+                adler32.update(bfCol.getBytes());
+                LOG.debug("signature. bf col: {}", bfCol);
             }
+            adler32.update(String.valueOf(bfFpp).getBytes());
+            LOG.debug("signature. bf fpp: {}", bfFpp);
+        }
 
-            // bloom filter
-            if (bfColumns != null && !bfColumns.isEmpty()) {
-                for (String bfCol : bfColumns) {
-                    adler32.update(bfCol.getBytes());
-                    LOG.debug("signature. bf col: {}", bfCol);
-                }
-                adler32.update(String.valueOf(bfFpp).getBytes());
-                LOG.debug("signature. bf fpp: {}", bfFpp);
+        // partition type
+        adler32.update(partitionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
+        LOG.debug("signature. partition type: {}", partitionInfo.getType().name());
+        // partition columns
+        if (partitionInfo.getType() == PartitionType.RANGE) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+            adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
+            LOG.debug("signature. partition col hash: {}", Util.schemaHash(0, partitionColumns, null, 0));
+        }
+
+        // partition and distribution
+        Collections.sort(partNames, String.CASE_INSENSITIVE_ORDER);
+        for (String partName : partNames) {
+            Partition partition = getPartition(partName);
+            Preconditions.checkNotNull(partition, partName);
+            adler32.update(partName.getBytes(StandardCharsets.UTF_8));
+            LOG.debug("signature. partition name: {}", partName);
+            DistributionInfo distributionInfo = partition.getDistributionInfo();
+            adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
+            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+                adler32.update(Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
+                LOG.debug("signature. distribution col hash: {}",
+                        Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
+                adler32.update(hashDistributionInfo.getBucketNum());
+                LOG.debug("signature. bucket num: {}", hashDistributionInfo.getBucketNum());
             }
-
-            // partition type
-            adler32.update(partitionInfo.getType().name().getBytes(charsetName));
-            LOG.debug("signature. partition type: {}", partitionInfo.getType().name());
-            // partition columns
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
-                LOG.debug("signature. partition col hash: {}", Util.schemaHash(0, partitionColumns, null, 0));
-            }
-
-            // partition and distribution
-            Collections.sort(partNames, String.CASE_INSENSITIVE_ORDER);
-            for (String partName : partNames) {
-                Partition partition = getPartition(partName);
-                Preconditions.checkNotNull(partition, partName);
-                adler32.update(partName.getBytes(charsetName));
-                LOG.debug("signature. partition name: {}", partName);
-                DistributionInfo distributionInfo = partition.getDistributionInfo();
-                adler32.update(distributionInfo.getType().name().getBytes(charsetName));
-                if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                    HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                    adler32.update(Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
-                    LOG.debug("signature. distribution col hash: {}",
-                            Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
-                    adler32.update(hashDistributionInfo.getBucketNum());
-                    LOG.debug("signature. bucket num: {}", hashDistributionInfo.getBucketNum());
-                }
-            }
-
-        } catch (UnsupportedEncodingException e) {
-            LOG.error("encoding error", e);
-            return -1;
         }
 
         LOG.debug("signature: {}", Math.abs((int) adler32.getValue()));
@@ -1266,7 +1266,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             }
             copied.setState(OlapTableState.NORMAL);
             for (Partition partition : copied.getPartitions()) {
-                boolean useStarOS = partition.isUseStarOS();
                 // remove shadow index from partition
                 for (MaterializedIndex deleteIndex : shadowIndex) {
                     partition.deleteRollupIndex(deleteIndex.getId());
@@ -1274,7 +1273,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (useStarOS) {
+                    if (copied.isLakeTable()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {
@@ -1350,15 +1349,14 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return replicaCount;
     }
 
-    public void checkStableAndNormal(String clusterName) throws DdlException {
+    public void checkStableAndNormal() throws DdlException {
         if (state != OlapTableState.NORMAL) {
             throw new DdlException("Table[" + name + "]'s state is " + state.toString() + " not NORMAL."
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
         boolean isStable = isStable(GlobalStateMgr.getCurrentSystemInfo(),
-                GlobalStateMgr.getCurrentState().getTabletScheduler(),
-                clusterName);
+                GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (!isStable) {
             throw new DdlException("table [" + name + "] is not stable."
                     + " Some tablets of this table may not be healthy or are being "
@@ -1368,7 +1366,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
     }
 
-    public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler, String clusterName) {
+    public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler) {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
@@ -1381,7 +1379,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     }
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet.getHealthStatusWithPriority(
-                            infoService, clusterName, visibleVersion, replicationNum,
+                            infoService, visibleVersion, replicationNum,
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",

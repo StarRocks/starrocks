@@ -250,7 +250,7 @@ public class Config extends ConfigBase {
     public static int edit_log_port = 9010;
 
     /**
-     * Master FE will save image every *edit_log_roll_num* meta journals.
+     * Leader FE will save image every *edit_log_roll_num* meta journals.
      */
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
@@ -272,7 +272,7 @@ public class Config extends ConfigBase {
     public static int meta_delay_toleration_second = 300;    // 5 min
 
     /**
-     * Master FE sync policy of bdbje.
+     * Leader FE sync policy of bdbje.
      * If you only deploy one Follower FE, set this to 'SYNC'. If you deploy more than 3 Follower FE,
      * you can set this and the following 'replica_sync_policy' to WRITE_NO_SYNC.
      * more info, see: http://docs.oracle.com/cd/E17277_02/html/java/com/sleepycat/je/Durability.SyncPolicy.html
@@ -316,8 +316,8 @@ public class Config extends ConfigBase {
     public static int bdbje_lock_timeout_second = 1;
 
     /**
-     * Set the maximum acceptable clock skew between non-master FE to Master FE host.
-     * This value is checked whenever a non-master FE establishes a connection to master FE via BDBJE.
+     * Set the maximum acceptable clock skew between non-leader FE to Leader FE host.
+     * This value is checked whenever a non-leader FE establishes a connection to leader FE via BDBJE.
      * The connection is abandoned if the clock skew is larger than this value.
      */
     @ConfField
@@ -399,7 +399,7 @@ public class Config extends ConfigBase {
 
     /**
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes info)
-     * and is supposed to start as Master.
+     * and is supposed to start as Leader.
      * If all the electable nodes can not start, we can copy the meta data
      * to another node and set this config to true to try to restart the FE.
      */
@@ -407,12 +407,12 @@ public class Config extends ConfigBase {
     public static String metadata_failure_recovery = "false";
 
     /**
-     * If true, non-master FE will ignore the meta data delay gap between Master FE and its self,
+     * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
-     * Non-master FE will still offer read service.
+     * Non-leader FE will still offer read service.
      * <p>
-     * This is helpful when you try to stop the Master FE for a relatively long time for some reason,
-     * but still wish the non-master FE can offer read service.
+     * This is helpful when you try to stop the Leader FE for a relatively long time for some reason,
+     * but still wish the non-leader FE can offer read service.
      */
     @ConfField(mutable = true)
     public static boolean ignore_meta_check = false;
@@ -756,6 +756,15 @@ public class Config extends ConfigBase {
     public static int alter_max_worker_queue_size = 4096;
 
     /**
+     * If set to true, FE will check backend available capacity by storage medium when create table
+     *
+     * The default value is true because if user has a deployment with only SSD or HDD medium storage paths,
+     * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_strict_storage_medium_check = true;
+
+    /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when creat.
      */
@@ -767,8 +776,8 @@ public class Config extends ConfigBase {
      * After that, tablets will be moved to HDD automatically.
      * You can set storage cooldown time in CREATE TABLE stmt.
      */
-    @ConfField
-    public static long storage_cooldown_second = 30 * 24 * 3600L; // 30 days
+    @ConfField(mutable = true)
+    public static long storage_cooldown_second = -1L; // won't cool down by default
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
      * And this specifies the maximal data retention time. After time, the data will be deleted permanently.
@@ -1014,7 +1023,7 @@ public class Config extends ConfigBase {
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int schedule_slot_num_per_path = 2;
 
     @ConfField
@@ -1166,12 +1175,6 @@ public class Config extends ConfigBase {
     public static int max_running_rollup_job_num_per_table = 1;
 
     /**
-     * If set to true, FE will check backend available capacity by storage medium when create table
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_strict_storage_medium_check = false;
-
-    /**
      * if set to false, auth check will be disable, in case some goes wrong with the new privilege system.
      */
     @ConfField
@@ -1284,11 +1287,17 @@ public class Config extends ConfigBase {
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
-    public static long statistics_manager_sleep_time_sec = 60 * 10;
+    public static long statistic_manager_sleep_time_sec = 60 * 10;
+
+    @ConfField(mutable = true)
+    public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3 days
 
     // The statistic
     @ConfField
     public static long statistic_cache_columns = 100000;
+
+    @ConfField
+    public static long statistic_dict_columns = 100000;
 
     /**
      * The collect thread work interval
@@ -1318,25 +1327,25 @@ public class Config extends ConfigBase {
      * Enable full statistics collection
      */
     @ConfField(mutable = true)
-    public static boolean enable_collect_full_statistics = false;
+    public static boolean enable_collect_full_statistic = false;
 
     /**
      * Statistics collection threshold
      */
     @ConfField(mutable = true)
-    public static double statistics_auto_collect_ratio = 0.8;
+    public static double statistic_auto_collect_ratio = 0.8;
 
     /**
      * Full statistics collection max data size
      */
     @ConfField(mutable = true)
-    public static long statistics_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+    public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
 
     /**
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
-    public static long statistics_collect_max_row_count_per_query = 5000000;
+    public static long statistic_collect_max_row_count_per_query = 5000000;
 
     /**
      * default bucket size of histogram statistics
@@ -1345,10 +1354,22 @@ public class Config extends ConfigBase {
     public static long histogram_buckets_size = 64;
 
     /**
+     * default top-n size of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_topn_size = 100;
+
+    /**
      * default sample ratio of histogram statistics
      */
     @ConfField(mutable = true)
     public static double histogram_sample_ratio = 0.1;
+
+    /**
+     * Max row count of histogram statistics
+     */
+    @ConfField(mutable = true)
+    public static long histogram_max_sample_row_count = 10000000;
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -1495,6 +1516,12 @@ public class Config extends ConfigBase {
     public static boolean enable_pipeline_load = true;
 
     /**
+     * Enable shuffle load
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_shuffle_load = true;
+
+    /**
      * Unused config field, leave it here for backward compatibility
      */
     @Deprecated
@@ -1620,4 +1647,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String jaeger_grpc_endpoint = "";
+
+    @ConfField
+    public static long experimental_lake_compaction_max_version_count = 10;
+
+    @ConfField
+    public static long experimental_lake_compaction_min_version_count = 3;
+
+    @ConfField
+    public static long experimental_lake_compaction_max_interval_seconds = 300;
 }

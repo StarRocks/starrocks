@@ -2,9 +2,11 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 
 import java.util.BitSet;
 import java.util.List;
@@ -16,6 +18,18 @@ public class JoinReorderLeftDeep extends JoinOrder {
         super(context);
     }
 
+    public boolean isSameTableJoin(GroupInfo left, GroupInfo right) {
+        if (!(left.bestExprInfo.expr.getOp() instanceof LogicalScanOperator)) {
+            return false;
+        }
+        if (!(right.bestExprInfo.expr.getOp() instanceof LogicalScanOperator)) {
+            return false;
+        }
+        LogicalScanOperator l = (LogicalScanOperator) left.bestExprInfo.expr.getOp();
+        LogicalScanOperator r = (LogicalScanOperator) right.bestExprInfo.expr.getOp();
+        return l.getTable().getId() == r.getTable().getId();
+    }
+
     @Override
     protected void enumerate() {
         List<GroupInfo> atoms = joinLevels.get(1).groups;
@@ -24,8 +38,41 @@ public class JoinReorderLeftDeep extends JoinOrder {
             return (diff < 0 ? -1 : (diff > 0 ? 1 : 0));
         });
 
+        boolean useHeuristic = true;
+        boolean[] used = new boolean[atomSize];
         GroupInfo leftGroup = atoms.get(0);
-        for (int index = 1; index < atomSize; ++index) {
+        used[0] = true;
+        int next = 1;
+        while (next < atomSize) {
+            if (used[next]) {
+                next++;
+                continue;
+            }
+            int index = next;
+            Preconditions.checkState(!used[index]);
+            if (useHeuristic) {
+                // search the next group which:
+                // 1. has never been used
+                // 2. can inner join with leftGroup
+                // 3. not same table inner join (happens only the first time).
+                // inner join on same tables possibly degrades to cross join.
+                for (; index < atomSize; ++index) {
+                    GroupInfo rightGroup = atoms.get(index);
+                    if (next == 1 && isSameTableJoin(leftGroup, rightGroup)) {
+                        continue;
+                    }
+                    if (!used[index] && canBuildInnerJoinPredicate(leftGroup, rightGroup)) {
+                        break;
+                    }
+                }
+                // if not found, fallback to old strategy
+                if (index == atomSize) {
+                    index = next;
+                }
+            }
+            Preconditions.checkState(!used[index]);
+            used[index] = true;
+
             GroupInfo rightGroup = atoms.get(index);
             ExpressionInfo joinExpr = buildJoinExpr(leftGroup, atoms.get(index));
             joinExpr.expr.deriveLogicalPropertyItself();

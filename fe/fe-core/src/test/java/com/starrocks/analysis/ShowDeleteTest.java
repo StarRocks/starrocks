@@ -87,7 +87,6 @@ public class ShowDeleteTest {
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testCluster:testUser");
-        ctx.setCluster("testCluster");
 
         new Expectations(ctx) {
             {

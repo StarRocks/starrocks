@@ -26,17 +26,22 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTable;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -56,7 +61,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-public class PublishVersionDaemon extends MasterDaemon {
+public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
@@ -168,6 +173,9 @@ public class PublishVersionDaemon extends MasterDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearPublishVersionTasks();
+
+                    // Refresh materialized view when base table update transaction has been visible if necessary
+                    refreshMvIfNecessary(transactionState);
                 }
             }
         } // end for readyTransactionStates
@@ -336,5 +344,35 @@ public class PublishVersionDaemon extends MasterDaemon {
             return null;
         }
         return backendIds.get(0);
+    }
+
+    /**
+     * Refresh the materialized view if it should be triggered after base table was loaded.
+     *
+     * @param transactionState
+     * @throws DdlException
+     * @throws MetaNotFoundException
+     */
+    private void refreshMvIfNecessary(TransactionState transactionState)
+            throws DdlException, MetaNotFoundException {
+        // Refresh materialized view when base table update transaction has been visible
+        long dbId = transactionState.getDbId();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        db.readLock();
+        try {
+            for (long tableId : transactionState.getTableIdList()) {
+                Table table = db.getTable(tableId);
+                Set<Long> relatedMvs = ((OlapTable) table).getRelatedMaterializedViews();
+                for (long mvId : relatedMvs) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                    if (materializedView.isLoadTriggeredRefresh()) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+                                db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+                    }
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
     }
 }

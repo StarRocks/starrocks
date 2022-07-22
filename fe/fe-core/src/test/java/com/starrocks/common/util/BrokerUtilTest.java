@@ -57,7 +57,7 @@ import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -161,7 +161,7 @@ public class BrokerUtilTest {
     @Test
     public void testReadFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                              @Injectable BrokerMgr brokerMgr)
-            throws TException, UserException, UnsupportedEncodingException {
+            throws TException, UserException {
         // list response
         TBrokerListResponse listResponse = new TBrokerListResponse();
         TBrokerOperationStatus status = new TBrokerOperationStatus();
@@ -181,7 +181,7 @@ public class BrokerUtilTest {
         String dppResultStr = "{'normal_rows': 10, 'abnormal_rows': 0, 'failed_reason': 'etl job failed'}";
         TBrokerReadResponse readResponse = new TBrokerReadResponse();
         readResponse.opStatus = status;
-        readResponse.setData(dppResultStr.getBytes("UTF-8"));
+        readResponse.setData(dppResultStr.getBytes(StandardCharsets.UTF_8));
 
         FsBroker fsBroker = new FsBroker("127.0.0.1", 99999);
 
@@ -222,14 +222,14 @@ public class BrokerUtilTest {
 
         BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
         byte[] data = BrokerUtil.readFile(filePath, brokerDesc);
-        String readStr = new String(data, "UTF-8");
+        String readStr = new String(data, StandardCharsets.UTF_8);
         Assert.assertEquals(dppResultStr, readStr);
     }
 
     @Test
     public void testWriteFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                               @Injectable BrokerMgr brokerMgr)
-            throws TException, UserException, UnsupportedEncodingException {
+            throws TException, UserException {
         // open writer response
         TBrokerOpenWriterResponse openWriterResponse = new TBrokerOpenWriterResponse();
         TBrokerOperationStatus status = new TBrokerOperationStatus();
@@ -272,7 +272,7 @@ public class BrokerUtilTest {
         };
 
         BrokerDesc brokerDesc = new BrokerDesc("broker0", Maps.newHashMap());
-        byte[] configs = "{'label': 'label0'}".getBytes("UTF-8");
+        byte[] configs = "{'label': 'label0'}".getBytes(StandardCharsets.UTF_8);
         String destFilePath = "hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/configs/jobconfig.json";
         try {
             BrokerUtil.writeFile(configs, destFilePath, brokerDesc);

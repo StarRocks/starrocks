@@ -36,8 +36,8 @@ import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.MasterTask;
-import com.starrocks.task.MasterTaskExecutor;
+import com.starrocks.task.LeaderTask;
+import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -111,7 +111,7 @@ public class LoadJobTest {
 
     @Test
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
-                            @Mocked MasterTaskExecutor masterTaskExecutor)
+                            @Mocked LeaderTaskExecutor leaderTaskExecutor)
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
@@ -121,7 +121,7 @@ public class LoadJobTest {
                         (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
                 minTimes = 0;
                 result = 1;
-                masterTaskExecutor.submit((MasterTask) any);
+                leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
             }

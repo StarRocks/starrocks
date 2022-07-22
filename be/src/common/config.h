@@ -23,8 +23,7 @@
 
 #include "configbase.h"
 
-namespace starrocks {
-namespace config {
+namespace starrocks::config {
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -100,6 +99,8 @@ CONF_Int32(delete_worker_count_normal_priority, "2");
 CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
+// The count of parallel clone task per storage path
+CONF_Int32(parallel_clone_task_per_path, "2");
 // The count of thread to clone.
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
@@ -686,11 +687,6 @@ CONF_mInt32(max_hdfs_file_handle, "1000");
 
 CONF_Int64(max_segment_file_size, "1073741824");
 
-// Enables using hdfsPreadFully() instead of hdfsRead() when performing HDFS read operations.
-// This is necessary to use HDFS hedged reads (assuming the HDFS client is configured to do so).
-// hdfsPreadFully() are always enabled for object storage.
-CONF_Bool(use_hdfs_pread, "true");
-
 // Rewrite partial semgent or not.
 // if true, partial segment will be rewrite into new segment file first and append other column data
 // if false, the data of other column will be append into partial segment file and rebuild segment footer
@@ -711,12 +707,17 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
-CONF_Int32(orc_file_cache_max_size, "2097152");
+CONF_Int32(orc_file_cache_max_size, "8388608");
+CONF_Int32(orc_natural_read_size, "8388608");
+CONF_mBool(orc_coalesce_read_enable, "true");
+
 // parquet reader, each column will reserve X bytes for read
 // but with coalesce read enabled, this value is not used.
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
+
+CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
@@ -751,10 +752,27 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
 
+// Config for query debug trace
+CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
+
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
+// Root dir used for cache if cache enabled.
+CONF_String(starlet_cache_dir, "");
 #endif
 
-} // namespace config
+CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 
-} // namespace starrocks
+CONF_mBool(dependency_librdkafka_debug_enable, "false");
+
+// A comma-separated list of debug contexts to enable.
+// Producer debug context: broker, topic, msg
+// Consumer debug context: consumer, cgrp, topic, fetch
+// Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
+// admin, eos, mock, assigner, conf
+CONF_String(dependency_librdkafka_debug, "all");
+
+// max loop count when be waiting its fragments finish
+CONF_Int64(loop_count_wait_fragments_finish, "0");
+
+} // namespace starrocks::config

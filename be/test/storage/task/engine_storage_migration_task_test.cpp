@@ -229,13 +229,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     vectorized::DeltaWriterOptions writer_options;
     writer_options.tablet_id = 12345;
     writer_options.schema_hash = 1111;
-    writer_options.write_type = vectorized::LOAD;
     writer_options.txn_id = 2222;
     writer_options.partition_id = 10;
     writer_options.load_id.set_hi(1000);
     writer_options.load_id.set_lo(2222);
     TupleDescriptor* tuple_desc = _create_tuple_desc();
-    writer_options.tuple_desc = tuple_desc;
     writer_options.slots = &tuple_desc->slots();
 
     {

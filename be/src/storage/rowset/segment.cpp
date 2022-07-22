@@ -62,12 +62,26 @@ namespace starrocks {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> blk_mgr,
-                                                 const std::string& filename, uint32_t segment_id,
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> fs,
+                                                 const std::string& path, uint32_t segment_id,
                                                  const TabletSchema* tablet_schema, size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
     auto segment = std::shared_ptr<Segment>(
-            new Segment(private_type(0), blk_mgr, filename, segment_id, tablet_schema, mem_tracker),
+            new Segment(private_type(0), std::move(fs), path, segment_id, tablet_schema, mem_tracker),
+            DeleterWithMemTracker<Segment>(mem_tracker));
+    mem_tracker->consume(segment->mem_usage());
+
+    RETURN_IF_ERROR(segment->_open(mem_tracker, footer_length_hint, partial_rowset_footer));
+    return std::move(segment);
+}
+
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, std::shared_ptr<FileSystem> fs,
+                                                 const std::string& path, uint32_t segment_id,
+                                                 std::shared_ptr<const TabletSchema> tablet_schema,
+                                                 size_t* footer_length_hint,
+                                                 const FooterPointerPB* partial_rowset_footer) {
+    auto segment = std::shared_ptr<Segment>(
+            new Segment(private_type(0), std::move(fs), path, segment_id, std::move(tablet_schema), mem_tracker),
             DeleterWithMemTracker<Segment>(mem_tracker));
     mem_tracker->consume(segment->mem_usage());
 
@@ -165,11 +179,19 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     return Status::OK();
 }
 
-Segment::Segment(const private_type&, std::shared_ptr<FileSystem> blk_mgr, std::string fname, uint32_t segment_id,
+Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  const TabletSchema* tablet_schema, MemTracker* mem_tracker)
-        : _fs(std::move(blk_mgr)),
-          _fname(std::move(fname)),
+        : _fs(std::move(fs)),
+          _fname(std::move(path)),
           _tablet_schema(tablet_schema),
+          _segment_id(segment_id),
+          _mem_tracker(mem_tracker) {}
+
+Segment::Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
+                 std::shared_ptr<const TabletSchema> tablet_schema, MemTracker* mem_tracker)
+        : _fs(std::move(fs)),
+          _fname(std::move(path)),
+          _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
           _mem_tracker(mem_tracker) {}
 
@@ -227,7 +249,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
 }
 
 Status Segment::load_index(MemTracker* mem_tracker) {
-    return _load_index_once.call([this, mem_tracker] {
+    auto res = success_once(_load_index_once, [this, mem_tracker] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
         // read and parse short key index page
         ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(_fname));
@@ -255,10 +277,11 @@ Status Segment::load_index(MemTracker* mem_tracker) {
 
         return st;
     });
+    return res.status();
 }
 
 bool Segment::has_loaded_index() const {
-    return _load_index_once.has_called();
+    return invoked(_load_index_once);
 }
 
 Status Segment::_create_column_readers(MemTracker* mem_tracker, SegmentFooterPB* footer) {

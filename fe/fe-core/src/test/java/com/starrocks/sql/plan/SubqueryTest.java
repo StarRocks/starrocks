@@ -67,15 +67,13 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----13:EXCHANGE\n" +
                 "  |    \n" +
-                "  1:AGGREGATE (update finalize)");
-        assertContains(plan, "  11:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----10:EXCHANGE\n" +
-                "  |    \n" +
-                "  3:AGGREGATE (update finalize)\n" +
-                "  |  output: avg(9: v7)");
+                "  10:Project");
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 13\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  12:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(15: v8)");
     }
 
     @Test
@@ -245,7 +243,6 @@ public class SubqueryTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
-
     @Test
     public void testCTEAnchorProperty() throws Exception {
         String sql = "explain SELECT\n" +
@@ -262,5 +259,110 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 16: v1\n" +
                 "  |  \n" +
                 "  |----29:EXCHANGE");
+    }
+
+    @Test
+    public void testHavingSubquery() throws Exception {
+        String sql = "SELECT \n" +
+                "  LPAD('x', 1878790738, '') \n" +
+                "FROM \n" +
+                "  t1 AS t1_104, \n" +
+                "  t2 AS t2_105\n" +
+                "GROUP BY \n" +
+                "  t2_105.v7, \n" +
+                "  t2_105.v8 \n" +
+                "HAVING \n" +
+                "  (\n" +
+                "    (\n" +
+                "      MIN(\n" +
+                "        (t2_105.v9) IN (\n" +
+                "          (\n" +
+                "            SELECT \n" +
+                "              t1_104.v4 \n" +
+                "            FROM \n" +
+                "              t1 AS t1_104 \n" +
+                "            WHERE \n" +
+                "              (t2_105.v8) IN ('')\n" +
+                "          )\n" +
+                "        )\n" +
+                "      )\n" +
+                "    ) IS NULL\n" +
+                "  );";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 6: v9 = 14: v4\n" +
+                "  |  equal join conjunct: 21: cast = 15: cast");
+    }
+
+    @Test
+    public void testComplexInAndExistsPredicate() throws Exception {
+        String sql = "select * from t0 where t0.v1 in (select v4 from t1) or (1=0 and t0.v1 in (select v7 from t2));";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  16:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
+
+        sql = "select * from t0 where exists (select v4 from t1) or (1=0 and exists (select v7 from t2));";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 13: COUNT(1) > 0");
+    }
+
+    @Test
+    public void testSubqueryReorder() throws Exception {
+        String sql = "select * from t0 join t1 on t0.v3 = t1.v6 where t1.v5 > (select t2.v7 from t2);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  6:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: 5: v5 > 7: v7\n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t1");
+    }
+
+    @Test
+    public void testMultiSubqueryReorder() throws Exception {
+        String sql = "select * from t0 join t1 on t0.v3 = t1.v6 " +
+                "where t1.v5 > (select t2.v7 from t2) and t1.v4 < (select t3.v10 from t3);";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertContains(plan, "  15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
+                "  |  \n" +
+                "  |----14:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+        assertContains(plan, "  12:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: 4: v4 < 11: v10\n" +
+                "  |  \n" +
+                "  |----11:EXCHANGE\n" +
+                "  |    \n" +
+                "  7:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  <slot 6> : 6: v6\n" +
+                "  |  \n" +
+                "  6:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: 5: v5 > 7: v7\n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t1");
     }
 }

@@ -21,14 +21,11 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -45,7 +42,7 @@ import java.util.Map;
  * TabletStatMgr is for collecting tablet(replica) statistics from backends.
  * Each FE will collect by itself.
  */
-public class TabletStatMgr extends MasterDaemon {
+public class TabletStatMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletStatMgr.class);
 
     public TabletStatMgr() {
@@ -94,7 +91,7 @@ public class TabletStatMgr extends MasterDaemon {
             db.writeLock();
             try {
                 for (Table table : db.getTables()) {
-                    if (table.getType() != TableType.OLAP) {
+                    if (!table.isNativeTable()) {
                         continue;
                     }
 
@@ -122,57 +119,20 @@ public class TabletStatMgr extends MasterDaemon {
 
     private void updateTabletStat(Long beId, TTabletStatResult result) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-
         for (Map.Entry<Long, TTabletStat> entry : result.getTablets_stats().entrySet()) {
-            long tabletId = entry.getKey();
-            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-            if (tabletMeta == null) {
+            if (invertedIndex.getTabletMeta(entry.getKey()) == null) {
                 // the replica is obsolete, ignore it.
                 continue;
             }
 
-            TTabletStat tabletStat = entry.getValue();
-            if (tabletMeta.isUseStarOS()) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
-                if (db == null) {
-                    continue;
-                }
-                db.writeLock();
-                try {
-                    Table table = db.getTable(tabletMeta.getTableId());
-                    if (table == null || !(table instanceof OlapTable)) {
-                        continue;
-                    }
-                    OlapTable olapTable = (OlapTable) table;
-                    Partition partition = olapTable.getPartition(tabletMeta.getPartitionId());
-                    if (partition == null) {
-                        continue;
-                    }
-                    MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
-                    if (index == null) {
-                        continue;
-                    }
-                    Tablet tablet = index.getTablet(tabletId);
-                    if (tablet == null) {
-                        continue;
-                    }
-
-                    Preconditions.checkState(tablet instanceof LakeTablet);
-                    LakeTablet lakeTablet = (LakeTablet) tablet;
-                    lakeTablet.setDataSize(tabletStat.getData_size());
-                    lakeTablet.setRowCount(tabletStat.getRow_num());
-                } finally {
-                    db.writeUnlock();
-                }
-            } else {
-                Replica replica = invertedIndex.getReplica(entry.getKey(), beId);
-                if (replica == null) {
-                    // replica may be deleted from globalStateMgr, ignore it.
-                    continue;
-                }
-                // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
-                replica.updateStat(tabletStat.getData_size(), tabletStat.getRow_num());
+            // Currently, only local table will update replica.
+            Replica replica = invertedIndex.getReplica(entry.getKey(), beId);
+            if (replica == null) {
+                // replica may be deleted from catalog, ignore it.
+                continue;
             }
+            // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
+            replica.updateStat(entry.getValue().getData_size(), entry.getValue().getRow_num());
         }
     }
 }

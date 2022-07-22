@@ -920,7 +920,7 @@ TEST_F(AggregateTest, test_dict_merge) {
 }
 
 TEST_F(AggregateTest, test_sum_nullable) {
-    using NullableSumInt64 = NullableAggregateFunctionState<SumAggregateState<int64_t>>;
+    using NullableSumInt64 = NullableAggregateFunctionState<SumAggregateState<int64_t>, false>;
     const AggregateFunction* sum_null = get_aggregate_function("sum", TYPE_INT, TYPE_BIGINT, true);
     auto state = ManagedAggrState::create(ctx, sum_null);
 
@@ -1221,14 +1221,45 @@ TEST_F(AggregateTest, test_bitmap_intersect) {
     ASSERT_EQ("1", result_column->get_pool()[0].to_string());
 }
 
+template <typename T>
+ColumnPtr gen_histogram_column() {
+    using DataColumn = typename ColumnTraits<T>::ColumnType;
+    auto column = DataColumn::create();
+    for (int i = 0; i < 1024; i++) {
+        if (i == 100) {
+            column->append(100);
+        }
+        if (i == 200) {
+            column->append(200);
+        }
+        column->append(i);
+    }
+    return column;
+}
+
 TEST_F(AggregateTest, test_histogram) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DOUBLE)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_INT))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
     const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
     auto state = ManagedAggrState::create(ctx, histogram_function);
 
-    auto data_column = gen_input_column1<int64_t>();
-    auto const1 = ColumnHelper::create_const_column<TYPE_INT>(data_column->size(), data_column->size());
-    auto const2 = ColumnHelper::create_const_column<TYPE_INT>(data_column->size(), data_column->size());
-    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+    auto data_column = gen_histogram_column<int64_t>();
+    auto const1 = ColumnHelper::create_const_column<TYPE_INT>(10, data_column->size());
+    auto const2 = ColumnHelper::create_const_column<TYPE_DOUBLE>(1, data_column->size());
+    auto const3 = ColumnHelper::create_const_column<TYPE_INT>(2, data_column->size());
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(const1); // first column
+    const_columns.emplace_back(const2);
+    const_columns.emplace_back(const3); // 3rd const column
+    local_ctx->impl()->set_constant_columns(const_columns);
 
     std::vector<const Column*> raw_columns;
     raw_columns.resize(4);
@@ -1237,17 +1268,17 @@ TEST_F(AggregateTest, test_histogram) {
     raw_columns[2] = const2.get();
     raw_columns[3] = const3.get();
     for (int i = 0; i < data_column->size(); ++i) {
-        histogram_function->update(ctx, raw_columns.data(), state->state(), i);
+        histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
     }
 
     auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    histogram_function->finalize_to_column(ctx, state->state(), result_column.get());
+    histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
     ASSERT_EQ(
             "['{ \"buckets\" : "
-            "[[\"0\",\"101\",\"102\",\"1\"],[\"102\",\"203\",\"204\",\"1\"],[\"204\",\"305\",\"306\",\"1\"],[\"306\","
-            "\"407\",\"408\",\"1\"],[\"408\",\"509\",\"510\",\"1\"],[\"510\",\"611\",\"612\",\"1\"],[\"612\",\"713\","
-            "\"714\",\"1\"],[\"714\",\"815\",\"816\",\"1\"],[\"816\",\"917\",\"918\",\"1\"],[\"918\",\"1019\",\"1020\","
-            "\"1\"],[\"1020\",\"200\",\"1026\",\"1\"]] }']",
+            "[[\"0\",\"102\",\"102\",\"1\"],[\"103\",\"205\",\"204\",\"1\"],[\"206\",\"307\",\"306\",\"1\"],[\"308\","
+            "\"409\",\"408\",\"1\"],[\"410\",\"511\",\"510\",\"1\"],[\"512\",\"613\",\"612\",\"1\"],[\"614\",\"715\","
+            "\"714\",\"1\"],[\"716\",\"817\",\"816\",\"1\"],[\"818\",\"919\",\"918\",\"1\"],[\"920\",\"1021\",\"1020\","
+            "\"1\"],[\"1022\",\"1023\",\"1022\",\"1\"]], \"top-n\" : [[\"100\",\"2\"],[\"200\",\"2\"]] }']",
             result_column->debug_string());
 }
 

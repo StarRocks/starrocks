@@ -26,8 +26,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 
 import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 // used for serialize memory data to byte stream of MySQL protocol
 public class MysqlSerializer {
@@ -136,32 +136,20 @@ public class MysqlSerializer {
     }
 
     public void writeLenEncodedString(String value) {
-        try {
-            byte[] buf = value.getBytes("UTF-8");
-            writeVInt(buf.length);
-            writeBytes(buf);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
+        byte[] buf = value.getBytes(StandardCharsets.UTF_8);
+        writeVInt(buf.length);
+        writeBytes(buf);
     }
 
     public void writeEofString(String value) {
-        try {
-            byte[] buf = value.getBytes("UTF-8");
-            writeBytes(buf);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
+        byte[] buf = value.getBytes(StandardCharsets.UTF_8);
+        writeBytes(buf);
     }
 
     public void writeNulTerminateString(String value) {
-        try {
-            byte[] buf = value.getBytes("UTF-8");
-            writeBytes(buf);
-            writeByte((byte) 0);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
+        byte[] buf = value.getBytes(StandardCharsets.UTF_8);
+        writeBytes(buf);
+        writeByte((byte) 0);
     }
 
     public void writeField(String db, String table, Column column, boolean sendDefault) {

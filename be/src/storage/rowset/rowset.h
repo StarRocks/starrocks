@@ -254,8 +254,6 @@ public:
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_temp_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id);
     static std::string segment_del_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);
-    static std::string segment_srcrssid_file_path(const std::string& segment_dir, const RowsetId& rowset_id,
-                                                  int segment_id);
 
     // return whether `path` is one of the files in this rowset
     bool check_path(const std::string& path);

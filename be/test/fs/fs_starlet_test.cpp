@@ -16,49 +16,70 @@
 
 namespace starrocks {
 
-class StarletFileSystemTest : public testing::Test {
+class StarletFileSystemTest : public ::testing::TestWithParam<std::string> {
 public:
-    StarletFileSystemTest() = default;
+    StarletFileSystemTest() { srand(time(NULL)); }
     ~StarletFileSystemTest() override = default;
     void SetUp() override {
+        std::string test_type = GetParam();
+
         staros::starlet::fslib::register_builtin_filesystems();
         staros::starlet::ShardInfo shard_info;
         shard_info.id = 10086;
-        shard_info.obj_store_info.uri = "";
-        shard_info.properties[staros::starlet::fslib::kS3AccessKeyId] = "5LXNPOQY3KB1LH4X4UQ6";
-        shard_info.properties[staros::starlet::fslib::kS3AccessKeySecret] = "EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb";
-        shard_info.properties[staros::starlet::fslib::kS3OverrideEndpoint] = "172.26.92.205:39000";
-        shard_info.properties[staros::starlet::fslib::kS3Bucket] = "starrocks-test-bucket";
+        shard_info.obj_store_info.s3_obj_store.uri =
+                fmt::format("s3://starrocks-test-bucket/{}.{}/", time(NULL), rand());
+        shard_info.obj_store_info.s3_obj_store.access_key = "5LXNPOQY3KB1LH4X4UQ6";
+        shard_info.obj_store_info.s3_obj_store.access_key_secret = "EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb";
+        shard_info.obj_store_info.s3_obj_store.endpoint = "172.26.92.205:39000";
+        shard_info.obj_store_info.s3_obj_store.region = "us-east-1";
         shard_info.properties["storageGroup"] = "10010";
+
+        if (test_type == "cachefs") {
+            shard_info.properties["cache_enabled"] = "true";
+            std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
+            EXPECT_TRUE(::mkdtemp(tmpl.data()) != NULL);
+            config::starlet_cache_dir = tmpl;
+        }
+
         g_worker = std::make_shared<starrocks::StarOSWorker>();
         (void)g_worker->add_shard(shard_info);
+
+        // Expect a clean root directory before testing
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
+        fs->delete_dir_recursive(StarletPath("/"));
     }
     void TearDown() override {
         (void)g_worker->remove_shard(10086);
         g_worker.reset();
+        std::string test_type = GetParam();
+        if (test_type == "cachefs" && config::starlet_cache_dir.compare(0, 5, std::string("/tmp/")) == 0) {
+            // Clean cache directory
+            std::string cmd = fmt::format("rm -rf {}", config::starlet_cache_dir);
+            ::system(cmd.c_str());
+        }
     }
 
     std::string StarletPath(std::string_view path) {
         if (path.front() == '/') {
-            return fmt::format("{}?ShardId={}", path.substr(1), 10086);
+            return fmt::format("{}{}?ShardId={}", kStarletPrefix, path.substr(1), 10086);
         } else {
-            return fmt::format("{}?ShardId={}", path, 10086);
+            return fmt::format("{}{}?ShardId={}", kStarletPrefix, path, 10086);
         }
     }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
                           bool expected_is_dir = true) {
         const StatusOr<bool> status_or = fs->is_directory(dir_name);
-        EXPECT_EQ(expected_success, status_or.ok());
+        EXPECT_EQ(expected_success, status_or.ok()) << dir_name;
         if (status_or.ok()) {
             EXPECT_EQ(expected_is_dir, status_or.value());
         }
     }
 };
 
-TEST_F(StarletFileSystemTest, test_write_and_read) {
+TEST_P(StarletFileSystemTest, test_write_and_read) {
     auto uri = StarletPath("test1");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
@@ -78,8 +99,8 @@ TEST_F(StarletFileSystemTest, test_write_and_read) {
     EXPECT_TRUE(fs->new_random_access_file(uri).status().is_not_found());
 }
 
-TEST_F(StarletFileSystemTest, test_directory) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
+TEST_P(StarletFileSystemTest, test_directory) {
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
     bool created = false;
 
     //
@@ -132,7 +153,6 @@ TEST_F(StarletFileSystemTest, test_directory) {
         CheckIsDirectory(fs.get(), StarletPath("/dirname2/0"), false);
         CheckIsDirectory(fs.get(), StarletPath("/dirname2/0.da"), false);
     }
-    CheckIsDirectory(fs.get(), StarletPath("/dirname2"), true, true);
 
     //
     //  /dirname0/
@@ -147,7 +167,6 @@ TEST_F(StarletFileSystemTest, test_directory) {
         EXPECT_OK(of->close());
         CheckIsDirectory(fs.get(), StarletPath("/dirname2/1.dat"), true, false);
     }
-    CheckIsDirectory(fs.get(), StarletPath("/dirname2"), true, true);
 
     //
     //  /dirname0/
@@ -200,8 +219,8 @@ TEST_F(StarletFileSystemTest, test_directory) {
     EXPECT_OK(fs->delete_file(StarletPath("/file0")));
 }
 
-TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
+TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {
@@ -213,8 +232,6 @@ TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
     fs->delete_dir_recursive(StarletPath("/dirname0"));
     EXPECT_OK(fs->create_dir_if_missing(StarletPath("/dirname0"), &created));
     ASSERT_OK(fs->delete_dir_recursive(StarletPath("/dirname0")));
-    EXPECT_OK(fs->iterate_dir(StarletPath("/"), cb));
-    ASSERT_EQ(0, entries.size());
 
     EXPECT_OK(fs->create_dir_if_missing(StarletPath("/dirname0"), &created));
     EXPECT_OK(fs->create_dir_if_missing(StarletPath("/dirname0/a"), &created));
@@ -242,9 +259,12 @@ TEST_F(StarletFileSystemTest, test_delete_dir_recursive) {
     ASSERT_ERROR(fs->delete_dir_recursive(StarletPath("/")));
 }
 
-TEST_F(StarletFileSystemTest, test_delete_nonexist_file) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("staros_s3://"));
+TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
+
+INSTANTIATE_TEST_CASE_P(StarletFileSystem, StarletFileSystemTest,
+                        ::testing::Values(std::string("s3"), std::string("cachefs")));
 
 } // namespace starrocks

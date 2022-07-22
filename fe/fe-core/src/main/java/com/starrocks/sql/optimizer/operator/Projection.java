@@ -57,13 +57,13 @@ public class Projection {
         }
 
         for (ScalarOperator operator : columnRefMap.values()) {
-            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet)) {
+            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet, childDictColumns)) {
                 return true;
             }
         }
 
         for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet)) {
+            if (!operator.isColumnRef() && couldApplyStringDict(operator, dictSet, childDictColumns)) {
                 return true;
             }
         }
@@ -78,13 +78,13 @@ public class Projection {
         }
 
         for (ScalarOperator operator : columnRefMap.values()) {
-            if (couldApplyStringDict(operator, dictSet)) {
+            if (couldApplyStringDict(operator, dictSet, childDictColumns)) {
                 return true;
             }
         }
 
         for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (couldApplyStringDict(operator, dictSet)) {
+            if (couldApplyStringDict(operator, dictSet, childDictColumns)) {
                 return true;
             }
         }
@@ -92,41 +92,40 @@ public class Projection {
         return false;
     }
 
-    public static boolean couldApplyDictOptimize(ScalarOperator operator) {
-        return operator.getUsedColumns().cardinality() == 1 &&
-                operator.accept(new AddDecodeNodeForDictStringRule.CouldApplyDictOptimizeVisitor(), null);
+    public static boolean couldApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
+        return AddDecodeNodeForDictStringRule.DecodeVisitor.couldApplyDictOptimize(operator, sids);
     }
 
-    private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet) {
+    private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet, Set<Integer> sids) {
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
-            return couldApplyDictOptimize(operator);
+            return couldApplyDictOptimize(operator, sids);
         }
         return false;
     }
 
-    public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
+    public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet, Set<Integer> sids) {
         columnRefMap.forEach((k, v) -> {
             if (columnRefSet.contains(k.getId())) {
                 columnRefSet.union(v.getUsedColumns());
             }
-            fillDisableDictOptimizeColumns(v, columnRefSet);
+            fillDisableDictOptimizeColumns(v, columnRefSet, sids);
         });
     }
 
-    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds) {
+    public boolean hasUnsupportedDictOperator(Set<Integer> stringColumnIds, Set<Integer> sids) {
         ColumnRefSet stringColumnRefSet = new ColumnRefSet();
         for (Integer stringColumnId : stringColumnIds) {
             stringColumnRefSet.union(stringColumnId);
         }
 
         ColumnRefSet columnRefSet = new ColumnRefSet();
-        this.fillDisableDictOptimizeColumns(columnRefSet);
+        this.fillDisableDictOptimizeColumns(columnRefSet, sids);
         return columnRefSet.isIntersect(stringColumnRefSet);
     }
 
-    private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet) {
-        if (!couldApplyDictOptimize(operator)) {
+    private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet, Set<Integer> sids) {
+        if (!couldApplyDictOptimize(operator, sids)) {
             columnRefSet.union(operator.getUsedColumns());
         }
     }

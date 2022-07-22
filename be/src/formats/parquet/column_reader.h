@@ -27,7 +27,6 @@ struct ColumnReaderOptions {
     SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
-    bool use_sb_stream = true;
 };
 
 class ColumnReader {

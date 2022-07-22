@@ -40,13 +40,6 @@ public class ClusterNamespace {
         return linkString(SystemInfoService.DEFAULT_CLUSTER, name);
     }
 
-    public static String getClusterNameFromFullName(String fullName) {
-        if (!checkName(fullName)) {
-            return null;
-        }
-        return extract(fullName, 0);
-    }
-
     public static String getNameFromFullName(String fullName) {
         if (!checkName(fullName)) {
             return fullName;

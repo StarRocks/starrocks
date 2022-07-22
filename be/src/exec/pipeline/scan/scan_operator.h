@@ -18,8 +18,6 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ScanOperator : public SourceOperator {
 public:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~ScanOperator() override;
@@ -81,6 +79,7 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
@@ -100,6 +99,7 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -128,7 +128,14 @@ private:
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
 
+    RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
+    RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
+    // The total number of the original tablets in this fragment instance.
+    RuntimeProfile::Counter* _tablets_counter = nullptr;
+    // The number of morsels picked up by this scan operator.
+    // A tablet may be divided into multiple morsels.
+    RuntimeProfile::Counter* _morsels_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

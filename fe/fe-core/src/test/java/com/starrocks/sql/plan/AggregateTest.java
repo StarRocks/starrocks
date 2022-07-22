@@ -5,6 +5,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
@@ -818,8 +819,35 @@ public class AggregateTest extends PlanTestBase {
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
-
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testWindowFunnelWithInvalidDecimalWindow() throws Exception {
+        FeConstants.runningUnitTest = true;
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("window argument must >= 0");
+        String sql =
+                "select L_ORDERKEY,window_funnel(-1, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        try {
+            getFragmentPlan(sql);
+        } finally {
+            FeConstants.runningUnitTest = false;
+        }        
+    }
+
+    @Test
+    public void testWindowFunnelWithNonDecimalWindow() throws Exception {
+        FeConstants.runningUnitTest = true;
+        expectedException.expect(SemanticException.class);
+        expectedException.expectMessage("window argument must be numerical type");
+        String sql =
+                "select L_ORDERKEY,window_funnel('varchar', L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        try {
+            getFragmentPlan(sql);
+        } finally {
+            FeConstants.runningUnitTest = false;
+        } 
     }
 
     @Test
@@ -928,13 +956,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
 
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:9: sum\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  7:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(8: case)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -947,31 +969,27 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:ASSERT NUMBER OF ROWS\n" +
-                "  |  assert number of rows: LE 1\n" +
-                "  |  \n" +
-                "  1:EXCHANGE"));
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1"));
 
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
+        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 04\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  3:OlapScanNode\n" +
-                "     TABLE: t1"));
+                "  3:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1\n" +
+                "  |  \n" +
+                "  2:EXCHANGE"));
 
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 2\n" +
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 3\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 01\n" +
+                "    EXCHANGE ID: 02\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  0:OlapScanNode\n" +
+                "  1:OlapScanNode\n" +
                 "     TABLE: t0"));
     }
 
@@ -1499,9 +1517,9 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  16:NESTLOOP JOIN\n" +
+        assertContains(plan, " 28:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0\n");
+                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
     }
 }

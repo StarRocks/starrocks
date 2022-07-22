@@ -40,7 +40,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
 import com.starrocks.persist.EditLog;
@@ -54,6 +53,7 @@ import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -64,8 +64,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -120,10 +120,6 @@ public class AuthTest {
 
         new Expectations() {
             {
-                analyzer.getClusterName();
-                minTimes = 0;
-                result = SystemInfoService.DEFAULT_CLUSTER;
-
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
@@ -142,10 +138,6 @@ public class AuthTest {
                 ConnectContext.get();
                 minTimes = 0;
                 result = ctx;
-
-                ctx.getClusterName();
-                minTimes = 0;
-                result = SystemInfoService.DEFAULT_CLUSTER;
 
                 ctx.getQualifiedUser();
                 minTimes = 0;
@@ -1624,7 +1616,7 @@ public class AuthTest {
     }
 
     @Test
-    public void testAuthPlugin() throws UnsupportedEncodingException {
+    public void testAuthPlugin() {
         new Expectations() {
             {
                 LdapSecurity.checkPassword("uid=zhangsan,ou=company,dc=example,dc=com", "123");
@@ -1666,12 +1658,12 @@ public class AuthTest {
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "123",
                 currentUser));
         Assert.assertTrue(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "123".getBytes("utf-8"), null, currentUser));
+                "123".getBytes(StandardCharsets.UTF_8), null, currentUser));
         Assert.assertFalse(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "456",
                         currentUser));
         Assert.assertFalse(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "456".getBytes("utf-8"), null, currentUser));
+                "456".getBytes(StandardCharsets.UTF_8), null, currentUser));
 
         // alter user zhangsan identified with authentication_ldap_simple
         userDesc = new UserDesc(userIdentity, AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), null, true);
@@ -1694,12 +1686,12 @@ public class AuthTest {
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "123",
                 currentUser));
         Assert.assertTrue(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "123".getBytes("utf-8"), null, currentUser));
+                "123".getBytes(StandardCharsets.UTF_8), null, currentUser));
         Assert.assertFalse(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "456",
                         currentUser));
         Assert.assertFalse(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "456".getBytes("utf-8"), null, currentUser));
+                "456".getBytes(StandardCharsets.UTF_8), null, currentUser));
 
         /*
             mysql_native_password
@@ -1722,7 +1714,7 @@ public class AuthTest {
             Assert.fail();
         }
         currentUser = Lists.newArrayList();
-        byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes("utf-8");
+        byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "123456");
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "192.168.8.8", "123456",
                 currentUser));
@@ -1732,11 +1724,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password by '654321'
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "654321", true);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        String sql = "alter user lisi identified with mysql_native_password by '654321'";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1757,12 +1748,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(),
-                "*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9", false);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        sql = "alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1783,11 +1772,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), null, false);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        sql = "alter user lisi identified with mysql_native_password";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1812,7 +1800,7 @@ public class AuthTest {
     public void testPasswordReuseNormal() throws Exception {
         String password = "123456AAbb";
         UserIdentity user = new UserIdentity("test_user", "%");
-        user.analyze("default_cluster");
+        user.analyze();
         UserDesc userDesc = new UserDesc(user, password, true);
         // 1. create user with no role
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1862,7 +1850,7 @@ public class AuthTest {
     public void testPasswordValidationPasswordReuse() throws Exception {
         String password = "123456AAbb";
         UserIdentity user = new UserIdentity("test_user", "%");
-        user.analyze("default_cluster");
+        user.analyze();
         UserDesc userDesc = new UserDesc(user, password, true);
         // 1. create user with no role
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
@@ -1890,7 +1878,7 @@ public class AuthTest {
         for (int i = 0; i != BIG_NUMBER; i++) {
             String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
             UserIdentity userIdentity = new UserIdentity(userName, "%");
-            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
             createUserStmt.analyze(analyzer);
@@ -1901,7 +1889,7 @@ public class AuthTest {
         // check the last user
         String lastUserName = String.format("user_%d_of_%d", BIG_NUMBER - 1, BIG_NUMBER);
         UserIdentity lastUserIdentity = new UserIdentity(lastUserName, "%");
-        lastUserIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        lastUserIdentity.analyze();
         // information_schema
         Assert.assertEquals(1, auth.getDBPrivEntries(lastUserIdentity).size());
         int infomationSchemaTableCnt = auth.getTablePrivEntries(lastUserIdentity).size();
@@ -1915,11 +1903,11 @@ public class AuthTest {
             }
             String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
             UserIdentity userIdentity = new UserIdentity(userName, "%");
-            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            userIdentity.analyze();
             for (int j = 0; j != BIG_NUMBER2; j++) {
                 String tableName = String.format("table_%d_of_%d", j, BIG_NUMBER2);
                 TablePattern tablePattern = new TablePattern("db1", tableName);
-                tablePattern.analyze(SystemInfoService.DEFAULT_CLUSTER);
+                tablePattern.analyze();
                 PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
                 auth.grantPrivs(userIdentity, tablePattern, privileges, false);
             }
@@ -1932,7 +1920,7 @@ public class AuthTest {
             // 1.1 create user
             String userName = String.format("user_%d_of_%d", i, BIG_NUMBER);
             UserIdentity userIdentity = new UserIdentity(userName, "%");
-            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            userIdentity.analyze();
             for (int j = 0; j != BIG_NUMBER2; j++) {
                 String tableName = String.format("table_%d_of_%d", j, BIG_NUMBER2);
                 Assert.assertTrue(auth.checkTblPriv(
@@ -1960,7 +1948,7 @@ public class AuthTest {
     @Test
     public void testGetPasswordByApproximate() throws Exception {
         UserIdentity userIdentity = new UserIdentity("test_user", "%");
-        userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        userIdentity.analyze();
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
         createUserStmt.analyze(analyzer);
@@ -1992,7 +1980,7 @@ public class AuthTest {
         };
         for (String[] userHost: userHostPatterns) {
             UserIdentity userIdentity = new UserIdentity(userHost[0], userHost[1]);
-            userIdentity.analyze(SystemInfoService.DEFAULT_CLUSTER);
+            userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, PASSWORD_STR, true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
             createUserStmt.analyze(analyzer);
@@ -2024,7 +2012,7 @@ public class AuthTest {
             Assert.assertEquals(expectHost, identities.get(0).getHost());
 
             identities.clear();
-            byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes("utf-8");
+            byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes(StandardCharsets.UTF_8);
             byte[] scramble = MysqlPassword.scramble(seed, PASSWORD_STR);
             auth.checkPassword(remoteUser, remoteIp, scramble, seed, identities);
             Assert.assertEquals(1, identities.size());
@@ -2052,7 +2040,7 @@ public class AuthTest {
         Assert.assertEquals(expect, userHostResult);
 
         UserIdentity user = new UserIdentity("user_1", "10.1.1.1");
-        user.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        user.analyze();
         iter = auth.getUserPrivTable().getReadOnlyIteratorByUser(user);
         userHostResult.clear();
         while(iter.hasNext()) {
@@ -2073,18 +2061,18 @@ public class AuthTest {
 
         // GRANT select_priv on db1.table1 to user_1@%
         TablePattern tablePattern = new TablePattern("db1", "table1");
-        tablePattern.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        tablePattern.analyze();
         PrivBitSet privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
         user = new UserIdentity("user_1", "%");
-        user.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        user.analyze();
         auth.grantPrivs(user, tablePattern, privileges, false);
 
         // GRANT select_priv on db1.table2 to user_1@10.1.1.1
         tablePattern = new TablePattern("db1", "table2");
-        tablePattern.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        tablePattern.analyze();
         privileges = AccessPrivilege.SELECT_PRIV.toPrivilege();
         user = new UserIdentity("user_1", "10.1.1.1");
-        user.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        user.analyze();
         auth.grantPrivs(user, tablePattern, privileges, false);
 
         // check if user_1@10.1.1.1 can see two table
@@ -2115,11 +2103,11 @@ public class AuthTest {
          // 1. prepare
          // 1.1create harry, gregory, albert
          UserIdentity harry = new UserIdentity("Harry", "%");
-         harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         harry.analyze();
          UserIdentity gregory = new UserIdentity("Gregory", "%");
-         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         gregory.analyze();
          UserIdentity albert = new UserIdentity("Albert", "%");
-         gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+         gregory.analyze();
          List<UserIdentity> userToBeCreated = new ArrayList<>();
          userToBeCreated.add(harry);
          userToBeCreated.add(gregory);
@@ -2171,7 +2159,7 @@ public class AuthTest {
         List<UserIdentity> userToBeCreated = new ArrayList<>();
         for (String name : names) {
             UserIdentity userIdentity = new UserIdentity(name, "%");
-            userIdentity.analyze("default_cluster");
+            userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
             createUserStmt.analyze(analyzer);
@@ -2191,7 +2179,7 @@ public class AuthTest {
 
         // 2. grant table privilege to onePrivilegeUser
         TablePattern table = new TablePattern("testdb", "table1");
-        table.analyze("default_cluster");
+        table.analyze();
         auth.grantPrivs(onePrivilegeUser, table, PrivBitSet.of(Privilege.SELECT_PRIV), false);
         infos = auth.getGrantsSQLs(onePrivilegeUser);
         Assert.assertEquals(1, infos.size());
@@ -2203,11 +2191,11 @@ public class AuthTest {
         // 3. grant resource & table & global & impersonate to manyPrivilegeUser
         List<String> expectSQLs = new ArrayList<>();
         TablePattern db = new TablePattern("testdb", "*");
-        db.analyze("default_cluster");
+        db.analyze();
         auth.grantPrivs(manyPrivilegeUser, db, PrivBitSet.of(Privilege.LOAD_PRIV, Privilege.SELECT_PRIV), false);
         expectSQLs.add("GRANT Select_priv, Load_priv ON default_cluster:testdb.* TO 'default_cluster:user3'@'%'");
         TablePattern global = new TablePattern("*", "*");
-        global.analyze("default_cluster");
+        global.analyze();
         auth.grantPrivs(manyPrivilegeUser, global, PrivBitSet.of(Privilege.GRANT_PRIV), false);
         expectSQLs.add("GRANT Grant_priv ON *.* TO 'default_cluster:user3'@'%'");
         ResourcePattern resourcePattern = new ResourcePattern("test_resource");
@@ -2275,9 +2263,9 @@ public class AuthTest {
         // 1. prepare
         // 1.1create harry, gregory
         UserIdentity harry = new UserIdentity("Harry", "%");
-        harry.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        harry.analyze();
         UserIdentity gregory = new UserIdentity("Gregory", "%");
-        gregory.analyze(SystemInfoService.DEFAULT_CLUSTER);
+        gregory.analyze();
         List<UserIdentity> userToBeCreated = new ArrayList<>();
         userToBeCreated.add(harry);
         userToBeCreated.add(gregory);

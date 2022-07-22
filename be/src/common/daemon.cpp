@@ -54,7 +54,10 @@
 namespace starrocks {
 DEFINE_bool(cn, false, "start as compute node");
 
-bool k_starrocks_exit = false;
+// NOTE: when BE receiving SIGTERM, this flag will be set to true. Then BE will reject
+// all ExecPlanFragments call by returning a fail status(brpc::EINTERNAL).
+// After all existing fragments executed, BE will exit.
+std::atomic<bool> k_starrocks_exit = false;
 
 class ReleaseColumnPool {
 public:
@@ -208,7 +211,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
 }
 
 void sigterm_handler(int signo) {
-    k_starrocks_exit = true;
+    k_starrocks_exit.store(true);
 }
 
 int install_signal(int signo, void (*handler)(int)) {

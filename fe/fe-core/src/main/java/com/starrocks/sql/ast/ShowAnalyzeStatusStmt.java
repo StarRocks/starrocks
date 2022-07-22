@@ -3,22 +3,26 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.StatsConstants;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 public class ShowAnalyzeStatusStmt extends ShowStmt {
+    public ShowAnalyzeStatusStmt(Predicate predicate) {
+        setPredicate(predicate);
+    }
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -28,10 +32,10 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
                     .addColumn(new Column("Columns", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Type", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Schedule", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Status", ScalarType.createVarchar(20)))
                     .addColumn(new Column("StartTime", ScalarType.createVarchar(60)))
                     .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
+                    .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
                     .build();
 
@@ -46,15 +50,14 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
-        row.set(1, ClusterNamespace.getNameFromFullName(db.getFullName()));
+        row.set(1, db.getOriginName());
         Table table = db.getTable(tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
         row.set(2, table.getName());
 
-        long totalCollectColumnsSize = table.getBaseSchema().stream()
-                .filter(column -> column.isKey() && column.getType().canStatistic()).count();
+        long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
 
         if (null != columns && !columns.isEmpty()
                 && (columns.size() != totalCollectColumnsSize)) {
@@ -64,13 +67,18 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
 
         row.set(4, analyzeStatus.getType().name());
         row.set(5, analyzeStatus.getScheduleType().name());
-        row.set(6, analyzeStatus.getProperties() == null ? "{}" : analyzeStatus.getProperties().toString());
-        row.set(7, analyzeStatus.getStatus().name());
-
-        row.set(8, analyzeStatus.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        if (analyzeStatus.getEndTime() != null) {
-            row.set(9, analyzeStatus.getEndTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
+            row.set(6, "SUCCESS");
+        } else {
+            row.set(6, analyzeStatus.getStatus().name());
         }
+
+        row.set(7, analyzeStatus.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        if (analyzeStatus.getEndTime() != null) {
+            row.set(8, analyzeStatus.getEndTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        }
+
+        row.set(9, analyzeStatus.getProperties() == null ? "{}" : analyzeStatus.getProperties().toString());
 
         if (analyzeStatus.getReason() != null) {
             row.set(10, analyzeStatus.getReason());
@@ -87,5 +95,15 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowAnalyzeStatusStatement(this, context);
     }
 }
