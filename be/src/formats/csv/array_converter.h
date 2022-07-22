@@ -10,8 +10,7 @@ namespace starrocks::vectorized::csv {
 class ArrayConverter final : public Converter {
 public:
     explicit ArrayConverter(std::unique_ptr<Converter> elem_converter)
-            : _element_converter(std::move(elem_converter)),
-              _array_reader(std::make_unique<StandardArrayReader>()) {}
+            : _element_converter(std::move(elem_converter)), _array_reader(std::make_unique<StandardArrayReader>()) {}
 
     ArrayConverter(std::unique_ptr<Converter> elem_converter, char collection_delimiter)
             : _element_converter(std::move(elem_converter)),

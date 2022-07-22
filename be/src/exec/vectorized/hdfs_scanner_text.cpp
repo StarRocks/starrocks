@@ -106,15 +106,15 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     _mapkey_delimiter = text_file_desc.mapkey_delim.front();
 
     // _collection_delimiter and _mapkey_delimiter won't be empty
-    CHECK(!_collection_delimiter.empty());
-    CHECK(!_mapkey_delimiter.empty());
+    DCHECK(!_collection_delimiter.empty());
+    DCHECK(!_mapkey_delimiter.empty());
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
-    for (auto slot : _scanner_params.materialize_slots) {
+    for (const auto& slot : _scanner_params.materialize_slots) {
         ConverterPtr conv;
         if (slot->type().type == TYPE_ARRAY) {
             // Use array converter with custom delimiter (Using it in Hive).
