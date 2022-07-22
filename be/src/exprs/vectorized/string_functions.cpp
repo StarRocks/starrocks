@@ -19,11 +19,7 @@
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-<<<<<<< HEAD
-=======
 #include "runtime/current_thread.h"
-#include "runtime/large_int_value.h"
->>>>>>> bf3b5c6d1 ([Enhance] make re2 driver-local to avoid contention (#8904))
 #include "storage/olap_define.h"
 #include "util/phmap/phmap.h"
 #include "util/raw_container.h"
@@ -2520,8 +2516,6 @@ int StringFunctions::index_of(const char* source, int source_count, const char* 
     return -1;
 }
 
-<<<<<<< HEAD
-=======
 struct StringFunctionsState {
     using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
@@ -2551,7 +2545,6 @@ struct StringFunctionsState {
     }
 };
 
->>>>>>> bf3b5c6d1 ([Enhance] make re2 driver-local to avoid contention (#8904))
 Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::THREAD_LOCAL) {
