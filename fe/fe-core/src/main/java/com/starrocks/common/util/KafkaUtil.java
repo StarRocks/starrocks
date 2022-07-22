@@ -76,7 +76,8 @@ public class KafkaUtil {
                 partitions = consumer.partitionsFor(topic,
                         Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
             } catch (Exception e) {
-                String msg = String.format("failed to get partitions from Kafka, broker_list: %s, topic: %s, err: %s", brokerList , topic, e.getMessage());
+                String msg = String.format("failed to get partitions from Kafka, broker_list: %s, topic: %s, err: %s",
+                        brokerList, topic, e.getMessage());
                 LOG.warn(msg);
                 throw new UserException(msg);
             } finally {
@@ -111,7 +112,8 @@ public class KafkaUtil {
                 partitionEndOffsets = consumer.endOffsets(topicPartitions,
                         Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
             } catch (Exception e) {
-                String msg = String.format("failed to get end offsets from Kafka, broker_list: %s, topic: %s, err: %s", brokerList , topic, e.getMessage());
+                String msg = String.format("failed to get end offsets from Kafka, broker_list: %s, topic: %s, err: %s",
+                        brokerList, topic, e.getMessage());
                 LOG.warn(msg);
                 throw new UserException(msg);
             } finally {
@@ -147,7 +149,8 @@ public class KafkaUtil {
                 partitionBeginningOffsets = consumer.beginningOffsets(topicPartitions,
                         Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
             } catch (Exception e) {
-                String msg = String.format("failed to get beginning offsets from Kafka, broker_list: %s, topic: %s, err: %s", brokerList , topic, e.getMessage());
+                String msg = String.format("failed to get beginning offsets from Kafka, broker_list: %s, topic: %s, err: %s",
+                        brokerList, topic, e.getMessage());
                 LOG.warn(msg);
                 throw new UserException(msg);
             } finally {
