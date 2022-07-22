@@ -649,6 +649,7 @@ public class NodeMgr {
         if (version > localImageVersion) {
             String url = "http://" + helperNode.first + ":" + Config.http_port
                     + "/image?version=" + version + "&subdir=" + subDir;
+            LOG.info("start to download image.{} from {}", version, url);
             String filename = Storage.IMAGE + "." + version;
             File dir = new File(dirStr);
             MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
