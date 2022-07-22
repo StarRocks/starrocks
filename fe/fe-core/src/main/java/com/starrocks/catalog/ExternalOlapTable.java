@@ -395,7 +395,7 @@ public class ExternalOlapTable extends OlapTable {
                                 singePartitionDesc.getBase_desc().getData_property().get(partitionId);
                         DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                                 thriftDataProperty.getCold_time());
-                        partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory, null);
+                        partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
                     }
                     break;
                 default:

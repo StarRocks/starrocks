@@ -37,7 +37,7 @@ public class PartitionUtils {
                     partitionInfo.addPartition(newTempPartitions.get(i).getId(),
                             partitionInfo.getDataProperty(sourcePartitionId),
                             partitionInfo.getReplicationNum(sourcePartitionId),
-                            partitionInfo.getIsInMemory(sourcePartitionId), null);
+                            partitionInfo.getIsInMemory(sourcePartitionId));
                     Partition partition = newTempPartitions.get(i);
                     // range is null for UNPARTITIONED type
                     Range<PartitionKey> range = null;
