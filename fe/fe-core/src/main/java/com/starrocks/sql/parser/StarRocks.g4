@@ -48,7 +48,6 @@ statement
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
     | recoverPartitionStatement                                                             #recoverPartition
-    | showOpenTablesStatement                                                               #showOpenTables
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -349,10 +348,6 @@ showPartitionsStatement
 
 recoverPartitionStatement
     : RECOVER PARTITION identifier FROM table=qualifiedName
-    ;
-
-showOpenTablesStatement
-    : SHOW OPEN TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
