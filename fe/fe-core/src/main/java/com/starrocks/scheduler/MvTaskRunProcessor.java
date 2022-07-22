@@ -41,8 +41,8 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -208,7 +208,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
 
         PartitionDiff partitionDiff = new PartitionDiff();
         if (partitionExpr instanceof SlotRef) {
-            partitionDiff = ExpressionPartitionUtil.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
+            partitionDiff = SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             String functionName = functionCallExpr.getFnName().getFunction();
@@ -216,7 +216,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 throw new SemanticException("Do not support function:" + functionCallExpr.toSql());
             }
             String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue();
-            partitionDiff = ExpressionPartitionUtil.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
+            partitionDiff = SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
                     granularity);
         }
 

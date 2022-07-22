@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Map;
 
-public class ExpressionPartitionUtilTest {
+public class SyncPartitionUtilsTest {
 
     private static final TableName TABLE_NAME = new TableName("db1", "table1");
     private static SlotRef slotRef;
@@ -60,14 +60,14 @@ public class ExpressionPartitionUtilTest {
         Map<String, Range<PartitionKey>> dstRange = Maps.newHashMap();
         dstRange.put("p20200101", createRange("2020-01-01", "2020-01-02"));
 
-        Map<String, Range<PartitionKey>> diff = ExpressionPartitionUtil.diffRange(srcRange, dstRange);
+        Map<String, Range<PartitionKey>> diff = SyncPartitionUtils.diffRange(srcRange, dstRange);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
         Assert.assertEquals("2020-01-03 00:00:00",
                 diff.get("p20200102").upperEndpoint().getKeys().get(0).getStringValue());
 
-        diff = ExpressionPartitionUtil.diffRange(dstRange, srcRange);
+        diff = SyncPartitionUtils.diffRange(dstRange, srcRange);
         Assert.assertEquals(0, diff.size());
 
         // two range
@@ -83,7 +83,7 @@ public class ExpressionPartitionUtilTest {
         dstRange.put("p20200102", createRange("2020-01-02", "2020-01-06"));
         dstRange.put("p20200106", createRange("2020-01-06", "2020-01-07"));
 
-        diff = ExpressionPartitionUtil.diffRange(srcRange, dstRange);
+        diff = SyncPartitionUtils.diffRange(srcRange, dstRange);
         Assert.assertEquals(2, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -94,7 +94,7 @@ public class ExpressionPartitionUtilTest {
         Assert.assertEquals("2020-01-06 00:00:00",
                 diff.get("p20200105").upperEndpoint().getKeys().get(0).getStringValue());
 
-        diff = ExpressionPartitionUtil.diffRange(dstRange, srcRange);
+        diff = SyncPartitionUtils.diffRange(dstRange, srcRange);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -113,7 +113,7 @@ public class ExpressionPartitionUtilTest {
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         mvRange.put("p202001", createRange("2020-01-01", "2020-02-01"));
 
-        PartitionDiff diff = ExpressionPartitionUtil.calcSyncSamePartition(baseRange, mvRange);
+        PartitionDiff diff = SyncPartitionUtils.calcSyncSamePartition(baseRange, mvRange);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Assert.assertEquals(3, adds.size());
@@ -149,7 +149,7 @@ public class ExpressionPartitionUtilTest {
         mvRange.put("p20200103", createRange("2020-01-03", "2020-01-04"));
 
 
-        diff = ExpressionPartitionUtil.calcSyncSamePartition(baseRange, mvRange);
+        diff = SyncPartitionUtils.calcSyncSamePartition(baseRange, mvRange);
 
         adds = diff.getAdds();
         deletes = diff.getDeletes();
@@ -172,7 +172,7 @@ public class ExpressionPartitionUtilTest {
 
         // minute
         Range<PartitionKey> baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
-        PartitionMapping mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "minute");
+        PartitionMapping mappedRange = SyncPartitionUtils.mappingRange(baseRange, "minute");
 
         Assert.assertEquals("2020-05-03T12:34:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -181,7 +181,7 @@ public class ExpressionPartitionUtilTest {
 
         // hour
         baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
-        mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "hour");
+        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "hour");
 
         Assert.assertEquals("2020-05-03T12:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -190,7 +190,7 @@ public class ExpressionPartitionUtilTest {
 
         // day
         baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
-        mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "day");
+        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-05-03T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -199,7 +199,7 @@ public class ExpressionPartitionUtilTest {
 
         // month
         baseRange = createRange("2020-05-03", "2020-06-04");
-        mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "month");
+        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "month");
 
         Assert.assertEquals("2020-05-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -208,7 +208,7 @@ public class ExpressionPartitionUtilTest {
 
         // quarter
         baseRange = createRange("2020-05-03", "2020-06-04");
-        mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "quarter");
+        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "quarter");
 
         Assert.assertEquals("2020-04-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -217,7 +217,7 @@ public class ExpressionPartitionUtilTest {
 
         // year
         baseRange = createRange("2020-05-03", "2020-06-04");
-        mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "year");
+        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "year");
 
         Assert.assertEquals("2020-01-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -230,7 +230,7 @@ public class ExpressionPartitionUtilTest {
 
         // less than
         Range<PartitionKey> baseRange = createLessThanRange("2020-05-03");
-        PartitionMapping mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "day");
+        PartitionMapping mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
 
 
         Assert.assertEquals("0000-01-01T00:00:00",
@@ -240,7 +240,7 @@ public class ExpressionPartitionUtilTest {
 
         // big partition
         baseRange = createRange("2020-01-01", "2020-02-01");
-        mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "day");
+        mappedRange = SyncPartitionUtils.mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-01-01T00:00:00",
                 mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
@@ -258,7 +258,7 @@ public class ExpressionPartitionUtilTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, "month");
+        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "month");
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
 
@@ -283,7 +283,7 @@ public class ExpressionPartitionUtilTest {
 
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
-        diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, "day");
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "day");
         adds = diff.getAdds();
         deletes = diff.getDeletes();
 
@@ -301,7 +301,7 @@ public class ExpressionPartitionUtilTest {
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, granularity);
+        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, granularity);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -327,7 +327,7 @@ public class ExpressionPartitionUtilTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
-        diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, granularity);
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, granularity);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
@@ -346,7 +346,7 @@ public class ExpressionPartitionUtilTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, "month");
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "month");
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
@@ -365,7 +365,7 @@ public class ExpressionPartitionUtilTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, "month");
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "month");
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(2, adds.size());

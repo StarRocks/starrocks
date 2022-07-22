@@ -1,13 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.io.DeepCopy;
@@ -108,16 +105,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.timeUnit = null;
         }
 
-        public AsyncRefreshContext(Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap) {
-            this.baseTableVisibleVersionMap = baseTableVisibleVersionMap;
-        }
-
         public Map<Long, Map<String, BasePartitionInfo>> getBaseTableVisibleVersionMap() {
             return baseTableVisibleVersionMap;
-        }
-
-        Map<String, BasePartitionInfo> getPartitionVisibleVersionMapForTable(long tableId) {
-            return baseTableVisibleVersionMap.get(tableId);
         }
 
         public boolean isDefineStartTime() {
@@ -167,12 +156,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.type = RefreshType.ASYNC;
             this.asyncRefreshContext = new AsyncRefreshContext();
             this.lastRefreshTime = 0;
-        }
-
-        public MvRefreshScheme(RefreshType type, AsyncRefreshContext asyncRefreshContext, long lastRefreshTime) {
-            this.type = type;
-            this.asyncRefreshContext = asyncRefreshContext;
-            this.lastRefreshTime = lastRefreshTime;
         }
 
         public RefreshType getType() {
@@ -281,20 +264,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
-    }
-
-    public Set<String> getExistBasePartitionNames(long baseTableId) {
-        return this.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
-                .computeIfAbsent(baseTableId, k -> Maps.newHashMap()).keySet();
-    }
-
-    public Set<String> getNoExistBasePartitionNames(long baseTableId, Set<String> partitionNames) {
-        Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
-                .getBaseTableVisibleVersionMap()
-                .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
-        return basePartitionInfoMap.keySet().stream()
-                .filter(partitionName -> !partitionNames.contains(partitionName))
-                .collect(Collectors.toSet());
     }
 
     public Set<String> getSyncedPartitionNames(long baseTableId) {
@@ -443,23 +412,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                                 .map(col -> new Field(col.getName(), col.getType(),
                                         new TableName(db.getFullName(), this.name), null))
                                 .collect(Collectors.toList()))), connectContext);
-    }
-
-    public OlapTable getPartitionTable(Database database) {
-        Preconditions.checkState(this.getPartitionRefTableExprs().size() == 1);
-        Expr partitionExpr = this.getPartitionRefTableExprs().get(0);
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        partitionExpr.collect(SlotRef.class, slotRefs);
-        // if partitionExpr is FunctionCallExpr, get first SlotRef
-        Preconditions.checkState(slotRefs.size() == 1);
-        SlotRef slotRef = slotRefs.get(0);
-        for (Long baseTableId : baseTableIds) {
-            OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-            if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
-                return olapTable;
-            }
-        }
-        return null;
     }
 
     public static MaterializedView read(DataInput in) throws IOException {

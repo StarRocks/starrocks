@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  * Process lower bound and upper bound for Expression Partition,
  * only support SlotRef and FunctionCallExpr
  */
-public class ExpressionPartitionUtil {
+public class SyncPartitionUtils {
     private static final String DEFAULT_PREFIX = "p";
 
     public static PartitionDiff calcSyncSamePartition(Map<String, Range<PartitionKey>> baseRangeMap,
