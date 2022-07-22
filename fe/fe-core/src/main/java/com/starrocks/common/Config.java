@@ -1023,7 +1023,7 @@ public class Config extends ConfigBase {
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int schedule_slot_num_per_path = 2;
 
     @ConfField
@@ -1295,6 +1295,9 @@ public class Config extends ConfigBase {
     // The statistic
     @ConfField
     public static long statistic_cache_columns = 100000;
+
+    @ConfField
+    public static long statistic_dict_columns = 100000;
 
     /**
      * The collect thread work interval
@@ -1644,4 +1647,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String jaeger_grpc_endpoint = "";
+
+    @ConfField
+    public static long experimental_lake_compaction_max_version_count = 10;
+
+    @ConfField
+    public static long experimental_lake_compaction_min_version_count = 3;
+
+    @ConfField
+    public static long experimental_lake_compaction_max_interval_seconds = 300;
 }
