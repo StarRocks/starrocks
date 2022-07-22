@@ -54,8 +54,13 @@ public class TypeDef implements ParseNode {
         return new TypeDef(ScalarType.createCharType(len));
     }
 
+    //
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
+        analyze();
+    }
+
+    public void analyze() throws AnalysisException {
         if (isAnalyzed) {
             return;
         }

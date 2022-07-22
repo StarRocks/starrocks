@@ -137,7 +137,7 @@ void ThreadPoolToken::shutdown() {
             break;
         }
         transition(State::QUIESCING);
-        FALLTHROUGH_INTENDED;
+        [[fallthrough]];
     case State::QUIESCING:
         // The token is already quiescing. Just wait for a worker thread to
         // switch it to QUIESCED.
@@ -146,6 +146,8 @@ void ThreadPoolToken::shutdown() {
     default:
         break;
     }
+    // releasing the tasks outside of lock
+    l.unlock();
 }
 
 void ThreadPoolToken::wait() {

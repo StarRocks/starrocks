@@ -47,10 +47,10 @@ public class CreateTableLikeTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         String createDbStmtStr2 = "create database test2;";
-        CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr2, connectContext);
+        CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr2, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt2.getFullDbName());
     }
 

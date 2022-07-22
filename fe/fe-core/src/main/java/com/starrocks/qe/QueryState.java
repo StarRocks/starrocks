@@ -100,6 +100,10 @@ public class QueryState {
         this.errorMessage = errorMsg;
     }
 
+    public boolean isError() {
+        return stateType == MysqlStateType.ERR;
+    }
+
     public void setStateType(MysqlStateType stateType) {
         this.stateType = stateType;
     }

@@ -63,12 +63,12 @@ import scala.Tuple2;
 import scala.collection.JavaConverters;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -432,18 +432,14 @@ public final class SparkDpp implements java.io.Serializable {
             case "CHAR":
             case "VARCHAR":
                 // TODO(wb) padding char type
-                try {
-                    int strSize = 0;
-                    if (srcValue != null &&
-                            (strSize = srcValue.toString().getBytes("UTF-8").length) > etlColumn.stringLength) {
-                        LOG.warn(String.format(
-                                "the length of input is too long than schema. column_name:%s," +
-                                        "input_str[%s],schema length:%s,actual length:%s",
-                                etlColumn.columnName, row.toString(), etlColumn.stringLength, strSize));
-                        return false;
-                    }
-                } catch (UnsupportedEncodingException e) {
-                    LOG.warn("input string value can not encode with utf-8,value=" + srcValue.toString());
+                int strSize = 0;
+                if (srcValue != null &&
+                        (strSize = srcValue.toString().getBytes(StandardCharsets.UTF_8).length) >
+                                etlColumn.stringLength) {
+                    LOG.warn(String.format(
+                            "the length of input is too long than schema. column_name:%s," +
+                                    "input_str[%s],schema length:%s,actual length:%s",
+                            etlColumn.columnName, row.toString(), etlColumn.stringLength, strSize));
                     return false;
                 }
                 break;

@@ -499,7 +499,6 @@ public class Coordinator {
         deliverExecFragments();
     }
 
-
     public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
         ResourceGroup resourceGroup = null;
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
@@ -866,7 +865,7 @@ public class Coordinator {
                 // Otherwise, the request will be in the first stage, including
                 // - the request need send descTable.
                 // - the request to the host, where some request in the previous group has already sent descTable.
-                List<List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
+                List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
@@ -930,11 +929,12 @@ public class Coordinator {
                                 queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
 
                         // Create ExecState for each fragment instance.
-                        BackendExecState lastExecState = null;
+                        List<BackendExecState> execStates = Lists.newArrayList();
                         for (TExecPlanFragmentParams tUniquePrams : tUniqueParamsList) {
                             // TODO: pool of pre-formatted BackendExecStates?
                             BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
                                     profileFragmentId, tCommonParams, tUniquePrams, this.addressToBackendID);
+                            execStates.add(execState);
                             backendExecStates.put(tUniquePrams.backend_num, execState);
                             if (needCheckBackendState) {
                                 needCheckBackendExecStates.add(execState);
@@ -944,23 +944,25 @@ public class Coordinator {
                                             fragment.getFragmentId().asInt(), jobId);
                                 }
                             }
-                            lastExecState = execState;
                         }
 
-                        if (lastExecState != null) {
-                            // Just choose any instance ExecState to send the RPC request.
-                            inflightRequestsList.get(inflightIndex).add(Pair.create(lastExecState, tRequest));
-                        }
+                        inflightRequestsList.get(inflightIndex).add(Pair.create(execStates, tRequest));
                     }
 
                     profileFragmentId += 1;
                 }
 
-                for (List<Pair<BackendExecState, TExecBatchPlanFragmentsParams>> inflightRequests : inflightRequestsList) {
+                for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests : inflightRequestsList) {
                     List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
-                    for (Pair<BackendExecState, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
-                        futures.add(Pair.create(inflightRequest.first,
-                                inflightRequest.first.execRemoteBatchFragmentsAsync(inflightRequest.second)));
+                    for (Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
+                        List<BackendExecState> execStates = inflightRequest.first;
+                        execStates.forEach(execState -> execState.setInitiated(true));
+
+                        Preconditions.checkState(!execStates.isEmpty());
+                        // Just choose any instance ExecState to send the batch RPC request.
+                        BackendExecState firstExecState = execStates.get(0);
+                        futures.add(Pair.create(firstExecState,
+                                firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
                     }
 
                     for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
@@ -2658,6 +2660,10 @@ public class Coordinator {
 
         private TUniqueId fragmentInstanceId() {
             return this.uniqueRpcParams.params.getFragment_instance_id();
+        }
+
+        public void setInitiated(boolean initiated) {
+            this.initiated = initiated;
         }
     }
 

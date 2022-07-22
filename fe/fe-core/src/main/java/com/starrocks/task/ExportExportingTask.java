@@ -48,7 +48,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class ExportExportingTask extends MasterTask {
+public class ExportExportingTask extends LeaderTask {
     private static final Logger LOG = LogManager.getLogger(ExportExportingTask.class);
     private static final int RETRY_NUM = 2;
 
@@ -90,7 +90,7 @@ public class ExportExportingTask extends MasterTask {
         if (job.isReplayed()) {
             // If the job is created from replay thread, all plan info will be lost.
             // so the job has to be cancelled.
-            String failMsg = "FE restarted or Master changed during exporting. Job must be cancelled";
+            String failMsg = "FE restarted or Leader changed during exporting. Job must be cancelled";
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
             return;
         }
@@ -252,7 +252,7 @@ public class ExportExportingTask extends MasterTask {
         return Status.OK;
     }
 
-    private class ExportExportingSubTask extends MasterTask {
+    private class ExportExportingSubTask extends LeaderTask {
         private final Coordinator coord;
         private final int taskIdx;
         private final int coordSize;

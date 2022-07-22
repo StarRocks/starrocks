@@ -21,16 +21,6 @@
 
 #pragma once
 
-#include <thrift/protocol/TDebugProtocol.h>
-
-#include <ctime>
-#include <map>
-#include <memory>
-
-#include "common/status.h"
-#include "gen_cpp/BackendService.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/TStarrocksExternalService.h"
 #include "service/backend_base.h"
 
 namespace starrocks {
@@ -41,8 +31,7 @@ class ComputeService : public BackendServiceBase {
 public:
     explicit ComputeService(ExecEnv* exec_env);
 
-    // NOTE: now we do not support multiple backend in one process
-    static Status create_service(ExecEnv* exec_env, int port, ThriftServer** server);
+    ~ComputeService() override;
 };
 
 } // namespace starrocks

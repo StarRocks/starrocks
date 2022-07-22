@@ -26,7 +26,6 @@ import com.sleepycat.je.rep.StateChangeEvent;
 import com.sleepycat.je.rep.StateChangeListener;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.EditLog;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -70,7 +69,7 @@ public class BDBStateChangeListener implements StateChangeListener {
             }
         }
         Preconditions.checkNotNull(newType);
-        GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(newType);
+        StateChangeExecutor.getInstance().notifyNewFETypeTransfer(newType);
     }
 
 }

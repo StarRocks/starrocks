@@ -235,7 +235,7 @@ public class StmtExecutor {
         }
     }
 
-    public boolean isForwardToMaster() {
+    public boolean isForwardToLeader() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
@@ -250,7 +250,7 @@ public class StmtExecutor {
         if (redirectStatus == null) {
             return false;
         } else {
-            return redirectStatus.isForwardToMaster();
+            return redirectStatus.isForwardToLeader();
         }
     }
 
@@ -329,7 +329,7 @@ public class StmtExecutor {
                     StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
-                    if (!isForwardToMaster()) {
+                    if (!isForwardToLeader()) {
                         context.getDumpInfo().reset();
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                         if (parsedStmt instanceof ShowStmt) {
@@ -369,11 +369,11 @@ public class StmtExecutor {
             if (context.isQueryDump()) {
                 return;
             }
-            if (isForwardToMaster()) {
-                forwardToMaster();
+            if (isForwardToLeader()) {
+                forwardToLeader();
                 return;
             } else {
-                LOG.debug("no need to transfer to Master. stmt: {}", context.getStmtId());
+                LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
             // Only add the last running stmt for multi statement,
@@ -495,6 +495,10 @@ public class StmtExecutor {
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         } finally {
+            if (context.getState().isError() && coord != null) {
+                coord.cancel();
+            }
+
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 // The transaction of an insert operation begin at analyze phase.
@@ -573,9 +577,9 @@ public class StmtExecutor {
         }
     }
 
-    private void forwardToMaster() throws Exception {
+    private void forwardToLeader() throws Exception {
         leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
-        LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
+        LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
         leaderOpExecutor.execute();
     }
 
@@ -605,7 +609,7 @@ public class StmtExecutor {
 
         // yiguolei: insertstmt's grammar analysis will write editlog, so that we check if the stmt should be forward to master here
         // if the stmt should be forward to master, then just return here and the master will do analysis again
-        if (isForwardToMaster()) {
+        if (isForwardToLeader()) {
             return;
         }
 

@@ -42,7 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class ExportPendingTask extends MasterTask {
+public class ExportPendingTask extends LeaderTask {
     private static final Logger LOG = LogManager.getLogger(ExportPendingTask.class);
 
     protected final ExportJob job;
@@ -70,7 +70,7 @@ public class ExportPendingTask extends MasterTask {
         if (job.isReplayed()) {
             // If the job is created from replay thread, all plan info will be lost.
             // so the job has to be cancelled.
-            String failMsg = "FE restarted or Master changed during exporting. Job must be cancalled.";
+            String failMsg = "FE restarted or Leader changed during exporting. Job must be cancalled.";
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
             return;
         }

@@ -91,7 +91,7 @@ public class ShardDeleterTest {
 
         new Expectations() {
             {
-                lakeService.dropTablet((DropTabletRequest) any).get();
+                lakeService.dropTabletAsync((DropTabletRequest) any).get();
                 minTimes = 0;
                 result = response;
 
