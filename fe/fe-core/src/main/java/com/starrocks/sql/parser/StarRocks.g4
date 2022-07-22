@@ -47,8 +47,8 @@ statement
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
     | showOpenTablesStatement                                                               #showOpenTables
+    | recoverPartitionStatement                                                             #recoverPartition
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -348,15 +348,13 @@ showPartitionsStatement
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
-recoverPartitionStatement
-    : RECOVER PARTITION identifier FROM table=qualifiedName
-    ;
-
-
 showOpenTablesStatement
     : SHOW OPEN TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+recoverPartitionStatement
+    : RECOVER PARTITION identifier FROM table=qualifiedName
+    ;
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement

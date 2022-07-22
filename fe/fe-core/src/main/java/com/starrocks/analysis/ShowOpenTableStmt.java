@@ -17,19 +17,18 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.catalog.Column;
+import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.catalog.InfoSchemaDb;
+import com.google.common.base.Strings;
+import com.starrocks.catalog.ScalarType;
 
 // SHOW OPEN TABLES
 public class ShowOpenTableStmt extends ShowStmt {
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Database", ScalarType.createVarchar(64)))
@@ -37,42 +36,63 @@ public class ShowOpenTableStmt extends ShowStmt {
                     .addColumn(new Column("In_use", ScalarType.createVarchar(80)))
                     .addColumn(new Column("Name_locked", ScalarType.createVarchar(64)))
                     .build();
+    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
 
-    private String dbName;
-    private String pattern;
-    private Expr where;
 
-    public String getDbName() {
-        return dbName;
+    private String  dbName;
+    private String  pattern;
+    private Expr  where;
+    public String getDbName() {return dbName;}
+    public String getPattern() {return pattern;}
+    public Expr getWhere() {return where;}
+    public void setDbName(String dbName) {this.dbName = dbName;}
+    public void setPattern(String pattern) {this.pattern = pattern;}
+    public void setWhere(Expr where) {this.where = where;}
+    public ShowOpenTableStmt () {}
+    public ShowOpenTableStmt (String dbName, String pattern, Expr where) {
+        setDbName( dbName);
+        setPattern( pattern);
+        setWhere( where);}
+    @Override
+    public void analyze(Analyzer analyzer) {
     }
 
-    public void setDbName(String dbName) {
-        this.dbName = dbName;
+    @Override
+    public ShowResultSetMetaData getMetaData() {
+        return META_DATA;
     }
-
-    public String getPattern() {
-        return pattern;
+    public boolean isSupportNewPlanner() {
+        return true;
     }
+    public QueryStatement toSelectStmt() {
+        if (where == null) {
+            return null;
+        }
+        SelectList selectList = new SelectList();
+        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
+        //  Database
+        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "DATABASE"), "Database");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "Database"), item.getExpr().clone(null));
+        //  Table
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE"), "Table");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "Table"), item.getExpr().clone(null));
+        //  In_use
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "IN_USE"), "In_use");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "In_use"), item.getExpr().clone(null));
+        //  Name_locked
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "NAME_LOCKED"), "Name_locked");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "Name_locked"), item.getExpr().clone(null));
 
-    public void setPattern(String pattern) {
-        this.pattern = pattern;
+        where = where.substitute(aliasMap);
+        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME), where, null, null));
     }
-
-    public Expr getWhere() {
-        return where;
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowOpenTablesStmt(this, context);
     }
-
-    public void setWhere(Expr where) {
-        this.where = where;
-    }
-
-    public ShowOpenTableStmt() {}
-    public ShowOpenTableStmt(String dbName, String pattern, Expr where) {
-        setDbName(dbName);
-        setPattern(pattern);
-        setWhere(where);
-    }
-
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder("SHOW OPEN TABLES");
@@ -87,52 +107,6 @@ public class ShowOpenTableStmt extends ShowStmt {
         }
         return sb.toString();
     }
-
-    public QueryStatement toSelectStmt() {
-        if (where == null) {
-            return null;
-        }
-
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
-        // Database
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "DATABASE"), "Database");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Database"), item.getExpr().clone(null));
-        // Table
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE"), "Table");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Table"), item.getExpr().clone(null));
-        // In_use
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "IN_USE"), "In_use");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "In_use"), item.getExpr().clone(null));
-        // Name_Locked
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "NAME_LOCKED"), "Name_locked");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Name_locked"), item.getExpr().clone(null));
-
-        where = where.substitute(aliasMap);
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
-    }
-
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowOpenTablesStmt(this, context);
-    }
-
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-    @Override
-    public void analyze(Analyzer analyzer) {
-    }
-
-    @Override
-    public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
-    }
-
     public String toString() {
         return toSql();
     }

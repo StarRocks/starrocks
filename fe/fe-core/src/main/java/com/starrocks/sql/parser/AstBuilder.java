@@ -127,8 +127,8 @@ import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
 import com.starrocks.analysis.ShowStatusStmt;
@@ -932,14 +932,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitDropViewStatement(StarRocksParser.DropViewStatementContext context) {
-        boolean ifExists = context.IF() != null && context.EXISTS() != null;
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        return new DropTableStmt(ifExists, targetTableName, true, false);
-    }
-
-    @Override
     public ParseNode visitShowOpenTablesStatement(StarRocksParser.ShowOpenTablesStatementContext context) {
         QualifiedName dbName = null;
         if (context.qualifiedName() != null) {
@@ -959,6 +951,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowOpenTableStmt(dbName == null ? null : dbName.toString(), pattern, where);
     }
 
+    @Override
+    public ParseNode visitDropViewStatement(StarRocksParser.DropViewStatementContext context) {
+        boolean ifExists = context.IF() != null && context.EXISTS() != null;
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        return new DropTableStmt(ifExists, targetTableName, true, false);
+    }
     // ------------------------------------------- Task Statement ------------------------------------------------------
 
     @Override
