@@ -325,38 +325,37 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
                                      Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
-        Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (baseColumn.isKey()) {
-                throw new DdlException("Can not modify key column: " + baseColumn.getName() + " for primary key table");
+            if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
+                throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
-            if (baseColumn.getAggregationType() != null) {
+            if (modColumn.getAggregationType() != null) {
                 throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
-                        baseColumn.getName());
+                        modColumn.getName());
             }
             modColumn.setAggregationType(AggregateType.REPLACE, true);
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
-            if (baseColumn.isKey() && null != baseColumn.getAggregationType()) {
-                throw new DdlException("Can not assign aggregation method on key column: " + baseColumn.getName());
-            } else if (null == baseColumn.getAggregationType()) {
-                Preconditions.checkArgument(baseColumn.getType().isScalarType());
+            if (modColumn.isKey() && null != modColumn.getAggregationType()) {
+                throw new DdlException("Can not assign aggregation method on key column: " + modColumn.getName());
+            } else if (null == modColumn.getAggregationType()) {
+                Preconditions.checkArgument(modColumn.getType().isScalarType());
                 // in aggregate key table, no aggregation method indicate key column
                 modColumn.setIsKey(true);
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
-            if (null != baseColumn.getAggregationType()) {
+            if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
-                baseColumn.getName());
+                modColumn.getName());
             }
-            if (!baseColumn.isKey()) {
+            if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
             }
         } else {
-            if (null != baseColumn.getAggregationType()) {
+            if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
-                baseColumn.getName());
+                modColumn.getName());
             }
-            if (!baseColumn.isKey()) {
+            if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
             }
         }
