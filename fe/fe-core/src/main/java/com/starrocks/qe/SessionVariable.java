@@ -149,6 +149,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
+    public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String WORKGROUP_ID = "workgroup_id";
@@ -228,9 +229,52 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
+=======
+    public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
+
+    public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
+
+    public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
+            .add(CODEGEN_LEVEL)
+            .add(ENABLE_SPILLING)
+            .add(MAX_EXECUTION_TIME)
+            .add(PROFILING)
+            .add(BATCH_SIZE)
+            .add(DISABLE_BUCKET_JOIN)
+            .add(CBO_ENABLE_REPLICATED_JOIN)
+            .add(FOREIGN_KEY_CHECKS)
+            .add("enable_cbo")
+            .add("enable_vectorized_engine")
+            .add("vectorized_engine_enable")
+            .add("enable_vectorized_insert")
+            .add("vectorized_insert_enable")
+            .add("prefer_join_method")
+            .add("rewrite_count_distinct_to_bitmap_hll").build();
+
+    @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
+    private boolean enablePipelineEngine = true;
+
+    @VariableMgr.VarAttr(name = USE_COMPUTE_NODES)
+    private int useComputeNodes = -1;
+
+    @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
+    private boolean preferComputeNode = false;
+
+    /**
+     * If enable this variable (only take effect for pipeline), it will deliver fragment instances
+     * to BE in batch and concurrently.
+     * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
+     * of a fragment to the same destination host are delivered in the same request.
+     * - Send different fragments concurrently according to topological order of the fragment tree
+     */
+    @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
+    private boolean enableDeliverBatchFragments = true;
+
+>>>>>>> f37bafc57 ([Enhancement] Add invisible session variable 'profile_timeout' (#8999))
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
@@ -408,6 +452,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int profileTimeout = 2;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
@@ -907,6 +954,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getWorkGroupId() {
         return workgroupId;
+    }
+
+    public int getProfileTimeout() {
+        return profileTimeout;
     }
 
     public int getPipelineProfileLevel() {
