@@ -14,8 +14,6 @@ import java.util.stream.Collectors;
 
 public class CompoundPredicateOperator extends PredicateOperator {
     private final CompoundType type;
-    private int hash = 0;
-    private boolean hashIsZero = false;
 
     public CompoundPredicateOperator(CompoundType compoundType, ScalarOperator... arguments) {
         super(OperatorType.COMPOUND, arguments);
@@ -92,16 +90,7 @@ public class CompoundPredicateOperator extends PredicateOperator {
 
     @Override
     public int hashCode() {
-        int h = hash;
-        if (h == 0 && !hashIsZero) {
-            h = Objects.hash(opType, type, Sets.newHashSet(this.getChildren()).hashCode());
-            if (h == 0) {
-                hashIsZero = true;
-            } else {
-                hash = h;
-            }
-        }
-        return h;
+        return Objects.hash(opType, type, Sets.newHashSet(this.getChildren()).hashCode());
     }
 
     public static ScalarOperator or(List<ScalarOperator> nodes) {
