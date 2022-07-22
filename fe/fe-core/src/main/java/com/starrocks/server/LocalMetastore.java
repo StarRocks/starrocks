@@ -1351,7 +1351,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         info.isInMemory());
             } else {
                 partitionInfo.addPartition(
-                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory(), null);
+                        partition.getId(), info.getDataProperty(), info.getReplicationNum(), info.isInMemory());
             }
             if (!isCheckpointThread()) {
                 // add to inverted index
