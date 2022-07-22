@@ -171,6 +171,16 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
 
             if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
+                // For transaction producer, producer will append one control msg to the group of msgs,
+                // but the control msg will not return to consumer,
+                // so we use the offset of eof to compute the last offset.
+                // The last offset of partition = `offset of eof` - 1
+                //
+                // if msg->offset == 0, don't record into cmt_offset,
+                // because the fe will +1 and then consume the next msg.
+                //
+                // Our offset recorded in the kafka is the offset of last consumed msg,
+                // but the standard usage is to record the last offset + 1.
                 if (msg->offset() > 0) {
                     cmt_offset[msg->partition()] = msg->offset() - 1;
                 }

@@ -81,6 +81,14 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
     RETURN_IF_ERROR(set_conf("metadata.broker.list", ctx->kafka_info->brokers));
     RETURN_IF_ERROR(set_conf("group.id", group_id));
+    // For transaction producer, producer will append one control msg to the group of msgs,
+    // but the control msg will not return to consumer,
+    // so we can't to judge whether the consumption has been completed by offset comparison.
+    // So we set enable.partition.eof=true,
+    // if we find current partition is already reach end,
+    // we will direct return instead of wait consume until timeout.
+    // Another advantage of doing this is that for topics with little data,
+    // there is no need to wait until the timeout and occupy a lot of consumer threads.
     RETURN_IF_ERROR(set_conf("enable.partition.eof", "true"));
     RETURN_IF_ERROR(set_conf("enable.auto.offset.store", "false"));
     // TODO: set it larger than 0 after we set rd_kafka_conf_set_stats_cb()
@@ -145,7 +153,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
         topic_partitions.push_back(tp1);
         ss << "[" << entry.first << ": " << entry.second << "] ";
     }
-    _partition_count = topic_partitions.size();
+    _non_eof_partition_count = topic_partitions.size();
 
     LOG(INFO) << "consumer: " << _id << ", grp: " << _grp_id << " assign topic partitions: " << topic << ", "
               << ss.str();
@@ -224,10 +232,17 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             break;
         }
         case RdKafka::ERR__PARTITION_EOF: {
-            _eof_count++;
+            _non_eof_partition_count--;
+            // For transaction producer, producer will append one control msg to the group of msgs,
+            // but the control msg will not return to consumer,
+            // so we use the offset of eof to compute the last offset.
+            //
+            // The last offset of partition = `offset of eof` - 1
+            // The goal of put the EOF msg to queue is that:
+            // we will calculate the last offset of the partition using offset of EOF msg
             if (!queue->blocking_put(msg.get())) {
                 done = true;
-            } else if (_eof_count == _partition_count) {
+            } else if (_non_eof_partition_count <= 0) {
                 msg.release();
                 done = true;
             } else {
@@ -356,8 +371,7 @@ Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
     _k_consumer->unassign();
-    _eof_count = 0;
-    _partition_count = 0;
+    _non_eof_partition_count = 0;
     return Status::OK();
 }
 
