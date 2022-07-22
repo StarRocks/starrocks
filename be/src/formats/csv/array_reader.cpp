@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2022-present, StarRocks Limited.
 
 #include "array_reader.h"
 
@@ -6,7 +6,8 @@
 
 namespace starrocks::vectorized::csv {
 
-bool StandardArrayReader::read_string(const std::unique_ptr<Converter>& elem_converter, Column* column, Slice s, const Converter::Options& options) const {
+bool StandardArrayReader::read_string(const std::unique_ptr<Converter>& elem_converter, Column* column, Slice s,
+                                      const Converter::Options& options) const {
     if (s.size < 2) {
         return false;
     }
@@ -62,7 +63,8 @@ bool StandardArrayReader::split_array_elements(Slice s, std::vector<Slice>* elem
     return true;
 }
 
-bool HiveTextArrayReader::read_string(const std::unique_ptr<Converter>& elem_converter, Column* column, Slice s, const Converter::Options& options) const {
+bool HiveTextArrayReader::read_string(const std::unique_ptr<Converter>& elem_converter, Column* column, Slice s,
+                                      const Converter::Options& options) const {
     auto* array = down_cast<ArrayColumn*>(column);
     auto* offsets = array->offsets_column().get();
     auto* elements = array->elements_column().get();

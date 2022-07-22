@@ -78,7 +78,7 @@ std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool n
 // Hive collection delimiter generate rule refer to:
 // https://github.com/apache/hive/blob/master/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
 static char get_collection_delimiter(char mapkey_delimiter, size_t nested_array_level) {
-    CHECK(nested_array_level > 1 && nested_array_level < 153);
+    DCHECK(nested_array_level > 1 && nested_array_level < 153);
 
     if (nested_array_level == 2) {
         return mapkey_delimiter;
@@ -100,7 +100,7 @@ static char get_collection_delimiter(char mapkey_delimiter, size_t nested_array_
         tmp = static_cast<int32_t>(nested_array_level) + (-128 - 25);
     }
 
-    return (char)tmp;
+    return static_cast<char>(tmp);
 }
 
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable, char collection_delimiter,
@@ -114,9 +114,12 @@ std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool n
     size_t next_nested_array_level = nested_array_level + 1;
     char next_delimiter = get_collection_delimiter(mapkey_delimiter, next_nested_array_level);
 
-    auto c = std::make_unique<ArrayConverter>(
-            get_converter(type_desc.children[0], true, next_delimiter, mapkey_delimiter, next_nested_array_level),
-            collection_delimiter);
+    auto sub_converter =
+            get_converter(type_desc.children[0], true, next_delimiter, mapkey_delimiter, next_nested_array_level);
+    if (sub_converter == nullptr) {
+        return nullptr;
+    }
+    auto c = std::make_unique<ArrayConverter>(std::move(sub_converter), collection_delimiter);
     if (c == nullptr) {
         return nullptr;
     }

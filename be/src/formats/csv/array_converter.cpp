@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "formats/csv/array_converter.h"
+
 #include "column/array_column.h"
 #include "common/logging.h"
 
