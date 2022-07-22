@@ -169,38 +169,6 @@ public class MvTaskRunProcessorTest {
         }
     }
 
-
-    @Test
-    public void testCollectNeedRefreshPartitionNames() {
-
-        MaterializedView materializedView1 = new MaterializedView();
-        materializedView1.addPartitionNameRef("p1","m1");
-        materializedView1.addPartitionNameRef("p1","m2");
-        materializedView1.addPartitionNameRef("p2","m2");
-        materializedView1.addPartitionNameRef("p3","m2");
-        materializedView1.addPartitionNameRef("p3","m3");
-        materializedView1.addPartitionNameRef("p3","m4");
-        Set<String> needRefreshMvPartitionNames1 = Sets.newHashSet();
-        Set<String> needRefreshTablePartitionNames1 = Sets.newHashSet();
-        Deencapsulation.invoke(new MvTaskRunProcessor(), "collectNeedRefreshPartitionNames", materializedView1,
-                "m2", needRefreshMvPartitionNames1, needRefreshTablePartitionNames1);
-        Assert.assertEquals(4, needRefreshMvPartitionNames1.size());
-        Assert.assertEquals(3, needRefreshTablePartitionNames1.size());
-
-
-        MaterializedView materializedView2 = new MaterializedView();
-        materializedView2.addPartitionNameRef("p1","m1");
-        materializedView2.addPartitionNameRef("p2","m2");
-        materializedView2.addPartitionNameRef("p3","m3");
-        Set<String> needRefreshMvPartitionNames2 = Sets.newHashSet();
-        Set<String> needRefreshTablePartitionNames2 = Sets.newHashSet();
-        Deencapsulation.invoke(new MvTaskRunProcessor(), "collectNeedRefreshPartitionNames", materializedView2,
-                "m2", needRefreshMvPartitionNames2, needRefreshTablePartitionNames2);
-        Assert.assertEquals(1, needRefreshMvPartitionNames2.size());
-        Assert.assertEquals(1, needRefreshTablePartitionNames2.size());
-
-    }
-
     private void testBaseTablePartitionInsertData(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p0, p0 insert data after collect and before insert overwrite

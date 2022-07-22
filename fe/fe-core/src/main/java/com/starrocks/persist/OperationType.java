@@ -232,13 +232,9 @@ public class OperationType {
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
-
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
-
-    public static final short OP_ADD_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO = 10097;
-    public static final short OP_REMOVE_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO = 10098;
     public static final short OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10099;
     public static final short OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10100;
 

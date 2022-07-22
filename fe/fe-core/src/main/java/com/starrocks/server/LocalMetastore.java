@@ -100,7 +100,6 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewPartitionNameRefInfo;
 import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
@@ -2481,32 +2480,6 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } // end for partitions
-        }
-    }
-
-    public void replayAddMvPartitionNameRefInfo(MaterializedViewPartitionNameRefInfo info) {
-        Database db = this.idToDb.get(info.getDbId());
-        MaterializedView mv = ((MaterializedView) db.getTable(info.getMvId()));
-        db.writeLock();
-        try {
-            mv.addPartitionNameRef(info.getTablePartitionName(), info.getMvPartitionName(), true);
-        } finally {
-            db.writeUnlock();
-        }
-    }
-
-    public void replayRemoveMvPartitionNameRefInfo(MaterializedViewPartitionNameRefInfo info) {
-        Database db = this.idToDb.get(info.getDbId());
-        MaterializedView mv = ((MaterializedView) db.getTable(info.getMvId()));
-        db.writeLock();
-        try {
-            if (info.getMvPartitionName() != null) {
-                mv.removePartitionNameRefByMv(info.getMvPartitionName(), true);
-            } else if (info.getTablePartitionName() != null) {
-                mv.removePartitionNameRefByTable(info.getTablePartitionName(), true);
-            }
-        } finally {
-            db.writeUnlock();
         }
     }
 
