@@ -84,8 +84,8 @@ public class BasicStatsMeta implements Writable {
         OlapTable table = (OlapTable) database.getTable(tableId);
         long minRowCount = Long.MAX_VALUE;
         for (Partition partition : table.getPartitions()) {
-            if (partition.getRowCount() == 0) {
-                //skip empty partition
+            if (!partition.hasData()) {
+                //skip init empty partition
                 continue;
             }
             if (partition.getRowCount() < minRowCount) {
@@ -106,6 +106,11 @@ public class BasicStatsMeta implements Writable {
             healthy = 1;
         } else if (updateRows > minRowCount) {
             healthy = 0;
+        } else if (minRowCount == 0) {
+            // updateRows == 0 && minRowCount == 0
+            // If minRowCount == 0 and partition.hasData is true.
+            // Indicates that a truncate or delete operation has occurred on this table.
+            healthy = 1;
         } else {
             healthy = 1 - (double) updateRows / (double) minRowCount;
         }
