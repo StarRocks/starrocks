@@ -95,13 +95,12 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
         if (_local_dict_code_col == nullptr) {
-            _init_local_dict_col();
+            _local_dict_code_col = _new_local_dict_col(values->is_nullable());
         }
         _local_dict_code_col->reset_column();
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
-        const auto& container = _get_local_dict_col_container(_local_dict_code_col.get());
-        RETURN_IF_ERROR(decode_dict_codes(container.data(), container.size(), values));
-        _acquire_null_data(values, _local_dict_code_col.get());
+        RETURN_IF_ERROR(decode_dict_codes(*_local_dict_code_col, values));
+        _swap_null_columns(_local_dict_code_col.get(), values);
         return Status::OK();
     }
 
@@ -141,9 +140,10 @@ public:
                                          std::vector<int16_t>* code_convert_map);
 
 private:
-    void _init_local_dict_col();
-    void _acquire_null_data(Column* global_dict_column, Column* local_dict_column);
-    const LowCardDictColumn::Container& _get_local_dict_col_container(Column* column);
+    // create a new empty local dict column
+    vectorized::ColumnPtr _new_local_dict_col(bool nullable);
+    // swap null column between src and dst column
+    void _swap_null_columns(Column* src, Column* dst);
 
     ColumnId _cid;
     ColumnIterator* _col_iter;
