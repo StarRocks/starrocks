@@ -1696,7 +1696,7 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                int timeout = connectContext.getSessionVariable().getProfileTimeout();
+                int timeout = ConnectContext.get().getSessionVariable().getProfileTimeout();
                 // Waiting for other fragment instances to finish execution
                 // Ideally, it should wait indefinitely, but out of defense, set timeout
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
