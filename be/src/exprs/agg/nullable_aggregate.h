@@ -52,10 +52,11 @@ struct NullableAggregateFunctionState
 // If an aggregate function has at least one nullable argument, we should use this class.
 // If all row all are NULL, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename State, bool IsWindowFunc, bool IgnoreNull = true>
+template <typename State, bool IsWindowFunc, bool IgnoreNull = true,
+          typename NestedAggregateFunctionPtr = AggregateFunctionPtr>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
 public:
-    explicit NullableAggregateFunctionBase(AggregateFunctionPtr nested_function_)
+    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
             : nested_function(std::move(nested_function_)) {}
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
@@ -221,14 +222,17 @@ public:
     }
 
 protected:
-    AggregateFunctionPtr nested_function;
+    NestedAggregateFunctionPtr nested_function;
 };
 
-template <typename State, bool IsWindowFunc, bool IgnoreNull = true>
-class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull> {
+template <typename State, bool IsWindowFunc, bool IgnoreNull = true,
+          typename NestedAggregateFunctionPtr = AggregateFunctionPtr>
+class NullableAggregateFunctionUnary final
+        : public NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull, NestedAggregateFunctionPtr> {
 public:
-    explicit NullableAggregateFunctionUnary(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull>(nested_function) {}
+    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function)
+            : NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull, NestedAggregateFunctionPtr>(
+                      nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {}
@@ -470,9 +474,9 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty,
         // we could directly return.
@@ -487,9 +491,9 @@ public:
             // The fast pass
             if (!column->has_null()) {
                 this->data(state).is_null = false;
-                this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                 &data_column, peer_group_start, peer_group_end,
-                                                                 frame_start, frame_end);
+                this->nested_function->update_batch_single_state_with_frame(ctx, this->data(state).mutable_nest_state(),
+                                                                            &data_column, peer_group_start,
+                                                                            peer_group_end, frame_start, frame_end);
                 return;
             }
 
@@ -497,9 +501,9 @@ public:
             for (size_t i = frame_start; i < frame_end; ++i) {
                 if (f_data[i] == 0) {
                     this->data(state).is_null = false;
-                    this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                     &data_column, peer_group_start, peer_group_end, i,
-                                                                     i + 1);
+                    this->nested_function->update_batch_single_state_with_frame(
+                            ctx, this->data(state).mutable_nest_state(), &data_column, peer_group_start, peer_group_end,
+                            i, i + 1);
                 } else if constexpr (!IgnoreNull) {
                     this->data(state).is_null = false;
                     this->nested_function->update_single_state_null(ctx, this->data(state).mutable_nest_state(),
@@ -508,8 +512,9 @@ public:
             }
         } else {
             this->data(state).is_null = false;
-            this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(), columns,
-                                                             peer_group_start, peer_group_end, frame_start, frame_end);
+            this->nested_function->update_batch_single_state_with_frame(ctx, this->data(state).mutable_nest_state(),
+                                                                        columns, peer_group_start, peer_group_end,
+                                                                        frame_start, frame_end);
         }
     }
 
@@ -547,8 +552,9 @@ public:
                                 ignore_addition);
                     } else {
                         // Build the frame for the first time
-                        this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                         &data_column, -1, -1, frame_start, frame_end);
+                        this->nested_function->update_batch_single_state_with_frame(
+                                ctx, this->data(state).mutable_nest_state(), &data_column, -1, -1, frame_start,
+                                frame_end);
                         this->data(state).is_frame_init = true;
                     }
                     return;
@@ -583,7 +589,7 @@ public:
                     for (size_t i = frame_start; i < frame_end; ++i) {
                         if (f_data[i] == 0) {
                             this->data(state).is_null = false;
-                            this->nested_function->update_batch_single_state(
+                            this->nested_function->update_batch_single_state_with_frame(
                                     ctx, this->data(state).mutable_nest_state(), &data_column, -1, -1, i, i + 1);
                         } else {
                             this->data(state).null_count++;
