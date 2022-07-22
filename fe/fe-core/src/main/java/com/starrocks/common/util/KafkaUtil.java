@@ -71,45 +71,27 @@ public class KafkaUtil {
             final Consumer<String, String> consumer = new KafkaConsumer<>(props);
 
             List<Integer> partitionIDs = new ArrayList<>();
-            final List<PartitionInfo> partitions = consumer.partitionsFor(topic, 
-                    Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            final List<PartitionInfo> partitions;
+            try {
+                partitions = consumer.partitionsFor(topic,
+                        Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            } catch (Exception e) {
+                String msg = String.format("failed to get partitions from Kafka, broker_list: %s, topic: %s, err: %s", brokerList , topic, e.getMessage());
+                LOG.warn(msg);
+                throw new UserException(msg);
+            } finally {
+                consumer.close();
+            }
 
             for (PartitionInfo partition : partitions) {
                 partitionIDs.add(partition.partition());
             }
 
-            consumer.close();
 
             return partitionIDs;
         }
 
         public Map<Integer, Long> getEndOffsets(String brokerList, String topic,
-                                                List<Integer> partitions) throws UserException {
-
-            final Properties props = new Properties();
-            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
-            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());  
-            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());  
-
-            final Consumer<String, String> consumer = new KafkaConsumer<>(props);
-
-            ArrayList<TopicPartition> topicPartitions = new ArrayList<>();
-            for (Integer partitionID : partitions) {
-                topicPartitions.add(new TopicPartition(topic, partitionID));
-            }
-            final Map<TopicPartition, Long> partitionNndOffsets = consumer.endOffsets(topicPartitions, 
-                    Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
-
-            final Map<Integer, Long> endOffsets = new HashMap<>();
-            for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
-                endOffsets.put(entry.getKey().partition(), entry.getValue());
-            }
-
-            consumer.close();
-            return endOffsets;
-        }
-
-        public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                 List<Integer> partitions) throws UserException {
 
             final Properties props = new Properties();
@@ -123,11 +105,57 @@ public class KafkaUtil {
             for (Integer partitionID : partitions) {
                 topicPartitions.add(new TopicPartition(topic, partitionID));
             }
-            final Map<TopicPartition, Long> partitionNndOffsets = consumer.beginningOffsets(topicPartitions, 
-                    Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+
+            final Map<TopicPartition, Long> partitionEndOffsets;
+            try {
+                partitionEndOffsets = consumer.endOffsets(topicPartitions,
+                        Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            } catch (Exception e) {
+                String msg = String.format("failed to get end offsets from Kafka, broker_list: %s, topic: %s, err: %s", brokerList , topic, e.getMessage());
+                LOG.warn(msg);
+                throw new UserException(msg);
+            } finally {
+                consumer.close();
+            }
+
+            final Map<Integer, Long> endOffsets = new HashMap<>();
+            for (Map.Entry<TopicPartition, Long> entry : partitionEndOffsets.entrySet()) {
+                endOffsets.put(entry.getKey().partition(), entry.getValue());
+            }
+
+            consumer.close();
+            return endOffsets;
+        }
+
+        public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
+                                                      List<Integer> partitions) throws UserException {
+
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+
+            final Consumer<String, String> consumer = new KafkaConsumer<>(props);
+
+            ArrayList<TopicPartition> topicPartitions = new ArrayList<>();
+            for (Integer partitionID : partitions) {
+                topicPartitions.add(new TopicPartition(topic, partitionID));
+            }
+
+            final Map<TopicPartition, Long> partitionBeginningOffsets;
+            try {
+                partitionBeginningOffsets = consumer.beginningOffsets(topicPartitions,
+                        Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            } catch (Exception e) {
+                String msg = String.format("failed to get beginning offsets from Kafka, broker_list: %s, topic: %s, err: %s", brokerList , topic, e.getMessage());
+                LOG.warn(msg);
+                throw new UserException(msg);
+            } finally {
+                consumer.close();
+            }
 
             final Map<Integer, Long> beginningOffsets = new HashMap<>();
-            for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
+            for (Map.Entry<TopicPartition, Long> entry : partitionBeginningOffsets.entrySet()) {
                 beginningOffsets.put(entry.getKey().partition(), entry.getValue());
             }
 
