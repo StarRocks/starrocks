@@ -1549,7 +1549,7 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  16:CROSS JOIN\n" +
+        assertContains(plan, "28:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
         connectContext.getSessionVariable().setCboCteReuse(false);
