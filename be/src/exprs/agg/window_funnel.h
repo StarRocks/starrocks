@@ -451,15 +451,8 @@ public:
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
-            if constexpr (PT == TYPE_DATETIME) {
-                tv = timestamp_column->get(i).get_timestamp().to_unix_second();
-            } else if constexpr (PT == TYPE_DATE) {
-                tv = timestamp_column->get(i).get_date().julian();
-            } else if constexpr (PT == TYPE_BIGINT) {
-                tv = timestamp_column->get(i).get_int64();
-            } else {
-                tv = timestamp_column->get(i).get_int32();
-            }
+            DCHECK(PT == TYPE_DATETIME || PT == TYPE_DATE || PT == TYPE_INT || PT == TYPE_BIGINT);
+            tv = timestamp_column->get_data()[i];
 
             // get 4th value: event cond array
             auto ele_vector = bool_array_column->get(i).get_array();
