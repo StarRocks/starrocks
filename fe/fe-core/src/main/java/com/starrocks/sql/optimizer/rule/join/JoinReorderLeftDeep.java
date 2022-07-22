@@ -54,7 +54,8 @@ public class JoinReorderLeftDeep extends JoinOrder {
                 // search the next group which:
                 // 1. has never been used
                 // 2. can inner join with leftGroup
-                // 3. not same table join (happens only the first time)
+                // 3. not same table inner join (happens only the first time).
+                // inner join on same tables possibly degrades to cross join.
                 for (; index < atomSize; ++index) {
                     GroupInfo rightGroup = atoms.get(index);
                     if (next == 1 && isSameTableJoin(leftGroup, rightGroup)) {
