@@ -89,7 +89,7 @@ public class CacheDictManager implements IDictManager {
             };
 
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
-            .maximumSize(Config.statistic_cache_columns)
+            .maximumSize(Config.statistic_dict_columns)
             .buildAsync(dictLoader);
 
     private Optional<ColumnDict> deserializeColumnDict(long tableId, String columnName, TStatisticData statisticData) {
