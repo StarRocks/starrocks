@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -85,6 +86,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // base table id -> (partition name -> partition info (id, version))
         // partition id maybe changed after insert overwrite, so use partition name as key.
         // partition id which in BasePartitionInfo can be used to check partition is changed
+        @SerializedName("baseTableVisibleVersionMap")
         private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
         @SerializedName(value = "defineStartTime")
@@ -215,6 +217,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
     private String viewDefineSql;
+
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
@@ -323,26 +326,59 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public void addBasePartition(long baseTableId, Partition baseTablePartition) {
+        addBasePartition(baseTableId, baseTablePartition, false);
+    }
+
+    public void addBasePartition(long baseTableId, Partition baseTablePartition, boolean isReplay) {
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
         basePartitionInfoMap.put(baseTablePartition.getName(),
                 new BasePartitionInfo(baseTablePartition.getId(), Partition.PARTITION_INIT_VERSION));
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAddMvVersionMapInfo(
+                    new MaterializedViewPartitionVersionInfo(this.dbId, this.id, baseTableId, baseTablePartition.getName(),
+                            baseTablePartition.getId(), Partition.PARTITION_INIT_VERSION));
+        }
     }
 
     public void updateBasePartition(long baseTableId, Partition baseTablePartition) {
+        updateBasePartition(baseTableId, baseTablePartition, false);
+    }
+
+    public void updateBasePartition(long baseTableId, Partition baseTablePartition, boolean isReplay) {
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
         basePartitionInfoMap.put(baseTablePartition.getName(),
                 new BasePartitionInfo(baseTablePartition.getId(), baseTablePartition.getVisibleVersion()));
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logAddMvVersionMapInfo(
+                    new MaterializedViewPartitionVersionInfo(this.dbId, this.id, baseTableId, baseTablePartition.getName(),
+                            baseTablePartition.getId(), baseTablePartition.getVisibleVersion()));
+        }
+    }
+
+    public void updateBasePartition(long baseTableId, String basePartitionName, BasePartitionInfo basePartitionInfo) {
+        Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
+        basePartitionInfoMap.put(basePartitionName, basePartitionInfo);
     }
 
     public void removeBasePartition(long baseTableId, String baseTablePartitionName) {
+        removeBasePartition(baseTableId, baseTablePartitionName, false);
+    }
+
+    public void removeBasePartition(long baseTableId, String baseTablePartitionName, boolean isReplay) {
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
         basePartitionInfoMap.remove(baseTablePartitionName);
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveMvVersionMapInfo(
+                    new MaterializedViewPartitionVersionInfo(this.dbId, this.id, baseTableId, baseTablePartitionName, -1, -1));
+        }
     }
 
     @Override

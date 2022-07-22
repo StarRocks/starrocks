@@ -292,7 +292,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableTabletInternalParallel = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
-    private boolean enableSharedScan = true;
+    private boolean enableSharedScan = false;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;

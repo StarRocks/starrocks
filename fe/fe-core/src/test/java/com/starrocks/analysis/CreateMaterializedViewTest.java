@@ -75,8 +75,8 @@ public class CreateMaterializedViewTest {
                         ")\n" +
                         "PARTITION BY RANGE(k1)\n" +
                         "(\n" +
-                        "    PARTITION p1 values less than('2020-02-01'),\n" +
-                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        "    PARTITION p1 values [('2020-01-01'),('2020-02-01')),\n" +
+                        "    PARTITION p2 values [('2020-02-01'),('2020-03-01'))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")

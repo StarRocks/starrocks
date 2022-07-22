@@ -229,7 +229,7 @@ public class OperationType {
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
 
-    // materialized view
+    // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
 
@@ -237,7 +237,12 @@ public class OperationType {
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
 
-    // manage system node info 10100 ~ 10120
+    public static final short OP_ADD_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO = 10097;
+    public static final short OP_REMOVE_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO = 10098;
+    public static final short OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10099;
+    public static final short OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10100;
+
+    // manage system node info 10101 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
 
     // manage compute node 10201 ~ 10220
@@ -247,4 +252,8 @@ public class OperationType {
     // shard operate 10221 ~ 10240
     public static final short OP_ADD_UNUSED_SHARD = 10221;
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
+
+    // new operator for add partition 10241 ~ 10260
+    // only used in list partition currently
+    public static final short OP_ADD_PARTITION_V2 = 10241;
 }

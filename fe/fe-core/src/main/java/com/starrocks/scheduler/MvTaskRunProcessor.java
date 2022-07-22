@@ -30,15 +30,18 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.io.DeepCopy;
+import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.ViewDefBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
@@ -46,6 +49,7 @@ import com.starrocks.sql.common.ExpressionPartitionUtil;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,10 +58,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Mv task run core logic，if multiple MvTaskRunProcessor instances are running, it will cause some concurrency issues
+ */
 public class MvTaskRunProcessor extends BaseTaskRunProcessor {
 
     private static final Logger LOG = LogManager.getLogger(MvTaskRunProcessor.class);
@@ -78,14 +87,17 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             LOG.warn(errorMsg);
             throw new DmlException(errorMsg);
         }
-        Set<Long> baseTableIds = materializedView.getBaseTableIds();
+        // collect all base table partition info
+        Map<Long, OlapTable> olapTables = collectBaseTables(materializedView, database);
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+        // if mv has not partition by clause
         if (partitionInfo instanceof SinglePartitionInfo) {
             // must create partition when creating mv
-            Preconditions.checkState(materializedView.getPartitions().size() != 0);
+            Preconditions.checkState(!materializedView.getPartitions().isEmpty());
             boolean needRefresh = false;
-            for (Long baseTableId : baseTableIds) {
-                OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
+            for (Map.Entry<Long, OlapTable> idOlapTableEntry : olapTables.entrySet()) {
+                long baseTableId = idOlapTableEntry.getKey();
+                OlapTable olapTable = idOlapTableEntry.getValue();
                 Collection<Partition> partitions = olapTable.getPartitions();
                 for (Partition partition : partitions) {
                     if (materializedView.needAddBasePartition(baseTableId, partition)) {
@@ -107,7 +119,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 }
             }
             if (needRefresh) {
-                refreshMv(context, materializedView);
+                refreshMv(context, materializedView, database, olapTables, null, materializedView.getPartitionNames());
             }
             return;
         }
@@ -119,31 +131,27 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
         // 1. scan base table, get table id which used in partition
         Expr partitionExpr = materializedView.getPartitionRefTableExprs().get(0);
-        Map<Long, OlapTable> olapTables = Maps.newHashMap();
         OlapTable partitionTable = null;
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef slotRef = slotRefs.get(0);
-        for (Long baseTableId : baseTableIds) {
-            OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
+        for (OlapTable olapTable : olapTables.values()) {
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 partitionTable = olapTable;
             }
-            olapTables.put(baseTableId, olapTable);
         }
         // 2. sync partition with partition table, get need refresh mv partition ids
         Set<String> needRefreshPartitionNames = processSyncBasePartition(database, materializedView,
                 partitionTable, partitionExpr, partitionProperties, distributionDesc);
         // 3. collect need refresh mv partition ids
         boolean refreshAllPartitions = false;
-        for (Long baseTableId : baseTableIds) {
-            if (baseTableId == partitionTable.getId()) {
+        for (OlapTable olapTable : olapTables.values()) {
+            if (olapTable.getId() == partitionTable.getId()) {
                 continue;
             }
             // check with no partition expression related table
-            OlapTable olapTable = olapTables.get(baseTableId);
             if (checkNoPartitionRefTablePartitions(materializedView, olapTable)) {
                 refreshAllPartitions = true;
             }
@@ -151,19 +159,36 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         if (materializedView.getPartitions().isEmpty()) {
             return;
         }
-        // if all partition need refresh
-        if (needRefreshPartitionNames.size() == materializedView.getPartitions().size()) {
-            refreshAllPartitions = true;
+        if (refreshAllPartitions) {
+            needRefreshPartitionNames =  materializedView.getPartitionNames();
         }
         // 4. refresh mv
-        if (refreshAllPartitions) {
-            refreshMv(context, materializedView);
-        } else {
-            if (!needRefreshPartitionNames.isEmpty()) {
-                refreshMv(context, materializedView, partitionTable, needRefreshPartitionNames);
-            }
+        if (!needRefreshPartitionNames.isEmpty()) {
+            refreshMv(context, materializedView, database, olapTables, partitionTable, needRefreshPartitionNames);
         }
     }
+    public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+        Map<Long, OlapTable> olapTables = Maps.newHashMap();
+        Set<Long> baseTableIds = materializedView.getBaseTableIds();
+        database.readLock();
+        try {
+            for (Long baseTableId : baseTableIds) {
+                OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
+                if (olapTable == null) {
+                    throw new SemanticException("Materialized view base table: " + baseTableId + " not exist.");
+                }
+                OlapTable copied = new OlapTable();
+                if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                    throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
+                }
+                olapTables.put(olapTable.getId(), copied);
+            }
+        } finally {
+            database.readUnlock();
+        }
+        return olapTables;
+    }
+
 
     private Set<String> processSyncBasePartition(Database db, MaterializedView mv, OlapTable base,
                                                  Expr partitionExpr, Map<String, String> partitionProperties,
@@ -231,7 +256,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 materializedView.removeBasePartition(baseTableId, syncedPartitionName);
             } else if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
                 refreshAllPartitions = true;
-                materializedView.updateBasePartition(baseTableId, baseTablePartition);
             }
         }
         return refreshAllPartitions;
@@ -259,6 +283,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         }
         return new HashDistributionDesc(hashDistributionInfo.getBucketNum(), distColumnNames);
     }
+
 
     private void addPartition(Database database, MaterializedView materializedView, String partitionName,
                               Range<PartitionKey> partitionKeyRange, Map<String, String> partitionProperties,
@@ -294,7 +319,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         } finally {
             database.writeUnlock();
         }
-
     }
 
     private void refreshMv(TaskRunContext context, MaterializedView materializedView) {
@@ -346,24 +370,161 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             execInsertStmt(insertIntoSql, context, mv);
             ctx.setQueryId(UUIDUtil.genUUID());
         }
+        // insert overwrite mv must set system = true
+        insertStmt.setSystem(true);
+        Analyzer.analyze(insertStmt, ctx);
+        // execute insert stmt
+        execInsertStmt(database, insertStmt, context, materializedView,
+                collectPartitionInfo(olapTables, tableNamePartitionNames));
     }
 
-    private void execInsertStmt(String insertSql, TaskRunContext context, MaterializedView materializedView) {
+    private void collectNeedRefreshPartitionNames(MaterializedView materializedView, String mvPartitionName,
+                                                  Set<String> needRefreshMvPartitionNames,
+                                                  Set<String> needRefreshTablePartitionNames) {
+        if (needRefreshMvPartitionNames.contains(mvPartitionName)) {
+            return;
+        }
+        needRefreshMvPartitionNames.add(mvPartitionName);
+        Set<String> tablePartitionNames = materializedView.getTablePartitionNamesByMv(mvPartitionName);
+        for (String tablePartitionName : tablePartitionNames) {
+            if (needRefreshTablePartitionNames.contains(tablePartitionName)) {
+                continue;
+            }
+            needRefreshTablePartitionNames.add(tablePartitionName);
+            Set<String> mvPartitionNames = materializedView.getMvPartitionNamesByTable(tablePartitionName);
+            for (String partitionName : mvPartitionNames) {
+                collectNeedRefreshPartitionNames(materializedView, partitionName, needRefreshMvPartitionNames,
+                        needRefreshTablePartitionNames);
+            }
+        }
+    }
+
+    private Map<Long, Map<String, MaterializedView.BasePartitionInfo>> collectPartitionInfo(
+            Map<Long, OlapTable> olapTables, Map<String, Set<String>> tableNamePartitionNames) {
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> tablePartitionInfos = Maps.newHashMap();
+        for (OlapTable olapTable : olapTables.values()) {
+            Map<String, MaterializedView.BasePartitionInfo> namePartitionInfos = Maps.newHashMap();
+            Set<String> tablePartitionNames = tableNamePartitionNames.get(olapTable.getName());
+            for (String tablePartitionName : tablePartitionNames) {
+                Partition partition = olapTable.getPartition(tablePartitionName);
+                if (partition.hasData()) {
+                    namePartitionInfos.put(partition.getName(),
+                            new MaterializedView.BasePartitionInfo(partition.getId(),
+                                    partition.getVisibleVersion()));
+                }
+            }
+            tablePartitionInfos.put(olapTable.getId(), namePartitionInfos);
+        }
+        return tablePartitionInfos;
+    }
+
+    private void execInsertStmt(Database database, InsertStmt insertStmt,
+                                TaskRunContext context, MaterializedView materializedView,
+                                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> plannedOlapTablePartitionInfos) {
         ConnectContext ctx = context.getCtx();
-        InsertStmt insertStmt = ((InsertStmt) SqlParser.parse(insertSql, ctx.getSessionVariable().getSqlMode()).get(0));
-        insertStmt.setSystem(true);
-        insertStmt.setOrigStmt(new OriginStatement(insertSql, 0));
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
         ctx.setThreadLocalInfo();
+        ctx.setStmtId(new AtomicInteger().incrementAndGet());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
         try {
-            executor.execute();
-        } catch (Exception e) {
-            throw new SemanticException("Refresh materialized view failed:" + insertSql, e);
-        } finally {
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> selectedBasePartitionInfos = Maps.newHashMap();
+            database.readLock();
+            ExecPlan execPlan;
+            try {
+                execPlan = new StatementPlanner().plan(insertStmt, ctx);
+                List<ScanNode> scanNodes = execPlan.getScanNodes();
+                for (ScanNode scanNode : scanNodes) {
+                    if (scanNode instanceof OlapScanNode) {
+                        OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                        Map<String, MaterializedView.BasePartitionInfo> selectedPartitionIdVersions =
+                                getSelectedPartitionInfos(olapScanNode);
+                        OlapTable olapTable = olapScanNode.getOlapTable();
+                        selectedBasePartitionInfos.put(olapTable.getId(), selectedPartitionIdVersions);
+                    }
+                }
+                // check partition changed
+                checkPartitionChange(selectedBasePartitionInfos, plannedOlapTablePartitionInfos);
+            } finally {
+                database.readUnlock();
+            }
+            executor.handleDMLStmt(execPlan, insertStmt);
+            // use selected base partition info to update mv version map & partition name map
+            for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> longMapEntry :
+                    selectedBasePartitionInfos.entrySet()) {
+                long baseTableId = longMapEntry.getKey();
+                Map<String, MaterializedView.BasePartitionInfo> baseTableIdAndVersion = longMapEntry.getValue();
+                for (Map.Entry<String, MaterializedView.BasePartitionInfo> basicTablePartitionIdVersions :
+                        baseTableIdAndVersion.entrySet()) {
+                    String baseTablePartitionName = basicTablePartitionIdVersions.getKey();
+                    MaterializedView.BasePartitionInfo baseTablePartitionVersion =
+                            basicTablePartitionIdVersions.getValue();
+                    materializedView.updateBasePartition(baseTableId, baseTablePartitionName,
+                            baseTablePartitionVersion);
+                }
+            }
             materializedView.getRefreshScheme().setLastRefreshTime(Utils.getLongFromDateTime(LocalDateTime.now()));
+        } catch (Exception e) {
+            throw new SemanticException("Refresh materialized view failed: " + e.getMessage(), e);
+        } finally {
             auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
         }
     }
 
+    private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(OlapScanNode olapScanNode) {
+        Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
+        Collection<Long> selectedPartitionIds = olapScanNode.getSelectedPartitionIds();
+        Collection<String> selectedPartitionNames = olapScanNode.getSelectedPartitionNames();
+        Collection<Long> selectedPartitionVersions = olapScanNode.getSelectedPartitionVersions();
+        Iterator<Long> selectPartitionIdIterator = selectedPartitionIds.iterator();
+        Iterator<String> selectPartitionNameIterator = selectedPartitionNames.iterator();
+        Iterator<Long> selectPartitionVersionIterator = selectedPartitionVersions.iterator();
+        while (selectPartitionIdIterator.hasNext()) {
+            long partitionId = selectPartitionIdIterator.next();
+            String partitionName = selectPartitionNameIterator.next();
+            long partitionVersion = selectPartitionVersionIterator.next();
+            partitionInfos.put(partitionName, new MaterializedView.BasePartitionInfo(partitionId, partitionVersion));
+        }
+        return partitionInfos;
+    }
+
+    /**
+     * Why need to do this:
+     * e.g.
+     * base table tbl1 has partitions p11 & p12 & p13
+     * base table tbl2 has partitions p21 & p22 & p23
+     * create materialized view mv1 partition by tbl1.a as select tbl1.a, tbl2.b from tbl1 join tbl2 on tbl1.a = tbl2.a;
+     * materialized view mv1 has partitions m1 & m2 & m3, m1 <-> p11, m2 <-> p12, m3 <-> p13
+     * if tbl1 p11 p12 inserted data, task use this sql for sync data:
+     * insert overwrite mv partition(m1,m2) select tbl1.a, tbl2.b from tbl1 partition(p11,p12) join tbl2 on tbl1.a = tbl2.a;
+     * if tbl1 p12 renamed to p120 or dropped when task running, only use tbl1(p11) tbl2(p21,p22,p23) to refresh m1 & m2;
+     * if tbl2 p22 renamed to p220 or dropped when task running, only use tbl1(p11,p12) tbl2(p21,p23) to refresh m1 & m2;
+     * but we do not remove the partition name relationships in maps
+     *
+     * @param selectedOlapTablePartitionInfos
+     * @param plannedOlapTablePartitionInfos
+     */
+    private void checkPartitionChange(
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> selectedOlapTablePartitionInfos,
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> plannedOlapTablePartitionInfos) {
+        for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> plannedOlapTablePartitionEntry :
+                plannedOlapTablePartitionInfos.entrySet()) {
+            long olapTableId = plannedOlapTablePartitionEntry.getKey();
+            Map<String, MaterializedView.BasePartitionInfo> plannedPartitionNameInfos =
+                    plannedOlapTablePartitionEntry.getValue();
+            Map<String, MaterializedView.BasePartitionInfo> selectedPartitionNameInfos =
+                    selectedOlapTablePartitionInfos.get(olapTableId);
+            for (Map.Entry<String, MaterializedView.BasePartitionInfo> plannedPartitionNameInfoEntry :
+                    plannedPartitionNameInfos.entrySet()) {
+                String plannedPartitionName = plannedPartitionNameInfoEntry.getKey();
+                MaterializedView.BasePartitionInfo selectedBasePartitionInfo =
+                        selectedPartitionNameInfos.get(plannedPartitionName);
+                // check partition is renamed or removed
+                if (selectedBasePartitionInfo == null) {
+                    throw new SemanticException(
+                            "Base table: " + olapTableId + " partition: " + plannedPartitionName + " can not find");
+                }
+            }
+        }
+    }
 }
