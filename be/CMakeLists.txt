@@ -71,7 +71,7 @@ message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
-option(WITHOUT_MINIDUMP "Build binary with compresss debug section" ON)
+option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
@@ -405,7 +405,7 @@ if (WITH_GCOV)
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
-if (WITHOUT_MINIDUMP)
+if (WITH_COMPRESS)
     # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 endif()
