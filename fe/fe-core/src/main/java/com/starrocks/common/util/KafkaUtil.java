@@ -40,19 +40,29 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+
 
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
 
     private static final ProxyAPI proxyApi = new ProxyAPI();
+
+    private static final KafkaAPI kafkaAPI = new KafkaAPI();
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties) throws UserException {
@@ -63,7 +73,7 @@ public class KafkaUtil {
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions) throws UserException {
-        return proxyApi.getLatestOffsets(brokerList, topic, properties, partitions);
+        return kafkaAPI.getLatestOffsets(brokerList, topic, properties, partitions);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
@@ -92,6 +102,29 @@ public class KafkaUtil {
             kafkaLoadInfo.properties.add(pair);
         }
         return kafkaLoadInfo;
+    }
+
+    static class KafkaAPI {
+        public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
+                                                   ImmutableMap<String, String> properties,
+                                                   List<Integer> partitions) throws UserException {
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+
+            final Consumer<String, String> consumer = new KafkaConsumer<>(props);
+
+            ArrayList<TopicPartition> topicPartitions = new ArrayList<>();
+            for (Integer partitionID : partitions) {
+                topicPartitions.add(new TopicPartition(topic, partitionID));
+            }
+            final Map<TopicPartition, Long> endOffsets = consumer.endOffsets(topicPartitions);
+
+            Map<Integer, Long> latestOffset = new HashMap<>();
+            for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
+                latestOffset.put(entry.getKey().partition(), entry.getValue());
+            }
+            return latestOffset;
+        }
     }
 
     static class ProxyAPI {
