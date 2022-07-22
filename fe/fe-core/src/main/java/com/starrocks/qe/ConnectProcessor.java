@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.QueryStmt;
@@ -84,8 +85,11 @@ public class ConnectProcessor {
     private void handleInitDb() {
         String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         try {
-            if (isChangeCatalog(identifier)) {
-                ctx.getGlobalStateMgr().changeCatalog(ctx, identifier);
+            String[] parts = identifier.trim().split("\\s+");
+            if (parts.length == 2) {
+                Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
+                        "You might want to use \"USE 'CATALOG <catalog_name>'\"");
+                ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
             } else {
                 ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
             }
@@ -636,9 +640,5 @@ public class ConnectProcessor {
                 break;
             }
         }
-    }
-
-    private boolean isChangeCatalog(String identifier) {
-        return identifier.trim().split("\\s+").length == 2;
     }
 }

@@ -12,8 +12,8 @@ public class UseCatalogStmt extends StatementBase {
         this.catalogName = catalogName;
     }
 
-    public String getIdentifier() {
-        return "catalog " + catalogName;
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override

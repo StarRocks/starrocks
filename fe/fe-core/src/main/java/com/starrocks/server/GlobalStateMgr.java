@@ -2795,12 +2795,7 @@ public class GlobalStateMgr {
 
     // Change current catalog of this session.
     // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
-    public void changeCatalog(ConnectContext ctx, String identifier) throws AnalysisException {
-        String[] parts = identifier.trim().split("\\s+");
-        Preconditions.checkState(parts.length == 2, "Invalid identifier " + identifier);
-        Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
-                "You might want to use \"USE 'CATALOG <catalog_name>'\"");
-        String newCatalogName = parts[1];
+    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws AnalysisException {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
