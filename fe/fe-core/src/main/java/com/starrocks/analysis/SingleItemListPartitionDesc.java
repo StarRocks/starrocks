@@ -43,18 +43,32 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         this.partitionProperties = partitionProperties;
     }
 
+    @Override
+    public Map<String, String> getProperties() {
+        return this.partitionProperties;
+    }
+
+    @Override
     public short getReplicationNum() {
         return this.replicationNum;
     }
 
+    @Override
     public DataProperty getPartitionDataProperty() {
         return this.partitionDataProperty;
     }
 
+    @Override
+    public Long getVersionInfo() {
+        return versionInfo;
+    }
+
+    @Override
     public TTabletType getTabletType() {
         return this.tabletType;
     }
 
+    @Override
     public boolean isInMemory() {
         return this.isInMemory;
     }
@@ -63,8 +77,14 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
         return this.values;
     }
 
+    @Override
     public String getPartitionName() {
         return this.partitionName;
+    }
+
+    @Override
+    public boolean isSetIfNotExists() {
+        return ifNotExists;
     }
 
     public List<LiteralExpr> getLiteralExprValues() throws AnalysisException {

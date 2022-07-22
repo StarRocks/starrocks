@@ -79,6 +79,9 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
+import com.starrocks.persist.ListPartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -177,6 +180,11 @@ public class GsonUtils {
             .registerSubtype(FrontendHbResponse.class, FrontendHbResponse.class.getSimpleName())
             .registerSubtype(BrokerHbResponse.class, BrokerHbResponse.class.getSimpleName());
 
+    private static final RuntimeTypeAdapterFactory<PartitionPersistInfoV2> partitionPersistInfoV2AdapterFactory
+            = RuntimeTypeAdapterFactory.of(PartitionPersistInfoV2.class, "clazz")
+            .registerSubtype(ListPartitionPersistInfo.class, ListPartitionPersistInfo.class.getSimpleName())
+            .registerSubtype(RangePartitionPersistInfo.class, RangePartitionPersistInfo.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -210,6 +218,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(tabletTypeAdapterFactory)
             .registerTypeAdapterFactory(heartbeatResponseAdapterFactor)
             .registerTypeAdapterFactory(partitionInfoTypeAdapterFactory)
+            .registerTypeAdapterFactory(partitionPersistInfoV2AdapterFactory)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
