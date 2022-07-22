@@ -30,7 +30,10 @@ jobs:
 
       - name: Read Properties
         id: read_property
-        run: echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
+        run: |
+          ls review
+          cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
+          echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
 
       - name: Label when approved by 2 committers
         if: steps.read_property.outputs.result == 'true'
