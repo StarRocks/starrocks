@@ -974,6 +974,12 @@ public class FunctionSet {
 
         // Type.DATE must before Type.DATATIME, because DATE could be considered as DATETIME.
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
+                Lists.newArrayList(Type.BIGINT, Type.INT, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
+	addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
                 Lists.newArrayList(Type.BIGINT, Type.DATE, Type.INT, Type.ARRAY_BOOLEAN),
                 Type.INT, Type.ARRAY_BIGINT, false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
