@@ -193,10 +193,10 @@ public class TabletScheduler extends LeaderDaemon {
      */
     private boolean updateWorkingSlots() {
         // Compute delta that will be checked to update slot number per storage path and
-        // record new value of `Config.schedule_slot_num_per_path`.
-        int cappedVal = Config.schedule_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
-                (Config.schedule_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
-                        Config.schedule_slot_num_per_path);
+        // record new value of `Config.tablet_sched_slot_num_per_storage_path`.
+        int cappedVal = Config.tablet_sched_slot_num_per_storage_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
+                (Config.tablet_sched_slot_num_per_storage_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
+                        Config.tablet_sched_slot_num_per_storage_path);
         int delta = 0;
         int oldSlotPerPathConfig = currentSlotPerPathConfig;
         if (currentSlotPerPathConfig != 0) {
@@ -1698,7 +1698,7 @@ public class TabletScheduler extends LeaderDaemon {
     public static class Slot {
         public int total;
         public int available;
-        // slot reserved for balance
+        // slot reserved for balance purpose
         public int balanceSlot;
 
         public long totalCopySize = 0;

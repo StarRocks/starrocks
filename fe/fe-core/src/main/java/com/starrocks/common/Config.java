@@ -723,7 +723,7 @@ public class Config extends ConfigBase {
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
-    @ConfField(mutable = false)
+    @ConfField
     public static int async_load_task_pool_size = 10;
 
     /**
@@ -829,7 +829,7 @@ public class Config extends ConfigBase {
     /**
      * Size of export task thread pool, default is 5.
      */
-    @ConfField(mutable = false)
+    @ConfField
     public static int export_task_pool_size = 5;
 
     // Configurations for consistency check
@@ -859,37 +859,12 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_connection_scheduler_threads_num = 4096;
-    /**
-     * Limit on the number of expr children of an expr tree.
-     * Exceed this limit may cause long analysis time while holding database read lock.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int expr_children_limit = 10000;
-    /**
-     * Limit on the depth of an expr tree.
-     * Exceed this limit may cause long analysis time while holding db read lock.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int expr_depth_limit = 3000;
 
     /**
      * Used to limit element num of InPredicate in delete statement.
      */
     @ConfField(mutable = true)
     public static int max_allowed_in_element_num_of_delete = 10000;
-
-    /**
-     * The multi cluster feature will be deprecated in version 0.12
-     * set this config to true will disable all operations related to cluster feature, include:
-     * create/drop cluster
-     * add free backend/add backend to cluster/decommission cluster balance
-     * change the backends num of cluster
-     * link/migration db
-     */
-    @ConfField(mutable = true)
-    public static boolean disable_cluster_feature = true;
 
     /**
      * control materialized view
@@ -943,10 +918,6 @@ public class Config extends ConfigBase {
     // default timeout of backup job
     @ConfField(mutable = true)
     public static int backup_job_default_timeout_ms = 86400 * 1000; // 1 day
-
-    // If use k8s deploy manager locally, set this to true and prepare the certs files
-    @ConfField
-    public static boolean with_k8s_certs = false;
 
     // Set runtime locale when exec some cmds
     @ConfField
@@ -1023,8 +994,8 @@ public class Config extends ConfigBase {
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
-    @ConfField(mutable = true)
-    public static int schedule_slot_num_per_path = 2;
+    @ConfField(mutable = true, alias = {"schedule_slot_num_per_path", "schedule_slot_num_per_path_for_test"})
+    public static int tablet_sched_slot_num_per_storage_path = 2;
 
     @ConfField
     public static String tablet_balancer_strategy = "disk_and_tablet";
@@ -1158,15 +1129,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean disable_colocate_balance = false;
-
-    /**
-     * If set to true, the insert stmt with processing error will still return a label to user.
-     * And user can use this label to check the load job's status.
-     * The default value is false, which means if insert operation encounter errors,
-     * exception will be thrown to user client directly without load label.
-     */
-    @ConfField(mutable = true)
-    public static boolean using_old_load_usage_pattern = false;
 
     /**
      * control rollup job concurrent limit
