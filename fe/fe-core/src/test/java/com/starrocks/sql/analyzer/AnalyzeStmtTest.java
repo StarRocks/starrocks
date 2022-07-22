@@ -14,6 +14,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
@@ -171,5 +172,15 @@ public class AnalyzeStmtTest {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
         Assert.assertEquals(dropHistogramStmt.getTableName().toSql(), "`test`.`t0`");
         Assert.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
+    }
+
+    @Test
+    public void testDropStats() {
+        String sql = "drop stats t0";
+        DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
+        Assert.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
+
+        Assert.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID = 10004", StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
+        Assert.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID = 10004", StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.FULL));
     }
 }
