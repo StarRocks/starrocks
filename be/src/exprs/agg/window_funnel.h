@@ -458,7 +458,7 @@ public:
             } else {
                 tv = timestamp_column->get_data()[i];
             }
-            
+
             // get 4th value: event cond array
             auto ele_vector = bool_array_column->get(i).get_array();
             uint8_t event_level = 0;
