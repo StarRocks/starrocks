@@ -72,9 +72,9 @@ StarRocks 的 FE 进程负责接收用户连接和查询请求，其本身是可
 7. 插入主节点以及 Observer 节点并读取配置。
 
     ```sql
-    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.92.139', 8533);
-    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.34.139', 9931);
-    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.34.140', 9931);
+    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.92.139', 9030);
+    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.34.139', 9030);
+    insert into mysql_servers(hostgroup_id, hostname, port) values(1, '172.26.34.140', 9030);
     load mysql servers to runtime;
     save mysql servers to disk;
     ```
