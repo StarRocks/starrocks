@@ -208,8 +208,12 @@ public class StatisticExecutor {
                 db.getId(), table.getId(), columns,
                 statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(),
                 LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        //Only update running status without edit log, make restart job status is failed
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
             statsJob.collect();
