@@ -120,6 +120,7 @@ statement
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
+    | showCharsetStatement                                                                  #showCharset
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -641,6 +642,10 @@ setUserPropertyStatement
 
 showStatusStatement
     : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement
