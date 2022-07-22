@@ -235,6 +235,11 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  32:OlapScanNode\n" +
                 "     table: date_dim, rollup: date_dim"));
+        Assert.assertTrue(replayPair.second.contains(" |----18:EXCHANGE\n" +
+                "  |       cardinality: 6304\n" +
+                "  |    \n" +
+                "  2:OlapScanNode\n" +
+                "     table: customer, rollup: customer"));
     }
 
     @Test
@@ -513,7 +518,7 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
                         TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
+        Assert.assertTrue(replayPair.second.contains("<slot 186> : 186: S_SUPPKEY"));
     }
 
     @Test
@@ -530,7 +535,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
+        Assert.assertTrue(replayPair.second.contains("  193:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
 
