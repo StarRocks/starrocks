@@ -144,9 +144,6 @@ public class AnalyzeManager implements Writable {
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
-        if (status.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
-            status.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        }
         analyzeStatusMap.put(status.getId(), status);
     }
 
