@@ -16,6 +16,7 @@
 #include "common/statusor.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
+#include "runtime/descriptors.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -35,6 +36,11 @@ struct SpaceInfo {
     int64_t available = 0;
 };
 
+struct FSOptions {
+    FSOptions(const TBrokerScanRangeParams* params = nullptr) : params(params) {}
+    const TBrokerScanRangeParams* params;
+};
+
 class FileSystem {
 public:
     enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET };
@@ -52,9 +58,11 @@ public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
 
-    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri);
+    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
+                                                                        FSOptions options = FSOptions());
 
-    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
+    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri,
+                                                                        FSOptions options = FSOptions());
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own FileSystem

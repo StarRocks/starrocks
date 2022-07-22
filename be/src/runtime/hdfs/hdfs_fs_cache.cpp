@@ -9,7 +9,7 @@
 
 namespace starrocks {
 
-static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle) {
+static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options) {
     const char* nn = namenode.c_str();
     if (is_hdfs_path(nn)) {
         handle->type = HdfsFsHandle::Type::HDFS;
@@ -27,7 +27,7 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
     return Status::OK();
 }
 
-Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle) {
+Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options) {
     {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _cache.find(namenode);
@@ -35,7 +35,7 @@ Status HdfsFsCache::get_connection(const std::string& namenode, HdfsFsHandle* ha
             *handle = it->second;
         } else {
             handle->namenode = namenode;
-            RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle));
+            RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, handle, options));
             _cache[namenode] = *handle;
         }
     }

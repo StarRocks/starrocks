@@ -37,7 +37,7 @@ public:
     }
 
     // This function is thread-safe
-    Status get_connection(const std::string& namenode, HdfsFsHandle* handle);
+    Status get_connection(const std::string& namenode, HdfsFsHandle* handle, const FSOptions& options);
 
 private:
     std::mutex _lock;

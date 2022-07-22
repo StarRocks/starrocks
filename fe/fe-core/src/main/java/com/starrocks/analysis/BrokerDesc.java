@@ -38,17 +38,32 @@ import java.util.Map;
 public class BrokerDesc implements Writable {
     private String name;
     private Map<String, String> properties;
+    private boolean hasBroker;
 
     // Only used for recovery
     private BrokerDesc() {
     }
 
     public BrokerDesc(String name, Map<String, String> properties) {
+        this.hasBroker = true;
         this.name = name;
         this.properties = properties;
         if (this.properties == null) {
             this.properties = Maps.newHashMap();
         }
+    }
+
+    public BrokerDesc(Map<String, String> properties) {
+        this.hasBroker = false;
+        this.name = "";
+        this.properties = properties;
+        if (this.properties == null) {
+            this.properties = Maps.newHashMap();
+        }
+    }
+
+    public boolean hasBroker() {
+        return hasBroker;
     }
 
     public String getName() {

@@ -27,6 +27,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.FailMsg;
@@ -77,7 +78,11 @@ public class BrokerLoadPendingTask extends LoadTask {
                 long groupFileSize = 0;
                 List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
                 for (String path : fileGroup.getFilePaths()) {
-                    BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
+                    if (brokerDesc.hasBroker()) {
+                        BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
+                    } else {
+                        HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+                    }
                 }
                 fileStatusList.add(fileStatuses);
                 for (TBrokerFileStatus fstatus : fileStatuses) {
