@@ -83,6 +83,7 @@ import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
@@ -402,6 +403,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitCreateFunction(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowOpenTablesStmt(ShowOpenTableStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
