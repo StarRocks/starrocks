@@ -20,12 +20,7 @@
 // under the License.
 
 package com.starrocks.common.util;
-
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.PKafkaLoadInfo;
 import com.starrocks.proto.PKafkaMetaProxyRequest;
@@ -43,11 +38,13 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.serialization.StringDeserializer;  
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -61,54 +58,46 @@ import java.util.concurrent.TimeUnit;
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
 
-    private static final ProxyAPI proxyApi = new ProxyAPI();
-
     private static final KafkaAPI kafkaAPI = new KafkaAPI();
 
-    public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                      ImmutableMap<String, String> properties) throws UserException {
-        return proxyApi.getAllKafkaPartitions(brokerList, topic, properties);
+    public static List<Integer> getAllKafkaPartitions(String brokerList, String topic) throws UserException {
+        return kafkaAPI.getAllKafkaPartitions(brokerList, topic);
     }
 
     // latest offset is (the latest existing message offset + 1)
-    public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
-                                                      ImmutableMap<String, String> properties,
+    public static Map<Integer, Long> getEndOffsets(String brokerList, String topic,
                                                       List<Integer> partitions) throws UserException {
-        return kafkaAPI.getLatestOffsets(brokerList, topic, properties, partitions);
+        return kafkaAPI.getEndOffsets(brokerList, topic, partitions);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
-                                                         ImmutableMap<String, String> properties,
                                                          List<Integer> partitions) throws UserException {
-        return proxyApi.getBeginningOffsets(brokerList, topic, properties, partitions);
-    }
-
-    public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
-            throws UserException {
-        return proxyApi.getBatchOffsets(requests);
-    }
-
-    public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
-                                                   ImmutableMap<String, String> properties) {
-        PKafkaLoadInfo kafkaLoadInfo = new PKafkaLoadInfo();
-        kafkaLoadInfo.brokers = brokerList;
-        kafkaLoadInfo.topic = topic;
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            PStringPair pair = new PStringPair();
-            pair.key = entry.getKey();
-            pair.val = entry.getValue();
-            if (kafkaLoadInfo.properties == null) {
-                kafkaLoadInfo.properties = Lists.newArrayList();
-            }
-            kafkaLoadInfo.properties.add(pair);
-        }
-        return kafkaLoadInfo;
+        return kafkaAPI.getBeginningOffsets(brokerList, topic,  partitions);
     }
 
     static class KafkaAPI {
-        public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
-                                                   ImmutableMap<String, String> properties,
-                                                   List<Integer> partitions) throws UserException {
+        public List<Integer> getAllKafkaPartitions(String brokerList, String topic)
+                throws UserException {
+            // create request
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+
+            final Consumer<String, String> consumer = new KafkaConsumer<>(props);
+
+            List<Integer> partitionIDs = new ArrayList<>();
+            final List<PartitionInfo> partitions = consumer.partitionsFor(topic, Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+
+            for(PartitionInfo partition : partitions) {
+                partitionIDs.add(partition.partition());
+            }
+
+            return partitionIDs;
+        }
+
+        public Map<Integer, Long> getEndOffsets(String brokerList, String topic,
+                                                List<Integer> partitions) throws UserException {
 
             final Properties props = new Properties();
             props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
@@ -121,110 +110,38 @@ public class KafkaUtil {
             for (Integer partitionID : partitions) {
                 topicPartitions.add(new TopicPartition(topic, partitionID));
             }
-            final Map<TopicPartition, Long> endOffsets = consumer.endOffsets(topicPartitions);
+            final Map<TopicPartition, Long> partitionNndOffsets = consumer.endOffsets(topicPartitions, Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
 
-            final Map<Integer, Long> latestOffset = new HashMap<>();
-            for (Map.Entry<TopicPartition, Long> entry : endOffsets.entrySet()) {
-                latestOffset.put(entry.getKey().partition(), entry.getValue());
+            final Map<Integer, Long> endOffsets = new HashMap<>();
+            for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
+                endOffsets.put(entry.getKey().partition(), entry.getValue());
             }
-            return latestOffset;
-        }
-    }
-
-    static class ProxyAPI {
-        public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
-                                                   ImmutableMap<String, String> convertedCustomProperties)
-                throws UserException {
-            // create request
-            PKafkaMetaProxyRequest metaRequest = new PKafkaMetaProxyRequest();
-            metaRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, convertedCustomProperties);
-            PProxyRequest request = new PProxyRequest();
-            request.kafkaMetaRequest = metaRequest;
-
-            PProxyResult result = sendProxyRequest(request);
-            return result.kafkaMetaResult.partitionIds;
-        }
-
-        public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
-                                                   ImmutableMap<String, String> properties,
-                                                   List<Integer> partitions) throws UserException {
-            return getOffsets(brokerList, topic, properties, partitions, true);
+            return endOffsets;
         }
 
         public Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
-                                                      ImmutableMap<String, String> properties,
-                                                      List<Integer> partitions) throws UserException {
-            return getOffsets(brokerList, topic, properties, partitions, false);
-        }
+                                                List<Integer> partitions) throws UserException {
 
-        public Map<Integer, Long> getOffsets(String brokerList, String topic,
-                                             ImmutableMap<String, String> properties,
-                                             List<Integer> partitions, boolean isLatest) throws UserException {
-            // create request
-            PKafkaOffsetProxyRequest offsetRequest = new PKafkaOffsetProxyRequest();
-            offsetRequest.kafkaInfo = genPKafkaLoadInfo(brokerList, topic, properties);
-            offsetRequest.partitionIds = partitions;
-            PProxyRequest request = new PProxyRequest();
-            request.kafkaOffsetRequest = offsetRequest;
+            final Properties props = new Properties();
+            props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+            props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+            props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
 
-            // send request
-            PProxyResult result = sendProxyRequest(request);
+            final Consumer<String, String> consumer = new KafkaConsumer<>(props);
 
-            // assembly result
-            Map<Integer, Long> partitionOffsets = Maps.newHashMapWithExpectedSize(partitions.size());
-            List<Long> offsets;
-            if (isLatest) {
-                offsets = result.kafkaOffsetResult.latestOffsets;
-            } else {
-                offsets = result.kafkaOffsetResult.beginningOffsets;
+            ArrayList<TopicPartition> topicPartitions = new ArrayList<>();
+            for (Integer partitionID : partitions) {
+                topicPartitions.add(new TopicPartition(topic, partitionID));
             }
-            for (int i = 0; i < result.kafkaOffsetResult.partitionIds.size(); i++) {
-                partitionOffsets.put(result.kafkaOffsetResult.partitionIds.get(i), offsets.get(i));
+            final Map<TopicPartition, Long> partitionNndOffsets = consumer.beginningOffsets(topicPartitions, Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+
+            final Map<Integer, Long> beginningOffsets = new HashMap<>();
+            for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
+                beginningOffsets.put(entry.getKey().partition(), entry.getValue());
             }
-            return partitionOffsets;
+            return beginningOffsets;
         }
 
-        public List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
-                throws UserException {
-            // create request
-            PProxyRequest pProxyRequest = new PProxyRequest();
-            PKafkaOffsetBatchProxyRequest pKafkaOffsetBatchProxyRequest = new PKafkaOffsetBatchProxyRequest();
-            pKafkaOffsetBatchProxyRequest.requests = requests;
-            pProxyRequest.kafkaOffsetBatchRequest = pKafkaOffsetBatchProxyRequest;
-
-            // send request
-            PProxyResult result = sendProxyRequest(pProxyRequest);
-
-            return result.kafkaOffsetBatchResult.results;
-        }
-
-        private PProxyResult sendProxyRequest(PProxyRequest request) throws UserException {
-            TNetworkAddress address = new TNetworkAddress();
-            try {
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-                if (backendIds.isEmpty()) {
-                    throw new LoadException("Failed to send proxy request. No alive backends");
-                }
-                Collections.shuffle(backendIds);
-                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
-                address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
-
-                // get info
-                Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
-                TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                if (code != TStatusCode.OK) {
-                    LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                    throw new UserException(
-                            "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                } else {
-                    return result;
-                }
-            } catch (Exception e) {
-                LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
-                throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());
-            }
-        }
     }
 }
 
