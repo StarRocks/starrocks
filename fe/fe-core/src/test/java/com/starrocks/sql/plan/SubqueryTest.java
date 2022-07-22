@@ -380,4 +380,57 @@ public class SubqueryTest extends PlanTestBase {
                 "  1:OlapScanNode\n" +
                 "     TABLE: t1");
     }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryByWhereClause() throws Exception {
+        {
+            String sql = "SELECT * FROM t0\n" +
+                    "WHERE t0.v2 > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4\n" +
+                    ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other join predicates: 2: v2 > 9: anyValue\n" +
+                    "  |  other predicates: assert_true((8: countRows <= 1) OR (8: countRows IS NULL))");
+        }
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryBySelectClause() throws Exception {
+        {
+            String sql = "SELECT t0.*, (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4\n" +
+                    ") as t1_v5 FROM t0;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other predicates: assert_true((8: countRows <= 1) OR (8: countRows IS NULL))");
+        }
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryByHavingClause() throws Exception {
+        {
+            String sql = "SELECT v1, SUM(v2) FROM t0\n" +
+                    "GROUP BY v1\n" +
+                    "HAVING SUM(v2) > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4\n" +
+                    ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 5: v4 = 1: v1\n" +
+                    "  |  other join predicates: 4: sum > 10: anyValue\n" +
+                    "  |  other predicates: assert_true((9: countRows IS NULL) OR (9: countRows <= 1))");
+        }
+    }
 }

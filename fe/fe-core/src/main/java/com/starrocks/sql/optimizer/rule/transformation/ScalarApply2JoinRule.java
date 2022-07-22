@@ -4,22 +4,38 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -48,32 +64,139 @@ public class ScalarApply2JoinRule extends TransformationRule {
         }
     }
 
-    public List<OptExpression> transformCorrelate(OptExpression input, LogicalApplyOperator apply,
-                                                  OptimizerContext context) {
-        if (!apply.isNeedCheckMaxRows()) {
-            OptExpression joinOptExpression;
+    private List<OptExpression> transformCorrelate(OptExpression input, LogicalApplyOperator apply,
+                                                   OptimizerContext context) {
+        if (apply.isNeedCheckMaxRows()) {
+            return transformCorrelateWithCheckOneRows(input, apply, context);
+        } else {
+            return transformCorrelateWithoutCheckOneRows(input, apply, context);
+        }
+    }
 
-            joinOptExpression = new OptExpression(
-                    new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN,
-                            Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate())));
+    /*
+     * e.g.
+     *   SELECT * FROM t0
+     *   WHERE t0.v2 > (
+     *       SELECT t1.v2 FROM t1
+     *       WHERE t0.v1 = t1.v1
+     *   );
+     *
+     * Transfer to:
+     *   SELECT t0.*
+     *   FROM t0 LEFT OUTER JOIN
+     *   (
+     *       SELECT t1.v1, count(1) as countRows, any_value(t1.v2) as anyValue
+     *       FROM t1
+     *       GROUP BY t1.v1
+     *   ) as t1a
+     *   ON t0.v1 = t1a.v1
+     *   WHERE t0.v2 > t1a.anyValue;
+     */
+    private List<OptExpression> transformCorrelateWithCheckOneRows(OptExpression input, LogicalApplyOperator apply,
+                                                                   OptimizerContext context) {
+        // t0.v1 = t1.v1
+        ScalarOperator correlationPredicate = apply.getCorrelationConjuncts();
+        Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> correlationPredicatePair =
+                SubqueryUtils.rewritePredicateAndExtractColumnRefs(Utils.extractConjuncts(correlationPredicate),
+                        apply.getCorrelationColumnRefs(), context);
+        // t1.v1
+        ColumnRefSet correlationPredicateInnerRefs = new ColumnRefSet(correlationPredicatePair.second.keySet());
 
-            joinOptExpression.getInputs().addAll(input.getInputs());
+        /*
+         * Step1: build agg
+         *      output: count(1) as countRows, any_value(t1.v2) as anyValue
+         *      groupBy: t1.v1
+         */
+        List<ColumnRefOperator> countAggregateGroupBys = Lists.newArrayList();
 
-            Map<ColumnRefOperator, ScalarOperator> output = Maps.newHashMap();
-            output.put(apply.getOutput(), apply.getSubqueryOperator());
-
-            // add all left column
-            ColumnRefFactory factory = context.getColumnRefFactory();
-            Arrays.stream(input.getInputs().get(0).getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)
-                    .forEach(d -> output.put(d, d));
-
-            OptExpression projectExpression = new OptExpression(new LogicalProjectOperator(output));
-            projectExpression.getInputs().add(joinOptExpression);
-
-            return Lists.newArrayList(projectExpression);
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        for (int columnId : correlationPredicateInnerRefs.getColumnIds()) {
+            ColumnRefOperator ref = factory.getColumnRef(columnId);
+            countAggregateGroupBys.add(ref);
         }
 
-        return Lists.newArrayList();
+        // count aggregate
+        Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+        CallOperator countRowsCallOp = SubqueryUtils.createCountRowsOperator();
+        ColumnRefOperator countRows =
+                factory.create("countRows", countRowsCallOp.getType(), countRowsCallOp.isNullable());
+        aggregates.put(countRows, countRowsCallOp);
+
+        // any_value aggregate
+        ScalarOperator subqueryOperator = apply.getSubqueryOperator();
+        Function anyValueFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {subqueryOperator.getType()},
+                Function.CompareMode.IS_IDENTICAL);
+        CallOperator anyValueCallOp = new CallOperator(FunctionSet.ANY_VALUE, subqueryOperator.getType(),
+                Lists.newArrayList(subqueryOperator), anyValueFn);
+        ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
+        aggregates.put(anyValue, anyValueCallOp);
+
+        OptExpression newAggOpt = OptExpression.create(
+                new LogicalAggregationOperator(AggType.GLOBAL, countAggregateGroupBys, aggregates),
+                input.inputAt(1));
+
+        /*
+         * Step2: build left outer join
+         * t0 LEFT OUTER JOIN t1a
+         * ON t0.v1 = t1a.v1
+         *
+         * If there exist subquery predicate, i.e. t0.v2 > ${subquery_output}
+         * we should put assert predicate above the subquery predicate to avoid filtering
+         * rows that shouldn't be filtered.
+         * But it is guaranteed that the subquery predicate will be push down
+         * to the left outer join operator, so we can safely put assert predicate right here.
+         */
+        IsNullPredicateOperator countRowsIsNullPredicate = new IsNullPredicateOperator(countRows);
+        BinaryPredicateOperator countRowsLEOneRowPredicate =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, countRows,
+                        ConstantOperator.createBigint(1));
+        PredicateOperator countRowsPredicate =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, countRowsIsNullPredicate,
+                        countRowsLEOneRowPredicate);
+        Function assertTrueFn = Expr.getBuiltinFunction(FunctionSet.ASSERT_TRUE, new Type[] {Type.BOOLEAN},
+                Function.CompareMode.IS_IDENTICAL);
+        CallOperator assertTrueCallOp =
+                new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
+                        Collections.singletonList(countRowsPredicate),
+                        assertTrueFn);
+        LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
+                .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
+                .setOnPredicate(Utils.compoundAnd(correlationPredicatePair.first))
+                .setPredicate(assertTrueCallOp)
+                .build();
+        OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
+
+        // Step3: build project, mapping subquery's output to anyValue
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        columnRefMap.put(apply.getOutput(), anyValue);
+        OptExpression newProjectOpt =
+                OptExpression.create(new LogicalProjectOperator(columnRefMap), newLeftOuterJoinOpt);
+
+        return Collections.singletonList(newProjectOpt);
+    }
+
+    private List<OptExpression> transformCorrelateWithoutCheckOneRows(OptExpression input, LogicalApplyOperator apply,
+                                                                      OptimizerContext context) {
+        OptExpression joinOptExpression;
+
+        joinOptExpression = new OptExpression(
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN,
+                        Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate())));
+
+        joinOptExpression.getInputs().addAll(input.getInputs());
+
+        Map<ColumnRefOperator, ScalarOperator> output = Maps.newHashMap();
+        output.put(apply.getOutput(), apply.getSubqueryOperator());
+
+        // add all left column
+        ColumnRefFactory factory = context.getColumnRefFactory();
+        Arrays.stream(input.getInputs().get(0).getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)
+                .forEach(d -> output.put(d, d));
+
+        OptExpression projectExpression = new OptExpression(new LogicalProjectOperator(output));
+        projectExpression.getInputs().add(joinOptExpression);
+
+        return Lists.newArrayList(projectExpression);
     }
 
     // UnCorrelation Scalar Subquery:
@@ -82,8 +205,8 @@ public class ScalarApply2JoinRule extends TransformationRule {
     //          Cross-Join
     //          /        \
     //       LEFT     AssertOneRows
-    public List<OptExpression> transformUnCorrelateCheckOneRows(OptExpression input, LogicalApplyOperator apply,
-                                                                OptimizerContext context) {
+    private List<OptExpression> transformUnCorrelateCheckOneRows(OptExpression input, LogicalApplyOperator apply,
+                                                                 OptimizerContext context) {
         // assert one rows will check rows, and fill null row if result is empty
         OptExpression assertOptExpression = new OptExpression(LogicalAssertOneRowOperator.createLessEqOne(""));
         assertOptExpression.getInputs().add(input.getInputs().get(1));

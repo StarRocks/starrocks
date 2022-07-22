@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -23,7 +24,8 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
-        if (call.isAggregate() || notAllConstant(call.getChildren())) {
+        if (call.isAggregate() || notAllConstant(call.getChildren()) ||
+                FunctionSet.ASSERT_TRUE.equals(call.getFnName())) {
             return call;
         }
         return ScalarOperatorEvaluator.INSTANCE.evaluation(call);
