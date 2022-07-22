@@ -352,6 +352,7 @@ recoverPartitionStatement
     : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
 
+
 showOpenTablesStatement
     : SHOW OPEN TABLES ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     ;
