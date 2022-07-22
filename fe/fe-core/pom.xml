@@ -600,6 +600,12 @@ under the License.
             <artifactId>opentelemetry-exporter-jaeger</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>7.0.1-ccs</version>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -769,29 +775,29 @@ under the License.
                         <phase>generate-sources</phase>
                         <configuration>
                             <tasks>
-                                <mkdir dir="${basedir}/target/generated-sources/proto"/>
+                                <mkdir dir="${basedir}/target/generated-sources/proto" />
                                 <exec executable="${java.home}/bin/java">
-                                    <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
-                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
-                                    <arg value="${starrocks.home}/gensrc/proto/internal_service.proto"/>
+                                    <arg value="-jar" />
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar" />
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto" />
+                                    <arg value="${starrocks.home}/gensrc/proto/internal_service.proto" />
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
-                                    <arg value="-jar"/>
-                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
-                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
-                                    <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
+                                    <arg value="-jar" />
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar" />
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto" />
+                                    <arg value="${starrocks.home}/gensrc/proto/lake_service.proto" />
                                 </exec>
                                 <exec executable="python">
-                                    <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
-                                    <arg value="--cpp"/>
-                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
-                                    <arg value="--java"/>
-                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
+                                    <arg value="${starrocks.home}/build-support/gen_build_version.py" />
+                                    <arg value="--cpp" />
+                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build" />
+                                    <arg value="--java" />
+                                    <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build" />
                                 </exec>
-                                <mkdir dir="${starrocks.home}gensrc/build/python/vectorized"/>
+                                <mkdir dir="${starrocks.home}gensrc/build/python/vectorized" />
                                 <exec executable="python" dir="${starrocks.home}gensrc/build/python/vectorized">
-                                    <arg value="${starrocks.home}/gensrc/script/vectorized/gen_vectorized_functions.py"/>
+                                    <arg value="${starrocks.home}/gensrc/script/vectorized/gen_vectorized_functions.py" />
                                 </exec>
                             </tasks>
                         </configuration>

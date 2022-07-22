@@ -117,6 +117,11 @@ under the License.
                     <id>oracleReleases</id>
                     <url>https://download.oracle.com/maven</url>
                 </repository>
+                <!-- for Kafka java client -->
+                <repository>
+                    <id>confluent</id>
+                    <url>https://packages.confluent.io/maven/</url>
+                </repository>
             </repositories>
 
             <pluginRepositories>
