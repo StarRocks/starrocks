@@ -29,13 +29,16 @@ jobs:
 
     - name: Read Properties
       id: read_property
-      run: echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
-
-    - name: echo1
-      id: echo1
       run: |
-        echo "false" >> temp.txt
-        echo "::set-output name=result::$(cat temp.txt)"
+        ls review
+        cat review/${{ steps.source-run-info.outputs.pullRequestNumber }}
+        echo "::set-output name=result::$(cat review/${{ steps.source-run-info.outputs.pullRequestNumber }})"
+
+#     - name: echo1
+#       id: echo1
+#       run: |
+#         echo "false" >> temp.txt
+#         echo "::set-output name=result::$(cat temp.txt)"
 
     - run: echo ${{ steps.echo1.outputs.result}}
     
