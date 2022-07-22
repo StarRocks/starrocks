@@ -447,13 +447,18 @@ public:
         auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
         dst_column->reserve(chunk_size);
 
-        const TimeTypeColumn* timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
+        const auto timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
-            DCHECK(PT == TYPE_DATETIME || PT == TYPE_DATE || PT == TYPE_INT || PT == TYPE_BIGINT);
-            tv = timestamp_column->get_data()[i];
-
+            if constexpr (PT == TYPE_DATETIME) {
+                tv = timestamp_column->get_data()[i].to_unix_second();
+            } else if constexpr (PT == TYPE_DATE) {
+                tv = timestamp_column->get_data()[i].julian();
+            } else {
+                tv = timestamp_column->get_data()[i];
+            }
+            
             // get 4th value: event cond array
             auto ele_vector = bool_array_column->get(i).get_array();
             uint8_t event_level = 0;
