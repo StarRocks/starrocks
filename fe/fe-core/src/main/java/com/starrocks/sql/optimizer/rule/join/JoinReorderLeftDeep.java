@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 
 import java.util.BitSet;
 import java.util.List;
@@ -15,6 +16,18 @@ public class JoinReorderLeftDeep extends JoinOrder {
 
     public JoinReorderLeftDeep(OptimizerContext context) {
         super(context);
+    }
+
+    public boolean isSameTableJoin(GroupInfo left, GroupInfo right) {
+        if (!(left.bestExprInfo.expr.getOp() instanceof LogicalScanOperator)) {
+            return false;
+        }
+        if (!(right.bestExprInfo.expr.getOp() instanceof LogicalScanOperator)) {
+            return false;
+        }
+        LogicalScanOperator l = (LogicalScanOperator) left.bestExprInfo.expr.getOp();
+        LogicalScanOperator r = (LogicalScanOperator) right.bestExprInfo.expr.getOp();
+        return l.getTable().getId() == r.getTable().getId();
     }
 
     @Override
@@ -41,8 +54,14 @@ public class JoinReorderLeftDeep extends JoinOrder {
                 // search the next group which:
                 // 1. has never been used
                 // 2. can inner join with leftGroup
+                // 3. not same table inner join (happens only the first time).
+                // inner join on same tables possibly degrades to cross join.
                 for (; index < atomSize; ++index) {
-                    if (!used[index] && canBuildInnerJoinPredicate(leftGroup, atoms.get(index))) {
+                    GroupInfo rightGroup = atoms.get(index);
+                    if (next == 1 && isSameTableJoin(leftGroup, rightGroup)) {
+                        continue;
+                    }
+                    if (!used[index] && canBuildInnerJoinPredicate(leftGroup, rightGroup)) {
                         break;
                     }
                 }
