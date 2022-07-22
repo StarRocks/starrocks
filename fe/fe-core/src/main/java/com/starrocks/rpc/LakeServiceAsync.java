@@ -22,5 +22,5 @@ public interface LakeServiceAsync extends LakeService  {
 
     Future<DropTabletResponse> dropTablet(DropTabletRequest request, RpcCallback<DropTabletResponse> callback);
 
-    Future<CompactResponse> compact(CompactRequest request, RpcCallback<CompactRequest> callback);
+    Future<CompactResponse> compact(CompactRequest request, RpcCallback<CompactResponse> callback);
 }

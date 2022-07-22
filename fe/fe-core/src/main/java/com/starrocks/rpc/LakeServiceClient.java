@@ -2,6 +2,7 @@
 
 package com.starrocks.rpc;
 
+import com.baidu.brpc.RpcContext;
 import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
@@ -48,6 +49,8 @@ public class LakeServiceClient {
 
     public Future<CompactResponse> compact(CompactRequest request) throws RpcException {
         RpcCallback<CompactResponse> callback = new EmptyRpcCallback<CompactResponse>();
+        RpcContext rpcContext = RpcContext.getContext();
+        rpcContext.setReadTimeoutMillis(1800000);
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compact(request, callback));
     }
 
