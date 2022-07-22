@@ -77,6 +77,7 @@ starrocksSparkRDD.collect()
 | starrocks.exec.mem.limit             | 2147483648        | Memory limit for a single query. Default to 2GB, in bytes                      |
 | starrocks.deserialize.arrow.async    | false             | Whether to support asynchronous conversion of Arrow format to the RowBatch required for spark-starrocks-connector iteration.                 |
 | starrocks.deserialize.queue.size     | 64                | Internal processing queue for asynchronous conversion of Arrow format, effective when `starrocks.deserialize.arrow.async` is true.        |
+| starrocks.filter.query          | --            | StarRocks uses this expression to complete the source-side data filtering. |
 
 #### SQL and Dataframe Configuration
 
@@ -93,7 +94,6 @@ starrocksSparkRDD.collect()
 | starrocks.request.auth.user     | --            | StarRocks username                                            |
 | starrocks.request.auth.password | --            | StarRocks password                                             |
 | starrocks.read.field            | --            | Retrieves a list of column names from the StarRocks table, with multiple columns separated by commas.                 |
-| starrocks.filter.query          | --            | StarRocks uses this expression to complete the source-side data filtering. |
 
 ### StarRocks and Spark column type mapping
 
