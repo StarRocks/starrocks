@@ -157,7 +157,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PROFILE_TIMEOUT = "profile_level";
+    public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
