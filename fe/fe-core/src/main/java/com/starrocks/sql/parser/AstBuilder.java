@@ -223,7 +223,8 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
-import com.starrocks.sql.ast.UseStmt;
+import com.starrocks.sql.ast.UseCatalogStmt;
+import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -2150,16 +2151,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitUse(StarRocksParser.UseContext context) {
+    public ParseNode visitUseDb(StarRocksParser.UseDbContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 1) {
-            return new UseStmt(null, parts.get(0));
+            return new UseDbStmt(null, parts.get(0));
         } else if (parts.size() == 2) {
-            return new UseStmt(parts.get(0), parts.get(1));
+            return new UseDbStmt(parts.get(0), parts.get(1));
         } else {
             throw new ParsingException("error catalog.database");
         }
+    }
+
+    public ParseNode visitUseCatalog(StarRocksParser.UseCatalogContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String catalogName = identifier.getValue();
+        return new UseCatalogStmt(catalogName);
     }
 
     @Override

@@ -9,19 +9,19 @@ import org.apache.logging.log4j.Logger;
 
 /**
  * Representation of a USE [catalog.]db statement.
- * Queries from MySQL client will not generate UseStmt, it will be handled by the COM_INIT_DB protocol.
- * Queries from JDBC will be handled by COM_QUERY protocol, it will generate UseStmt.
+ * Queries from MySQL client will not generate UseDbStmt, it will be handled by the COM_INIT_DB protocol.
+ * Queries from JDBC will be handled by COM_QUERY protocol, it will generate UseDbStmt.
  */
-public class UseStmt extends StatementBase {
-    private static final Logger LOG = LogManager.getLogger(UseStmt.class);
+public class UseDbStmt extends StatementBase {
+    private static final Logger LOG = LogManager.getLogger(UseDbStmt.class);
     private final String catalog;
     private final String database;
 
-    public UseStmt(String db) {
+    public UseDbStmt(String db) {
         this(null, db);
     }
 
-    public UseStmt(String catalog, String database) {
+    public UseDbStmt(String catalog, String database) {
         this.catalog = catalog;
         this.database = database;
     }
@@ -36,7 +36,7 @@ public class UseStmt extends StatementBase {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitUseStatement(this, context);
+        return visitor.visitUseDbStatement(this, context);
     }
 
     @Override

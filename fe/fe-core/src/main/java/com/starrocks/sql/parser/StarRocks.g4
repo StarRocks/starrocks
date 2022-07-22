@@ -112,7 +112,8 @@ statement
 
 
     // Other statement
-    | USE qualifiedName                                                                     #use
+    | USE qualifiedName                                                                     #useDb
+    | USE CATALOG identifierOrString                                                        #useCatalog
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist

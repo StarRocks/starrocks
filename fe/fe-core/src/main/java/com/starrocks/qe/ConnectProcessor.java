@@ -31,7 +31,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -85,8 +84,12 @@ public class ConnectProcessor {
     private void handleInitDb() {
         String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         try {
-            ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
-        } catch (DdlException e) {
+            if (isChangeCatalog(identifier)) {
+                ctx.getGlobalStateMgr().changeCatalog(ctx, identifier);
+            } else {
+                ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
+            }
+        } catch (Exception e) {
             ctx.getState().setError(e.getMessage());
             return;
         }
@@ -633,5 +636,9 @@ public class ConnectProcessor {
                 break;
             }
         }
+    }
+
+    private boolean isChangeCatalog(String identifier) {
+        return identifier.trim().split("\\s+").length == 2;
     }
 }
