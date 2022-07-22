@@ -77,7 +77,7 @@ public class ShowOpenTableStmt extends ShowStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder("SHOW OPEN TABLES");
         if (!Strings.isNullOrEmpty(dbName)){
-            sb.append(" From ").append(dbName);
+            sb.append(" FROM ").append(dbName);
         }
         if (pattern != null) {
             sb.append(" LIKE '").append(pattern).append("'");
@@ -108,9 +108,9 @@ public class ShowOpenTableStmt extends ShowStmt {
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "In_use"), item.getExpr().clone(null));
         // Name_Locked
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "NAME_LOCKED"), "Name_Locked");
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "NAME_LOCKED"), "Name_locked");
         selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Name_Locked"), item.getExpr().clone(null));
+        aliasMap.put(new SlotRef(null, "Name_locked"), item.getExpr().clone(null));
 
         where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
@@ -131,5 +131,9 @@ public class ShowOpenTableStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    public String toString() {
+        return toSql();
     }
 }
