@@ -278,7 +278,7 @@ public class ConnectContext {
     }
 
     public SetStmt getModifiedSessionVariables() {
-        if (! modifiedSessionVariables.isEmpty()) {
+        if (!modifiedSessionVariables.isEmpty()) {
             return new SetStmt(modifiedSessionVariables);
         }
         return null;
