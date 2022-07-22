@@ -6,10 +6,13 @@
 
 #include <fmt/format.h>
 
+#include <unordered_map>
+
 #include "common/logging.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/util.h"
 #include "service/staros_worker.h"
+#include "storage/lake/filenames.h"
 
 namespace starrocks::lake {
 
@@ -18,11 +21,11 @@ std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
 }
 
 std::string StarletLocationProvider::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
-    return fmt::format("{}tbl_{:016X}_{:016X}?ShardId={}", kStarletPrefix, tablet_id, version, tablet_id);
+    return fmt::format("{}{}?ShardId={}", kStarletPrefix, tablet_metadata_filename(tablet_id, version), tablet_id);
 }
 
 std::string StarletLocationProvider::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
-    return fmt::format("{}txn_{:016X}_{:016X}?ShardId={}", kStarletPrefix, tablet_id, txn_id, tablet_id);
+    return fmt::format("{}{}?ShardId={}", kStarletPrefix, txn_log_filename(tablet_id, txn_id), tablet_id);
 }
 
 std::string StarletLocationProvider::segment_location(int64_t tablet_id, std::string_view segment_name) const {
@@ -38,8 +41,23 @@ std::string StarletLocationProvider::join_path(std::string_view parent, std::str
                                 : fmt::format("{}/{}{}", prefix, child, suffix);
 }
 
-Status StarletLocationProvider::list_root_locations(std::set<std::string>*) const {
-    return Status::NotSupported("StarletLocationProvider::list_root_locations");
+Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots) const {
+    if (roots == nullptr) {
+        return Status::InvalidArgument("roots set is NULL");
+    }
+    if (g_worker == nullptr) {
+        return Status::OK();
+    }
+    auto shards = g_worker->shards();
+    std::unordered_map<std::string, staros::starlet::ShardId> root_ids;
+    for (const auto& shard : shards) {
+        root_ids[shard.obj_store_info.s3_obj_store.uri] = shard.id;
+    }
+    for (const auto& [uri, id] : root_ids) {
+        (void)uri;
+        roots->insert(root_location(id));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake
