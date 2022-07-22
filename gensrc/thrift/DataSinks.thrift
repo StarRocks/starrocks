@@ -128,6 +128,12 @@ struct TExportSink {
     5: optional list<Types.TNetworkAddress> broker_addresses
     6: optional map<string, string> properties
 
+    // If use_broker is set, we will write hdfs thourgh broker
+    // If use_broker is not set, we will write through libhdfs/S3 directly
+    7: optional bool use_broker = false;
+    // hdfs_write_buffer_size_kb for writing through lib hdfs directly
+    8: optional i32 hdfs_write_buffer_size_kb = 0; 
+
     // export file name prefix
     30: optional string file_name_prefix
 }
