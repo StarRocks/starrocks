@@ -135,7 +135,8 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
 void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
-        auto& rg = _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+        auto& rg = _row_group_metadata->columns[schema_node->physical_column_index].meta_data;
         int64_t offset = 0;
         if (rg.__isset.dictionary_page_offset) {
             offset = rg.dictionary_page_offset;
