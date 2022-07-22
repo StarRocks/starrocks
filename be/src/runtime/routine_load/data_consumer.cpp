@@ -21,7 +21,6 @@
 
 #include "runtime/routine_load/data_consumer.h"
 
-#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -82,7 +81,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
     RETURN_IF_ERROR(set_conf("metadata.broker.list", ctx->kafka_info->brokers));
     RETURN_IF_ERROR(set_conf("group.id", group_id));
-    RETURN_IF_ERROR(set_conf("enable.partition.eof", "false"));
+    RETURN_IF_ERROR(set_conf("enable.partition.eof", "true"));
     RETURN_IF_ERROR(set_conf("enable.auto.offset.store", "false"));
     // TODO: set it larger than 0 after we set rd_kafka_conf_set_stats_cb()
     RETURN_IF_ERROR(set_conf("statistics.interval.ms", "0"));
@@ -146,6 +145,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
         topic_partitions.push_back(tp1);
         ss << "[" << entry.first << ": " << entry.second << "] ";
     }
+    _partition_count = topic_partitions.size();
 
     LOG(INFO) << "consumer: " << _id << ", grp: " << _grp_id << " assign topic partitions: " << topic << ", "
               << ss.str();
@@ -221,6 +221,15 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             ss << msg->errstr() << ", partition " << msg->partition() << " offset " << msg->offset() << " has no data";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
             st = Status::InternalError(ss.str());
+            break;
+        }
+        case RdKafka::ERR__PARTITION_EOF: {
+            _eof_count++;
+            if (!queue->blocking_put(msg.get())) {
+                done = true;
+            } else if (_eof_count == _partition_count) {
+                done = true;
+            }
             break;
         }
         default:
@@ -344,6 +353,8 @@ Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
     _k_consumer->unassign();
+    _eof_count = 0;
+    _partition_count = 0;
     return Status::OK();
 }
 
