@@ -1297,8 +1297,6 @@ public class PlanFragmentBuilder {
 
             if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
                 inputFragment.setEnableSharedScan(false);
-            }
-            if ((node.isOnePhaseAgg() || node.getType().isDistinct()) && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 inputFragment.setAssignScanRangesPerDriverSeq(true);
             }
 
