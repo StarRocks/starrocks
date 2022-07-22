@@ -30,7 +30,7 @@ public:
 // In Hive, array's format is different from standard array. Hive use
 // custom array delimiter (aka. collection delimiter).
 // In default, 1D array's delimiter is \002(^B), 2D array is \003(^C),.... Detail delimiter rule refer to:
-// https://github.com/apache/hive/blob/master/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
+// https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
 // For example, a standard array: [[1, 2], [3, 4, 5]], in Hive will be stored as: 1^C2^B3^C4^C5
 class HiveTextArrayReader final : public ArrayReader {
 public:
