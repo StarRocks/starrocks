@@ -134,6 +134,9 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    //  Backup Store Satement
+    | showBackupStatement                                                                   #showBackup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -813,6 +816,11 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+showBackupStatement
+    : SHOW BACKUP (FROM identifier)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------

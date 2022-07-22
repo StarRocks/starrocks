@@ -116,6 +116,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -262,7 +263,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
     }
-
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
@@ -1493,8 +1493,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.ALL() != null) {
                 return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
             } else {
-                return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
-                        .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
+                return new AlterResourceGroupStmt(name,
+                        new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
+                                .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
             }
         } else {
             Map<String, String> properties = new HashMap<>();
@@ -2341,6 +2342,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
         boolean isShowFull = context.FULL() != null;
         return new ShowProcesslistStmt(isShowFull);
+    }
+
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+
+    @Override
+    public ParseNode visitShowBackupStatement(StarRocksParser.ShowBackupStatementContext context) {
+        if (context.identifier() == null) {
+            return new ShowBackupStmt(null);
+        }
+        return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue());
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
