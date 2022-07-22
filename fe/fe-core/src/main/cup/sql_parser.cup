@@ -292,7 +292,7 @@ nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, load_stmt,
     create_routine_load_stmt, pause_routine_load_stmt, resume_routine_load_stmt, stop_routine_load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
-    kill_stmt, drop_stmt, recover_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
+    kill_stmt, drop_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
     unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
     alter_resource_group_stmt;
@@ -600,8 +600,6 @@ stmt ::=
     | query_stmt:query
     {: RESULT = query; :}
     | drop_stmt:stmt
-    {: RESULT = stmt; :}
-    | recover_stmt:stmt
     {: RESULT = stmt; :}
     | set_stmt:set
     {: RESULT = set; :}
@@ -928,32 +926,6 @@ alter_table_clause ::=
     | KW_ORDER KW_BY LPAREN ident_list:cols RPAREN opt_from_rollup:rollup opt_properties:properties
     {:
         RESULT = new ReorderColumnsClause(cols, rollup, properties);
-    :}
-    | KW_ADD opt_tmp:isTempPartition single_range_partition_desc:desc opt_distribution:distribution opt_properties:properties
-    {:
-        RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
-    :}
-    | KW_ADD opt_tmp:isTempPartition KW_PARTITIONS multi_range_partition_desc:desc opt_distribution:distribution opt_properties:properties
-    {:
-        RESULT = new AddPartitionClause(desc, distribution, properties, isTempPartition);
-    :}
-    | KW_DROP opt_tmp:isTempPartition KW_PARTITION opt_if_exists:ifExists ident:partitionName opt_force:force
-    {:
-        RESULT = new DropPartitionClause(ifExists, partitionName, isTempPartition, force ? force : isTempPartition);
-    :}
-    | KW_MODIFY KW_PARTITION ident:partitionName KW_SET LPAREN key_value_map:properties RPAREN
-    {:
-        ArrayList<String> partitions = new ArrayList<String>();
-        partitions.add(partitionName);
-        RESULT = new ModifyPartitionClause(partitions, properties);
-    :}
-    | KW_MODIFY KW_PARTITION LPAREN ident_list:partitions RPAREN KW_SET LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = new ModifyPartitionClause(partitions, properties);
-    :}
-    | KW_MODIFY KW_PARTITION LPAREN STAR RPAREN KW_SET LPAREN key_value_map:properties RPAREN
-    {:
-        RESULT = ModifyPartitionClause.createStarClause(properties);
     :}
     | KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
     {:
@@ -1648,14 +1620,6 @@ drop_stmt ::=
     :}
     ;
 
-// Recover statement
-recover_stmt ::=
-    KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
-    {:
-        RESULT = new RecoverPartitionStmt(dbTblName, partitionName);
-    :}
-    ;
-
 opt_agg_type ::=
     /* not set */
     {: RESULT = null; :}
@@ -2306,10 +2270,6 @@ show_param ::=
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
-    :}
-	| opt_tmp:tmp KW_PARTITIONS KW_FROM table_name:tblName opt_wild_where order_by_clause:orderByClause limit_clause: limitClause
-    {:
-        RESULT = new ShowPartitionsStmt(tblName, parser.where, orderByClause, limitClause, tmp);
     :}
     | KW_PROPERTY opt_user:user opt_wild_where
     {:
