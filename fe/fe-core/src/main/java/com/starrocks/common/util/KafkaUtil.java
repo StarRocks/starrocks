@@ -78,6 +78,8 @@ public class KafkaUtil {
                 partitionIDs.add(partition.partition());
             }
 
+            consumer.close();
+
             return partitionIDs;
         }
 
@@ -102,6 +104,8 @@ public class KafkaUtil {
             for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
                 endOffsets.put(entry.getKey().partition(), entry.getValue());
             }
+
+            consumer.close();
             return endOffsets;
         }
 
@@ -126,6 +130,8 @@ public class KafkaUtil {
             for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
                 beginningOffsets.put(entry.getKey().partition(), entry.getValue());
             }
+
+            consumer.close();
             return beginningOffsets;
         }
 
