@@ -476,8 +476,22 @@ public class Alter {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
                 } else {
-                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
-                            TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                    db.writeLock();
+                    try {
+                        OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                        boolean metaValue = Boolean.parseBoolean(properties.get(
+                                                        PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
+                        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
+                            if (!olapTable.checkPersistentIndex()) {
+                                throw new DdlException("PrimaryKey table using persistent index don't support " + 
+                                        "varchar(char) as key so far, and key length should be no more than 64 Bytes");
+                            }
+                        }
+                        ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                                TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                    } finally {
+                        db.writeUnlock();
+                    }
                 }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());

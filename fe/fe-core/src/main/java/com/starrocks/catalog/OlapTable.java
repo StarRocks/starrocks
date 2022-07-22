@@ -1528,9 +1528,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public Boolean checkPersistentIndex() {
-        if (getKeysType() != KeysType.PRIMARY_KEYS || !enablePersistentIndex()) {
-            return true;
-        }
         // check key type and length
         int keyLength = 0;
         for (Column column : getFullSchema()) {
