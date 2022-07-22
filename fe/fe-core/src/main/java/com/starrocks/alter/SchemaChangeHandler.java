@@ -1545,7 +1545,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for alter clauses
 
-        LOG.warn("createJob");
         createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
         return null;
     }
