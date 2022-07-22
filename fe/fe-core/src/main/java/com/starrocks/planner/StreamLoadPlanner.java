@@ -133,9 +133,7 @@ public class StreamLoadPlanner {
                     IDictManager.getInstance().hasGlobalDict(destTable.getId(),
                             col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
-                if (dict != null && dict.isPresent()) {
-                    globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict.get()));
-                }
+                dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
         }
         if (isPrimaryKey) {

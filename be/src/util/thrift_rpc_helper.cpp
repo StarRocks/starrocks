@@ -73,11 +73,13 @@ Status ThriftRpcHelper::rpc(const std::string& ip, const int32_t port,
             callback(client);
         }
     } catch (apache::thrift::TException& e) {
-        LOG(WARNING) << "call frontend service failed, address=" << address << ", reason=" << e.what();
+        std::stringstream ss;
+        ss << "call frontend service failed, address=" << address << ", reason=" << e.what();
+        LOG(WARNING) << ss.str();
         SleepFor(MonoDelta::FromMilliseconds(config::thrift_client_retry_interval_ms * 2));
         // just reopen to disable this connection
         client.reopen(timeout_ms);
-        return Status::ThriftRpcError("failed to call frontend service");
+        return Status::ThriftRpcError(ss.str());
     }
     return Status::OK();
 }

@@ -33,7 +33,9 @@ set(EXEC_FILES
     backend_base.cpp
     internal_service.cpp
     staros_worker.cpp
-    mem_hook.cpp)
+    mem_hook.cpp
+    service.cpp
+)
 
 add_library(Service
         ${EXEC_FILES}

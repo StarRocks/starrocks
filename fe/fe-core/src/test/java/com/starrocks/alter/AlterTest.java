@@ -1425,7 +1425,7 @@ public class AlterTest {
 
         String renameDb = "alter database test rename test0";
         AlterDatabaseRename renameDbStmt =
-                (AlterDatabaseRename) UtFrameUtils.parseAndAnalyzeStmt(renameDb, starRocksAssert.getCtx());
+                (AlterDatabaseRename) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
 }
