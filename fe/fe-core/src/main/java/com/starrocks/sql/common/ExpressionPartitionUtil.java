@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.common;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
@@ -15,7 +16,6 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.RangeUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
@@ -51,17 +51,7 @@ public class ExpressionPartitionUtil {
         LiteralExpr baseLowerLiteralExpr = basePartitionRange.lowerEndpoint().getKeys().get(basePartitionRangeIndex);
         LiteralExpr baseUpperLiteralExpr = basePartitionRange.upperEndpoint().getKeys().get(basePartitionRangeIndex);
         if (expr instanceof SlotRef) {
-            try {
-                PartitionKey lowerBound = PartitionKey.createPartitionKey(
-                        Collections.singletonList(new PartitionValue(baseLowerLiteralExpr.getStringValue())),
-                        Collections.singletonList(partitionColumn));
-                PartitionKey upperBound = PartitionKey.createPartitionKey(
-                        Collections.singletonList(new PartitionValue(baseUpperLiteralExpr.getStringValue())),
-                        Collections.singletonList(partitionColumn));
-                return Range.closedOpen(lowerBound, upperBound);
-            } catch (AnalysisException e) {
-                throw new SemanticException("Create Partition Range failed:" + e.getMessage());
-            }
+            return generateRange(existPartitionKeyRanges, partitionColumn, baseLowerLiteralExpr, baseUpperLiteralExpr);
         } else if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
 
@@ -74,50 +64,49 @@ public class ExpressionPartitionUtil {
                 upperLiteralExpr = ExpressionPartitionUtil.getBound(
                         functionCallExpr, upperLiteralExpr, partitionColumn.getPrimitiveType(), 1);
             }
-            try {
-                // compare with existPartitionRange
-                for (Range<PartitionKey> existPartitionKeyRange : existPartitionKeyRanges) {
-                    PartitionKey lowerPartitionKey = PartitionKey.createPartitionKey(
-                            Collections.singletonList(new PartitionValue(lowerLiteralExpr.getStringValue())),
-                            Collections.singletonList(partitionColumn));
-                    PartitionKey upperPartitionKey = PartitionKey.createPartitionKey(
-                            Collections.singletonList(new PartitionValue(upperLiteralExpr.getStringValue())),
-                            Collections.singletonList(partitionColumn));
-                    Range<PartitionKey> partitionKeyRange = Range.closedOpen(lowerPartitionKey, upperPartitionKey);
-                    if (RangeUtils.isRangeIntersect(partitionKeyRange, existPartitionKeyRange)) {
-                        PartitionKey existLowerPartitionKey = existPartitionKeyRange.lowerEndpoint();
-                        PartitionKey existUpperPartitionKey = existPartitionKeyRange.upperEndpoint();
-                        if (existLowerPartitionKey.compareTo(lowerPartitionKey) <= 0 &&
-                                existUpperPartitionKey.compareTo(upperPartitionKey) >= 0) {
-                            // range full coverage
-                            return null;
-                        } else if (existLowerPartitionKey.compareTo(lowerPartitionKey) <= 0) {
-                            lowerLiteralExpr = ExpressionPartitionUtil.getBound(
-                                    functionCallExpr, lowerLiteralExpr, partitionColumn.getPrimitiveType(), 1);
-                            if (lowerLiteralExpr.equals(upperLiteralExpr)) {
-                                return null;
-                            }
-                        } else if (existUpperPartitionKey.compareTo(upperPartitionKey) >= 0) {
-                            upperLiteralExpr = ExpressionPartitionUtil.getBound(
-                                    functionCallExpr, upperLiteralExpr, partitionColumn.getPrimitiveType(), -1);
-                            if (upperLiteralExpr.equals(lowerLiteralExpr)) {
-                                return null;
-                            }
-                        }
-                    }
-                }
-                PartitionKey lowerPartitionKey = PartitionKey.createPartitionKey(
-                        Collections.singletonList(new PartitionValue(lowerLiteralExpr.getStringValue())),
-                        Collections.singletonList(partitionColumn));
-                PartitionKey upperPartitionKey = PartitionKey.createPartitionKey(
-                        Collections.singletonList(new PartitionValue(upperLiteralExpr.getStringValue())),
-                        Collections.singletonList(partitionColumn));
-                return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
-            } catch (AnalysisException e) {
-                throw new SemanticException("Create Partition Range failed:" + e.getMessage());
-            }
+            return generateRange(existPartitionKeyRanges, partitionColumn, lowerLiteralExpr, upperLiteralExpr);
         } else {
             throw new SemanticException("Do not support expr:" + expr.toSql());
+        }
+    }
+
+    private static Range<PartitionKey> generateRange(Collection<Range<PartitionKey>> existPartitionKeyRanges,
+                                              Column partitionColumn, LiteralExpr lowerLiteralExpr,
+                                              LiteralExpr upperLiteralExpr) {
+        try {
+            // compare with existPartitionRange
+            for (Range<PartitionKey> existPartitionKeyRange : existPartitionKeyRanges) {
+                PartitionKey existLowerPartitionKey = existPartitionKeyRange.lowerEndpoint();
+                PartitionKey existUpperPartitionKey = existPartitionKeyRange.upperEndpoint();
+                Preconditions.checkState(existLowerPartitionKey.getKeys().size() == 1);
+                Preconditions.checkState(existUpperPartitionKey.getKeys().size() == 1);
+                LiteralExpr existLowerLiteralExpr = existLowerPartitionKey.getKeys().get(0);
+                LiteralExpr existUpperLiteralExpr = existUpperPartitionKey.getKeys().get(0);
+                if (existLowerLiteralExpr.compareLiteral(lowerLiteralExpr) <= 0 &&
+                        existUpperLiteralExpr.compareLiteral(upperLiteralExpr) >= 0) {
+                    // range full coverage
+                    return null;
+                } else {
+                    if (existLowerLiteralExpr.compareTo(lowerLiteralExpr) <= 0) {
+                        lowerLiteralExpr = existUpperLiteralExpr;
+                    } else {
+                        upperLiteralExpr = existLowerLiteralExpr;
+                    }
+                    if (lowerLiteralExpr.compareLiteral(upperLiteralExpr) >= 0) {
+                        // no span
+                        return null;
+                    }
+                }
+            }
+            PartitionKey lowerPartitionKey = PartitionKey.createPartitionKey(
+                    Collections.singletonList(new PartitionValue(lowerLiteralExpr.getStringValue())),
+                    Collections.singletonList(partitionColumn));
+            PartitionKey upperPartitionKey = PartitionKey.createPartitionKey(
+                    Collections.singletonList(new PartitionValue(upperLiteralExpr.getStringValue())),
+                    Collections.singletonList(partitionColumn));
+            return Range.closedOpen(lowerPartitionKey, upperPartitionKey);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Create Partition Range failed:" + e.getMessage());
         }
     }
 
