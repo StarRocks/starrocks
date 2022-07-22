@@ -36,6 +36,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewPartitionNameRefInfo;
+import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -191,6 +193,26 @@ public class EditLog {
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
                     globalStateMgr.replayAddPartition(info);
+                    break;
+                }
+                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO: {
+                    MaterializedViewPartitionNameRefInfo info = (MaterializedViewPartitionNameRefInfo) journal.getData();
+                    globalStateMgr.replayAddMvPartitionNameRefInfo(info);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO: {
+                    MaterializedViewPartitionNameRefInfo info = (MaterializedViewPartitionNameRefInfo) journal.getData();
+                    globalStateMgr.replayRemoveMvPartitionNameRefInfo(info);
+                    break;
+                }
+                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
+                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
+                    globalStateMgr.replayAddMvPartitionVersionInfo(info);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
+                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
+                    globalStateMgr.replayRemoveMvPartitionVersionInfo(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -1518,5 +1540,20 @@ public class EditLog {
     public void logDeleteUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
+    
+    public void logAddMvPartitionNameRef(MaterializedViewPartitionNameRefInfo info) {
+        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO, info);
+    }
 
+    public void logRemoveMvPartitionNameRef(MaterializedViewPartitionNameRefInfo info) {
+        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO, info);
+    }
+
+    public void logAddMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
+        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
+
+    public void logRemoveMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
+        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
 }
