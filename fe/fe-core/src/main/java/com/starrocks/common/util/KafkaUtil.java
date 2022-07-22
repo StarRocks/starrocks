@@ -71,9 +71,10 @@ public class KafkaUtil {
             final Consumer<String, String> consumer = new KafkaConsumer<>(props);
 
             List<Integer> partitionIDs = new ArrayList<>();
-            final List<PartitionInfo> partitions = consumer.partitionsFor(topic, Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            final List<PartitionInfo> partitions = consumer.partitionsFor(topic, 
+                    Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
 
-            for(PartitionInfo partition : partitions) {
+            for (PartitionInfo partition : partitions) {
                 partitionIDs.add(partition.partition());
             }
 
@@ -94,7 +95,8 @@ public class KafkaUtil {
             for (Integer partitionID : partitions) {
                 topicPartitions.add(new TopicPartition(topic, partitionID));
             }
-            final Map<TopicPartition, Long> partitionNndOffsets = consumer.endOffsets(topicPartitions, Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            final Map<TopicPartition, Long> partitionNndOffsets = consumer.endOffsets(topicPartitions, 
+                    Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
 
             final Map<Integer, Long> endOffsets = new HashMap<>();
             for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
@@ -117,7 +119,8 @@ public class KafkaUtil {
             for (Integer partitionID : partitions) {
                 topicPartitions.add(new TopicPartition(topic, partitionID));
             }
-            final Map<TopicPartition, Long> partitionNndOffsets = consumer.beginningOffsets(topicPartitions, Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
+            final Map<TopicPartition, Long> partitionNndOffsets = consumer.beginningOffsets(topicPartitions, 
+                    Duration.ofSeconds(Config.routine_load_kafka_timeout_second));
 
             final Map<Integer, Long> beginningOffsets = new HashMap<>();
             for (Map.Entry<TopicPartition, Long> entry : partitionNndOffsets.entrySet()) {
