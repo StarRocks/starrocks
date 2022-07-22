@@ -5,7 +5,16 @@
 #include <memory>
 
 #include "column/column.h"
+<<<<<<< HEAD
 #include "runtime/global_dicts.h"
+=======
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
+#include "runtime/global_dict/config.h"
+#include "runtime/global_dict/dict_column.h"
+#include "runtime/global_dict/types.h"
+>>>>>>> 9ac785507 ([Bugfix] fix "unsupport decode_dict_codes" error in late_materized (#9046))
 #include "simd/gather.h"
 #include "storage/range.h"
 #include "storage/rowset/column_iterator.h"
