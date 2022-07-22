@@ -1026,12 +1026,6 @@ opt_intermediate_type ::=
 
 // Create Statement
 create_stmt ::=
-    /* Function */
-    KW_CREATE function_type:functionType function_name:functionName LPAREN func_args_def:args RPAREN
-            KW_RETURNS type_def:returnType opt_intermediate_type:intermediateType opt_properties:properties
-    {:
-        RESULT = new CreateFunctionStmt(functionType, functionName, args, returnType, intermediateType, properties);
-    :}
     /* User */
     | KW_CREATE KW_USER opt_if_not_exists:ifNotExists grant_user:user opt_user_role:userRole
     {:
@@ -1570,11 +1564,6 @@ revoke_stmt ::=
 
 // Drop statement
 drop_stmt ::=
-    /* Function */
-    KW_DROP KW_FUNCTION function_name:functionName LPAREN func_args_def:args RPAREN
-    {:
-        RESULT = new DropFunctionStmt(functionName, args);
-    :}
     /* Table */
     | KW_DROP KW_TABLE opt_if_exists:ifExists table_name:name opt_force:force
     {:
@@ -2326,10 +2315,6 @@ show_param ::=
     | KW_ROLES
     {:
         RESULT = new ShowRolesStmt();
-    :}
-    | opt_full opt_builtin:isBuiltin KW_FUNCTIONS opt_db:dbName opt_wild_where
-    {:
-        RESULT = new ShowFunctionsStmt(dbName, isBuiltin, parser.isVerbose, parser.wild, parser.where);
     :}
     | KW_FILE opt_db:dbName
     {:
