@@ -185,7 +185,7 @@ public class IcebergUtil {
         properties.put(IcebergTable.ICEBERG_CATALOG, "CUSTOM_CATALOG");
         properties.put(IcebergTable.ICEBERG_IMPL, catalogImpl);
         properties.putAll(customProperties);
-        return convertColumnTypes(icebergTable, properties);
+        return convertToSRTable(icebergTable, properties);
     }
 
     public static IcebergTable convertHiveCatalogToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
@@ -195,10 +195,10 @@ public class IcebergUtil {
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
         properties.put(IcebergTable.ICEBERG_CATALOG, "HIVE_CATALOG");
         properties.put(IcebergTable.ICEBERG_METASTORE_URIS, metastoreURI);
-        return convertColumnTypes(icebergTable, properties);
+        return convertToSRTable(icebergTable, properties);
     }
 
-    private static IcebergTable convertColumnTypes(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
+    private static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
             throws DdlException {
         Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
                 .collect(Collectors.toMap(Types.NestedField::name, field -> field));

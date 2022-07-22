@@ -5,7 +5,6 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import com.starrocks.external.iceberg.IcebergHiveCatalog;
 import com.starrocks.external.iceberg.IcebergUtil;
@@ -94,7 +93,7 @@ public class IcebergMetadataTest {
 
     @Test
     public void testGetTable(@Mocked IcebergHiveCatalog icebergHiveCatalog,
-                             @Mocked HiveTableOperations hiveTableOperations) throws Exception {
+                             @Mocked HiveTableOperations hiveTableOperations) {
 
         new Expectations() {
             {
@@ -115,7 +114,7 @@ public class IcebergMetadataTest {
     
     @Test
     public void testNotExistTable(@Mocked IcebergHiveCatalog icebergHiveCatalog,
-                                  @Mocked HiveTableOperations hiveTableOperations) throws DdlException {
+                                  @Mocked HiveTableOperations hiveTableOperations) {
         new Expectations() {
             {
                 icebergHiveCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier("db", "tbl"));

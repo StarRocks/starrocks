@@ -80,7 +80,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             org.apache.iceberg.Table icebergTable
                     = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-            if ("custom".equalsIgnoreCase(catalogType)) {
+            if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
                 return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName, customProperties);
             }
             return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, dbName, tblName);
