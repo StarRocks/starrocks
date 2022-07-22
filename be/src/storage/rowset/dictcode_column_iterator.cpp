@@ -3,6 +3,7 @@
 #include "storage/rowset/dictcode_column_iterator.h"
 
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "storage/rowset/scalar_column_iterator.h"
@@ -85,10 +86,20 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ScalarColumnIterator
 
 vectorized::ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(bool nullable) {
     vectorized::ColumnPtr res = std::make_unique<vectorized::Int32Column>();
-    if (_opts.is_nullable) {
+    if (nullable) {
         res = vectorized::NullableColumn::create(std::move(res), vectorized::NullColumn::create());
     }
     return res;
+}
+
+void GlobalDictCodeColumnIterator::_swap_null_columns(Column* src, Column* dst) {
+    DCHECK_EQ(src->is_nullable(), dst->is_nullable());
+    if (src->is_nullable()) {
+        auto src_column = down_cast<vectorized::NullableColumn*>(src);
+        auto dst_column = down_cast<vectorized::NullableColumn*>(dst);
+        dst_column->null_column_data().swap(src_column->null_column_data());
+        dst_column->set_has_null(src_column->has_null());
+    }
 }
 
 } // namespace starrocks

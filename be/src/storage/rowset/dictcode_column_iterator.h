@@ -6,6 +6,8 @@
 
 #include "column/column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr_context.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/types.h"
@@ -103,6 +105,7 @@ public:
         _local_dict_code_col->reset_column();
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
         RETURN_IF_ERROR(decode_dict_codes(*_local_dict_code_col, values));
+        _swap_null_columns(_local_dict_code_col.get(), values);
         return Status::OK();
     }
 
@@ -142,7 +145,10 @@ public:
                                          std::vector<int16_t>* code_convert_map);
 
 private:
+    // create a new empty local dict column
     vectorized::ColumnPtr _new_local_dict_col(bool nullable);
+    // swap null column between src and dst column
+    void _swap_null_columns(Column* src, Column* dst);
 
     ColumnId _cid;
     ColumnIterator* _col_iter;
