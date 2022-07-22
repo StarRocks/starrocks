@@ -21,18 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.analysis.CompoundPredicate.Operator;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 public class RecoverDbStmt extends DdlStmt {
@@ -48,23 +36,6 @@ public class RecoverDbStmt extends DdlStmt {
 
     public void setDbName(String dbname) {
         this.dbName = dbname;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(dbName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-        }
-        dbName = ClusterNamespace.getFullName(dbName);
-
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
-                PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
-                                Privilege.CREATE_PRIV,
-                                Privilege.ADMIN_PRIV),
-                        Operator.OR))) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED, analyzer.getQualifiedUser(), dbName);
-        }
     }
 
     @Override
