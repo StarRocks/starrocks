@@ -71,6 +71,8 @@ message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
+option(WITHOUT_MINIDUMP "Build binary with compresss debug section" ON)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -401,6 +403,11 @@ set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -g -Wno-unused-local-typedefs")
 if (WITH_GCOV)
     # To generate flags to code coverage
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
+endif()
+
+if (WITHOUT_MINIDUMP)
+    # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
 endif()
 
 if (ENABLE_QUERY_DEBUG_TRACE)
