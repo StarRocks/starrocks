@@ -4113,15 +4113,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (DdlException e) {
-            // create partition failed, remove all newly created tablets
-            for (Long tabletId : tabletIdSet) {
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-            }
-            // lake table need to delete shard
-            if (copiedTbl.isLakeTable()) {
-                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                editLog.logAddUnusedShard(tabletIdSet);
-            }
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
             throw e;
         }
         Preconditions.checkState(origPartitions.size() == newPartitions.size());
@@ -4130,9 +4122,11 @@ public class LocalMetastore implements ConnectorMetadata {
         // before replacing, we need to check again.
         // Things may be changed outside the database lock.
         db.writeLock();
+        boolean success = true;
         try {
             OlapTable olapTable = (OlapTable) db.getTable(copiedTbl.getId());
             if (olapTable == null) {
+                success = false;
                 throw new DdlException("Table[" + copiedTbl.getName() + "] is dropped");
             }
 
@@ -4182,10 +4176,25 @@ public class LocalMetastore implements ConnectorMetadata {
             editLog.logTruncateTable(info);
         } finally {
             db.writeUnlock();
+            if (!success) {
+                deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
+            }
         }
 
         LOG.info("finished to truncate table {}, partitions: {}",
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
+    }
+
+    private void deleteUselessTabletAndShard(Set<Long> tabletIdSet, OlapTable olapTable) {
+        // create partition failed, remove all newly created tablets
+        for (Long tabletId : tabletIdSet) {
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+        }
+        // lake table need to delete shard
+        if (olapTable.isLakeTable()) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
+        }
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
