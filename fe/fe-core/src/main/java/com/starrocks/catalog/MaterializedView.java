@@ -264,11 +264,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
-    public Set<String> getTableMvPartitionNameRefMap(String tablePartitionName) {
+    public Set<String> getMvPartitionNamesByTable(String tablePartitionName) {
         return tableMvPartitionNameRefMap.computeIfAbsent(tablePartitionName, k -> Sets.newHashSet());
     }
 
-    public Set<String> getMvTablePartitionNameRefMap(String mvPartitionName) {
+    public Set<String> getTablePartitionNamesByMv(String mvPartitionName) {
         return mvTablePartitionNameRefMap.computeIfAbsent(mvPartitionName, k -> Sets.newHashSet());
     }
 
@@ -301,7 +301,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         mvTablePartitionNameRefMap.computeIfAbsent(mvPartitionName, k -> Sets.newHashSet()).add(basePartitionName);
     }
 
-    public void dropPartitionNameRef(String mvPartitionName) {
+    public void removePartitionNameRefByMv(String mvPartitionName) {
         Set<String> basePartitionNames = mvTablePartitionNameRefMap.get(mvPartitionName);
         for (String basePartitionName : basePartitionNames) {
             tableMvPartitionNameRefMap.get(basePartitionName).remove(mvPartitionName);
@@ -309,12 +309,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         mvTablePartitionNameRefMap.remove(mvPartitionName);
     }
 
-    public Set<String> getMvPartitionNameByTable(String tablePartitionName) {
-        return tableMvPartitionNameRefMap.get(tablePartitionName);
-    }
-
-    public Set<String> getTablePartitionNameByMv(String mvPartitionName) {
-        return mvTablePartitionNameRefMap.get(mvPartitionName);
+    public void removePartitionNameRefByTable(String basePartitionName) {
+        Set<String> mvPartitionNames = tableMvPartitionNameRefMap.get(basePartitionName);
+        for (String mvPartitionName : mvPartitionNames) {
+            mvTablePartitionNameRefMap.get(mvPartitionName).remove(basePartitionName);
+        }
+        tableMvPartitionNameRefMap.remove(basePartitionName);
     }
 
     public Set<String> getExistBasePartitionNames(long baseTableId) {
@@ -372,6 +372,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
         basePartitionInfoMap.put(baseTablePartition.getName(),
                 new BasePartitionInfo(baseTablePartition.getId(), baseTablePartition.getVisibleVersion()));
+    }
+
+    public void updateBasePartition(long baseTableId, String basePartitionName, BasePartitionInfo basePartitionInfo) {
+        Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(baseTableId, k -> Maps.newHashMap());
+        basePartitionInfoMap.put(basePartitionName, basePartitionInfo);
     }
 
     public void removeBasePartition(long baseTableId, String baseTablePartitionName) {
