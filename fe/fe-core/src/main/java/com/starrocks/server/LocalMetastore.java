@@ -4122,11 +4122,9 @@ public class LocalMetastore implements ConnectorMetadata {
         // before replacing, we need to check again.
         // Things may be changed outside the database lock.
         db.writeLock();
-        boolean success = true;
         try {
             OlapTable olapTable = (OlapTable) db.getTable(copiedTbl.getId());
             if (olapTable == null) {
-                success = false;
                 throw new DdlException("Table[" + copiedTbl.getName() + "] is dropped");
             }
 
@@ -4174,11 +4172,11 @@ public class LocalMetastore implements ConnectorMetadata {
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
             editLog.logTruncateTable(info);
+        } catch (DdlException e) {
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
+            throw e;
         } finally {
             db.writeUnlock();
-            if (!success) {
-                deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
-            }
         }
 
         LOG.info("finished to truncate table {}, partitions: {}",
@@ -4191,7 +4189,7 @@ public class LocalMetastore implements ConnectorMetadata {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
         // lake table need to delete shard
-        if (olapTable.isLakeTable()) {
+        if (olapTable.isLakeTable() && !tabletIdSet.isEmpty()) {
             stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
             editLog.logAddUnusedShard(tabletIdSet);
         }
