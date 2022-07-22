@@ -46,5 +46,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: 391d6539e2d09aed3d187353bfd85fefa7a4c281 # ${{ secrets.SONAR_TOKEN }}
         run: |
-          cd fe
+          thrift --version
+          whereis thrift
+          mkdir -p thirdparty/installed/bin/
+          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
+          cd ${{ github.workspace }}/fe
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
