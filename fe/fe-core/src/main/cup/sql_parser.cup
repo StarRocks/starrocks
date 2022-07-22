@@ -1027,7 +1027,7 @@ opt_intermediate_type ::=
 // Create Statement
 create_stmt ::=
     /* User */
-    | KW_CREATE KW_USER opt_if_not_exists:ifNotExists grant_user:user opt_user_role:userRole
+    KW_CREATE KW_USER opt_if_not_exists:ifNotExists grant_user:user opt_user_role:userRole
     {:
         RESULT = new CreateUserStmt(ifNotExists, user, userRole);
     :}
@@ -1565,7 +1565,7 @@ revoke_stmt ::=
 // Drop statement
 drop_stmt ::=
     /* Table */
-    | KW_DROP KW_TABLE opt_if_exists:ifExists table_name:name opt_force:force
+    KW_DROP KW_TABLE opt_if_exists:ifExists table_name:name opt_force:force
     {:
         RESULT = new DropTableStmt(ifExists, name, force);
     :}
