@@ -21,6 +21,9 @@
 
 #include "service/internal_service.h"
 
+#include <atomic>
+
+#include "brpc/errno.pb.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "exec/pipeline/fragment_context.h"
@@ -40,6 +43,8 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
+
+extern std::atomic<bool> k_starrocks_exit;
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
@@ -146,6 +151,12 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec plan fragment because of exit";
+        return;
+    }
+
     auto st = _exec_plan_fragment(cntl);
     if (!st.ok()) {
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
@@ -160,6 +171,12 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        LOG(WARNING) << "reject exec multi plan fragment because of exit";
+        return;
+    }
+
     auto st = _exec_batch_plan_fragments(cntl);
     if (!st.ok()) {
         LOG(WARNING) << "exec multi plan fragments failed, errmsg=" << st.get_error_msg();
