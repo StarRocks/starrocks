@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -63,8 +64,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1615,7 +1616,7 @@ public class AuthTest {
     }
 
     @Test
-    public void testAuthPlugin() throws UnsupportedEncodingException {
+    public void testAuthPlugin() {
         new Expectations() {
             {
                 LdapSecurity.checkPassword("uid=zhangsan,ou=company,dc=example,dc=com", "123");
@@ -1657,12 +1658,12 @@ public class AuthTest {
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "123",
                 currentUser));
         Assert.assertTrue(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "123".getBytes("utf-8"), null, currentUser));
+                "123".getBytes(StandardCharsets.UTF_8), null, currentUser));
         Assert.assertFalse(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "456",
                         currentUser));
         Assert.assertFalse(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "456".getBytes("utf-8"), null, currentUser));
+                "456".getBytes(StandardCharsets.UTF_8), null, currentUser));
 
         // alter user zhangsan identified with authentication_ldap_simple
         userDesc = new UserDesc(userIdentity, AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), null, true);
@@ -1685,12 +1686,12 @@ public class AuthTest {
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "123",
                 currentUser));
         Assert.assertTrue(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "123".getBytes("utf-8"), null, currentUser));
+                "123".getBytes(StandardCharsets.UTF_8), null, currentUser));
         Assert.assertFalse(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8", "456",
                         currentUser));
         Assert.assertFalse(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
-                "456".getBytes("utf-8"), null, currentUser));
+                "456".getBytes(StandardCharsets.UTF_8), null, currentUser));
 
         /*
             mysql_native_password
@@ -1713,7 +1714,7 @@ public class AuthTest {
             Assert.fail();
         }
         currentUser = Lists.newArrayList();
-        byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes("utf-8");
+        byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "123456");
         Assert.assertTrue(auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "192.168.8.8", "123456",
                 currentUser));
@@ -1723,11 +1724,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password by '654321'
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "654321", true);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        String sql = "alter user lisi identified with mysql_native_password by '654321'";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1748,12 +1748,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(),
-                "*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9", false);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        sql = "alter user lisi identified with mysql_native_password as '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1774,11 +1772,10 @@ public class AuthTest {
                 currentUser));
 
         // alter user lisi identified with mysql_native_password
-        userDesc = new UserDesc(userIdentity, AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), null, false);
-        alterUserStmt = new AlterUserStmt(userDesc);
+        sql = "alter user lisi identified with mysql_native_password";
         try {
-            alterUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -2015,7 +2012,7 @@ public class AuthTest {
             Assert.assertEquals(expectHost, identities.get(0).getHost());
 
             identities.clear();
-            byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes("utf-8");
+            byte[] seed = "dJSH\\]mcwKJlLH[bYunm".getBytes(StandardCharsets.UTF_8);
             byte[] scramble = MysqlPassword.scramble(seed, PASSWORD_STR);
             auth.checkPassword(remoteUser, remoteIp, scramble, seed, identities);
             Assert.assertEquals(1, identities.size());

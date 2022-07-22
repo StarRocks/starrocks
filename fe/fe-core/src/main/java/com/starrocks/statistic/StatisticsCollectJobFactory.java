@@ -93,37 +93,48 @@ public class StatisticsCollectJobFactory {
             return;
         }
 
-        LocalDateTime updateTime = StatisticUtils.getTableLastUpdateTime(table);
-        if (job.getWorkTime().isAfter(updateTime) || StatisticUtils.isEmptyTable(table)) {
+        if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
 
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
-        if (basicStatsMeta == null || (basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.SAMPLE)
-                && job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL))) {
-            createFullStatsJob(allTableJobMap, job, null, db, table, columns);
-            return;
-        }
+        if (basicStatsMeta != null) {
+            if (basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.SAMPLE)
+                    && job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
+                createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columns);
+                return;
+            }
 
-        double statisticAutoCollectRatio = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
-                Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
-                Config.statistic_auto_collect_ratio;
-        if (basicStatsMeta.getHealthy() > statisticAutoCollectRatio) {
-            return;
+            LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+            LocalDateTime statisticsUpdateTime = basicStatsMeta.getUpdateTime();
+            if (statisticsUpdateTime.isAfter(tableUpdateTime)) {
+                return;
+            }
+
+            double statisticAutoCollectRatio = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
+                    Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
+                    Config.statistic_auto_collect_ratio;
+            if (basicStatsMeta.getHealthy() > statisticAutoCollectRatio) {
+                return;
+            }
         }
 
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
             allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, null, columns,
                     job.getAnalyzeType(), job.getScheduleType(), job.getProperties()));
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
-            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columns);
+            if (basicStatsMeta == null) {
+                createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columns);
+            } else {
+                createFullStatsJob(allTableJobMap, job, basicStatsMeta.getUpdateTime(), db, table, columns);
+            }
         } else {
             throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(), ErrorType.INTERNAL_ERROR);
         }
     }
 
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
-                                           AnalyzeJob job, BasicStatsMeta basicStatsMeta,
+                                           AnalyzeJob job, LocalDateTime statsLastUpdateTime,
                                            Database db, Table table, List<String> columns) {
         StatsConstants.AnalyzeType analyzeType;
         if (((OlapTable) table).getPartitions().stream().anyMatch(
@@ -135,22 +146,16 @@ public class StatisticsCollectJobFactory {
 
         List<Partition> partitions = Lists.newArrayList(((OlapTable) table).getPartitions());
         List<Long> partitionIdList = new ArrayList<>();
-        if (basicStatsMeta == null) {
-            allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, null, columns,
-                    analyzeType, job.getScheduleType(), job.getProperties()));
-        } else {
-            LocalDateTime statsLastUpdateTime = basicStatsMeta.getUpdateTime();
-            for (Partition partition : partitions) {
-                LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                if (statsLastUpdateTime.isBefore(partitionUpdateTime) && partition.hasData()) {
-                    partitionIdList.add(partition.getId());
-                }
+        for (Partition partition : partitions) {
+            LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+            if (statsLastUpdateTime.isBefore(partitionUpdateTime) && partition.hasData()) {
+                partitionIdList.add(partition.getId());
             }
+        }
 
-            if (!partitionIdList.isEmpty()) {
-                allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, partitionIdList, columns,
-                        analyzeType, job.getScheduleType(), Maps.newHashMap()));
-            }
+        if (!partitionIdList.isEmpty()) {
+            allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, partitionIdList, columns,
+                    analyzeType, job.getScheduleType(), Maps.newHashMap()));
         }
     }
 }

@@ -35,7 +35,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.MasterOpExecutor;
+import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -71,16 +71,16 @@ public class ShowProcAction extends RestBaseAction {
         }
 
         // forward to master if necessary
-        if (!GlobalStateMgr.getCurrentState().isMaster() && isForward) {
+        if (!GlobalStateMgr.getCurrentState().isLeader() && isForward) {
             String showProcStmt = "SHOW PROC \"" + path + "\"";
             // ConnectContext build in RestBaseAction
             ConnectContext context = ConnectContext.get();
-            MasterOpExecutor masterOpExecutor = new MasterOpExecutor(new OriginStatement(showProcStmt, 0), context,
+            LeaderOpExecutor leaderOpExecutor = new LeaderOpExecutor(new OriginStatement(showProcStmt, 0), context,
                     RedirectStatus.FORWARD_NO_SYNC);
-            LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
+            LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
 
             try {
-                masterOpExecutor.execute();
+                leaderOpExecutor.execute();
             } catch (Exception e) {
                 LOG.warn("failed to forward stmt", e);
                 response.appendContent("Failed to forward stmt: " + e.getMessage());
@@ -88,7 +88,7 @@ public class ShowProcAction extends RestBaseAction {
                 return;
             }
 
-            ShowResultSet resultSet = masterOpExecutor.getProxyResultSet();
+            ShowResultSet resultSet = leaderOpExecutor.getProxyResultSet();
             if (resultSet == null) {
                 response.appendContent("Failed to get result set");
                 sendResult(request, response);

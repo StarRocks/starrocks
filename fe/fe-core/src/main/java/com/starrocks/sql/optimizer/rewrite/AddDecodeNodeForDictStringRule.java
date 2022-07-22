@@ -87,6 +87,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     private static final Logger LOG = LogManager.getLogger(AddDecodeNodeForDictStringRule.class);
 
     private final Map<Long, List<Integer>> tableIdToStringColumnIds = Maps.newHashMap();
+    private final Map<Pair<Long, String>, ColumnDict> globalDictCache = Maps.newHashMap();
 
     public static final Type ID_TYPE = Type.INT;
 
@@ -96,6 +97,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // The child operators whether have encoded
         boolean hasEncoded = false;
         final ColumnRefFactory columnRefFactory;
+        // Global DictCache
+        // (TableID, ColumnName) -> ColumnDict
+        final Map<Pair<Long, String>, ColumnDict> globalDictCache;
         final Map<Long, List<Integer>> tableIdToStringColumnIds;
         final Set<Integer> allStringColumnIds;
         // For the low cardinality string columns that have applied global dict optimization
@@ -111,7 +115,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         // other stages need to be rewritten as well
         Set<Integer> needRewriteMultiCountDistinctColumns;
 
-        public DecodeContext(Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory) {
+        public DecodeContext(Map<Pair<Long, String>, ColumnDict> globalDictCache,
+                             Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory) {
+            this.globalDictCache = globalDictCache;
             this.tableIdToStringColumnIds = tableIdToStringColumnIds;
             this.columnRefFactory = columnRefFactory;
             stringColumnIdToDictColumnIds = Maps.newHashMap();
@@ -123,6 +129,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             for (List<Integer> ids : tableIdToStringColumnIds.values()) {
                 allStringColumnIds.addAll(ids);
             }
+        }
+
+        // if column ref is an applied optimized string column, return the dictionary column.
+        // else return column ref itself
+        ColumnRefOperator getMappedOperator(ColumnRefOperator columnRef) {
+            int id = columnRef.getId();
+            Integer mapped = stringColumnIdToDictColumnIds.getOrDefault(id, id);
+            return columnRefFactory.getColumnRef(mapped);
         }
 
         public void clear() {
@@ -372,11 +386,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     newColRefToColumnMetaMap.remove(stringColumn);
                     newColRefToColumnMetaMap.put(newDictColumn, newColumn);
 
-                    Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(tableId, stringColumn.getName());
-                    if (dict != null && dict.isPresent()) {
-                        globalDicts.add(new Pair<>(newDictColumn.getId(), dict.get()));
-                    }
+                    // get dict from cache
+                    ColumnDict columnDict = context.globalDictCache.get(new Pair<>(tableId, stringColumn.getName()));
+                    Preconditions.checkState(columnDict != null);
+                    globalDicts.add(new Pair<>(newDictColumn.getId(), columnDict));
 
                     context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                     context.hasEncoded = true;
@@ -473,6 +486,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     orderingList.add(orderDesc);
                 }
             }
+
+            List<ColumnRefOperator> partitionByColumns = null;
+            if (operator.getPartitionByColumns() != null) {
+                partitionByColumns =
+                        operator.getPartitionByColumns().stream().map(context::getMappedOperator)
+                                .collect(Collectors.toList());
+            }
+
             OrderSpec newOrderSpec = new OrderSpec(orderingList);
 
             ScalarOperator predicate = operator.getPredicate();
@@ -487,7 +508,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(),
                     operator.getOffset(),
-                    null,
+                    partitionByColumns,
                     Operator.DEFAULT_LIMIT,
                     operator.getSortPhase(),
                     operator.getTopNType(),
@@ -714,7 +735,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
 
-            DecodeContext mergeContext = new DecodeContext(
+            DecodeContext mergeContext = new DecodeContext(context.globalDictCache,
                     context.tableIdToStringColumnIds, context.columnRefFactory);
             for (int i = 0; i < optExpression.arity(); ++i) {
                 context.clear();
@@ -841,6 +862,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                 // Condition 3: the varchar column has collected global dict
                 if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+                    Optional<ColumnDict> dict =
+                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                    // cache reaches capacity limit, randomly eliminate some keys
+                    // then we will get an empty dictionary.
+                    if (!dict.isPresent()) {
+                        continue;
+                    }
+                    globalDictCache.put(new Pair<>(table.getId(), column.getName()), dict.get());
                     if (!tableIdToStringColumnIds.containsKey(table.getId())) {
                         List<Integer> integers = Lists.newArrayList();
                         integers.add(column.getId());
@@ -858,8 +887,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             return root;
         }
 
-        DecodeContext context = new DecodeContext(tableIdToStringColumnIds, taskContext.getOptimizerContext().
-                getColumnRefFactory());
+        DecodeContext context =
+                new DecodeContext(globalDictCache, tableIdToStringColumnIds, taskContext.getOptimizerContext().
+                        getColumnRefFactory());
 
         OptExpression rewriteExpr = root.getOp().accept(new DecodeVisitor(), root, context);
         if (context.hasEncoded) {

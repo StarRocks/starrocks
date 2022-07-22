@@ -103,9 +103,6 @@ public class AnalyzeManager implements Writable {
     }
 
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
-        if (status.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
-            status.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        }
         analyzeStatusMap.put(status.getId(), status);
     }
 
@@ -227,7 +224,8 @@ public class AnalyzeManager implements Writable {
 
             for (String histogramColumn : histogramItem.getValue()) {
                 Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);
-                GlobalStateMgr.getCurrentState().getEditLog().logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
+                GlobalStateMgr.getCurrentState().getEditLog()
+                        .logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
                 histogramStatsMetaMap.remove(histogramKey);
             }
         }

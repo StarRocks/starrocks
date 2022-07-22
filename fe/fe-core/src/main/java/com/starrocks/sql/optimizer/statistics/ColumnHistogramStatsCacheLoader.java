@@ -36,8 +36,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
                 if (!statisticData.isEmpty()) {
                     List<Bucket> buckets = convert(statisticData.get(0).histogram);
-                    Map<Double, Long> mcv = convertMCV(statisticData.get(0).histogram);
-                    Histogram histogram = new Histogram(buckets, mcv);
+                    Map<Double, Long> topn = convertTOPN(statisticData.get(0).histogram);
+                    Histogram histogram = new Histogram(buckets, topn);
                     return Optional.of(histogram);
                 } else {
                     return Optional.empty();
@@ -65,8 +65,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(tableId, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
                     List<Bucket> buckets = convert(histogramStatsData.histogram);
-                    Map<Double, Long> mcv = convertMCV(histogramStatsData.histogram);
-                    Histogram histogram = new Histogram(buckets, mcv);
+                    Map<Double, Long> topn = convertTOPN(histogramStatsData.histogram);
+                    Histogram histogram = new Histogram(buckets, topn);
                     result.put(new ColumnStatsCacheKey(histogramStatsData.tableId, histogramStatsData.columnName),
                             Optional.of(histogram));
                 }
@@ -108,7 +108,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return buckets;
     }
 
-    private Map<Double, Long> convertMCV(String histogramString) {
+    private Map<Double, Long> convertTOPN(String histogramString) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonArray histogramObj = jsonObject.getAsJsonArray("top-n");
 

@@ -54,7 +54,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -191,6 +191,10 @@ public class Database extends MetaObject implements Writable {
 
     public long getId() {
         return id;
+    }
+
+    public String getOriginName() {
+        return ClusterNamespace.getNameFromFullName(fullQualifiedName);
     }
 
     public String getFullName() {
@@ -406,7 +410,19 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
+        // process related materialized views
+        if (table.isOlapTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            for (long mvId : olapTable.getRelatedMaterializedViews()) {
+                Table tmpTable = getTable(mvId);
+                if (tmpTable != null) {
+                    MaterializedView mv = (MaterializedView) tmpTable;
+                    mv.setActive(false);
+                }
+            }
+        }
+
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(),
                 table.getId());
         return batchTaskMap;
     }
@@ -540,13 +556,7 @@ public class Database extends MetaObject implements Writable {
     public int getSignature(int signatureVersion) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
-        String charsetName = "UTF-8";
-        try {
-            adler32.update(this.fullQualifiedName.getBytes(charsetName));
-        } catch (UnsupportedEncodingException e) {
-            LOG.error("encoding error", e);
-            return -1;
-        }
+        adler32.update(this.fullQualifiedName.getBytes(StandardCharsets.UTF_8));
         return Math.abs((int) adler32.getValue());
     }
 

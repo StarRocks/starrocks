@@ -36,6 +36,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewPartitionNameRefInfo;
+import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -45,7 +47,7 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
-import com.starrocks.ha.MasterInfo;
+import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
@@ -173,7 +175,7 @@ public class EditLog {
                         break;
                     }
                     LOG.info("Begin to unprotect drop table. db = "
-                            + db.getFullName() + " table = " + info.getTableId());
+                            + db.getOriginName() + " table = " + info.getTableId());
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
@@ -183,6 +185,34 @@ public class EditLog {
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
                     globalStateMgr.replayCreateMaterializedView(info.getDbName(), ((MaterializedView) info.getTable()));
+                    break;
+                }
+                case OperationType.OP_ADD_PARTITION_V2: {
+                    PartitionPersistInfoV2 info = (PartitionPersistInfoV2) journal.getData();
+                    LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
+                            + " table = " + info.getTableId()
+                            + " partitionName = " + info.getPartition().getName());
+                    globalStateMgr.replayAddPartition(info);
+                    break;
+                }
+                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO: {
+                    MaterializedViewPartitionNameRefInfo info = (MaterializedViewPartitionNameRefInfo) journal.getData();
+                    globalStateMgr.replayAddMvPartitionNameRefInfo(info);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO: {
+                    MaterializedViewPartitionNameRefInfo info = (MaterializedViewPartitionNameRefInfo) journal.getData();
+                    globalStateMgr.replayRemoveMvPartitionNameRefInfo(info);
+                    break;
+                }
+                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
+                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
+                    globalStateMgr.replayAddMvPartitionVersionInfo(info);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
+                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
+                    globalStateMgr.replayRemoveMvPartitionVersionInfo(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -500,9 +530,9 @@ public class EditLog {
                     globalStateMgr.setSynchronizedTime(stamp.getTimestamp());
                     break;
                 }
-                case OperationType.OP_MASTER_INFO_CHANGE: {
-                    MasterInfo info = (MasterInfo) journal.getData();
-                    globalStateMgr.setMaster(info);
+                case OperationType.OP_LEADER_INFO_CHANGE: {
+                    LeaderInfo info = (LeaderInfo) journal.getData();
+                    globalStateMgr.setLeader(info);
                     break;
                 }
                 //compatible with old community meta, newly added log using OP_META_VERSION_V2
@@ -1052,6 +1082,10 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
+    public void logAddPartition(PartitionPersistInfoV2 info) {
+        logEdit(OperationType.OP_ADD_PARTITION_V2, info);
+    }
+
     public void logAddPartition(PartitionPersistInfo info) {
         logEdit(OperationType.OP_ADD_PARTITION, info);
     }
@@ -1180,8 +1214,8 @@ public class EditLog {
         logEdit(OperationType.OP_TIMESTAMP, stamp);
     }
 
-    public void logMasterInfo(MasterInfo info) {
-        logEdit(OperationType.OP_MASTER_INFO_CHANGE, info);
+    public void logLeaderInfo(LeaderInfo info) {
+        logEdit(OperationType.OP_LEADER_INFO_CHANGE, info);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {
@@ -1533,5 +1567,20 @@ public class EditLog {
     public void logDeleteUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
+    
+    public void logAddMvPartitionNameRef(MaterializedViewPartitionNameRefInfo info) {
+        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO, info);
+    }
 
+    public void logRemoveMvPartitionNameRef(MaterializedViewPartitionNameRefInfo info) {
+        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_NAME_REF_INFO, info);
+    }
+
+    public void logAddMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
+        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
+
+    public void logRemoveMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
+        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
 }

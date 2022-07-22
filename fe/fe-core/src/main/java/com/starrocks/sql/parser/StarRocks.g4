@@ -23,6 +23,7 @@ statement
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -46,6 +47,7 @@ statement
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -103,14 +105,23 @@ statement
     | alterResourceGroupStatement                                                               #alterResourceGroup
     | showResourceGroupStatement                                                                #showResourceGroup
 
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+    | dropFunctionStatement                                                                 #dropFunctionst
+    | createFunctionStatement                                                               #createFunction
+
+
+
     // Other statement
     | USE qualifiedName                                                                     #use
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
+    | showCharsetStatement                                                                  #showCharset
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -118,6 +129,7 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+    | ALTER USER user authOption                                                            #alterUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -158,6 +170,11 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -329,6 +346,10 @@ showPartitionsStatement
     : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+recoverPartitionStatement
+    : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -578,6 +599,24 @@ classifier
     : '(' expression (',' expression)* ')'
     ;
 
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+dropFunctionStatement
+    : DROP FUNCTION qualifiedName '(' typeList ')'
+    ;
+
+createFunctionStatement
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    ;
+
+typeList
+    : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -588,6 +627,11 @@ showDatabasesStatement
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
+
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
+    ;
+
 
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
@@ -603,6 +647,10 @@ setUserPropertyStatement
 
 showStatusStatement
     : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement
@@ -1180,6 +1228,11 @@ number
     | INTEGER_VALUE  #integerValue
     ;
 
+authOption
+    : IDENTIFIED BY PASSWORD? string                            # authWithoutPlugin
+    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
+    ;
+
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
@@ -1209,4 +1262,5 @@ nonReserved
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WORK | WRITE
     | YEAR
+    | DOTDOTDOT
     ;

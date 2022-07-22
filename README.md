@@ -21,7 +21,7 @@
     <img src="https://img.shields.io/badge/Visit%20StarRocks-Website-green" alt="Website">
   </a>
   </a>
-   <a href="https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw">
+   <a href="https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg">
     <img src="https://img.shields.io/badge/Join-Slack-ff69b4" alt="Slack">
   </a>
   </a>
@@ -81,7 +81,7 @@ StarRocks’s streamlined architecture is mainly composed of two modules：Front
 
 ### ❓ Get support  
 [<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)
--  [Slack community: ](https://join.slack.com/t/starrocks/shared_invite/zt-192zeqlc7-Afpz4mA9g0WO3rPeDbXLrw)join technical discussions, ask questions, and meet other users!
+-  [Slack community: ](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)join technical discussions, ask questions, and meet other users!
 -  [YouTube channel:](https://www.youtube.com/channel/UC38wR-ogamk4naaWNQ45y7Q/featured) subscribe to the latest video tutorials and webcasts.
 -  [GitHub issues:](https://github.com/StarRocks/starrocks/issues) report an issue with StarRocks.
 

@@ -52,7 +52,7 @@ import org.apache.spark.launcher.SparkLauncher;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -120,9 +120,9 @@ public class SparkEtlJobHandler {
         }
 
         try {
-            byte[] configData = etlJobConfig.configToJson().getBytes("UTF-8");
+            byte[] configData = etlJobConfig.configToJson().getBytes(StandardCharsets.UTF_8);
             BrokerUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc);
-        } catch (UserException | UnsupportedEncodingException e) {
+        } catch (UserException e) {
             throw new LoadException(e.getMessage());
         }
 
@@ -256,7 +256,7 @@ public class SparkEtlJobHandler {
             String dppResultFilePath = EtlJobConfig.getDppResultFilePath(etlOutputPath);
             try {
                 byte[] data = BrokerUtil.readFile(dppResultFilePath, brokerDesc);
-                String dppResultStr = new String(data, "UTF-8");
+                String dppResultStr = new String(data, StandardCharsets.UTF_8);
                 DppResult dppResult = new Gson().fromJson(dppResultStr, DppResult.class);
                 if (dppResult != null) {
                     status.setDppResult(dppResult);
@@ -264,7 +264,7 @@ public class SparkEtlJobHandler {
                         status.setFailMsg(dppResult.failedReason);
                     }
                 }
-            } catch (UserException | JsonSyntaxException | UnsupportedEncodingException e) {
+            } catch (UserException | JsonSyntaxException e) {
                 LOG.warn("read broker file failed. path: {}", dppResultFilePath, e);
             }
         }

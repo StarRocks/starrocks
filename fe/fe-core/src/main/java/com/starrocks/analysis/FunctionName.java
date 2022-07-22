@@ -125,7 +125,7 @@ public class FunctionName implements Writable {
         return db;
     }
 
-    public void analyze(Analyzer analyzer) throws AnalysisException {
+    public void analyze(String defaultDb) throws AnalysisException {
         if (fn_.length() == 0) {
             throw new AnalysisException("Function name can not be empty.");
         }
@@ -140,7 +140,7 @@ public class FunctionName implements Writable {
             throw new AnalysisException("Function cannot start with a digit: " + fn_);
         }
         if (db_ == null) {
-            db_ = analyzer.getDefaultDb();
+            db_ = defaultDb;
             if (Strings.isNullOrEmpty(db_)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }

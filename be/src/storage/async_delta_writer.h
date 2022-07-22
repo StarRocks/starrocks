@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
@@ -33,7 +35,7 @@ public:
     static StatusOr<std::unique_ptr<AsyncDeltaWriter>> open(const DeltaWriterOptions& opt, MemTracker* mem_tracker);
 
     AsyncDeltaWriter(private_type, std::unique_ptr<DeltaWriter> writer)
-            : _writer(std::move(writer)), _queue_id{kInvalidQueueId} {}
+            : _writer(std::move(writer)), _queue_id{kInvalidQueueId}, _closed(false) {}
 
     ~AsyncDeltaWriter();
 
@@ -69,14 +71,18 @@ private:
         AsyncDeltaWriterCallback* write_cb = nullptr;
         uint32_t indexes_size = 0;
         bool commit_after_write = false;
+        bool abort = false;
+        bool abort_with_log = false;
     };
-
-    Status _init();
 
     static int _execute(void* meta, bthread::TaskIterator<AsyncDeltaWriter::Task>& iter);
 
+    Status _init();
+    void _close();
+
     std::unique_ptr<DeltaWriter> _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
+    std::atomic<bool> _closed;
 };
 
 class CommittedRowsetInfo {

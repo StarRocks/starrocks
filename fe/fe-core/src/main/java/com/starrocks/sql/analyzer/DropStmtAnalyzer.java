@@ -3,13 +3,18 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.FunctionArgsDef;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -67,11 +72,11 @@ public class DropStmtAnalyzer {
             // Check if a view
             if (statement.isView()) {
                 if (!(table instanceof View)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getFullName(), tableName, "VIEW");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "VIEW");
                 }
             } else {
                 if (table instanceof View) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getFullName(), tableName, "TABLE");
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_OBJECT, db.getOriginName(), tableName, "TABLE");
                 }
             }
             return null;
@@ -88,6 +93,25 @@ public class DropStmtAnalyzer {
             if (dbName.equalsIgnoreCase(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+            try {
+                // analyze function name
+                FunctionName functionName = statement.getFunctionName();
+                functionName.analyze(context.getDatabase());
+                // analyze arguments
+                FunctionArgsDef argsDef = statement.getArgsDef();
+                argsDef.analyze();
+
+                statement.setFunction(
+                        new FunctionSearchDesc(functionName, argsDef.getArgTypes(), argsDef.isVariadic()));
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+
             return null;
         }
     }

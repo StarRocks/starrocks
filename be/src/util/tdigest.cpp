@@ -54,7 +54,7 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "util/radix_sort.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -552,7 +552,8 @@ void TDigest::updateCumulative() {
 
 void TDigest::process() {
     CentroidComparator cc;
-    RadixSort<TDigestRadixSortTraits>::executeLSD(_unprocessed.data(), _unprocessed.size());
+    pdqsort(false, _unprocessed.begin(), _unprocessed.end(),
+            [&](auto& lhs, auto& rhs) { return lhs.mean() < rhs.mean(); });
     auto count = _unprocessed.size();
     _unprocessed.insert(_unprocessed.end(), _processed.cbegin(), _processed.cend());
     std::inplace_merge(_unprocessed.begin(), _unprocessed.begin() + count, _unprocessed.end(), cc);

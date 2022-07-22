@@ -59,7 +59,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
@@ -323,26 +322,21 @@ public class ConnectProcessor {
     // Get the column definitions of a table
     private void handleFieldList() throws IOException {
         // Already get command code.
-        String tableName = null;
-        try {
-            tableName = new String(MysqlProto.readNulTerminateString(packetBuf), "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            // Impossible!!!
-            LOG.error("Unknown UTF-8 character set.");
-            return;
-        }
+        String tableName = new String(MysqlProto.readNulTerminateString(packetBuf), StandardCharsets.UTF_8);
         if (Strings.isNullOrEmpty(tableName)) {
             ctx.getState().setError("Empty tableName");
             return;
         }
-        Database db = ctx.getGlobalStateMgr().getDb(ctx.getDatabase());
+        Database db = ctx.getGlobalStateMgr().getMetadataMgr().getDb(ctx.getCurrentCatalog(), ctx.getDatabase());
         if (db == null) {
             ctx.getState().setError("Unknown database(" + ctx.getDatabase() + ")");
             return;
         }
         db.readLock();
         try {
-            Table table = db.getTable(tableName);
+            // we should get table through metadata manager
+            Table table = ctx.getGlobalStateMgr().getMetadataMgr().getTable(
+                    ctx.getCurrentCatalog(), ctx.getDatabase(), tableName);
             if (table == null) {
                 ctx.getState().setError("Unknown table(" + tableName + ")");
                 return;
@@ -356,7 +350,7 @@ public class ConnectProcessor {
             List<Column> baseSchema = table.getBaseSchema();
             for (Column column : baseSchema) {
                 serializer.reset();
-                serializer.writeField(db.getFullName(), table.getName(), column, true);
+                serializer.writeField(db.getOriginName(), table.getName(), column, true);
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
 
@@ -428,7 +422,7 @@ public class ConnectProcessor {
     // use to return result packet to user
     private void finalizeCommand() throws IOException {
         ByteBuffer packet = null;
-        if (executor != null && executor.isForwardToMaster()) {
+        if (executor != null && executor.isForwardToLeader()) {
             // for ERR State, set packet to remote packet(executor.getOutputPacket())
             //      because remote packet has error detail
             // but for not ERR (OK or EOF) State, we should check whether stmt is ShowStmt,
@@ -559,7 +553,7 @@ public class ConnectProcessor {
             // return error directly.
             TMasterOpResult result = new TMasterOpResult();
             ctx.getState().setError(
-                    "Missing current user identity. You need to upgrade this Frontend to the same version as Master Frontend.");
+                    "Missing current user identity. You need to upgrade this Frontend to the same version as Leader Frontend.");
             result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
             result.setPacket(getResultPacket());
             return result;

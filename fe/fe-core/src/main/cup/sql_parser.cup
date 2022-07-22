@@ -737,18 +737,6 @@ alter_stmt ::=
     {:
         RESULT = new AlterSystemStmt(clause);
     :}
-    | KW_ALTER KW_DATABASE ident:dbName KW_SET KW_DATA KW_QUOTA quantity:quota_quantity
-    {:
-        RESULT = new AlterDatabaseQuotaStmt(dbName, QuotaType.DATA, quota_quantity);
-    :}
-    | KW_ALTER KW_DATABASE ident:dbName KW_SET KW_REPLICA KW_QUOTA INTEGER_LITERAL:number
-    {:
-        RESULT = new AlterDatabaseQuotaStmt(dbName, QuotaType.REPLICA, String.valueOf(number));
-    :}
-    | KW_ALTER KW_DATABASE ident:dbName KW_RENAME ident:newDbName
-    {:
-        RESULT = new AlterDatabaseRename(dbName, newDbName);
-    :}
     | KW_ALTER KW_USER grant_user:user
     {:
         RESULT = new AlterUserStmt(user);
@@ -1066,17 +1054,8 @@ opt_intermediate_type ::=
 
 // Create Statement
 create_stmt ::=
-    /* Database */
-    KW_CREATE KW_DATABASE opt_if_not_exists:ifNotExists ident:db
-    {:
-        RESULT = new CreateDbStmt(ifNotExists, db);
-    :}
-    | KW_CREATE KW_SCHEMA opt_if_not_exists:ifNotExists ident:db
-    {:
-        RESULT = new CreateDbStmt(ifNotExists, db);
-    :}
     /* Function */
-    | KW_CREATE function_type:functionType function_name:functionName LPAREN func_args_def:args RPAREN
+    KW_CREATE function_type:functionType function_name:functionName LPAREN func_args_def:args RPAREN
             KW_RETURNS type_def:returnType opt_intermediate_type:intermediateType opt_properties:properties
     {:
         RESULT = new CreateFunctionStmt(functionType, functionName, args, returnType, intermediateType, properties);
@@ -1619,17 +1598,8 @@ revoke_stmt ::=
 
 // Drop statement
 drop_stmt ::=
-    /* Database */
-    KW_DROP KW_DATABASE opt_if_exists:ifExists ident:db opt_force:force
-    {:
-        RESULT = new DropDbStmt(ifExists, db, force);
-    :}
-    | KW_DROP KW_SCHEMA opt_if_exists:ifExists ident:db opt_force:force
-    {:
-        RESULT = new DropDbStmt(ifExists, db, force);
-    :}
     /* Function */
-    | KW_DROP KW_FUNCTION function_name:functionName LPAREN func_args_def:args RPAREN
+    KW_DROP KW_FUNCTION function_name:functionName LPAREN func_args_def:args RPAREN
     {:
         RESULT = new DropFunctionStmt(functionName, args);
     :}
@@ -1680,15 +1650,7 @@ drop_stmt ::=
 
 // Recover statement
 recover_stmt ::=
-    KW_RECOVER KW_DATABASE ident:dbName
-    {:
-        RESULT = new RecoverDbStmt(dbName);
-    :}
-    | KW_RECOVER KW_SCHEMA ident:dbName
-    {:
-        RESULT = new RecoverDbStmt(dbName);
-    :}
-    | KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
+    KW_RECOVER KW_PARTITION ident:partitionName KW_FROM table_name:dbTblName
     {:
         RESULT = new RecoverPartitionStmt(dbTblName, partitionName);
     :}
@@ -2241,11 +2203,6 @@ show_param ::=
     {:
         RESULT = new ShowMaterializedViewStmt(db);
     :}
-    /* show processlist */
-    | opt_full KW_PROCESSLIST
-    {:
-        RESULT = new ShowProcesslistStmt(parser.isVerbose);
-    :}
     /* routine */
     | procedure_or_function KW_STATUS opt_wild_where
     {:
@@ -2280,15 +2237,6 @@ show_param ::=
     | KW_AUTHORS
     {:
         RESULT = new ShowAuthorStmt();
-    :}
-    /* Create database */
-    | KW_CREATE KW_DATABASE ident:db
-    {:
-        RESULT = new ShowCreateDbStmt(db);
-    :}
-    | KW_CREATE KW_SCHEMA ident:db
-    {:
-        RESULT = new ShowCreateDbStmt(db);
     :}
     /* Database */
     | KW_DATABASES opt_wild_where
@@ -2358,15 +2306,6 @@ show_param ::=
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
-    :}
-    /* Show data statement: used to show data size of specified range */
-    | KW_DATA
-    {:
-        RESULT = new ShowDataStmt(null, null);
-    :}
-    | KW_DATA KW_FROM table_name:dbTblName
-    {:
-        RESULT = new ShowDataStmt(dbTblName.getDb(), dbTblName.getTbl());
     :}
 	| opt_tmp:tmp KW_PARTITIONS KW_FROM table_name:tblName opt_wild_where order_by_clause:orderByClause limit_clause: limitClause
     {:
@@ -4705,29 +4644,13 @@ integer_list ::=
     ;
 
 admin_stmt ::=
-    KW_ADMIN KW_SHOW KW_REPLICA KW_STATUS KW_FROM base_table_ref:table_ref opt_wild_where
-    {:
-        RESULT = new AdminShowReplicaStatusStmt(table_ref, parser.where);
-    :}
-    | KW_ADMIN KW_SHOW KW_REPLICA KW_DISTRIBUTION KW_FROM base_table_ref:table_ref
-    {:
-        RESULT = new AdminShowReplicaDistributionStmt(table_ref);
-    :}
-    | KW_ADMIN KW_SET KW_REPLICA KW_STATUS KW_PROPERTIES LPAREN key_value_map:prop RPAREN
-    {:
-        RESULT = new AdminSetReplicaStatusStmt(prop);
-    :}
-    | KW_ADMIN KW_REPAIR KW_TABLE base_table_ref:table_ref
+    KW_ADMIN KW_REPAIR KW_TABLE base_table_ref:table_ref
     {:
         RESULT = new AdminRepairTableStmt(table_ref);
     :}
     | KW_ADMIN KW_CANCEL KW_REPAIR KW_TABLE base_table_ref:table_ref
     {:
         RESULT = new AdminCancelRepairTableStmt(table_ref);
-    :}
-    | KW_ADMIN KW_SHOW KW_FRONTEND KW_CONFIG opt_wild_where
-    {:
-        RESULT = new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, parser.wild);
     :}
     | KW_ADMIN KW_CHECK KW_TABLET LPAREN integer_list:tabletIds RPAREN opt_properties:properties
     {:
@@ -4962,8 +4885,6 @@ keyword ::=
     | KW_PLUGINS:id
     {: RESULT = id; :}
     | KW_PROC:id
-    {: RESULT = id; :}
-    | KW_PROCESSLIST:id
     {: RESULT = id; :}
     | KW_PROPERTIES:id
     {: RESULT = id; :}

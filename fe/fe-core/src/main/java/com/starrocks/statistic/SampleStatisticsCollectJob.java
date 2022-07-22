@@ -7,7 +7,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
@@ -50,9 +49,8 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
         int partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
                 / (sampleRowCount * columns.size()) + 1);
-        List<List<String>> splitColumns = Lists.partition(columns, partitionSize);
 
-        for (List<String> splitColItem : splitColumns) {
+        for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
             collectStatisticSync(sql);
         }
@@ -118,7 +116,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             context.put("tableId", tableId);
             context.put("columnName", name);
             context.put("dbName", db.getFullName());
-            context.put("tableName", ClusterNamespace.getNameFromFullName(db.getFullName()) + "." + table.getName());
+            context.put("tableName", db.getOriginName() + "." + table.getName());
             context.put("dataSize", getDataSize(column, true));
             context.put("ratio", ratio);
             context.put("hints", hintTablets);

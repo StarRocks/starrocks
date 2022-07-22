@@ -33,6 +33,7 @@ import java.time.ZoneId;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 public class TimeUtilsTest {
 
@@ -174,6 +175,24 @@ public class TimeUtilsTest {
         } catch (DdlException ex) {
             Assert.assertTrue(ex.getMessage().contains("Unknown or incorrect time zone: 'FOO'"));
         }
+    }
+
+    @Test
+    public void testConvertTimeUnitValuetoSecond() {
+        long dayRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.DAYS);
+        long hourRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.HOURS);
+        long minuteRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.MINUTES);
+        long secondRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.SECONDS);
+        long milRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.MILLISECONDS);
+        long micRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.MICROSECONDS);
+        long nanoRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.NANOSECONDS);
+        Assert.assertEquals(dayRes, 2 * 24 * 60 * 60);
+        Assert.assertEquals(hourRes, 2 * 60 * 60);
+        Assert.assertEquals(minuteRes, 2 * 60);
+        Assert.assertEquals(secondRes, 2);
+        Assert.assertEquals(milRes, 2 / 1000);
+        Assert.assertEquals(micRes, 2 / 1000 / 1000);
+        Assert.assertEquals(nanoRes, 2 / 1000 / 1000 / 1000);
     }
 
 }

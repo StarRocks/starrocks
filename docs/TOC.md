@@ -2,8 +2,9 @@
 
 ## Index
 
-+ [Introduction](./introduction/StarRocks_intro.md)
++ [StarRocks](/introduction/StarRocks_intro.md)
 + Quick Start
+  + [Introduction](./introduction/what_is_starrocks.md)
   + [Concepts](./quick_start/Concepts.md)
   + [Architecture](./quick_start/Architecture.md)
   + [Deploy](./quick_start/Deploy.md)
@@ -39,7 +40,7 @@
   + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
   + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [Colocate Join](./using_starrocks/Colocation_join.md)
+  + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [External tables](./using_starrocks/External_table.md)
   + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
   + [Array](./using_starrocks/Array.md)
@@ -77,14 +78,12 @@
       + [CANCEL DECOMMISSION](./sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE FILE](./sql-reference/sql-statements/Administration/CREATE%20FILE.md)
       + [DROP FILE](./sql-reference/sql-statements/Administration/DROP%20FILE.md)
-      + [ENTER](./sql-reference/sql-statements/Administration/ENTER.md)
       + [INSTALL PLUGIN](./sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
       + [SHOW FRONTENDS](./sql-reference/sql-statements/Administration/SHOW%20FRONTENDS.md)
       + [SHOW FULL COLUMNS](./sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](./sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
-      + [SHOW MIGRATIONS](./sql-reference/sql-statements/Administration/SHOW%20MIGRATIONS.md)
       + [SHOW PLUGINS](./sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
       + [SHOW FILE](./sql-reference/sql-statements/Administration/SHOW%20FILE.md)

@@ -5,6 +5,9 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import org.junit.BeforeClass;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class TPCDSPlanTestBase extends PlanTestBase {
     final static protected String[] tpcdsTables =
             {"call_center", "catalog_page", "catalog_returns", "catalog_sales", "customer", "customer_address",
@@ -21,6 +24,28 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             long v = tpcdsTablesRowCount[i];
             OlapTable table = getOlapTable(t);
             setTableStatistics(table, v * factor);
+        }
+    }
+
+    public Map<String, Long> getTPCDSTableStats() {
+        Map<String, Long> m = new HashMap<>();
+        for (int i = 0; i < tpcdsTables.length; i++) {
+            String t = tpcdsTables[i];
+            long v = tpcdsTablesRowCount[i];
+            OlapTable table = getOlapTable(t);
+            m.put(t, table.getRowCount());
+        }
+        return m;
+    }
+
+    public void setTPCDSTableStats(Map<String, Long> m) {
+        for (int i = 0; i < tpcdsTables.length; i++) {
+            String t = tpcdsTables[i];
+            if (m.containsKey(t)) {
+                long v = m.get(t);
+                OlapTable table = getOlapTable(t);
+                setTableStatistics(table, v);
+            }
         }
     }
 

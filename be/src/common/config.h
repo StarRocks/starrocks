@@ -752,6 +752,9 @@ CONF_Int32(max_batch_publish_latency_ms, "100");
 // Config for opentelemetry tracing.
 CONF_String(jaeger_endpoint, "");
 
+// Config for query debug trace
+CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
+
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
 // Root dir used for cache if cache enabled.
@@ -768,5 +771,8 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 // Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
 // admin, eos, mock, assigner, conf
 CONF_String(dependency_librdkafka_debug, "all");
+
+// max loop count when be waiting its fragments finish
+CONF_Int64(loop_count_wait_fragments_finish, "0");
 
 } // namespace starrocks::config

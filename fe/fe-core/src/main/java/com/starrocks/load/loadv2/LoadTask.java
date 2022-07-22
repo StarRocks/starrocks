@@ -27,11 +27,11 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.MasterTask;
+import com.starrocks.task.LeaderTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public abstract class LoadTask extends MasterTask {
+public abstract class LoadTask extends LeaderTask {
     public enum TaskType {
         PENDING,
         LOADING

@@ -86,7 +86,7 @@ public class DropPartitionTest {
         Assert.assertNull(partition);
         String recoverPartitionSql = "recover partition p20210201 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
-                (RecoverPartitionStmt) UtFrameUtils.parseAndAnalyzeStmt(recoverPartitionSql, connectContext);
+                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt);
         partition = table.getPartition("p20210201");
         Assert.assertNotNull(partition);
@@ -108,7 +108,7 @@ public class DropPartitionTest {
         Assert.assertNull(partition);
         String recoverPartitionSql = "recover partition p20210202 from test.tbl1";
         RecoverPartitionStmt recoverPartitionStmt =
-                (RecoverPartitionStmt) UtFrameUtils.parseAndAnalyzeStmt(recoverPartitionSql, connectContext);
+                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "No partition named p20210202 in table tbl1",
                 () -> GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt));

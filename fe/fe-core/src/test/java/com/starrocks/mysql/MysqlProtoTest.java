@@ -37,8 +37,8 @@ import org.junit.Test;
 import org.slf4j.Logger;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class MysqlProtoTest {
@@ -251,7 +251,7 @@ public class MysqlProtoTest {
     }
 
     @Test
-    public void testRead() throws UnsupportedEncodingException {
+    public void testRead() {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         serializer.writeInt1(200);
         serializer.writeInt2(65535);
@@ -261,7 +261,7 @@ public class MysqlProtoTest {
         serializer.writeInt8(1234567898);
         serializer.writeVInt(1111123452);
         // string
-        serializer.writeBytes("hello".getBytes("utf-8"));
+        serializer.writeBytes("hello".getBytes(StandardCharsets.UTF_8));
         serializer.writeLenEncodedString("world");
         serializer.writeNulTerminateString("i have dream");
         serializer.writeEofString("you have dream too");

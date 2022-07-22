@@ -11,7 +11,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -145,7 +144,7 @@ public class StatisticExecutor {
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
-        String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+        String dbName = db.getOriginName();
         String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
@@ -228,7 +227,7 @@ public class StatisticExecutor {
 
         //Only update running status without edit log, make restart job status is failed
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeStatusWithoutEditLog(analyzeStatus);
+        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
             statsJob.collect();
