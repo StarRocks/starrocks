@@ -1,29 +1,27 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 package com.starrocks.sql.common;
-
-import com.google.common.collect.Range;
-import com.starrocks.catalog.PartitionKey;
-
 import java.time.LocalDateTime;
 
 public class PartitionMapping {
 
-    private final LocalDateTime firstTime;
-    private final LocalDateTime lastTime;
+    // the lowerDateTime is closed
+    private final LocalDateTime lowerDateTime;
+    // the upperDateTime is open
+    private final LocalDateTime upperDateTime;
 
-    public PartitionMapping(LocalDateTime firstTime, LocalDateTime lastTime) {
+    public PartitionMapping(LocalDateTime lowerDateTime, LocalDateTime upperDateTime) {
 
-        this.firstTime = firstTime;
-        this.lastTime = lastTime;
+        this.lowerDateTime = lowerDateTime;
+        this.upperDateTime = upperDateTime;
     }
 
 
-    public LocalDateTime getFirstTime() {
-        return firstTime;
+    public LocalDateTime getLowerDateTime() {
+        return lowerDateTime;
     }
 
-    public LocalDateTime getLastTime() {
-        return lastTime;
+    public LocalDateTime getUpperDateTime() {
+        return upperDateTime;
     }
 }

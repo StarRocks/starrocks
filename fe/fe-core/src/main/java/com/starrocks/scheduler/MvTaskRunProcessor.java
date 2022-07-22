@@ -121,7 +121,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Expr partitionExpr = materializedView.getPartitionRefTableExprs().get(0);
         Map<Long, OlapTable> olapTables = Maps.newHashMap();
         OlapTable partitionTable = null;
-        Column partitionColumn = null;
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
@@ -131,13 +130,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 partitionTable = olapTable;
-                partitionColumn = partitionTable.getColumn(slotRef.getColumnName());
             }
             olapTables.put(baseTableId, olapTable);
         }
         // 2. sync partition with partition table, get need refresh mv partition ids
         Set<String> needRefreshPartitionNames = processSyncBasePartition(database, materializedView,
-                partitionTable, partitionExpr, partitionColumn, partitionProperties, distributionDesc);
+                partitionTable, partitionExpr, partitionProperties, distributionDesc);
         // 3. collect need refresh mv partition ids
         boolean refreshAllPartitions = false;
         for (Long baseTableId : baseTableIds) {
@@ -168,15 +166,14 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
     }
 
     private Set<String> processSyncBasePartition(Database db, MaterializedView mv, OlapTable base,
-                                                 Expr partitionExpr, Column basePartitionColumn,
-                                                 Map<String, String> partitionProperties,
+                                                 Expr partitionExpr, Map<String, String> partitionProperties,
                                                  DistributionDesc distributionDesc) {
         long baseTableId = base.getId();
 
         Map<String, Range<PartitionKey>> basePartitionMap = base.getRangePartitionMap();
         Map<String, Range<PartitionKey>> mvPartitionMap = mv.getRangePartitionMap();
 
-        PartitionDiff partitionDiff = new PartitionDiff(Maps.newHashMap(), Maps.newHashMap());
+        PartitionDiff partitionDiff = new PartitionDiff();
         if (partitionExpr instanceof SlotRef) {
             partitionDiff = ExpressionPartitionUtil.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
@@ -212,7 +209,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             needRefreshPartitionNames.add(partitionName);
         }
         LOG.info("The process of synchronizing partitions add range {} ", adds);
-
 
         return needRefreshPartitionNames;
     }

@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 
@@ -9,9 +10,12 @@ import java.util.Map;
 
 public class PartitionDiff {
 
-    Map<String, Range<PartitionKey>> adds;
+    Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
 
-    Map<String, Range<PartitionKey>> deletes;
+    Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
+
+    public PartitionDiff() {
+    }
 
     public PartitionDiff(Map<String, Range<PartitionKey>> adds, Map<String, Range<PartitionKey>> deletes) {
         this.adds = adds;

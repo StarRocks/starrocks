@@ -6,9 +6,7 @@ import com.clearspring.analytics.util.Lists;
 import com.clearspring.analytics.util.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.RangeSet;
 import com.google.common.collect.Sets;
-import com.google.common.collect.TreeRangeSet;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.PartitionKey;
@@ -61,13 +59,16 @@ public class ExpressionPartitionUtil {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
         for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
             PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), granularity);
-            // this will cause range overlap
-            timePointSet.add(mappedRange.getFirstTime());
-            timePointSet.add(mappedRange.getLastTime());
+            // this mappedRange may exist range overlap
+            timePointSet.add(mappedRange.getLowerDateTime());
+            timePointSet.add(mappedRange.getUpperDateTime());
         }
         List<LocalDateTime> timePointList = Lists.newArrayList(timePointSet);
         // deal overlap
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+        if (timePointList.size() < 2) {
+            return result;
+        }
         for (int i = 1; i < timePointList.size(); i++) {
             try {
                 PartitionKey lowerPartitionKey = new PartitionKey();
@@ -81,14 +82,13 @@ public class ExpressionPartitionUtil {
                 String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime, granularity);
                 result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
             } catch (AnalysisException ex) {
-                throw new SemanticException("Convert to DateLiteral failed:" + ex);
+                throw new SemanticException("Convert to DateLiteral failed:", ex);
             }
         }
         return result;
     }
 
-    public static PartitionMapping mappingRange(Range<PartitionKey> baseRange,
-                                                                String granularity) {
+    public static PartitionMapping mappingRange(Range<PartitionKey> baseRange, String granularity) {
         // assume expr partition must be DateLiteral and only one partition
         LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
         LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
@@ -98,94 +98,120 @@ public class ExpressionPartitionUtil {
         DateLiteral upperDate = (DateLiteral) upperExpr;
         LocalDateTime lowerDateTime = lowerDate.toLocalDateTime();
         LocalDateTime upperDateTime = upperDate.toLocalDateTime();
-//        PrimitiveType srcType = baseRange.upperEndpoint().getTypes().get(0);
 
-        LocalDateTime firstTime = getFirstTime(lowerDateTime, granularity);
-        LocalDateTime lastTime = getLastTime(upperDateTime, granularity);
-        return new PartitionMapping(firstTime, lastTime);
+        LocalDateTime truncLowerDateTime = getLowerDateTime(lowerDateTime, granularity);
+        LocalDateTime truncUpperDateTime = getUpperDateTime(upperDateTime, granularity);
+        return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
-    public static String getMVPartitionName(LocalDateTime firstTime, LocalDateTime lastTime, String granularity) {
+    public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
+                                            String granularity) {
         switch (granularity) {
             case "minute":
-                return DEFAULT_PREFIX + firstTime.format(DateUtils.MINUTE_FORMATTER) +
-                        "_" + lastTime.format(DateUtils.MINUTE_FORMATTER);
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MINUTE_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.MINUTE_FORMATTER);
             case "hour":
-                return DEFAULT_PREFIX + firstTime.format(DateUtils.HOUR_FORMATTER) +
-                        "_" + lastTime.format(DateUtils.HOUR_FORMATTER);
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.HOUR_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.HOUR_FORMATTER);
             case "day":
-                return DEFAULT_PREFIX + firstTime.format(DateUtils.DATEKEY_FORMATTER) +
-                        "_" + lastTime.format(DateUtils.DATEKEY_FORMATTER);
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.DATEKEY_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.DATEKEY_FORMATTER);
             case "month":
-                return DEFAULT_PREFIX + firstTime.format(DateUtils.MONTH_FORMATTER) +
-                        "_" + lastTime.format(DateUtils.MONTH_FORMATTER);
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MONTH_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.MONTH_FORMATTER);
             case "quarter":
-                return DEFAULT_PREFIX + firstTime.format(DateUtils.QUARTER_FORMATTER) +
-                        "_" + lastTime.format(DateUtils.QUARTER_FORMATTER);
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.QUARTER_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.QUARTER_FORMATTER);
             case "year":
-                return DEFAULT_PREFIX + firstTime.format(DateUtils.YEAR_FORMATTER) +
-                        "_" + lastTime.format(DateUtils.YEAR_FORMATTER);
+                return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.YEAR_FORMATTER) +
+                        "_" + upperDateTime.format(DateUtils.YEAR_FORMATTER);
             default:
-                throw new SemanticException("Do not support in date_trunc format string:" + granularity);
+                throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
     }
 
+    // when the upperDateTime is the same as granularity rollup time, should not +1
     @NotNull
-    private static LocalDateTime getLastTime(LocalDateTime upperDateTime, String granularity) {
-        LocalDateTime lastTime;
+    private static LocalDateTime getUpperDateTime(LocalDateTime upperDateTime, String granularity) {
+        LocalDateTime truncUpperDateTime;
         switch (granularity) {
             case "minute":
-                lastTime = upperDateTime.plusMinutes(1).withNano(0).withSecond(0);;
+                if (upperDateTime.withNano(0).withSecond(0).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    truncUpperDateTime = upperDateTime.plusMinutes(1).withNano(0).withSecond(0);
+                }
                 break;
             case "hour":
-                lastTime = upperDateTime.plusHours(1).withNano(0).withSecond(0).withMinute(0);;
+                if (upperDateTime.withNano(0).withSecond(0).withMinute(0).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    truncUpperDateTime = upperDateTime.plusHours(1).withNano(0).withSecond(0).withMinute(0);
+                }
                 break;
             case "day":
-                lastTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
+                if (upperDateTime.with(LocalTime.MIN).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    truncUpperDateTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
+                }
                 break;
             case "month":
-                lastTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());;
+                if (upperDateTime.with(TemporalAdjusters.firstDayOfMonth()).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
+                }
                 break;
             case "quarter":
-                LocalDateTime nextDateTime = upperDateTime.plusMonths(3);
-                lastTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
-                        .with(TemporalAdjusters.firstDayOfMonth());;
+                if (upperDateTime.with(upperDateTime.getMonth().firstMonthOfQuarter())
+                        .with(TemporalAdjusters.firstDayOfMonth()).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    LocalDateTime nextDateTime = upperDateTime.plusMonths(3);
+                    truncUpperDateTime = nextDateTime.with(nextDateTime.getMonth().firstMonthOfQuarter())
+                            .with(TemporalAdjusters.firstDayOfMonth());
+                }
                 break;
             case "year":
-                lastTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());;
+                if (upperDateTime.with(TemporalAdjusters.firstDayOfYear()).equals(upperDateTime)) {
+                    truncUpperDateTime = upperDateTime;
+                } else {
+                    truncUpperDateTime = upperDateTime.plusYears(1).with(TemporalAdjusters.firstDayOfYear());
+                }
                 break;
             default:
-                throw new SemanticException("Do not support in date_trunc format string:" + granularity);
+                throw new SemanticException("Do not support date_trunc format string:{}", granularity);
         }
-        return lastTime;
+        return truncUpperDateTime;
     }
 
-    private static LocalDateTime getFirstTime(LocalDateTime lowerDateTime, String granularity) {
-        LocalDateTime firstTime;
+    private static LocalDateTime getLowerDateTime(LocalDateTime lowerDateTime, String granularity) {
+        LocalDateTime truncLowerDateTime;
         switch (granularity) {
             case "minute":
-                firstTime = lowerDateTime.withNano(0).withSecond(0);
+                truncLowerDateTime = lowerDateTime.withNano(0).withSecond(0);
                 break;
             case "hour":
-                firstTime = lowerDateTime.withNano(0).withSecond(0).withMinute(0);
+                truncLowerDateTime = lowerDateTime.withNano(0).withSecond(0).withMinute(0);
                 break;
             case "day":
-                firstTime = lowerDateTime.with(LocalTime.MIN);
+                truncLowerDateTime = lowerDateTime.with(LocalTime.MIN);
                 break;
             case "month":
-                firstTime = lowerDateTime.with(TemporalAdjusters.firstDayOfMonth());
+                truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfMonth());
                 break;
             case "quarter":
-                firstTime = lowerDateTime.with(lowerDateTime.getMonth().firstMonthOfQuarter())
+                truncLowerDateTime = lowerDateTime.with(lowerDateTime.getMonth().firstMonthOfQuarter())
                         .with(TemporalAdjusters.firstDayOfMonth());
                 break;
             case "year":
-                firstTime = lowerDateTime.with(TemporalAdjusters.firstDayOfYear());
+                truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfYear());
                 break;
             default:
                 throw new SemanticException("Do not support in date_trunc format string:" + granularity);
         }
-        return firstTime;
+        return truncLowerDateTime;
     }
 
     public static Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,

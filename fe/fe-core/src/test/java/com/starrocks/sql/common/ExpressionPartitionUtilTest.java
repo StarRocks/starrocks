@@ -1,31 +1,21 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.common;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 public class ExpressionPartitionUtilTest {
@@ -185,54 +175,54 @@ public class ExpressionPartitionUtilTest {
         PartitionMapping mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "minute");
 
         Assert.assertEquals("2020-05-03T12:34:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
         Assert.assertEquals("2020-06-04T12:35:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // hour
         baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
         mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "hour");
 
         Assert.assertEquals("2020-05-03T12:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
         Assert.assertEquals("2020-06-04T13:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // day
         baseRange = createRange("2020-05-03 12:34:56", "2020-06-04 12:34:56");
         mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-05-03T00:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
         Assert.assertEquals("2020-06-05T00:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // month
         baseRange = createRange("2020-05-03", "2020-06-04");
         mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "month");
 
         Assert.assertEquals("2020-05-01T00:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
         Assert.assertEquals("2020-07-01T00:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // quarter
         baseRange = createRange("2020-05-03", "2020-06-04");
         mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "quarter");
 
         Assert.assertEquals("2020-04-01T00:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
         Assert.assertEquals("2020-07-01T00:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // year
         baseRange = createRange("2020-05-03", "2020-06-04");
         mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "year");
 
         Assert.assertEquals("2020-01-01T00:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
         Assert.assertEquals("2021-01-01T00:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
     }
 
     @Test
@@ -244,20 +234,63 @@ public class ExpressionPartitionUtilTest {
 
 
         Assert.assertEquals("0000-01-01T00:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
-        Assert.assertEquals("2020-05-04T00:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
+        Assert.assertEquals("2020-05-03T00:00:00",
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
 
         // big partition
         baseRange = createRange("2020-01-01", "2020-02-01");
         mappedRange = ExpressionPartitionUtil.mappingRange(baseRange, "day");
 
         Assert.assertEquals("2020-01-01T00:00:00",
-                mappedRange.getFirstTime().format(DateTimeFormatter.ISO_DATE_TIME));
-        Assert.assertEquals("2020-02-02T00:00:00",
-                mappedRange.getLastTime().format(DateTimeFormatter.ISO_DATE_TIME));
+                mappedRange.getLowerDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
+        Assert.assertEquals("2020-02-01T00:00:00",
+                mappedRange.getUpperDateTime().format(DateTimeFormatter.ISO_DATE_TIME));
     }
 
+    @Test
+    public void testCalcSyncRollupSpecial() throws AnalysisException {
+
+        // less than
+        Map<String, Range<PartitionKey>> baseRange = Maps.newHashMap();
+        Range<PartitionKey> basePartition = createLessThanRange("2020-05-03");
+        baseRange.put("p1", basePartition);
+        baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
+
+        Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
+        PartitionDiff diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, "month");
+        Map<String, Range<PartitionKey>> adds = diff.getAdds();
+        Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
+
+        Assert.assertEquals(3, adds.size());
+        Assert.assertEquals("0000-01-01 00:00:00",
+                adds.get("p000101_202005").lowerEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals("2020-05-01 00:00:00",
+                adds.get("p000101_202005").upperEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals("2020-06-01 00:00:00",
+                adds.get("p202006_202012").lowerEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals("2020-12-01 00:00:00",
+                adds.get("p202006_202012").upperEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals("2020-05-01 00:00:00",
+                adds.get("p202005_202006").lowerEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals("2020-06-01 00:00:00",
+                adds.get("p202005_202006").upperEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals(0, deletes.size());
+
+        // big partition
+        baseRange = Maps.newHashMap();
+        baseRange.put("p202001", createRange("2020-01-01", "2020-02-01"));
+
+        mvRange = Maps.newHashMap();
+        mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
+        diff = ExpressionPartitionUtil.calcSyncRollupPartition(baseRange, mvRange, "day");
+        adds = diff.getAdds();
+        deletes = diff.getDeletes();
+
+        System.out.println(adds);
+        System.out.println(deletes);
+
+    }
     @Test
     public void testCalcSyncRollupPartition() throws AnalysisException {
         // overlap scenario
@@ -299,9 +332,9 @@ public class ExpressionPartitionUtilTest {
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
         Assert.assertEquals("2020-01-01 00:00:00",
-                adds.get("p202001_202102").lowerEndpoint().getKeys().get(0).getStringValue());
-        Assert.assertEquals("2021-02-01 00:00:00",
-                adds.get("p202001_202102").upperEndpoint().getKeys().get(0).getStringValue());
+                adds.get("p202001_202101").lowerEndpoint().getKeys().get(0).getStringValue());
+        Assert.assertEquals("2021-01-01 00:00:00",
+                adds.get("p202001_202101").upperEndpoint().getKeys().get(0).getStringValue());
 
         Assert.assertEquals(1, deletes.size());
         Assert.assertEquals("2020-01-01 00:00:00",
