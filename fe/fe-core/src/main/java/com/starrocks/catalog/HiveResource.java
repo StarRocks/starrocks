@@ -66,7 +66,7 @@ public class HiveResource extends Resource {
     @Override
     protected void getProcNodeData(BaseProcResult result) {
         String lowerCaseType = type.name().toLowerCase();
-        if (isMaxComputeResource) {
+        if (!isMaxComputeResource) {
             result.addRow(Lists.newArrayList(name, lowerCaseType, HIVE_METASTORE_URIS, metastoreURIs));
         } else {
             result.addRow(Lists.newArrayList(name, lowerCaseType, MAX_COMPUTE_ENABLE, "true"));
