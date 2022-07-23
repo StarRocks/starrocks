@@ -4498,6 +4498,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void onErasePartition(Partition partition) {
+        // for debug
+        LOG.info("enter onErasePartition");
         // remove tablet in inverted index
         Set<Long> tabletIdSet = new HashSet<Long>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
@@ -4507,6 +4509,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 invertedIndex.deleteTablet(tabletId);
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 if (tabletMeta.isLakeTablet()) {
+                    // for debug
+                    LOG.info("tablet {} is lake tablet", tabletId);
                     tabletIdSet.add(tabletId);
                 }
             }
@@ -4519,7 +4523,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    // for test onlyta
+    // for test only
     @VisibleForTesting
     public void clear() {
         if (idToDb != null) {
