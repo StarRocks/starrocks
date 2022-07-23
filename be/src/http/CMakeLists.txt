@@ -45,6 +45,7 @@ set(SOURCES
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
   action/metrics_action.cpp
+  action/pprof_actions.cpp
   action/stream_load.cpp
   action/transaction_stream_load.cpp
   action/meta_action.cpp
@@ -52,11 +53,6 @@ set(SOURCES
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
 )
-
-if (NOT USE_JEMALLOC)
-  # pprof is only available under tcmalloc
-  list(APPEND SOURCES action/pprof_actions.cpp)
-endif()
 
 add_library(Webserver STATIC ${SOURCES})
 

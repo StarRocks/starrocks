@@ -2,6 +2,7 @@
 
 #ifdef USE_JEMALLOC
 #include <malloc.h>
+
 #include "jemalloc/jemalloc.h"
 #else
 #include <gperftools/nallocx.h>
@@ -180,24 +181,24 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 
 #ifdef USE_JEMALLOC
 #define STARROCKS_MALLOC_SIZE(ptr) je_malloc_usable_size(ptr)
-#define STARROCKS_NALLOX(size,flags) je_nallocx(size,flags)
+#define STARROCKS_NALLOX(size, flags) je_nallocx(size, flags)
 #define STARROCKS_MALLOC(size) je_malloc(size)
 #define STARROCKS_FREE(ptr) je_free(ptr)
-#define STARROCKS_REALLOC(ptr,size) je_realloc(ptr,size)
-#define STARROCKS_CALLOC(number,size) je_calloc(number,size)
-#define STARROCKS_ALIGNED_ALLOC(align,size) je_aligned_alloc(align,size)
-#define STARROCKS_POSIX_MEMALIGN(ptr,align,size) je_posix_memalign(ptr,align,size)
+#define STARROCKS_REALLOC(ptr, size) je_realloc(ptr, size)
+#define STARROCKS_CALLOC(number, size) je_calloc(number, size)
+#define STARROCKS_ALIGNED_ALLOC(align, size) je_aligned_alloc(align, size)
+#define STARROCKS_POSIX_MEMALIGN(ptr, align, size) je_posix_memalign(ptr, align, size)
 #define STARROCKS_CFREE(ptr) je_free(ptr)
 #define STARROCKS_VALLOC(size) je_valloc(size)
 #else
 #define STARROCKS_MALLOC_SIZE(ptr) tc_malloc_size(ptr)
-#define STARROCKS_NALLOX(size,flags) tc_nallocx(size,flags)
+#define STARROCKS_NALLOX(size, flags) tc_nallocx(size, flags)
 #define STARROCKS_MALLOC(size) tc_malloc(size)
 #define STARROCKS_FREE(ptr) tc_free(ptr)
-#define STARROCKS_REALLOC(ptr,size) tc_realloc(ptr,size)
-#define STARROCKS_CALLOC(number,size) tc_calloc(number,size)
-#define STARROCKS_ALIGNED_ALLOC(align,size) tc_memalign(align,size)
-#define STARROCKS_POSIX_MEMALIGN(ptr,align,size) tc_posix_memalign(ptr,align,size)
+#define STARROCKS_REALLOC(ptr, size) tc_realloc(ptr, size)
+#define STARROCKS_CALLOC(number, size) tc_calloc(number, size)
+#define STARROCKS_ALIGNED_ALLOC(align, size) tc_memalign(align, size)
+#define STARROCKS_POSIX_MEMALIGN(ptr, align, size) tc_posix_memalign(ptr, align, size)
 #define STARROCKS_CFREE(ptr) tc_cfree(ptr)
 #define STARROCKS_VALLOC(size) tc_valloc(size)
 #endif
@@ -434,7 +435,6 @@ size_t my_malloc_usebale_size(void* ptr) __THROW {
     size_t ret = STARROCKS_MALLOC_SIZE(ptr);
     return ret;
 }
-
 
 void* malloc(size_t size) __THROW ALIAS(my_malloc);
 void free(void* p) __THROW ALIAS(my_free);
