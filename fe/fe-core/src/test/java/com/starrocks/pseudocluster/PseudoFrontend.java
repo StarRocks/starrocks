@@ -9,6 +9,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
@@ -175,7 +176,12 @@ public class PseudoFrontend {
                 ExecuteEnv.setup();
 
                 GlobalStateMgr.getCurrentState().initialize(args);
-                GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(FrontendNodeType.MASTER);
+                StateChangeExecutor.getInstance().setMetaContext(
+                        GlobalStateMgr.getCurrentState().getMetaContext());
+                StateChangeExecutor.getInstance().registerStateChangeExecution(
+                        GlobalStateMgr.getCurrentState().getStateChangeExecution());
+                StateChangeExecutor.getInstance().start();
+                StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
                 FrontendOptions.saveStartType();
 
                 GlobalStateMgr.getCurrentState().waitForReady();
