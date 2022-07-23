@@ -21,6 +21,8 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         sourceRunId: ${{ github.event.workflow_run.id }}
 
+    - run: sleep 15 # wait the pr review upload artifact finished
+
     - uses: dawidd6/action-download-artifact@v2
       with:
         workflow: review-pr-trigger.yml
