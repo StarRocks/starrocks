@@ -75,7 +75,8 @@ public class TransactionState implements Writable {
         INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
         ROUTINE_LOAD_TASK(4),           // routine load task use this type
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
-        DELETE(6);                      // synchronization delete job use this type
+        DELETE(6),                     // synchronization delete job use this type
+        LAKE_COMPACTION(7);            // compaction of LakeTable
 
         private final int flag;
 
@@ -101,6 +102,8 @@ public class TransactionState implements Writable {
                     return BATCH_LOAD_JOB;
                 case 6:
                     return DELETE;
+                case 7:
+                    return LAKE_COMPACTION;
                 default:
                     return null;
             }
@@ -402,7 +405,7 @@ public class TransactionState implements Writable {
         // 1. the transactionStatus status must be VISIBLE
         // 2. this.latch.countDown(); has not been called before
         // 3. this.latch can not be null
-        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {            
+        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {
             this.latch.countDown();
         }
     }

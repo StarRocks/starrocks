@@ -95,6 +95,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewPartitionNameRefInfo;
+import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -164,6 +166,8 @@ import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
+import com.starrocks.lake.compaction.CompactionDispatchDaemon;
+import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
@@ -192,6 +196,7 @@ import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
@@ -416,6 +421,11 @@ public class GlobalStateMgr {
 
     private StateChangeExecution execution;
 
+    // For LakeTable
+    private CompactionManager compactionManager;
+    // For LakeTable
+    private CompactionDispatchDaemon compactionDispatchDaemon;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -472,6 +482,10 @@ public class GlobalStateMgr {
 
     public ConnectorMetadata getLocalMetastore() {
         return localMetastore;
+    }
+
+    public CompactionManager getCompactionManager() {
+        return compactionManager;
     }
 
     private static class SingletonHolder {
@@ -588,6 +602,10 @@ public class GlobalStateMgr {
                 gsm.transferToNonLeader(newType);
             }
         };
+        if (Config.use_staros) {
+            this.compactionManager = new CompactionManager();
+            this.compactionDispatchDaemon = new CompactionDispatchDaemon();
+        }
     }
 
     public static void destroyCheckpoint() {
@@ -848,6 +866,12 @@ public class GlobalStateMgr {
 
         // 6. start task cleaner thread
         createTaskCleaner();
+
+        // 7. init starosAgent
+        if (Config.use_staros && !starOSAgent.init()) {
+            LOG.error("init starOSAgent failed");
+            System.exit(-1);
+        }
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -986,7 +1010,9 @@ public class GlobalStateMgr {
     private void startLeaderOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
             // register service to starMgr
-            getStarOSAgent().registerAndBootstrapService();
+            if (!getStarOSAgent().registerAndBootstrapService()) {
+                System.exit(-1);
+            }
         }
 
         // start checkpoint thread
@@ -1043,7 +1069,11 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        shardManager.getShardDeleter().start();
+
+        if (Config.use_staros) {
+            shardManager.getShardDeleter().start();
+            compactionDispatchDaemon.start();
+        }
     }
 
     // start threads that should running on all FE
@@ -1778,6 +1808,10 @@ public class GlobalStateMgr {
         localMetastore.replayAddPartition(info);
     }
 
+    public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
+        localMetastore.replayAddPartition(info);
+    }
+
     public void dropPartition(Database db, OlapTable olapTable, DropPartitionClause clause) throws DdlException {
         localMetastore.dropPartition(db, olapTable, clause);
     }
@@ -2238,6 +2272,22 @@ public class GlobalStateMgr {
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
         localMetastore.replayCreateMaterializedView(dbName, materializedView);
+    }
+
+    public void replayAddMvPartitionNameRefInfo(MaterializedViewPartitionNameRefInfo info) {
+        localMetastore.replayAddMvPartitionNameRefInfo(info);
+    }
+
+    public void replayRemoveMvPartitionNameRefInfo(MaterializedViewPartitionNameRefInfo info) {
+        localMetastore.replayRemoveMvPartitionNameRefInfo(info);
+    }
+
+    public void replayAddMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
+        localMetastore.replayAddMvPartitionVersionInfo(info);
+    }
+
+    public void replayRemoveMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
+        localMetastore.replayRemoveMvPartitionVersionInfo(info);
     }
 
     // Drop table

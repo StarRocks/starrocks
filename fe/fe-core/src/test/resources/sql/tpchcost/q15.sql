@@ -150,6 +150,7 @@ OutPut Exchange Id: 18
 5:AGGREGATE (merge finalize)
 |  aggregate: sum[([27: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [11: L_SUPPKEY, INT, false]
+|  having: 27: sum IS NOT NULL
 |  cardinality: 1000000
 |  probe runtime filters:
 |  - filter_id = 0, probe_expr = (27: sum)

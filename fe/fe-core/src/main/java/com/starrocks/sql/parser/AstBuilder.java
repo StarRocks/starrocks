@@ -116,6 +116,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowCharsetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -187,6 +188,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -1331,6 +1333,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new AnalyzeStmt(tableName, columnNames, properties, context.SAMPLE() != null, new AnalyzeBasicDesc());
+    }
+
+    @Override
+    public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        return new DropStatsStmt(tableName);
     }
 
     @Override
@@ -2747,7 +2756,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.YEAR() != null) {
             return new FunctionCallExpr("year", visit(context.expression(), Expr.class));
         } else if (context.PASSWORD() != null) {
-            return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(context.string().getText())));
+            StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+            return new StringLiteral(new String(MysqlPassword.makeScrambledPassword(stringLiteral.getValue())));
         }
 
         if (context.TIMESTAMPADD() != null || context.TIMESTAMPDIFF() != null) {
@@ -3513,5 +3523,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         String partitionName = ((Identifier) visit(context.identifier())).getValue();
         return new RecoverPartitionStmt(tableName, partitionName);
+    }
+    
+    @Override
+    public ParseNode visitShowCharsetStatement(StarRocksParser.ShowCharsetStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+
+        return new ShowCharsetStmt(pattern, where);
     }
 }

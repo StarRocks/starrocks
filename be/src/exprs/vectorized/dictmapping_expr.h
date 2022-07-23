@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <memory>
+#include <mutex>
+
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
@@ -26,11 +29,18 @@ public:
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 
-    void rewrite(Expr* expr) {
-        DCHECK(dict_func_expr == nullptr);
-        DCHECK(expr != nullptr);
-        dict_func_expr = expr;
-        add_child(dict_func_expr);
+    template <class Rewrite>
+    Status rewrite(Rewrite&& rewriter) {
+        std::call_once(*_rewrite_once_flag, [&]() {
+            DCHECK(dict_func_expr == nullptr);
+            auto rewrite_result = rewriter();
+            _rewrite_status = rewrite_result.status();
+            if (_rewrite_status.ok()) {
+                dict_func_expr = rewrite_result.value();
+                add_child(dict_func_expr);
+            }
+        });
+        return _rewrite_status;
     }
 
     SlotId slot_id() {
@@ -45,6 +55,8 @@ public:
     }
 
 private:
+    std::shared_ptr<std::once_flag> _rewrite_once_flag = std::make_shared<std::once_flag>();
+    Status _rewrite_status;
     // used for dictionary expression calculation.
     // the input columns are dictionary columns
     Expr* dict_func_expr = nullptr;

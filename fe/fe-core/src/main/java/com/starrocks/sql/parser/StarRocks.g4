@@ -90,6 +90,7 @@ statement
 
     // Analyze Statement
     | analyzeStatement                                                                      #analyze
+    | dropStatsStatement                                                                    #dropStats
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
@@ -120,6 +121,7 @@ statement
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
+    | showCharsetStatement                                                                  #showCharset
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -535,6 +537,10 @@ analyzeStatement
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
+dropStatsStatement
+    : DROP STATS qualifiedName
+    ;
+
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
@@ -641,6 +647,10 @@ setUserPropertyStatement
 
 showStatusStatement
     : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement

@@ -99,6 +99,7 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -135,6 +136,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -466,6 +468,8 @@ public class StmtExecutor {
                 handleAnalyzeStmt();
             } else if (parsedStmt instanceof DropHistogramStmt) {
                 handleDropHistogramStmt();
+            } else if (parsedStmt instanceof DropStatsStmt) {
+                handleDropStatsStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -495,6 +499,10 @@ public class StmtExecutor {
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         } finally {
+            if (context.getState().isError() && coord != null) {
+                coord.cancel();
+            }
+
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 // The transaction of an insert operation begin at analyze phase.
@@ -817,12 +825,26 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+    private void handleDropStatsStmt() {
+        DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropStatsStmt.getTableName());
+        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+    }
+
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
 
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
 
     private void handleAddSqlBlackListStmt() {

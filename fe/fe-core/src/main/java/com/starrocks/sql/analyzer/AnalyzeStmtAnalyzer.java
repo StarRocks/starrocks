@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -205,6 +206,12 @@ public class AnalyzeStmtAnalyzer {
                         String.valueOf((double) sampleRows / (double) totalRows));
                 properties.put(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS, String.valueOf(sampleRows));
             }
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
+            MetaUtils.normalizationTableName(session, statement.getTableName());
+            return null;
         }
 
         @Override
