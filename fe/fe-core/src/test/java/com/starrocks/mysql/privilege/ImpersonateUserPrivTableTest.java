@@ -31,18 +31,18 @@ public class ImpersonateUserPrivTableTest {
         UserIdentity gregory = UserIdentity.createAnalyzedUserIdentWithIp("Gregory", "%");
         auth.createUser(new CreateUserStmt(new UserDesc(gregory)));
         // 1.2 make initialized checkpoint here for later use
-        UtFrameUtils.ImageHelper imageHelper = new UtFrameUtils.ImageHelper();
-        auth.saveAuth(imageHelper.getDataOutputStream(), -1);
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        auth.saveAuth(pseudoImage.getDataOutputStream(), -1);
         // 1.3 ignore all irrelevant journals by resetting journal queue
-        UtFrameUtils.JournalReplayerHelper.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
         // 2. master grant impersonate
         auth.grantImpersonate(new GrantImpersonateStmt(harry, gregory));
 
         // 3. verify follower replay
         // 3.1 follower load initialized checkpoint
-        Auth newAuth = Auth.read(imageHelper.getDataInputStream());
-        ImpersonatePrivInfo info = (ImpersonatePrivInfo) UtFrameUtils.JournalReplayerHelper.replayNextJournal();
+        Auth newAuth = Auth.read(pseudoImage.getDataInputStream());
+        ImpersonatePrivInfo info = (ImpersonatePrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
         // 3.2 follower replay
         newAuth.replayGrantImpersonate(info);
         // 3.3 verify the consistency of metadata between the master & the follower
@@ -50,12 +50,12 @@ public class ImpersonateUserPrivTableTest {
 
         // 4. verify image
         // 4.1 dump image
-        imageHelper = new UtFrameUtils.ImageHelper();
+        pseudoImage = new UtFrameUtils.PseudoImage();
         long writeChecksum = -1;
-        auth.saveAuth(imageHelper.getDataOutputStream(), writeChecksum);
-        writeChecksum = auth.writeAsGson(imageHelper.getDataOutputStream(), writeChecksum);
+        auth.saveAuth(pseudoImage.getDataOutputStream(), writeChecksum);
+        writeChecksum = auth.writeAsGson(pseudoImage.getDataOutputStream(), writeChecksum);
         // 4.2 load image to a new auth
-        DataInputStream dis = imageHelper.getDataInputStream();
+        DataInputStream dis = pseudoImage.getDataInputStream();
         newAuth = Auth.read(dis);
         long readChecksum = -1;
         readChecksum = newAuth.readAsGson(dis, readChecksum);

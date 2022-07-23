@@ -590,18 +590,18 @@ public class UtFrameUtils {
     }
 
     public static void setUpForPersistTest() {
-        JournalReplayerHelper.setUp();
-        ImageHelper.setUpImageVersion();
+        PseudoJournalReplayer.setUp();
+        PseudoImage.setUpImageVersion();
     }
 
     public static void tearDownForPersisTest() {
-        JournalReplayerHelper.tearDown();
+        PseudoJournalReplayer.tearDown();
     }
 
     /**
-     * image helper is used to test if image is wrote correctly.
+     * pseudo image is used to test if image is wrote correctly.
      */
-    public static class ImageHelper {
+    public static class PseudoImage {
         private static AtomicBoolean isSetup = new AtomicBoolean(false);
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
@@ -614,7 +614,7 @@ public class UtFrameUtils {
             isSetup.set(true);
         }
 
-        public ImageHelper() throws IOException {
+        public PseudoImage() throws IOException {
             assert (isSetup.get());
             buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
         }
@@ -632,9 +632,9 @@ public class UtFrameUtils {
     }
 
     /**
-     * journal replayer helper is used to test if replayed correctly
+     * pseudo journal replayer is used to test if replayed correctly
      */
-    public static class JournalReplayerHelper {
+    public static class PseudoJournalReplayer {
         // master journal queue
         private static BlockingQueue<JournalTask> masterJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue

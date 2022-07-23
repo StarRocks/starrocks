@@ -800,10 +800,10 @@ public class RoutineLoadManagerTest {
         Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
         // 3. save image & reload
-        UtFrameUtils.ImageHelper imageHelper = new UtFrameUtils.ImageHelper();
-        leaderLoadManager.write(imageHelper.getDataOutputStream());
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        leaderLoadManager.write(pseudoImage.getDataOutputStream());
         RoutineLoadManager restartedRoutineLoadManager = new RoutineLoadManager();
-        restartedRoutineLoadManager.readFields(imageHelper.getDataInputStream());
+        restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
         // discard expired job
         Assert.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
