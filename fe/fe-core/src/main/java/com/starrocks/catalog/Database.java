@@ -111,6 +111,8 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Database(long id, String name) {
+        // used for remove cluster from stmt
+        name = ClusterNamespace.getFullName(name);
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
