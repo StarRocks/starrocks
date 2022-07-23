@@ -152,7 +152,18 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 
             if (left_bytes == ctx->max_batch_size) {
                 // nothing to be consumed, we have to cancel it, because
-                // we do not allow finishing stream load pipe without data
+                // we do not allow finishing stream load pipe without data.
+                //
+                // But if the offset have already moved, such as the control msg,
+                // we need to commit and tell fe to move offset to the newest offset, otherwise, fe we retry consume.
+                for (auto& item : cmt_offset) {
+                    if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
+                        kafka_pipe->finish();
+                        ctx->kafka_info->cmt_offset = std::move(cmt_offset);
+                        ctx->receive_bytes = 0;
+                        return Status::OK();
+                    }
+                }
                 kafka_pipe->cancel(Status::Cancelled("Cancelled"));
                 return Status::Cancelled("Cancelled");
             } else {
