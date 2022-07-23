@@ -3221,6 +3221,8 @@ public class LocalMetastore implements ConnectorMetadata {
                             TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
+                } else {
+                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
                 }
                 if (optHints != null) {
                     Map<String, String> taskProperties = task.getProperties();

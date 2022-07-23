@@ -21,6 +21,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -515,5 +516,6 @@ public class MaterializedViewTest {
         Map<String, String> taskProperties = task.getProperties();
         Assert.assertTrue(taskProperties.containsKey("query_timeout"));
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
+        Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
     }
 }
