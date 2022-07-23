@@ -231,6 +231,29 @@ public class EsTable extends Table {
                 maxDocValueFields = DEFAULT_MAX_DOCVALUE_FIELDS;
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (properties.containsKey(WAN_ONLY)) {
+            try {
+                wanOnly = Boolean.parseBoolean(properties.get(WAN_ONLY).trim());
+            } catch (Exception e) {
+                wanOnly = false;
+            }
+        }
+        if (properties.containsKey(ES_NET_SSL)) {
+            try {
+                sslEnabled = Boolean.parseBoolean(properties.get(ES_NET_SSL).trim());
+            } catch (Exception e) {
+                sslEnabled = false;
+            }
+        }
+        Column idColumn = getColumn("_id");
+        if (idColumn != null && !(idColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                || idColumn.getPrimitiveType() == PrimitiveType.CHAR)) {
+            throw new DdlException("Type of _id (ES Primary-Key) Column must be Char/Varchar");
+        }
+>>>>>>> 1a03fd651 ([StarRocks On ES] Wrong _id type causes table creation to fail (#7484))
         tableContext.put("hosts", hosts);
         tableContext.put("userName", userName);
         tableContext.put("passwd", passwd);
