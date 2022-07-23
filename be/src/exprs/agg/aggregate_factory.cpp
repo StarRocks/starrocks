@@ -540,8 +540,8 @@ public:
                                                                             IsWindowFunc>(avg);
             } else if (name == "decimal_sum") {
                 auto sum = AggregateFactory::MakeDecimalSumAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>, IsWindowFunc,
-                                                                            false>(sum);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<AvgAggregateState<ResultType>,
+                                                                            IsWindowFunc>(sum);
             } else if (name == "decimal_multi_distinct_sum") {
                 auto distinct_sum = AggregateFactory::MakeDecimalSumDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT, ResultPT>,
