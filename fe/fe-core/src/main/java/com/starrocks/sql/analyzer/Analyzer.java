@@ -23,6 +23,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
+import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
@@ -439,6 +440,12 @@ public class Analyzer {
         @Override
         public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStmt(DropRepositoryStmt statement, ConnectContext context) {
+            DropRepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }
