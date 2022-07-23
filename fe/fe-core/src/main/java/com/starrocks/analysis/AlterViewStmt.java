@@ -21,8 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -41,10 +39,6 @@ public class AlterViewStmt extends BaseViewStmt {
 
     public TableName getTbl() {
         return tableName;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
     }
 
     @Override

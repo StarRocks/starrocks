@@ -24,8 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
@@ -301,97 +299,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         return Type.DOUBLE;
     }
 
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        super.analyzeImpl(analyzer);
-
-        for (Expr expr : children) {
-            if (expr instanceof Subquery) {
-                Subquery subquery = (Subquery) expr;
-                if (!subquery.returnsScalarColumn()) {
-                    String msg = "Subquery of binary predicate must return a single column: " + expr.toSql();
-                    throw new AnalysisException(msg);
-                }
-                /**
-                 * Situation: The expr is a binary predicate and the type of subquery is not scalar type.
-                 * Add assert: The stmt of subquery is added an assert condition (return error if row count > 1).
-                 * Input params:
-                 *     expr: k1=(select k1 from t2)
-                 *     subquery stmt: select k1 from t2
-                 * Output params:
-                 *     new expr: k1 = (select k1 from t2 (assert row count: return error if row count > 1 ))
-                 *     subquery stmt: select k1 from t2 (assert row count: return error if row count > 1 )
-                 */
-                if (!subquery.getType().isScalarType()) {
-                    subquery.getStatement().setAssertNumRowsElement(1, AssertNumRowsElement.Assertion.LE);
-                }
-            }
-        }
-
-        // if children has subquery, it will be rewritten and reanalyzed in the future.
-        if (contains(Subquery.class)) {
-            return;
-        }
-
-        // decimal_col = "string literal" is rewritten into decimal_col = cast("string literal" as decimal);
-        if (getChild(0).getType().isDecimalV3() && getChild(1) instanceof StringLiteral) {
-            StringLiteral stringLiteral = (StringLiteral) getChild(1);
-            setChild(1, stringLiteral.castToNontypedNumericLiteral());
-        }
-
-        // "string literal" = decimal_col is rewritten into cast("string literal" as decimal) = decimal_col;
-        if (getChild(1).getType().isDecimalV3() && getChild(0) instanceof StringLiteral) {
-            StringLiteral stringLiteral = (StringLiteral) getChild(0);
-            setChild(0, stringLiteral.castToNontypedNumericLiteral());
-        }
-
-        Type cmpType = getCmpType(getChild(0).getType(), getChild(1).getType());
-
-        if (getChild(0).getType().isDate() && getChild(1) instanceof LiteralExpr
-                && isValidDate((LiteralExpr) getChild(1))) {
-            cmpType = Type.DATE;
-        } else if (getChild(1).getType().isDate() && getChild(0) instanceof LiteralExpr
-                && isValidDate((LiteralExpr) getChild(0))) {
-            cmpType = Type.DATE;
-        } else if (getChild(0) instanceof SlotRef &&
-                getChild(0).getType().getPrimitiveType() == PrimitiveType.DECIMAL32 &&
-                getChild(1) instanceof LiteralExpr
-                && isValidDecimal((LiteralExpr) (getChild(1)), getChild(0).getType())) {
-            cmpType = getChild(0).getType();
-        } else if (getChild(1) instanceof SlotRef &&
-                getChild(1).getType().getPrimitiveType() == PrimitiveType.DECIMAL32 &&
-                getChild(0) instanceof LiteralExpr
-                && isValidDecimal((LiteralExpr) (getChild(0)), getChild(1).getType())) {
-            cmpType = getChild(1).getType();
-        }
-
-        // Ignore return value because type is always bool for predicates.
-        castBinaryOp(cmpType);
-
-        this.opcode = op.getOpcode();
-        String opName = op.getName();
-
-        selectivity = Expr.DEFAULT_SELECTIVITY;
-    }
-
-    public boolean isValidDate(LiteralExpr expr) {
-        try {
-            new DateLiteral(expr.getStringValue(), Type.DATE);
-        } catch (Exception ex) {
-            return false;
-        }
-        return true;
-    }
-
-    public boolean isValidDecimal(LiteralExpr expr, Type type) {
-        try {
-            new DecimalLiteral(expr.getStringValue(), type);
-        } catch (Exception ex) {
-            return false;
-        }
-        return true;
-    }
-
     /**
      * If predicate is of the form "<slotref> <op> <expr>", returns expr,
      * otherwise returns null. Slotref may be wrapped in a CastExpr.
@@ -426,37 +333,6 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
 
         return null;
-    }
-
-    /**
-     * If e is an equality predicate between two slots that only require implicit
-     * casts, returns those two slots; otherwise returns null.
-     */
-    public static Pair<SlotId, SlotId> getEqSlots(Expr e) {
-        if (!(e instanceof BinaryPredicate)) {
-            return null;
-        }
-        return ((BinaryPredicate) e).getEqSlots();
-    }
-
-    /**
-     * If this is an equality predicate between two slots that only require implicit
-     * casts, returns those two slots; otherwise returns null.
-     */
-    @Override
-    public Pair<SlotId, SlotId> getEqSlots() {
-        if (op != Operator.EQ) {
-            return null;
-        }
-        SlotRef lhs = getChild(0).unwrapSlotRef(true);
-        if (lhs == null) {
-            return null;
-        }
-        SlotRef rhs = getChild(1).unwrapSlotRef(true);
-        if (rhs == null) {
-            return null;
-        }
-        return new Pair<>(lhs.getSlotId(), rhs.getSlotId());
     }
 
     public boolean slotIsLeft() {

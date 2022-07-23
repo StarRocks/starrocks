@@ -34,8 +34,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TSlotRef;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -43,7 +41,6 @@ import java.io.IOException;
 import java.util.List;
 
 public class SlotRef extends Expr {
-    private static final Logger LOG = LogManager.getLogger(SlotRef.class);
     private TableName tblName;
     private String col;
     // Used in toSql

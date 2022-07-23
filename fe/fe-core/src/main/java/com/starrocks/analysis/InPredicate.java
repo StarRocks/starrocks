@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
@@ -39,11 +38,7 @@ import java.util.List;
  */
 
 public class InPredicate extends Predicate {
-    private static final String IN_ITERATE = "in_iterate";
-    private static final String NOT_IN_ITERATE = "not_in_iterate";
     private final boolean isNotIn;
-
-    private static final NullLiteral NULL_LITERAL = new NullLiteral();
 
     // First child is the comparison expr for which we
     // should check membership in the inList (the remaining children).
@@ -101,10 +96,6 @@ public class InPredicate extends Predicate {
             }
         }
         return true;
-    }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override

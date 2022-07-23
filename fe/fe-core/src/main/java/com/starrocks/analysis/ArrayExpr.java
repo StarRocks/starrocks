@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -49,27 +48,6 @@ public class ArrayExpr extends Expr {
 
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        Type targetItemType = null;
-        if (this.type != null) {
-            targetItemType = ((ArrayType) this.type).getItemType();
-        } else if (!this.children.isEmpty()) {
-            targetItemType = findCommonType(this.children);
-        } else {
-            // Type.NULL can be implicitly cast to any other types.
-            this.type = new ArrayType(Type.NULL);
-        }
-
-        // Array<DECIMALV3> type is not supported in current version, turn it into DECIMALV2 type
-        if (targetItemType != null && targetItemType.isDecimalV3()) {
-            targetItemType = ScalarType.DECIMALV2;
-        }
-
-        for (int i = 0; i < this.children.size(); i++) {
-            if (!this.children.get(i).getType().matchesType(targetItemType)) {
-                castChild(targetItemType, i);
-            }
-        }
-        this.type = this.type == null ? new ArrayType(targetItemType) : this.type;
     }
 
     public boolean isExplicitType() {

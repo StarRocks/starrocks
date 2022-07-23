@@ -311,7 +311,7 @@ public class ExportJob implements Writable {
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
                 ((OlapScanNode) scanNode).setCanTurnOnPreAggr(false);
                 scanNode.init(analyzer);
-                ((OlapScanNode) scanNode).selectBestRollupByRollupSelector(analyzer);
+                ((OlapScanNode) scanNode).selectBestRollupByRollupSelector();
                 break;
             case MYSQL:
                 scanNode = new MysqlScanNode(new PlanNodeId(0), exportTupleDesc, (MysqlTable) this.exportTable);

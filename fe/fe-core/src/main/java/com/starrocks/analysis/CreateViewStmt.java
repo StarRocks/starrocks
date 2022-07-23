@@ -22,12 +22,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
@@ -56,10 +52,6 @@ public class CreateViewStmt extends BaseViewStmt {
 
     public String getComment() {
         return comment;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

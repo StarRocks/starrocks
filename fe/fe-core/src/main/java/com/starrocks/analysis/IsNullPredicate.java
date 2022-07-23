@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
@@ -86,21 +85,6 @@ public class IsNullPredicate extends Predicate {
     public boolean isSlotRefChildren() {
         return (children.get(0) instanceof SlotRef);
     }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        super.analyzeImpl(analyzer);
-
-        if (isNotNull) {
-            fn = isNotNullFN;
-        } else {
-            fn = isNullFN;
-        }
-
-        // determine selectivity
-        selectivity = 0.1;
-    }
-
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.FUNCTION_CALL;
