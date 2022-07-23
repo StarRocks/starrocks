@@ -21,7 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.google.common.base.Strings;
 
 // SHOW OPEN TABLES
