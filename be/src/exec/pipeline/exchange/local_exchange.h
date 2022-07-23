@@ -89,6 +89,7 @@ class PartitionExchanger final : public LocalExchanger {
 
         vectorized::Columns _partitions_columns;
         std::vector<uint32_t> _hash_values;
+        std::vector<uint32_t> _shuffle_channel_id;
         // This array record the channel start point in _row_indexes
         // And the last item is the number of rows of the current shuffle chunk.
         // It will easy to get number of rows belong to one channel by doing
