@@ -34,6 +34,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -99,9 +100,14 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+                             short replicationNum, boolean isInMemory, StorageInfo storageInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageInfo);
         setRangeInternal(partitionId, isTemp, range);
+    }
+
+    public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
+                             short replicationNum, boolean isInMemory) {
+        this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, isInMemory, null);
     }
 
     public Range<PartitionKey> checkAndCreateRange(SingleRangePartitionDesc desc, boolean isTemp) throws DdlException {
