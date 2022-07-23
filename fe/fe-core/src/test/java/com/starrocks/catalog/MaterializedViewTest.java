@@ -21,6 +21,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -56,24 +57,13 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testInit(@Mocked GlobalStateMgr globalStateMgr) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                globalStateMgr.getClusterId();
-                result = 1024;
-            }
-        };
+    public void testInit() {
         MaterializedView mv = new MaterializedView();
-        Assert.assertEquals(1024, mv.getClusterId());
         Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv.getType());
         Assert.assertEquals(null, mv.getTableProperty());
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv2", columns, KeysType.AGG_KEYS,
                 null, null, null);
-        Assert.assertEquals(1024, mv2.getClusterId());
         Assert.assertEquals(100, mv2.getDbId());
         Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv2.getType());
         Assert.assertEquals(null, mv2.getTableProperty());
@@ -515,5 +505,6 @@ public class MaterializedViewTest {
         Map<String, String> taskProperties = task.getProperties();
         Assert.assertTrue(taskProperties.containsKey("query_timeout"));
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
+        Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
     }
 }

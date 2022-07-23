@@ -229,7 +229,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
-        this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
         this.tableProperty = null;
         this.state = OlapTableState.NORMAL;
         this.active = true;
