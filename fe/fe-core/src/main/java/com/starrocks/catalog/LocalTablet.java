@@ -622,13 +622,13 @@ public class LocalTablet extends Tablet {
         boolean ready = false;
         switch (priority) {
             case HIGH:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000;
                 break;
             case NORMAL:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 2;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000 * 2;
                 break;
             case LOW:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 3;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000 * 3;
                 break;
             default:
                 break;

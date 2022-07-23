@@ -30,8 +30,9 @@ import com.starrocks.sql.ast.AstVisitor;
 
 // admin show frontend config;
 public class AdminShowConfigStmt extends ShowStmt {
-    public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>().add("Key").add(
-            "Value").add("Type").add("IsMutable").add("Comment").build();
+    public static final ImmutableList<String> TITLE_NAMES =
+            new ImmutableList.Builder<String>().add("Key").add("AliasNames").add(
+                    "Value").add("Type").add("IsMutable").add("Comment").build();
 
     private ConfigType type;
 

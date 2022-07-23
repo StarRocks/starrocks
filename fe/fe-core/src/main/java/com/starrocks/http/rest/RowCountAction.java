@@ -40,7 +40,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.util.Map;
 
@@ -107,17 +106,6 @@ public class RowCountAction extends RestBaseAction {
         }
 
         // to json response
-        String result = "";
-        ObjectMapper mapper = new ObjectMapper();
-        try {
-            result = mapper.writeValueAsString(indexRowCountMap);
-        } catch (Exception e) {
-            //  do nothing
-        }
-
-        // send result
-        response.setContentType("application/json");
-        response.getContent().append(result);
-        sendResult(request, response);
+        sendResultByJson(request, response, indexRowCountMap);
     }
 }
