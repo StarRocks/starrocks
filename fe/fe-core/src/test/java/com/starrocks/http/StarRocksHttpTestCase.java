@@ -53,6 +53,9 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStatus;
+
 import junit.framework.AssertionFailedError;
 import mockit.Expectations;
 import mockit.Mock;
@@ -436,6 +439,22 @@ abstract public class StarRocksHttpTestCase {
             TabletInvertedIndex getCurrentInvertedIndex() {
                 return tabletInvertedIndex;
             }
+
+            @Mock
+            GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
+                new MockUp<GlobalTransactionMgr>() {
+                    @Mock
+                    TransactionStatus getLabelState(long dbId, String label) {
+                        if (label == "a") {
+                            return TransactionStatus.PREPARED;
+                        } else {
+                            return TransactionStatus.PREPARE;
+                        }
+                    }
+                };
+
+                return new GlobalTransactionMgr(null);
+            } 
         };
         assignBackends();
         doSetUp();

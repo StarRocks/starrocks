@@ -21,7 +21,11 @@
 
 package com.starrocks.http.rest;
 
+import com.google.common.base.Strings;
+import com.starrocks.catalog.Database;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -29,6 +33,7 @@ import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,6 +46,10 @@ public class TransactionLoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(TransactionLoadAction.class);
     private static final String TXN_OP_KEY = "txn_op";
     private static final String TXN_BEGIN = "begin";
+    private static final String TXN_COMMIT = "commit";
+    private static final String TXN_ROLLBACK = "rollback";
+    private static final String TIMEOUT_KEY = "timeout";
+    private static TransactionLoadAction ac;
 
     private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
@@ -52,8 +61,18 @@ public class TransactionLoadAction extends RestBaseAction {
         super(controller);
     }
 
+    public int txnBackendMapSize() {
+        synchronized (this) {
+            return txnBackendMap.size();
+        }
+    }
+
+    public static TransactionLoadAction getAction() {
+        return ac;
+    }
+
     public static void registerAction(ActionController controller) throws IllegalArgException {
-        TransactionLoadAction ac = new TransactionLoadAction(controller);
+        ac = new TransactionLoadAction(controller);
         controller.registerHandler(HttpMethod.POST, "/api/transaction/{" + TXN_OP_KEY + "}", ac);
         controller.registerHandler(HttpMethod.PUT,
                 "/api/transaction/{" + TXN_OP_KEY + "}", ac);
@@ -61,20 +80,71 @@ public class TransactionLoadAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+        if (redirectToLeader(request, response)) {
+            return;
+        }
         String dbName = request.getRequest().headers().get(DB_KEY);
         String tableName = request.getRequest().headers().get(TABLE_KEY);
         String label = request.getRequest().headers().get(LABEL_KEY);
         String op = request.getSingleParameter(TXN_OP_KEY);
+        String timeout = request.getRequest().headers().get(TIMEOUT_KEY);
         Long backendID = null;
 
+        // 1. handle commit/rollback PREPARED transaction
+        if (op.equalsIgnoreCase(TXN_COMMIT) || op.equalsIgnoreCase(TXN_ROLLBACK)) {
+            TransactionResult resp = new TransactionResult();
+            resp.addResultEntry("Label", label);
+            try {
+                if (Strings.isNullOrEmpty(dbName)) {
+                    throw new DdlException("No database selected.");
+                }
+                String fullDbName = ClusterNamespace.getFullName(dbName);
+                Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+                if (db == null) {
+                    throw new DdlException("database " + dbName + " not exists");
+                }
+                TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(db.getId(),
+                        label);
+                if (txnStatus == TransactionStatus.PREPARED) {
+                    Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
+                    if (txnID == -1) {
+                        throw new DdlException("label " + label + " txn not exist");
+                    }
+
+                    if (op.equalsIgnoreCase(TXN_COMMIT)) {
+                        long timeoutMillis = 20000;
+                        if (timeout != null) {
+                            timeoutMillis = Long.parseLong(timeout) * 1000;
+                        }
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(db, txnID, timeoutMillis);
+                    } else if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
+                                "User Aborted");
+                    }
+                    sendResult(request, response, resp);
+                    return;
+                }
+            } catch (Exception e) {
+                resp.status = ActionStatus.FAILED;
+                resp.msg = e.getClass().toString() + ": " + e.getMessage();
+                LOG.warn(DebugUtil.getStackTrace(e));
+                sendResult(request, response, resp);
+            }
+            if (resp.status == ActionStatus.FAILED) {
+                return;
+            }
+        }
+
+        // 2. redirect transaction op to BE
         synchronized (this) {
+            // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
             if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                // Choose a backend sequentially.
                 List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
                 if (backendIds == null) {
                     throw new DdlException("No backend alive.");
                 }
                 backendID = backendIds.get(0);
+                // txnBackendMap is LRU cache, it automic remove unused entry
                 txnBackendMap.put(label, backendID);
             } else {
                 backendID = txnBackendMap.get(label);

@@ -57,7 +57,7 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
             writer.Int64(txn_id);
             writer.Key("BeginTxnTimeMs");
             writer.Int64(begin_txn_cost_nanos / 1000000);
-        } else if (boost::iequals(txn_op, TXN_COMMIT)) {
+        } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
             // txn id
             writer.Key("TxnId");
             writer.Int64(txn_id);
@@ -71,10 +71,10 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
             writer.Key("NumberUnselectedRows");
             writer.Int64(number_unselected_rows);
             writer.Key("LoadBytes");
-            writer.Int64(receive_bytes);
+            writer.Int64(total_receive_bytes);
             writer.Key("LoadTimeMs");
             writer.Int64(load_cost_nanos / 1000000);
-            writer.Key("StreamLoadPutTimeMs");
+            writer.Key("StreamLoadPlanTimeMs");
             writer.Int64(stream_load_put_cost_nanos / 1000000);
             writer.Key("ReceivedDataTimeMs");
             writer.Int64(total_received_data_cost_nanos / 1000000);
@@ -90,7 +90,7 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
             // number_load_rows
             writer.Key("LoadBytes");
             writer.Int64(receive_bytes);
-            writer.Key("StreamLoadPutTimeMs");
+            writer.Key("StreamLoadPlanTimeMs");
             writer.Int64(stream_load_put_cost_nanos / 1000000);
             writer.Key("ReceivedDataTimeMs");
             writer.Int64(received_data_cost_nanos / 1000000);
@@ -158,7 +158,7 @@ std::string StreamLoadContext::to_json() const {
     writer.Int64(load_cost_nanos / 1000000);
     writer.Key("BeginTxnTimeMs");
     writer.Int64(begin_txn_cost_nanos / 1000000);
-    writer.Key("StreamLoadPutTimeMs");
+    writer.Key("StreamLoadPlanTimeMs");
     writer.Int64(stream_load_put_cost_nanos / 1000000);
     writer.Key("ReadDataTimeMs");
     writer.Int64(total_received_data_cost_nanos / 1000000);

@@ -188,6 +188,49 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_fail) {
     }
 }
 
+TEST_F(TransactionStreamLoadActionTest, txn_prepare_fail) {
+    TransactionManagerAction txn_action(&_env);
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_COMMIT);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INTERNAL_ERROR", doc["Status"].GetString());
+    }
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("TXN_NOT_EXISTS", doc["Status"].GetString());
+    }
+}
+
 TEST_F(TransactionStreamLoadActionTest, txn_rollback) {
     TransactionManagerAction txn_action(&_env);
 
@@ -273,6 +316,56 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_success) {
         b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
         b._headers.emplace(HTTP_LABEL_KEY, "123");
         b._params.emplace(HTTP_TXN_OP_KEY, TXN_COMMIT);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_prepared_success) {
+    TransactionManagerAction txn_action(&_env);
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        TransactionStreamLoadAction action(&_env);
+
+        HttpRequest request(_evhttp_req);
+
+        struct evhttp_request ev_req;
+        ev_req.remote_host = nullptr;
+        request._ev_req = &ev_req;
+
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
         txn_action.handle(&b);
 
         rapidjson::Document doc;
@@ -385,6 +478,58 @@ TEST_F(TransactionStreamLoadActionTest, txn_commit_fe_fail) {
     }
 }
 
+TEST_F(TransactionStreamLoadActionTest, txn_prepare_fe_fail) {
+    TransactionManagerAction txn_action(&_env);
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        TransactionStreamLoadAction action(&_env);
+
+        HttpRequest request(_evhttp_req);
+
+        struct evhttp_request ev_req;
+        ev_req.remote_host = nullptr;
+        request._ev_req = &ev_req;
+
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_PREPARE);
+        Status status = Status::InternalError("TestFail");
+        status.to_thrift(&k_stream_load_commit_result.status);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INTERNAL_ERROR", doc["Status"].GetString());
+    }
+}
+
 TEST_F(TransactionStreamLoadActionTest, txn_begin_fe_fail) {
     TransactionManagerAction txn_action(&_env);
 
@@ -469,6 +614,120 @@ TEST_F(TransactionStreamLoadActionTest, txn_list) {
         doc.Parse(k_response_str.c_str());
         ASSERT_STREQ("OK", doc["Status"].GetString());
         ASSERT_STREQ("123", doc["Label"].GetString());
+    }
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_idle_timeout) {
+    TransactionManagerAction txn_action(&_env);
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._headers.emplace(HTTP_IDLE_TRANSACTION_TIMEOUT, "1");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    sleep(4);
+
+    {
+        TransactionStreamLoadAction action(&_env);
+
+        HttpRequest request(_evhttp_req);
+
+        struct evhttp_request ev_req;
+        ev_req.remote_host = nullptr;
+        request._ev_req = &ev_req;
+
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("TXN_NOT_EXISTS", doc["Status"].GetString());
+    }
+}
+
+TEST_F(TransactionStreamLoadActionTest, txn_not_same_load) {
+    TransactionManagerAction txn_action(&_env);
+
+    {
+        HttpRequest b(_evhttp_req);
+        b._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        b._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        b._headers.emplace(HTTP_DB_KEY, "db");
+        b._headers.emplace(HTTP_LABEL_KEY, "123");
+        b._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&b);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    TransactionStreamLoadAction action(&_env);
+    {
+        HttpRequest request(_evhttp_req);
+
+        struct evhttp_request ev_req;
+        ev_req.remote_host = nullptr;
+        request._ev_req = &ev_req;
+
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_DB_KEY, "db");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        HttpRequest request(_evhttp_req);
+
+        struct evhttp_request ev_req;
+        ev_req.remote_host = nullptr;
+        request._ev_req = &ev_req;
+
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_DB_KEY, "db");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        request._headers.emplace(HTTP_COLUMN_SEPARATOR, "|");
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString());
+    }
+
+    {
+        HttpRequest request(_evhttp_req);
+
+        struct evhttp_request ev_req;
+        ev_req.remote_host = nullptr;
+        request._ev_req = &ev_req;
+
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_DB_KEY, "db");
+        request._headers.emplace(HTTP_LABEL_KEY, "123");
+        request._headers.emplace(HTTP_COLUMN_SEPARATOR, ",");
+        ASSERT_EQ(-1, action.on_header(&request));
     }
 }
 

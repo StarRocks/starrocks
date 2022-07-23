@@ -112,6 +112,10 @@ public class PartitionCommitInfo implements Writable {
         return version;
     }
 
+    public void setVersion(long version) {
+        this.version = version;
+    }
+
     public long getVersionTime() {
         return versionTime;
     }

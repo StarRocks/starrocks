@@ -162,22 +162,27 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preWriteCommitLog(TransactionState txnState) {
-        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED);
+        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED
+                || txnState.getTransactionStatus() == TransactionStatus.PREPARED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         txnState.getErrorReplicas().addAll(errorReplicaIds);
         for (long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
             PartitionCommitInfo partitionCommitInfo;
+            long version = -1;
+            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                version = partition.getNextVersion();
+            }
             if (isFirstPartition) {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        partition.getNextVersion(),
+                        version,
                         System.currentTimeMillis(),
                         Lists.newArrayList(invalidDictCacheColumns),
                         Lists.newArrayList(validDictCacheColumns));
             } else {
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        partition.getNextVersion(),
+                        version,
                         System.currentTimeMillis() /* use as partition visible time */);
             }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);

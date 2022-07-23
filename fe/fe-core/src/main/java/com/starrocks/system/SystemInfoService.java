@@ -170,6 +170,17 @@ public class SystemInfoService {
     }
 
     // for test
+    public void dropBackend(Backend backend) {
+        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
+        copiedBackends.remove(backend.getId());
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+
+        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVerions.remove(backend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+    }
+
+    // for test
     public void addBackend(Backend backend) {
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(backend.getId(), backend);

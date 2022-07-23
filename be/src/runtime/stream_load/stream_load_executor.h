@@ -36,6 +36,8 @@ public:
 
     Status commit_txn(StreamLoadContext* ctx);
 
+    Status prepare_txn(StreamLoadContext* ctx);
+
     Status rollback_txn(StreamLoadContext* ctx);
 
     Status execute_plan_fragment(StreamLoadContext* ctx);

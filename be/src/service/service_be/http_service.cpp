@@ -75,6 +75,9 @@ Status HttpServiceBE::start() {
     // BeginTrasaction:     POST /api/transaction/begin
     // CommitTransaction:   POST /api/transaction/commit
     // RollbackTransaction: POST /api/transaction/rollback
+    // PrepreTransaction:   POST /api/transaction/prepare
+    //
+    // ListTransactions:    POST /api/transaction/list
     TransactionManagerAction* transaction_manager_action = new TransactionManagerAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);

@@ -648,6 +648,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_timeout_second = 259200; // 3days
 
     /**
+     * Default prepared transaction timeout
+     */
+    @ConfField(mutable = true)
+    public static int prepared_transaction_default_timeout_second = 86400; // 1day
+
+    /**
      * Max load timeout applicable to all type of load except for stream load
      */
     @ConfField(mutable = true)
