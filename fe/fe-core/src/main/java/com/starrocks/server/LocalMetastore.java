@@ -1385,6 +1385,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+        // for debug
+        LOG.info("enter dropPartition in LocalMetaStore");
         OlapTable olapTable = (OlapTable) table;
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
 
@@ -1412,6 +1414,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // drop
         Set<Long> tabletIdSet = new HashSet<Long>(); 
         if (isTempPartition) {
+            // for debug
+            LOG.info("isTempPartition");
             olapTable.dropTempPartition(partitionName, true);
         } else {
             if (!clause.isForceDrop()) {
