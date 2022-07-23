@@ -18,6 +18,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
@@ -65,14 +66,7 @@ public class BDBJEJournalTest {
 
     private BDBEnvironment initBDBEnv(String name) throws Exception {
         // try to find a port that is not bind
-        String selfNodeHostPort = null;
-        for (int port = 9000; port != 120000; port ++) {
-            if(! NetUtils.isPortUsing("127.0.0.1", port)) {
-                selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
-                break;
-            }
-        }
-        Assert.assertNotNull(selfNodeHostPort);
+        String selfNodeHostPort = "127.0.0.1:" + UtFrameUtils.findValidPort();
         BDBEnvironment environment = new BDBEnvironment(
                 tempDir,
                 name,
