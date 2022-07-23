@@ -4524,7 +4524,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return tabletIdSet;
     }
 
-    // for test only
+    // for test onlyta
     @VisibleForTesting
     public void clear() {
         if (idToDb != null) {
