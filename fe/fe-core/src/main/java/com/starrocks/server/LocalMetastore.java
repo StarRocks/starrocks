@@ -4764,6 +4764,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
+<<<<<<< HEAD
                 if (copiedTbl.isCloudNativeTable()) {
                     partitionInfo.setStorageCacheInfo(newPartitionId,
                             partitionInfo.getStorageCacheInfo(oldPartitionId));
@@ -4771,13 +4772,23 @@ public class LocalMetastore implements ConnectorMetadata {
 
                 copiedTbl.setDefaultDistributionInfo(entry.getValue().getDistributionInfo());
 
+=======
+                if (copiedTbl.isLakeTable()) {
+                    partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
+                }
+
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (DdlException e) {
+<<<<<<< HEAD
             deleteUselessTablets(tabletIdSet);
+=======
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
             throw e;
         }
         Preconditions.checkState(origPartitions.size() == newPartitions.size());
@@ -4838,6 +4849,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getEditLog().logTruncateTable(info);
 
             // refresh mv
@@ -4858,6 +4870,12 @@ public class LocalMetastore implements ConnectorMetadata {
             throw e;
         } catch (MetaNotFoundException e) {
             LOG.warn("Table related materialized view can not be found", e);
+=======
+            editLog.logTruncateTable(info);
+        } catch (DdlException e) {
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
+            throw e;
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
         } finally {
             db.writeUnlock();
         }
@@ -4866,12 +4884,25 @@ public class LocalMetastore implements ConnectorMetadata {
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
     }
 
+<<<<<<< HEAD
     private void deleteUselessTablets(Set<Long> tabletIdSet) {
         // create partition failed, remove all newly created tablets.
         // For lakeTable, shards cleanup is taken care in ShardDeleter.
         for (Long tabletId : tabletIdSet) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
         }
+=======
+    private void deleteUselessTabletAndShard(Set<Long> tabletIdSet, OlapTable olapTable) {
+        // create partition failed, remove all newly created tablets
+        for (Long tabletId : tabletIdSet) {
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+        }
+        // lake table need to delete shard
+        if (olapTable.isLakeTable() && !tabletIdSet.isEmpty()) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
+        }
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
@@ -4925,12 +4956,20 @@ public class LocalMetastore implements ConnectorMetadata {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
+<<<<<<< HEAD
                                 partitionId, indexId, schemaHash, medium, olapTable.isCloudNativeTableOrMaterializedView());
+=======
+                                partitionId, indexId, schemaHash, medium, olapTable.isLakeTable());
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (olapTable.isOlapTable()) {
+<<<<<<< HEAD
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+=======
+                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
                             }
@@ -5276,6 +5315,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return newPartitions;
     }
+<<<<<<< HEAD
 
     public long saveAutoIncrementId(DataOutputStream dos, long checksum) throws IOException {
         AutoIncrementInfo info = new AutoIncrementInfo(tableIdToIncrementId);
@@ -5420,3 +5460,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 }
 
+=======
+}
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))

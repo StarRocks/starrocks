@@ -75,8 +75,13 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
+<<<<<<< HEAD
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
+=======
+import com.starrocks.lake.StorageInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -1716,13 +1721,18 @@ public class OlapTable extends Table {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
+<<<<<<< HEAD
         StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
+=======
+        StorageInfo storageInfo = partitionInfo.getStorageInfo(oldPartition.getId());
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
 
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
+<<<<<<< HEAD
                     replicationNum, isInMemory, storageCacheInfo);
         } else if (partitionInfo.getType() == PartitionType.LIST) {
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
@@ -1739,6 +1749,12 @@ public class OlapTable extends Table {
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
+=======
+                        replicationNum, isInMemory, storageInfo);
+        } else {
+            partitionInfo.dropPartition(oldPartition.getId());
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
         }
 
         return oldPartition;

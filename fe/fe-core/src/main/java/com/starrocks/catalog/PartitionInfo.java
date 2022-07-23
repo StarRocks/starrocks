@@ -195,10 +195,17 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     public void addPartition(long partitionId, DataProperty dataProperty,
                              short replicationNum,
                              boolean isInMemory,
+<<<<<<< HEAD
                              StorageCacheInfo storageCacheInfo) {
         this.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
         if (storageCacheInfo != null) {
             idToStorageCacheInfo.put(partitionId, storageCacheInfo);
+=======
+                             StorageInfo storageInfo) {
+        this.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+        if (storageInfo != null) {
+            idToStorageInfo.put(partitionId, storageInfo);
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
         }
     }
 

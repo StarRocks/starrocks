@@ -44,7 +44,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
+<<<<<<< HEAD
 import com.starrocks.lake.StorageCacheInfo;
+=======
+import com.starrocks.lake.StorageInfo;
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -123,8 +127,13 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
+<<<<<<< HEAD
                              short replicationNum, boolean isInMemory, StorageCacheInfo storageCacheInfo) {
         addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+=======
+                             short replicationNum, boolean isInMemory, StorageInfo storageInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageInfo);
+>>>>>>> a0cd1c571 (Fix truncate lake table bug (#9002))
         setRangeInternal(partitionId, isTemp, range);
     }
 
