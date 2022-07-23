@@ -49,9 +49,7 @@ std::string HyperLogLog::empty() {
     return buf;
 }
 
-HyperLogLog::HyperLogLog(const HyperLogLog& other)
-        : _type(other._type),
-          _hash_set(other._hash_set == nullptr ? nullptr : std::make_unique<ElementSet>(*other._hash_set)) {
+HyperLogLog::HyperLogLog(const HyperLogLog& other) : _type(other._type), _hash_set(other._hash_set) {
     if (other._registers.data != nullptr) {
         ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
@@ -63,7 +61,7 @@ HyperLogLog::HyperLogLog(const HyperLogLog& other)
 HyperLogLog& HyperLogLog::operator=(const HyperLogLog& other) {
     if (this != &other) {
         this->_type = other._type;
-        this->_hash_set = other._hash_set == nullptr ? nullptr : std::make_unique<ElementSet>(*other._hash_set);
+        this->_hash_set = other._hash_set;
 
         if (_registers.data != nullptr) {
             ChunkAllocator::instance()->free(_registers);
@@ -103,8 +101,8 @@ HyperLogLog& HyperLogLog::operator=(HyperLogLog&& other) noexcept {
     return *this;
 }
 
-HyperLogLog::HyperLogLog(uint64_t hash_value) : _type(HLL_DATA_EXPLICIT), _hash_set(std::make_unique<ElementSet>()) {
-    _hash_set->emplace(hash_value);
+HyperLogLog::HyperLogLog(uint64_t hash_value) : _type(HLL_DATA_EXPLICIT) {
+    _hash_set.emplace(hash_value);
 }
 
 HyperLogLog::HyperLogLog(const Slice& src) {
@@ -131,11 +129,12 @@ void HyperLogLog::_convert_explicit_to_register() {
     DCHECK_EQ(_registers.size, HLL_REGISTERS_COUNT);
     memset(_registers.data, 0, HLL_REGISTERS_COUNT);
 
-    for (auto value : *_hash_set) {
+    for (auto value : _hash_set) {
         _update_registers(value);
     }
 
-    _hash_set.reset();
+    // Clear _hash_set.
+    phmap::flat_hash_set<uint64_t>().swap(_hash_set);
 }
 
 // Change HLL_DATA_EXPLICIT to HLL_DATA_FULL directly, because HLL_DATA_SPARSE
@@ -143,13 +142,12 @@ void HyperLogLog::_convert_explicit_to_register() {
 void HyperLogLog::update(uint64_t hash_value) {
     switch (_type) {
     case HLL_DATA_EMPTY:
-        _hash_set = std::make_unique<ElementSet>();
-        _hash_set->insert(hash_value);
+        _hash_set.insert(hash_value);
         _type = HLL_DATA_EXPLICIT;
         break;
     case HLL_DATA_EXPLICIT:
-        if (_hash_set->size() < HLL_EXPLICLIT_INT64_NUM) {
-            _hash_set->insert(hash_value);
+        if (_hash_set.size() < HLL_EXPLICLIT_INT64_NUM) {
+            _hash_set.insert(hash_value);
             break;
         }
         _convert_explicit_to_register();
@@ -173,7 +171,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         _type = other._type;
         switch (other._type) {
         case HLL_DATA_EXPLICIT:
-            _hash_set = std::make_unique<ElementSet>(*other._hash_set);
+            _hash_set = other._hash_set;
             break;
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
@@ -193,8 +191,8 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_EXPLICIT:
             // Merge other's explicit values first, then check if the number is exccede
             // HLL_EXPLICLIT_INT64_NUM. This is OK because the max value is 2 * 160.
-            _hash_set->insert(other._hash_set->begin(), other._hash_set->end());
-            if (_hash_set->size() > HLL_EXPLICLIT_INT64_NUM) {
+            _hash_set.insert(other._hash_set.begin(), other._hash_set.end());
+            if (_hash_set.size() > HLL_EXPLICLIT_INT64_NUM) {
                 _convert_explicit_to_register();
                 _type = HLL_DATA_FULL;
             }
@@ -214,7 +212,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
     case HLL_DATA_FULL: {
         switch (other._type) {
         case HLL_DATA_EXPLICIT:
-            for (auto hash_value : *other._hash_set) {
+            for (auto hash_value : other._hash_set) {
                 _update_registers(hash_value);
             }
             break;
@@ -236,7 +234,7 @@ size_t HyperLogLog::max_serialized_size() const {
     default:
         return 1;
     case HLL_DATA_EXPLICIT:
-        return 2 + _hash_set->size() * 8;
+        return 2 + _hash_set.size() * 8;
     case HLL_DATA_SPARSE:
     case HLL_DATA_FULL:
         return 1 + HLL_REGISTERS_COUNT;
@@ -254,12 +252,12 @@ size_t HyperLogLog::serialize(uint8_t* dst) const {
         break;
     }
     case HLL_DATA_EXPLICIT: {
-        DCHECK(_hash_set->size() <= HLL_EXPLICLIT_INT64_NUM)
-                << "Number of explicit elements(" << _hash_set->size() << ") should be less or equal than "
+        DCHECK(_hash_set.size() <= HLL_EXPLICLIT_INT64_NUM)
+                << "Number of explicit elements(" << _hash_set.size() << ") should be less or equal than "
                 << HLL_EXPLICLIT_INT64_NUM;
         *ptr++ = _type;
-        *ptr++ = (uint8_t)_hash_set->size();
-        for (auto hash_value : *_hash_set) {
+        *ptr++ = (uint8_t)_hash_set.size();
+        for (auto hash_value : _hash_set) {
             encode_fixed64_le(ptr, hash_value);
             ptr += 8;
         }
@@ -363,13 +361,12 @@ bool HyperLogLog::deserialize(const Slice& slice) {
     case HLL_DATA_EMPTY:
         break;
     case HLL_DATA_EXPLICIT: {
-        _hash_set = std::make_unique<ElementSet>();
         // 2: number of explicit values
         // make sure that num_explicit is positive
         uint8_t num_explicits = *ptr++;
         // 3+: 8 bytes hash value
         for (int i = 0; i < num_explicits; ++i) {
-            _hash_set->insert(decode_fixed64_le(ptr));
+            _hash_set.insert(decode_fixed64_le(ptr));
             ptr += 8;
         }
         break;
@@ -415,7 +412,7 @@ int64_t HyperLogLog::estimate_cardinality() const {
         return 0;
     }
     if (_type == HLL_DATA_EXPLICIT) {
-        return _hash_set->size();
+        return _hash_set.size();
     }
 
     const int num_streams = HLL_REGISTERS_COUNT;
@@ -469,7 +466,7 @@ std::string HyperLogLog::to_string() const {
     case HLL_DATA_EMPTY:
         return {};
     case HLL_DATA_EXPLICIT:
-        return strings::Substitute("hash set size: $0\ncardinality:$1\ntype:$2", _hash_set->size(),
+        return strings::Substitute("hash set size: $0\ncardinality:$1\ntype:$2", _hash_set.size(),
                                    estimate_cardinality(), _type);
     case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
@@ -482,7 +479,7 @@ std::string HyperLogLog::to_string() const {
 
 void HyperLogLog::clear() {
     _type = HLL_DATA_EMPTY;
-    _hash_set.reset();
+    _hash_set.clear();
 }
 
 void HyperLogLog::_merge_registers(uint8_t* other_registers) {
