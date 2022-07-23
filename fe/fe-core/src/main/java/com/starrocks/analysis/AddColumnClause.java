@@ -21,14 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -56,6 +51,18 @@ public class AddColumnClause extends AlterTableClause {
         return rollupName;
     }
 
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
+    }
+
+    public ColumnDef getColumnDef() {
+        return columnDef;
+    }
+
+    public void setColumn(Column column) {
+        this.column = column;
+    }
+
     public AddColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollupName,
                            Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE);
@@ -63,31 +70,6 @@ public class AddColumnClause extends AlterTableClause {
         this.colPos = colPos;
         this.rollupName = rollupName;
         this.properties = properties;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnDef == null) {
-            throw new AnalysisException("No column definition in add column clause.");
-        }
-        columnDef.analyze(true);
-        if (colPos != null) {
-            colPos.analyze();
-        }
-
-        if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, columnDef.getName());
-        }
-
-        if (columnDef.getAggregateType() != null && colPos != null && colPos.isFirst()) {
-            throw new AnalysisException("Cannot add value column[" + columnDef.getName() + "] at first");
-        }
-
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
-
-        column = columnDef.toColumn();
     }
 
     @Override
@@ -111,5 +93,15 @@ public class AddColumnClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddColumnClause(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
