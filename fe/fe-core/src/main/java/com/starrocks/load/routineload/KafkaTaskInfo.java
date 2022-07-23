@@ -22,7 +22,6 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -83,9 +82,8 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         }
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) routineLoadJob;
-        Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
+        Map<Integer, Long> latestOffsets = KafkaUtil.getEndOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
-                ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
                 new ArrayList<>(partitionIdToOffset.keySet()));
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
             int partitionId = entry.getKey();
