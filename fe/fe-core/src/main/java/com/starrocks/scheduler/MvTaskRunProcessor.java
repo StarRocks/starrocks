@@ -203,10 +203,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             partitionDiff = SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-            String functionName = functionCallExpr.getFnName().getFunction();
-            if (!functionName.equalsIgnoreCase("date_trunc")) {
-                throw new SemanticException("Do not support function:" + functionCallExpr.toSql());
-            }
             granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue();
             partitionDiff = SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
                     granularity);
@@ -251,18 +247,16 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(baseChangedPartitionName));
             }
 
-            int curNameCount = needRefreshMvPartitionNames.size();
-            int updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
-                    needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
-            while (curNameCount != updatedCount) {
-                curNameCount = updatedCount;
-                updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
-                        needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
-            }
+            SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                    baseToMvNameRef, mvToBaseNameRef);
         }
+
+        LOG.info("Calculate the partitions that need to be refreshed:[{}]", needRefreshMvPartitionNames);
 
         return needRefreshMvPartitionNames;
     }
+
+
 
     private boolean checkNoPartitionRefTablePartitions(MaterializedView materializedView, OlapTable olapTable) {
         boolean refreshAllPartitions = false;

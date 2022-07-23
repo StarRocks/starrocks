@@ -128,7 +128,20 @@ public class SyncPartitionUtils {
         return result;
     }
 
-    public static int gatherPotentialRefreshPartitionNames(Set<String> baseChangedPartitionNames,
+    public static void calcPotentialRefreshPartition(Set<String> needRefreshMvPartitionNames,
+                                                      Set<String> baseChangedPartitionNames,
+                                                      Map<String, Set<String>> baseToMvNameRef,
+                                                      Map<String, Set<String>> mvToBaseNameRef) {
+        int curNameCount = needRefreshMvPartitionNames.size();
+        int updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
+                needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
+        while (curNameCount != updatedCount) {
+            curNameCount = updatedCount;
+            updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
+                    needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
+        }
+    }
+    private static int gatherPotentialRefreshPartitionNames(Set<String> baseChangedPartitionNames,
                                                      Set<String> needRefreshMvPartitionNames,
                                                      Map<String, Set<String>> baseToMvNameRef,
                                                      Map<String, Set<String>> mvToBaseNameRef) {
