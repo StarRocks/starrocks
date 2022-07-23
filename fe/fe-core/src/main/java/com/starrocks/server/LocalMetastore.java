@@ -4535,15 +4535,27 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
+        Set<Long> tabletIdSet = new HashSet<Long>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+                long tabletId = tablet.getId();
+                invertedIndex.deleteTablet(tabletId);
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta.isLakeTablet()) {
+                    tabletIdSet.add(tabletId);
+                }
             }
+        }
+        if (!tabletIdSet.isEmpty()) {
+            // for debug
+            LOG.info("delete lake tablet : {}", tabletIdSet);
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
         }
     }
 
-    // for test only
+    // for test onlyta
     @VisibleForTesting
     public void clear() {
         if (idToDb != null) {
