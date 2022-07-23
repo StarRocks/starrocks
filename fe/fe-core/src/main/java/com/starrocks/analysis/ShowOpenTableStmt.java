@@ -21,12 +21,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.google.common.base.Strings;
 
 // SHOW OPEN TABLES
 public class ShowOpenTableStmt extends ShowStmt {
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Database", ScalarType.createVarchar(64)))
