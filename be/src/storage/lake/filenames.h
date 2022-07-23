@@ -11,6 +11,9 @@
 
 namespace starrocks::lake {
 
+constexpr static const int kTabletMetadataFilenameLength = 37;
+constexpr static const int kTxnLogFilenameLength = 37;
+
 inline bool is_segment(std::string_view file_name) {
     return HasSuffixString(file_name, ".dat");
 }
@@ -33,24 +36,24 @@ inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
 
 // Return value: <tablet id, tablet version>
 inline std::pair<int64_t, int64_t> parse_tablet_metadata_filename(std::string_view file_name) {
-    constexpr static int BASE = 16;
-    CHECK_EQ(37, file_name.size()) << file_name;
+    constexpr static int kBase = 16;
+    CHECK_EQ(kTabletMetadataFilenameLength, file_name.size()) << file_name;
     StringParser::ParseResult res;
-    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data() + 4, 16, BASE, &res);
+    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data() + 4, 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
-    auto version = StringParser::string_to_int<int64_t>(file_name.data() + 21, 16, BASE, &res);
+    auto version = StringParser::string_to_int<int64_t>(file_name.data() + 21, 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
     return {tablet_id, version};
 }
 
 // Return value: <tablet id, txn id>
 inline std::pair<int64_t, int64_t> parse_txn_log_filename(std::string_view file_name) {
-    constexpr static int BASE = 16;
-    CHECK_EQ(37, file_name.size()) << file_name;
+    constexpr static int kBase = 16;
+    CHECK_EQ(kTxnLogFilenameLength, file_name.size()) << file_name;
     StringParser::ParseResult res;
-    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data() + 4, 16, BASE, &res);
+    auto tablet_id = StringParser::string_to_int<int64_t>(file_name.data() + 4, 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
-    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data() + 21, 16, BASE, &res);
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data() + 21, 16, kBase, &res);
     CHECK_EQ(StringParser::PARSE_SUCCESS, res) << file_name;
     return {tablet_id, txn_id};
 }

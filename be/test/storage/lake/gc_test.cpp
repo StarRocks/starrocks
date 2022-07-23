@@ -33,7 +33,7 @@ protected:
     inline static std::unique_ptr<TabletManager> s_tablet_manager;
 };
 
-// NOILNTNEXTLINE
+// NOLINTNEXTLINE
 TEST_F(GCTest, test_metadata_gc) {
     auto fs = FileSystem::Default();
     auto tablet_id = next_id();
@@ -62,7 +62,7 @@ TEST_F(GCTest, test_metadata_gc) {
     }
 }
 
-// NOILNTNEXTLINE
+// NOLINTNEXTLINE
 TEST_F(GCTest, segment_metadata_gc) {
     auto fs = FileSystem::Default();
     auto tablet_id = next_id();
