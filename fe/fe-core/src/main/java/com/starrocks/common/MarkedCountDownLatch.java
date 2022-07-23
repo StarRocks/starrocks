@@ -31,7 +31,7 @@ import java.util.concurrent.CountDownLatch;
 
 public class MarkedCountDownLatch<K, V> extends CountDownLatch {
 
-    private Multimap<K, V> marks;
+    private final Multimap<K, V> marks;
     private Status st = Status.OK;
 
     public MarkedCountDownLatch(int count) {
