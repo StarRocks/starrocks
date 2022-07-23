@@ -18,6 +18,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/scan_node.h"
 #include "exec/vectorized/cross_join_node.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
@@ -257,6 +258,11 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     plan->collect_scan_nodes(&scan_nodes);
 
     int64_t sum_scan_limit = 0;
+    bool enable_shared_scan = false;
+    if (request.__isset.enable_shared_scan) {
+        enable_shared_scan = request.enable_shared_scan;
+    }
+
     MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
@@ -280,6 +286,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
             _query_ctx->set_scan_limit(parallel_scan_limit);
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
+
+        if (auto* olap_scan = dynamic_cast<vectorized::OlapScanNode*>(scan_node)) {
+            olap_scan->enable_shared_scan(enable_shared_scan);
         }
     }
 

@@ -1585,6 +1585,7 @@ public class PlanFragmentBuilder {
                 return;
             }
             fragment.preferInstanceParallel();
+            fragment.setEnableSharedScan(false);
         }
 
         private void estimateDopOfOnePhaseAgg(PlanFragment fragment) {
@@ -1592,6 +1593,7 @@ public class PlanFragmentBuilder {
                 return;
             }
             fragment.preferInstanceParallel();
+            fragment.setEnableSharedScan(false);
         }
 
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, global runtime filter

@@ -13,15 +13,12 @@ class ScanNode;
 
 namespace pipeline {
 
-class ChunkBufferLimiter;
-using ChunkBufferLimiterPtr = std::unique_ptr<ChunkBufferLimiter>;
+class ChunkBufferToken;
+using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ScanOperator : public SourceOperator {
 public:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                 ChunkBufferLimiter* buffer_limiter);
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node);
 
     ~ScanOperator() override;
 
@@ -59,12 +56,31 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+protected:
+    const size_t _buffer_size = config::pipeline_io_buffer_size;
+
+    // TODO: remove this to the base ScanContext.
+    /// Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual bool has_buffer_output() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+    virtual size_t buffer_size() const = 0;
+    virtual size_t buffer_capacity() const = 0;
+    virtual size_t default_buffer_capacity() const = 0;
+    virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
+    virtual bool is_buffer_full() const = 0;
+    virtual void set_buffer_finished() = 0;
+
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
+    void _close_chunk_source_unlocked(RuntimeState* state, int index);
+    void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
@@ -83,6 +99,7 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+    int _io_tasks_per_scan_operator;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -91,17 +108,17 @@ protected:
     std::vector<std::shared_ptr<RuntimeProfile>> _chunk_source_profiles;
 
     bool _is_finished = false;
-    // Shared among scan operators decomposed from a scan node, and owned by ScanOperatorFactory.
-    ChunkBufferLimiter* _buffer_limiter;
 
 private:
-    const size_t _buffer_size = config::pipeline_io_buffer_size;
-
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
+
+    mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    int32_t _chunk_source_idx = -1;
+
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
@@ -123,7 +140,7 @@ private:
 
 class ScanOperatorFactory : public SourceOperatorFactory {
 public:
-    ScanOperatorFactory(int32_t id, ScanNode* scan_node, ChunkBufferLimiterPtr buffer_limiter);
+    ScanOperatorFactory(int32_t id, ScanNode* scan_node);
 
     ~ScanOperatorFactory() override = default;
 
@@ -134,6 +151,9 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
+    bool need_local_shuffle() const override { return _need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;
     virtual void do_close(RuntimeState* state) = 0;
@@ -141,7 +161,7 @@ public:
 
 protected:
     ScanNode* const _scan_node;
-    ChunkBufferLimiterPtr _buffer_limiter;
+    bool _need_local_shuffle = true;
 };
 
 pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperatorFactory> factory, ScanNode* scan_node,

@@ -10,4 +10,8 @@ constexpr const int DEFAULT_CHUNK_SIZE = 4096;
 // Chunk size for some huge type(HLL, JSON)
 constexpr inline int CHUNK_SIZE_FOR_HUGE_TYPE = 4096;
 
+// Lock is sharded into 32 shards
+constexpr int NUM_LOCK_SHARD_LOG = 5;
+constexpr int NUM_LOCK_SHARD = 1 << NUM_LOCK_SHARD_LOG;
+
 } // namespace starrocks
