@@ -11,12 +11,11 @@ DIAGNOSTIC_POP
 
 #include "agent/agent_server.h"
 #include "common/status.h"
+#include "fs/fs_util.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/tablet_metadata.h"
-#include "storage/lake/txn_log.h"
 #include "util/countdown_latch.h"
 #include "util/threadpool.h"
 
@@ -220,6 +219,26 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
             LOG(INFO) << "Compacted tablet " << tablet_id << ". version=" << request->version()
                       << " txn_id=" << request->txn_id();
         }
+    }
+}
+
+void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::lake::DropTableRequest* request,
+                                 ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet_id");
+        return;
+    }
+
+    // TODO: move the execution to TaskWorkerPool
+    auto location = _env->lake_tablet_manager()->tablet_root_location(request->tablet_id());
+    auto st = fs::remove_all(location);
+    if (!st.ok() && !st.is_not_found()) {
+        LOG(ERROR) << "Fail to remove " << location << ": " << st;
+        cntl->SetFailed(st.get_error_msg());
     }
 }
 

@@ -20,14 +20,14 @@ namespace starrocks {
 class LakeServiceTest : public testing::Test {
 public:
     LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(next_id()) {
-        CHECK_OK(fs::create_directories("./lake_service_test"));
-        _location_provider = new lake::FixedLocationProvider("./lake_service_test");
+        CHECK_OK(fs::create_directories(kRootLocation));
+        _location_provider = new lake::FixedLocationProvider(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
     }
 
     ~LakeServiceTest() override {
-        CHECK_OK(fs::remove_all("./lake_service_test"));
+        CHECK_OK(fs::remove_all(kRootLocation));
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
         delete _location_provider;
     }
@@ -78,6 +78,8 @@ public:
     void TearDown() override { _tablet_mgr->drop_tablet(_tablet_id); }
 
 protected:
+    constexpr static const char* const kRootLocation = "./lake_service_test";
+
     LakeServiceImpl _lake_service;
     int64_t _tablet_id;
     lake::TabletManager* _tablet_mgr;
@@ -386,6 +388,25 @@ TEST_F(LakeServiceTest, test_compact) {
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
     }
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+    lake::DropTableRequest request;
+    lake::DropTableResponse response;
+
+    brpc::Controller cntl;
+    _lake_service.drop_table(&cntl, &request, &response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing tablet_id", cntl.ErrorText());
+
+    cntl.Reset();
+    request.set_tablet_id(_tablet_id);
+    _lake_service.drop_table(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    auto st = FileSystem::Default()->path_exists(kRootLocation);
+    ASSERT_TRUE(st.is_not_found()) << st;
 }
 
 } // namespace starrocks
