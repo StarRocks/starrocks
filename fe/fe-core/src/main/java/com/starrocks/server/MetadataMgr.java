@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -111,7 +112,15 @@ public class MetadataMgr {
 
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+        return connectorMetadata.map(metadata -> {
+            try {
+                return metadata.getTable(dbName, tblName);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e);
+            } catch (DdlException e) {
+                throw new RuntimeException(e);
+            }
+        }).orElse(null);
     }
 
     private void readLock() {

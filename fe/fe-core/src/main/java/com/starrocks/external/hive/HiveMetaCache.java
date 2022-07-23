@@ -308,12 +308,12 @@ public class HiveMetaCache {
         return tableCache.getIfPresent(hiveTableName);
     }
 
-    public Table getTable(HiveTableName hiveTableName) {
+    public Table getTable(HiveTableName hiveTableName) throws ExecutionException {
         try {
             return tableCache.get(hiveTableName);
         } catch (Exception e) {
             LOG.error("Failed to get table {}", hiveTableName, e);
-            return null;
+            throw e;
         }
     }
 

@@ -17,6 +17,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 public class HiveMetadataTest {
     @Test
@@ -116,7 +117,7 @@ public class HiveMetadataTest {
     }
 
     @Test
-    public void testNotExistTable() throws DdlException {
+    public void testNotExistTable() throws DdlException, ExecutionException {
         String resourceName = "thrift://127.0.0.1:9083";
         HiveMetadata metadata = new HiveMetadata(resourceName);
         Assert.assertNull(metadata.getTable("db", "tbl"));
