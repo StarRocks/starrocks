@@ -167,8 +167,7 @@ private:
     const std::vector<ExprContext*>& _partition_expr_ctxs; // compute per-row partition values
     vectorized::Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
-    std::vector<uint32_t> _channel_ids;
-    std::vector<uint32_t> _shuffle_ids;
+    std::vector<uint32_t> _shuffle_channel_ids;
     std::vector<int> _driver_sequence_per_shuffle;
     // This array record the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.

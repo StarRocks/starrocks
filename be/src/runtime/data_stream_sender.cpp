@@ -598,11 +598,23 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
 
             // compute row indexes for each channel
             _channel_row_idx_start_points.assign(num_channels + 1, 0);
-            for (uint16_t i = 0; i < num_rows; ++i) {
-                uint16_t channel_index = _hash_values[i] % num_channels;
-                _channel_row_idx_start_points[channel_index]++;
-                _hash_values[i] = channel_index;
+            struct ReduceOp {
+                uint32_t operator()(uint32_t l, uint32_t r) { return ((uint64_t)l * (uint64_t)r) >> 32; }
+            };
+            if (_part_type == TPartitionType::HASH_PARTITIONED) {
+                for (uint16_t i = 0; i < num_rows; ++i) {
+                    uint16_t channel_index = ReduceOp()(_hash_values[i], num_channels);
+                    _channel_row_idx_start_points[channel_index]++;
+                    _hash_values[i] = channel_index;
+                }
+            } else {
+                for (uint16_t i = 0; i < num_rows; ++i) {
+                    uint16_t channel_index = _hash_values[i] % num_channels;
+                    _channel_row_idx_start_points[channel_index]++;
+                    _hash_values[i] = channel_index;
+                }
             }
+
             // NOTE:
             // we make the last item equal with number of rows of this chunk
             for (int i = 1; i <= num_channels; ++i) {

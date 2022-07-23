@@ -10,6 +10,7 @@
 #include <random>
 
 #include "common/config.h"
+#include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Types_types.h"
@@ -388,8 +389,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(channel->init(state));
     }
 
-    _channel_ids.resize(state->chunk_size());
-    _shuffle_ids.resize(state->chunk_size());
+    _shuffle_channel_ids.resize(state->chunk_size());
     _row_indexes.resize(state->chunk_size());
 
     return Status::OK();
@@ -522,19 +522,23 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             // Compute row indexes for each channel's each shuffle
             _channel_row_idx_start_points.assign(_num_shuffles + 1, 0);
 
-            for (size_t i = 0; i < num_rows; ++i) {
-                size_t channel_id = _hash_values[i] % num_channels;
-                size_t shuffle_id;
+            Shuffler shuffler(num_channels, _num_shuffles_per_channel);
+            if (_part_type == TPartitionType::HASH_PARTITIONED) {
                 if (_is_channel_bound_driver_sequence) {
-                    shuffle_id = channel_id;
+                    shuffler.exchange_shuffle<false, ReduceOp>(_shuffle_channel_ids, _hash_values, num_rows);
                 } else {
-                    // Note that xorshift32 rehash must be applied for both local shuffle and exchange sink here.
-                    uint32_t driver_sequence = HashUtil::xorshift32(_hash_values[i]) % _num_shuffles_per_channel;
-                    shuffle_id = channel_id * _num_shuffles_per_channel + driver_sequence;
+                    shuffler.exchange_shuffle<true, ReduceOp>(_shuffle_channel_ids, _hash_values, num_rows);
                 }
-                _channel_ids[i] = channel_id;
-                _shuffle_ids[i] = shuffle_id;
-                _channel_row_idx_start_points[shuffle_id]++;
+            } else {
+                if (_is_channel_bound_driver_sequence) {
+                    shuffler.exchange_shuffle<false, ModuloOp>(_shuffle_channel_ids, _hash_values, num_rows);
+                } else {
+                    shuffler.exchange_shuffle<true, ModuloOp>(_shuffle_channel_ids, _hash_values, num_rows);
+                }
+            }
+
+            for (size_t i = 0; i < num_rows; ++i) {
+                _channel_row_idx_start_points[_shuffle_channel_ids[i]]++;
             }
             // NOTE:
             // we make the last item equal with number of rows of this chunk
@@ -543,8 +547,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             }
 
             for (int32_t i = num_rows - 1; i >= 0; --i) {
-                _row_indexes[_channel_row_idx_start_points[_shuffle_ids[i]] - 1] = i;
-                _channel_row_idx_start_points[_shuffle_ids[i]]--;
+                _row_indexes[_channel_row_idx_start_points[_shuffle_channel_ids[i]] - 1] = i;
+                _channel_row_idx_start_points[_shuffle_channel_ids[i]]--;
             }
         }
 
