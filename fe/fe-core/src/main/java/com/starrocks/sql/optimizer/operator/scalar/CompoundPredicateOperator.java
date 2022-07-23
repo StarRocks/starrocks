@@ -2,12 +2,15 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class CompoundPredicateOperator extends PredicateOperator {
     private final CompoundType type;
@@ -63,6 +66,10 @@ public class CompoundPredicateOperator extends PredicateOperator {
         }
     }
 
+    private List<ScalarOperator> normalizeChildren() {
+        return getChildren().stream().sorted(Comparator.comparingInt(ScalarOperator::hashCode)).collect(Collectors.toList());
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -71,16 +78,19 @@ public class CompoundPredicateOperator extends PredicateOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        CompoundPredicateOperator that = (CompoundPredicateOperator) o;
+        if (type != that.type) {
             return false;
         }
-        CompoundPredicateOperator that = (CompoundPredicateOperator) o;
-        return type == that.type;
+
+        List<ScalarOperator> thisArgs = this.normalizeChildren();
+        List<ScalarOperator> thatArgs = that.normalizeChildren();
+        return Objects.equals(thisArgs, thatArgs);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type);
+        return Objects.hash(opType, type, Sets.newHashSet(this.getChildren()).hashCode());
     }
 
     public static ScalarOperator or(List<ScalarOperator> nodes) {
