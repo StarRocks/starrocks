@@ -577,6 +577,26 @@ public class PrivilegeCheckerTest {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze();
 
+        Config.enable_experimental_mv = true;
+        starRocksAssert.useDatabase("db1")
+                .withTable("CREATE TABLE db1.tbl_with_mv\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
+
         String sql = "refresh materialized view mv1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
