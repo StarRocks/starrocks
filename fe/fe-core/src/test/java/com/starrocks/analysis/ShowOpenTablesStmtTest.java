@@ -46,6 +46,7 @@ public class ShowOpenTablesStmtTest {
 
         // compatible old
         stmt = new ShowOpenTableStmt();
+        stmt.analyze(stmt.analyzer);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
         Assert.assertTrue(stmt.isSupportNewPlanner());
