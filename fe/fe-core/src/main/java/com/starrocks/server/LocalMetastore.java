@@ -3914,7 +3914,7 @@ public class LocalMetastore implements ConnectorMetadata {
         defaultCluster = cluster;
 
         // create info schema db
-        final InfoSchemaDb infoDb = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+        final InfoSchemaDb infoDb = new InfoSchemaDb();
         unprotectCreateDb(infoDb);
 
         // only need to create default cluster once.
@@ -3948,7 +3948,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (getFullNameToDb().containsKey(dbName)) {
                     db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
                 } else {
-                    db = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+                    db = new InfoSchemaDb();
                 }
                 String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
                 // Every time we construct the InfoSchemaDb, which id will increment.
