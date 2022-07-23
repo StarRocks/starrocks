@@ -4519,24 +4519,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     tabletIdSet.add(tabletId);
                 }
                 invertedIndex.deleteTablet(tabletId);
-            }
         }
         return tabletIdSet;
-    }
-
-    // for test onlyta
-    @VisibleForTesting
-    public void clear() {
-        if (idToDb != null) {
-            idToDb.clear();
-        }
-        if (fullNameToDb != null) {
-            fullNameToDb.clear();
-        }
-
-        stateMgr.getRollupHandler().unprotectedGetAlterJobs().clear();
-        stateMgr.getSchemaChangeHandler().unprotectedGetAlterJobs().clear();
-        System.gc();
     }
 
     @VisibleForTesting
