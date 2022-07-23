@@ -77,7 +77,7 @@ public class ShowProcStmt extends ShowStmt {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToMaster()) {
+        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
             return RedirectStatus.FORWARD_NO_SYNC;
         } else {
             return RedirectStatus.NO_FORWARD;

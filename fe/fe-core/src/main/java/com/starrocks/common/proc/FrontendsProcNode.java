@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import org.apache.commons.validator.routines.InetAddressValidator;
@@ -45,7 +46,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
-            .add("Role").add("IsMaster").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
+            .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
 
@@ -99,12 +100,11 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            info.add(fe.getRole().name());
 
             if (fe.getHost().equals(leaderIp)) {
-                info.add("true");
+                info.add(FrontendNodeType.LEADER.toString());
             } else {
-                info.add("false");
+                info.add(fe.getRole().name());
             }
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));
