@@ -457,6 +457,12 @@ alterClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
+    | addColumnClause
+    | addColumnsClause
+    | dropColumnClause
+    | modifyColumnClause
+    | columnRenameClause
+    | reorderColumnsClause
     ;
 
 addPartitionClause
@@ -523,6 +529,29 @@ modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
+addColumnClause
+    : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+addColumnsClause
+    : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+dropColumnClause
+    : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnClause
+    : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+columnRenameClause
+    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    ;
+
+reorderColumnsClause
+    : ORDER BY identifierList (FROM rollupName=identifier)? properties?
+    ;
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement

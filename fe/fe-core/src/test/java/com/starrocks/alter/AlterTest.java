@@ -22,18 +22,23 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.GrantStmt;
+import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
@@ -288,7 +293,7 @@ public class AlterTest {
         }
     }
 
-    private static void alterTableWithMewParserAndExceptionMsg(String sql, String msg) throws Exception {
+    private static void alterTableWithNewParserAndExceptionMsg(String sql, String msg) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
@@ -460,7 +465,7 @@ public class AlterTest {
 
         // no conflict
         stmt = "alter table test.tbl1 add column k3 int, add column k4 int";
-        alterTable(stmt, false);
+        alterTableWithNewParser(stmt, false);
         waitSchemaChangeJobDone(false, tbl);
 
         stmt = "alter table test.tbl1 add rollup r1 (k1)";
@@ -687,7 +692,7 @@ public class AlterTest {
         String alterStmt = "alter table test." + tableName + " set (\"dynamic_partition.enable\" = \"true\");";
         String errorMsg = "Table test.no_dynamic_table is not a dynamic partition table. " +
                 "Use command `HELP ALTER TABLE` to see how to change a normal table to a dynamic partition table.";
-        alterTableWithMewParserAndExceptionMsg(alterStmt, errorMsg);
+        alterTableWithNewParserAndExceptionMsg(alterStmt, errorMsg);
         // test set dynamic properties in a no dynamic partition table
         String stmt = "alter table test." + tableName + " set (\n" +
                 "'dynamic_partition.enable' = 'true',\n" +
@@ -894,7 +899,6 @@ public class AlterTest {
 
 
     }
-
 
 
     @Test
@@ -1419,7 +1423,7 @@ public class AlterTest {
 
     @Test
     public void testRenameDb() throws Exception {
-        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();;
+        Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
@@ -1815,4 +1819,114 @@ public class AlterTest {
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_4", addPartitionClause);
     }
 
+    @Test
+    public void testCatalogAddColumn() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    v1 int \n" +
+                        ")\n" +
+                        "DUPLICATE KEY(`k1`)" +
+                        "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        OlapTable tbl = (OlapTable) db.getTable("tbl1");
+
+        String stmt = "alter table test.tbl1 add column k2 int";
+        alterTableWithNewParser(stmt, false);
+        waitSchemaChangeJobDone(false, tbl);
+
+        stmt = "alter table test.tbl1 add column k3 int default '0' after k2";
+        alterTableWithNewParser(stmt, false);
+        waitSchemaChangeJobDone(false, tbl);
+
+        stmt = "alter table test.tbl1 add column k4 int first";
+        alterTableWithNewParserAndExceptionMsg(stmt, "Invalid column order. value should be after key. index[tbl1]");
+
+        stmt = "alter table test.tbl1 add column k5 int after k3 in `testRollup`";
+        alterTableWithNewParserAndExceptionMsg(stmt, "Index[testRollup] does not exist in table[tbl1]");
+
+        Assert.assertEquals(tbl.getColumns().size(), 4);
+    }
+
+    @Test
+    public void testCatalogAddColumns() throws Exception {
+        String stmt = "alter table test.tbl1 add column (`col1` int(11) not null default \"0\" comment \"\", "
+                + "`col2` int(11) not null default \"0\" comment \"\") in `testTable`;";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        AddColumnsClause clause = (AddColumnsClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(2, clause.getColumns().size());
+        Assert.assertEquals(0, clause.getProperties().size());
+        Assert.assertEquals("testTable", clause.getRollupName());
+
+        stmt = "alter table test.tbl1 add column (`col1` int(11) not null default \"0\" comment \"\", "
+                + "`col2` int(11) not null default \"0\" comment \"\");";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        clause = (AddColumnsClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(null, clause.getRollupName());
+    }
+
+    @Test
+    public void testCatalogDropColumn() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String stmt = "alter table test.tbl1 drop column k2 from `testRollup`";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        DropColumnClause clause = (DropColumnClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(0, clause.getProperties().size());
+        Assert.assertEquals("testRollup", clause.getRollupName());
+
+        stmt = "alter table test.tbl1 drop column col1, drop column col2";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        Assert.assertEquals("default_cluster:test", alterTableStmt.getTbl().getDb());
+        Assert.assertEquals(2, alterTableStmt.getOps().size());
+    }
+
+    @Test
+    public void testCatalogModifyColumn() throws Exception {
+        String stmt = "alter table test.tbl1 modify column k2 bigint first from `testRollup`";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        ModifyColumnClause clause = (ModifyColumnClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(0, clause.getProperties().size());
+        Assert.assertEquals("testRollup", clause.getRollupName());
+
+        stmt = "alter table test.tbl1 modify column k3 bigint comment 'add comment' after k2";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        clause = (ModifyColumnClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals("k2", clause.getColPos().getLastCol());
+        Assert.assertEquals(null, clause.getRollupName());
+    }
+
+    @Test
+    public void testCatalogRenameColumn() throws Exception {
+        String stmt = "alter table test.tbl1 rename column k3 k3_new";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        ColumnRenameClause clause = (ColumnRenameClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(clause.getNewColName(), "k3_new");
+    }
+
+    @Test
+    public void testCatalogReorderColumns() throws Exception {
+        List<String> cols = Lists.newArrayList("k1", "k2");
+        String stmt = "alter table test.tbl1 order by (k1, k2)";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        ReorderColumnsClause clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(cols, clause.getColumnsByPos());
+        Assert.assertEquals(0, clause.getProperties().size());
+        Assert.assertNull(clause.getRollupName());
+
+        stmt = "alter table test.tbl1 order by (k1, k2) from `testRollup`";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
+        Assert.assertEquals(clause.getRollupName(), "testRollup");
+        Assert.assertEquals("ORDER BY `k1`, `k2` IN `testRollup`", clause.toString());
+    }
 }
