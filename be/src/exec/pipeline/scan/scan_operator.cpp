@@ -13,14 +13,17 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/debug/query_trace.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
 
 // ========== ScanOperator ==========
 
-ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node)
+ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                           ScanNode* scan_node)
         : SourceOperator(factory, id, scan_node->name(), scan_node->id(), driver_sequence),
           _scan_node(scan_node),
+          _dop(dop),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
@@ -45,8 +48,11 @@ Status ScanOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
+    _unique_metrics->add_info_string("BufferUnplugThreshold", std::to_string(_buffer_unplug_threshold()));
     _peak_buffer_size_counter = _unique_metrics->AddHighWaterMarkCounter("PeakChunkBufferSize", TUnit::UNIT);
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
+    _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
+    _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
 
     if (_workgroup == nullptr) {
         DCHECK(_io_threads != nullptr);
@@ -92,6 +98,12 @@ void ScanOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
+size_t ScanOperator::_buffer_unplug_threshold() const {
+    size_t threshold = buffer_capacity() / _dop / 2;
+    threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
+    return threshold;
+}
+
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
@@ -100,23 +112,39 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-    if (has_buffer_output()) {
+
+    // Try to buffer enough chunks for exec thread, to reduce scheduling overhead.
+    // It's like the Linux Block-Scheduler's Unplug algorithm, so we just name it unplug.
+    // The default threshould of unpluging is BufferCapacity/DOP/4, and its range is [1, 16]
+    // The overall strategy:
+    // 1. If enough buffered chunks: pull_chunk, so return true
+    // 2. If not enough buffered chunks
+    //   2.1 Enough running io-tasks and buffer not full: wait some time for more chunks, so return false
+    //   2.1 Enough running io-tasks but buffer is full: pull_chunks, so return true
+    //   2.2 Not enough running io-tasks: submit io tasks, so return true
+    //   2.3 No more tasks: pull_chunk, so return true
+    if (_unpluging) {
+        if (num_buffered_chunks() > 0) {
+            return true;
+        }
+        _unpluging = false;
+    }
+    if (num_buffered_chunks() >= _buffer_unplug_threshold()) {
+        COUNTER_UPDATE(_buffer_unplug_counter, 1);
+        _unpluging = true;
         return true;
     }
-
+    if (is_buffer_full() && num_buffered_chunks() > 0) {
+        return true;
+    }
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator || is_buffer_full()) {
         return false;
     }
 
-    // Because committing i/o task is trigger ONLY in pull_chunk,
-    // return true if more i/o tasks can be committed.
-
-    // Can pick up more morsels.
+    // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         return true;
     }
-
-    // Can trigger_next_scan for the picked-up morsel.
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
         if (_chunk_sources[i] != nullptr && !_is_io_task_running[i] && _chunk_sources[i]->has_next_chunk()) {
@@ -124,7 +152,7 @@ bool ScanOperator::has_output() const {
         }
     }
 
-    return false;
+    return num_buffered_chunks() > 0;
 }
 
 bool ScanOperator::pending_finish() const {
@@ -152,7 +180,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Remain some data in the buffer
-    if (has_buffer_output()) {
+    if (num_buffered_chunks() > 0) {
         return false;
     }
 
@@ -198,14 +226,15 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
+    if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
+        return Status::OK();
+    }
 
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
     while (--cnt >= 0) {
-        if (++_chunk_source_idx >= _io_tasks_per_scan_operator) {
-            _chunk_source_idx = 0;
-        }
+        _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
             continue;
@@ -272,6 +301,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         return Status::OK();
     }
 
+    COUNTER_UPDATE(_submit_task_counter, 1);
     _chunk_sources[chunk_source_index]->pin_chunk_token(std::move(buffer_token));
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
@@ -303,7 +333,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
                 // Read chunk
                 Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
-                        _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                        kIOTaskBatchSize, state, &num_read_chunks, worker_id, _workgroup);
                 if (!status.ok() && !status.is_end_of_file()) {
                     _set_scan_status(status);
                 }
@@ -341,7 +371,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                 int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
                 Status status =
-                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(kIOTaskBatchSize, state);
                 if (!status.ok() && !status.is_end_of_file()) {
                     _set_scan_status(status);
                 }
