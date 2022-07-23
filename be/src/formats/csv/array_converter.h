@@ -18,9 +18,13 @@ public:
     bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
 
 private:
-    bool _split_array_elements(Slice s, std::vector<Slice>* elements) const;
-
+    static bool _validate_array(Slice s, const Options& options);
+    static bool _split_array_elements(Slice s, std::vector<Slice>* elements, const Options& options);
+    static bool _split_default_array_elements(Slice s, std::vector<Slice>* elements, const Options& options);
+    static bool _split_hive_array_elements(Slice s, std::vector<Slice>* elements, const Options& options);
     std::unique_ptr<Converter> _element_converter;
 };
+
+char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level);
 
 } // namespace starrocks::vectorized::csv
