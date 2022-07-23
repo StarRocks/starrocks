@@ -95,6 +95,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewPartitionNameRefInfo;
+import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -2270,6 +2272,22 @@ public class GlobalStateMgr {
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
         localMetastore.replayCreateMaterializedView(dbName, materializedView);
+    }
+
+    public void replayAddMvPartitionNameRefInfo(MaterializedViewPartitionNameRefInfo info) {
+        localMetastore.replayAddMvPartitionNameRefInfo(info);
+    }
+
+    public void replayRemoveMvPartitionNameRefInfo(MaterializedViewPartitionNameRefInfo info) {
+        localMetastore.replayRemoveMvPartitionNameRefInfo(info);
+    }
+
+    public void replayAddMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
+        localMetastore.replayAddMvPartitionVersionInfo(info);
+    }
+
+    public void replayRemoveMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
+        localMetastore.replayRemoveMvPartitionVersionInfo(info);
     }
 
     // Drop table

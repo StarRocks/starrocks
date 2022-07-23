@@ -157,6 +157,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
+    public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
@@ -259,7 +260,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
 
-
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
@@ -273,7 +273,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
      * to BE in batch and concurrently.
      * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     *   of a fragment to the same destination host are delivered in the same request.
+     * of a fragment to the same destination host are delivered in the same request.
      * - Send different fragments concurrently according to topological order of the fragment tree
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
@@ -438,6 +438,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int profileTimeout = 2;
 
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
@@ -926,6 +929,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getResourceGroupId() {
         return resourceGroupId;
+    }
+
+    public int getProfileTimeout() {
+        return profileTimeout;
     }
 
     public int getPipelineProfileLevel() {
