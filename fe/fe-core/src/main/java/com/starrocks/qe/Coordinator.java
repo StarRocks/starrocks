@@ -1683,9 +1683,14 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                profileDoneSignal.await(2, TimeUnit.SECONDS);
-            } catch (InterruptedException e1) {
-                LOG.warn("signal await error", e1);
+                int timeout = connectContext.getSessionVariable().getProfileTimeout();
+                // Waiting for other fragment instances to finish execution
+                // Ideally, it should wait indefinitely, but out of defense, set timeout
+                if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
+                    LOG.warn("failed to get profile within {} seconds", timeout);
+                }
+            } catch (InterruptedException e) {
+                LOG.warn("signal await error", e);
             }
         }
         lock();
