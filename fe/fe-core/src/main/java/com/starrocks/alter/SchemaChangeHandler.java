@@ -326,7 +326,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (modColumn.isKey()) {
+            if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
             if (modColumn.getAggregationType() != null) {
@@ -345,7 +345,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
-                        modColumn.getName());
+                modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
@@ -353,7 +353,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
-                        modColumn.getName());
+                modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
