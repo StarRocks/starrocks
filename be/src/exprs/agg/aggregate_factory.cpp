@@ -390,7 +390,8 @@ public:
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState, false>(retentoin);
             } else if (name == "window_funnel") {
-                if constexpr (ArgPT == TYPE_DATETIME || ArgPT == TYPE_DATE) {
+                if constexpr (ArgPT == TYPE_INT || ArgPT == TYPE_BIGINT || ArgPT == TYPE_DATE ||
+                              ArgPT == TYPE_DATETIME) {
                     auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
                     return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgPT>>(
                             windowfunnel);
@@ -402,7 +403,8 @@ public:
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
             } else if (name == "window_funnel") {
-                if constexpr (ArgPT == TYPE_DATETIME || ArgPT == TYPE_DATE) {
+                if constexpr (ArgPT == TYPE_INT || ArgPT == TYPE_BIGINT || ArgPT == TYPE_DATE ||
+                              ArgPT == TYPE_DATETIME) {
                     return AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
                 }
             }
@@ -1021,6 +1023,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     // This first type is the 4th type input of windowfunnel.
     // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
+    add_array_mapping<TYPE_INT, TYPE_INT>("window_funnel");
+    add_array_mapping<TYPE_BIGINT, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATETIME, TYPE_INT>("window_funnel");
     add_array_mapping<TYPE_DATE, TYPE_INT>("window_funnel");
 }
