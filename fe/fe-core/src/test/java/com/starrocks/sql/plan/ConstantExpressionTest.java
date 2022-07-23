@@ -348,4 +348,17 @@ public class ConstantExpressionTest extends PlanTestBase {
                 "  |  <slot 2> : uuid()\n" +
                 "  |  <slot 3> : uuid()"));
     }
+
+    @Test
+    public void testCastOverflowWithFloatLiteral() throws Exception {
+        Assert.assertThrows("Number out of range", UnsupportedOperationException.class,
+                () -> getFragmentPlan("SELECT CAST(3e39 as float)"));
+        Assert.assertThrows("Number out of range", ParsingException.class,
+                () -> getFragmentPlan("SELECT CAST(3e310 as double)"));
+
+        String plan = getFragmentPlan("SELECT CAST(3e39 as double)");
+        assertContains(plan, "3.0E39");
+        plan = getFragmentPlan("SELECT CAST(-3e39 as double)");
+        assertContains(plan, "-3.0E39");
+    }
 }
