@@ -126,6 +126,7 @@ import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
@@ -935,6 +936,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         return new DropTableStmt(ifExists, targetTableName, true, false);
+    }
+
+    @Override
+    public ParseNode visitShowOpenTablesStatement(StarRocksParser.ShowOpenTablesStatementContext context) {
+        QualifiedName dbName = null;
+        if (context.qualifiedName() != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        return new ShowOpenTableStmt(dbName == null ? null : dbName.toString(), pattern, where);
     }
 
     // ------------------------------------------- Task Statement ------------------------------------------------------
