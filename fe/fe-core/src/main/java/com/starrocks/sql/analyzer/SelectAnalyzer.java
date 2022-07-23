@@ -203,6 +203,11 @@ public class SelectAnalyzer {
                 }
 
                 for (Field field : fields) {
+                    if (field.getType().isInvalid()) {
+                        throw new SemanticException("Column " + field.getName() + " type is invalid, " +
+                                "may be column type transform failed from external table");
+                    }
+
                     int fieldIndex = scope.getRelationFields().indexOf(field);
                     /*
                      * Generate a special "SlotRef" as FieldReference,
