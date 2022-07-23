@@ -7545,6 +7545,26 @@ public class Catalog {
         }
     }
 
+    public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
+        if (info.getDbName() == null) {
+            return;
+        }
+        String hiveExternalDb = info.getDbName();
+        String hiveExternalTable = info.getTableName();
+        LOG.info("replayModifyTableColumn hiveDb:{},hiveTable:{}", hiveExternalDb, hiveExternalTable);
+        List<Column> columns = info.getColumns();
+        Database db = getDb(hiveExternalDb);
+        HiveTable table;
+        db.readLock();
+        try {
+            Table tbl = db.getTable(hiveExternalTable);
+            table = (HiveTable) tbl;
+            table.setNewFullSchema(columns);
+        } finally {
+            db.readUnlock();
+        }
+    }
+
     public long saveAnalyze(DataOutputStream dos, long checksum) throws IOException {
         Catalog.getCurrentAnalyzeMgr().write(dos);
         return checksum;

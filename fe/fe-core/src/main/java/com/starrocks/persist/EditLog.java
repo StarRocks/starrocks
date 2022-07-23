@@ -810,6 +810,12 @@ public class EditLog {
                     catalog.getAnalyzeManager().replayRemoveAnalyzeJob(analyzeJob);
                     break;
                 }
+                case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
+                    ModifyTableColumnOperationLog modifyTableColumnOperationLog =
+                            (ModifyTableColumnOperationLog) journal.getData();
+                    catalog.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
