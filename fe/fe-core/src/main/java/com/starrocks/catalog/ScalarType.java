@@ -614,7 +614,9 @@ public class ScalarType extends Type implements Cloneable {
 
     @Override
     public boolean isSupported() {
-        return type != PrimitiveType.BINARY;
+        // BINARY and CONVERT_FAILED is unsupported
+        return (type != PrimitiveType.BINARY) &&
+                (type != PrimitiveType.CONVERT_FAILED);
     }
 
     @Override

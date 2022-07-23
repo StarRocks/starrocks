@@ -26,6 +26,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
@@ -660,7 +661,11 @@ public class PlanFragmentBuilder {
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
+                if (slotDescriptor.getColumn().getPrimitiveType().equals(PrimitiveType.CONVERT_FAILED)) {
+                    slotDescriptor.setIsMaterialized(false);
+                } else {
+                    slotDescriptor.setIsMaterialized(true);
+                }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
         }
