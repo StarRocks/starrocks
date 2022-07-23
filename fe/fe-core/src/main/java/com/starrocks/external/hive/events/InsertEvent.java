@@ -30,9 +30,17 @@ public class InsertEvent extends MetastoreTableEvent {
     private InsertEvent(NotificationEvent event, HiveMetaCache metaCache) {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.INSERT.equals(getEventType()));
-        InsertMessage insertMessage =
-                MetastoreEventsProcessor.getMessageDeserializer()
-                        .getInsertMessage(event.getMessage());
+        InsertMessage insertMessage = null;
+        if (event.getMessageFormat().contains("gzip")) {
+            insertMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getInsertMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+        } else {
+            insertMessage =
+                    MetastoreEventsProcessor.getMessageDeserializer()
+                            .getInsertMessage(event.getMessage());
+        }
+
         try {
             hmsTbl = Preconditions.checkNotNull(insertMessage.getTableObj());
             insertPartition = insertMessage.getPtnObj();

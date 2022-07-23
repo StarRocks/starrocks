@@ -26,9 +26,17 @@ public class DropTableEvent extends MetastoreTableEvent {
     private DropTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.DROP_TABLE.equals(getEventType()));
-        JSONDropTableMessage dropTableMessage =
-                (JSONDropTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
-                        .getDropTableMessage(event.getMessage());
+        JSONDropTableMessage dropTableMessage = null;
+        if (event.getMessageFormat().contains("gzip")) {
+            dropTableMessage =
+                    (JSONDropTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
+                            .getDropTableMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+        } else {
+            dropTableMessage =
+                    (JSONDropTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
+                            .getDropTableMessage(event.getMessage());
+        }
+
         try {
             dbName = dropTableMessage.getDB();
             tableName = dropTableMessage.getTable();

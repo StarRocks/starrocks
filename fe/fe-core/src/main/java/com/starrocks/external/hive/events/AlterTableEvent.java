@@ -35,9 +35,16 @@ public class AlterTableEvent extends MetastoreTableEvent {
     private AlterTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.ALTER_TABLE.equals(getEventType()));
-        JSONAlterTableMessage alterTableMessage =
-                (JSONAlterTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
-                        .getAlterTableMessage(event.getMessage());
+        JSONAlterTableMessage alterTableMessage = null;
+        if (event.getMessageFormat().contains("gzip")) {
+            alterTableMessage =
+                    (JSONAlterTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
+                            .getAlterTableMessage(MetastoreEventsProcessor.gzipDeCompress(event.getMessage()));
+        } else {
+            alterTableMessage =
+                    (JSONAlterTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
+                            .getAlterTableMessage(event.getMessage());
+        }
         try {
             hmsTbl = Preconditions.checkNotNull(alterTableMessage.getTableObjBefore());
             tableAfter = Preconditions.checkNotNull(alterTableMessage.getTableObjAfter());
