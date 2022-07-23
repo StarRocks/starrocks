@@ -48,7 +48,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -115,7 +117,7 @@ public class ConnectContext {
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
-    protected List<SetVar> modifiedSessionVariables = new ArrayList<>();
+    protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -273,13 +275,13 @@ public class ConnectContext {
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
         if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
-            modifiedSessionVariables.add(setVar);
+            modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
 
     public SetStmt getModifiedSessionVariables() {
         if (!modifiedSessionVariables.isEmpty()) {
-            return new SetStmt(modifiedSessionVariables);
+            return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
         }
         return null;
     }
