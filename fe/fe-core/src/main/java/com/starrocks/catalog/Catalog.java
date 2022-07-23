@@ -6216,26 +6216,6 @@ public class Catalog {
         }
     }
 
-    public void replayModifyTableColumn(short opCode, ModifyTableColumnOperationLog info) {
-        if (info.getDbName() == null) {
-            return;
-        }
-        String hiveExternalDb = info.getDbName();
-        String hiveExternalTable = info.getTableName();
-        LOG.info("replayModifyTableColumn hiveDb:{},hiveTable:{}", hiveExternalDb, hiveExternalTable);
-        List<Column> columns = info.getColumns();
-        Database db = getDb(hiveExternalDb);
-        HiveTable table;
-        db.readLock();
-        try {
-            Table tbl = db.getTable(hiveExternalTable);
-            table = (HiveTable) tbl;
-            table.setNewFullSchema(columns);
-        } finally {
-            db.readUnlock();
-        }
-    }
-
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
@@ -7545,7 +7525,7 @@ public class Catalog {
         }
     }
 
-    public void replayModifyHiveTableColumn(short opCode, ModifyTableColumnOperationLog info) {
+    public void replayModifyHiveTableColumn(ModifyTableColumnOperationLog info) {
         if (info.getDbName() == null) {
             return;
         }
@@ -7555,13 +7535,13 @@ public class Catalog {
         List<Column> columns = info.getColumns();
         Database db = getDb(hiveExternalDb);
         HiveTable table;
-        db.readLock();
+        db.writeLock();
         try {
             Table tbl = db.getTable(hiveExternalTable);
             table = (HiveTable) tbl;
             table.setNewFullSchema(columns);
         } finally {
-            db.readUnlock();
+            db.writeUnlock();
         }
     }
 

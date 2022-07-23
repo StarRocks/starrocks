@@ -813,7 +813,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
-                    catalog.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+                    catalog.replayModifyHiveTableColumn(modifyTableColumnOperationLog);
                     break;
                 }
                 default: {
