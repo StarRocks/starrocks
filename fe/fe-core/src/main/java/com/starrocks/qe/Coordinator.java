@@ -1718,7 +1718,7 @@ public class Coordinator {
                     && fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()).size() > 0);
             boolean hasBucketShuffle = isBucketShuffleJoin(fragment.getFragmentId().asInt());
 
-            if (hasColocate || hasBucketShuffle) {
+            if (!fragment.isWithLocalShuffle() && (hasColocate || hasBucketShuffle)) {
                 computeColocatedJoinInstanceParam(fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()),
                         fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
                         parallelExecInstanceNum, pipelineDop, enablePipeline, params);

@@ -715,7 +715,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     aggOperator.isSplit(),
                     aggOperator.getLimit(),
                     aggOperator.getPredicate(),
-                    aggOperator.getProjection());
+                    aggOperator.getProjection(),
+                    aggOperator.isWithLocalShuffleOperator());
         }
 
         @Override

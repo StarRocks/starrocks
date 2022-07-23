@@ -18,6 +18,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -44,8 +45,14 @@ public class ReplayFromDumpTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
     public String getModelContent(String filename, String model) {
@@ -157,6 +164,7 @@ public class ReplayFromDumpTest {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/tpch17"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
         sessionVariable.setNewPlanerAggStage(2);
+        sessionVariable.setEnableLocalShuffleAgg(false);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)"));

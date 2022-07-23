@@ -44,6 +44,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // flg for this aggregate operator could use streaming pre-aggregation
     private boolean useStreamingPreAgg = true;
 
+    private final boolean withLocalShuffleOperator;
+
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -52,7 +54,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                                          boolean isSplit,
                                          long limit,
                                          ScalarOperator predicate,
-                                         Projection projection) {
+                                         Projection projection,
+                                         boolean withLocalShuffleOperator) {
         super(OperatorType.PHYSICAL_HASH_AGG);
         this.type = type;
         this.groupBys = groupBys;
@@ -63,6 +66,11 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.withLocalShuffleOperator = withLocalShuffleOperator;
+    }
+
+    public boolean isWithLocalShuffleOperator() {
+        return withLocalShuffleOperator;
     }
 
     public List<ColumnRefOperator> getGroupBys() {
@@ -107,7 +115,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, groupBys, aggregations.keySet());
+        return Objects.hash(super.hashCode(), type, withLocalShuffleOperator, groupBys, aggregations.keySet());
     }
 
     @Override
@@ -122,7 +130,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
             return false;
         }
         PhysicalHashAggregateOperator that = (PhysicalHashAggregateOperator) o;
-        return type == that.type && Objects.equals(aggregations, that.aggregations) &&
+        return type == that.type && withLocalShuffleOperator == that.withLocalShuffleOperator &&
+                Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupBys, that.groupBys);
     }
 
