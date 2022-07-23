@@ -356,7 +356,7 @@ std::string SchemaDescriptor::debug_string() const {
 
 int SchemaDescriptor::get_column_index(const std::string& column) const {
     for (size_t i = 0; i < _fields.size(); i++) {
-        if (_fields[i].name == column) {
+        if (strcasecmp(_fields[i].name.c_str(), column.c_str()) == 0) {
             return i;
         }
     }
