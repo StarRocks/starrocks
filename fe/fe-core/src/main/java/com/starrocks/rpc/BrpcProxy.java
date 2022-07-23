@@ -14,13 +14,20 @@ public class BrpcProxy {
     private final ConcurrentHashMap<TNetworkAddress, PBackendServiceAsync> backendServiceMap;
     private final ConcurrentHashMap<TNetworkAddress, LakeServiceAsync> lakeServiceMap;
 
-    private BrpcProxy() {
+    public BrpcProxy() {
         backendServiceMap = new ConcurrentHashMap<>();
         lakeServiceMap = new ConcurrentHashMap<>();
     }
 
     public static BrpcProxy getInstance() {
         return BrpcProxy.SingletonHolder.INSTANCE;
+    }
+
+    /**
+     * Only used for pseudo cluster or unittest
+     */
+    public static void setInstance(BrpcProxy proxy) {
+        BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
     public PBackendServiceAsync getBackendService(TNetworkAddress address) {

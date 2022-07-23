@@ -175,7 +175,7 @@ public class BackendServiceClient {
     }
 
     public Future<PFetchDataResult> fetchDataAsync(TNetworkAddress address, PFetchDataRequest request) throws RpcException {
-        RpcCallback<PFetchDataResult> callback = new EmptyRpcCallback<PFetchDataResult>()
+        RpcCallback<PFetchDataResult> callback = new EmptyRpcCallback<PFetchDataResult>();
         RpcContext rpcContext = RpcContext.getContext();
         rpcContext.setReadTimeoutMillis(86400000);
         try {
