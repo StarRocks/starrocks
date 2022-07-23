@@ -221,6 +221,13 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_ADD_PARTITIONS_V2: {
+                    AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
+                    for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
+                        globalStateMgr.replayAddPartition(info);
+                    }
+                    break;
+                }
                 case OperationType.OP_DROP_PARTITION: {
                     DropPartitionInfo info = (DropPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
@@ -1088,6 +1095,10 @@ public class EditLog {
 
     public void logAddPartitions(AddPartitionsInfo info) {
         logEdit(OperationType.OP_ADD_PARTITIONS, info);
+    }
+
+    public void logAddPartitions(AddPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
     }
 
     public void logDropPartition(DropPartitionInfo info) {

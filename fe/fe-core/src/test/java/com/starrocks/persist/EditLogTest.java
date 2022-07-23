@@ -2,30 +2,28 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.lake.ShardDeleter;
-import com.starrocks.lake.ShardManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.journal.JournalTask;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.lake.ShardDeleter;
+import com.starrocks.lake.ShardManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-
-import java.lang.reflect.Field;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class EditLogTest {
@@ -184,4 +182,5 @@ public class EditLogTest {
         EditLog.loadJournal(mgr, journal);
         Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
     }
+
 }

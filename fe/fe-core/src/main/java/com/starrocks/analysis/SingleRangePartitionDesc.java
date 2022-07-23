@@ -101,6 +101,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         return versionInfo;
     }
 
+    @Override
     public StorageInfo getStorageInfo() {
         return storageInfo;
     }

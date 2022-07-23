@@ -256,6 +256,9 @@ public class OperationType {
     // only used in list partition currently
     public static final short OP_ADD_PARTITION_V2 = 10241;
 
+    // only used in lake table currently
+    public static final short OP_ADD_PARTITIONS_V2 = 10242;
+
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
 }
