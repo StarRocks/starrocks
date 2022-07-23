@@ -1287,10 +1287,14 @@ public class Config extends ConfigBase {
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
-    public static long statistic_manager_sleep_time_sec = 60 * 10;
+    public static long statistic_manager_sleep_time_sec = 60; // 60s
 
+
+    /**
+     * Analyze status keep time in catalog
+     */
     @ConfField(mutable = true)
-    public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3 days
+    public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     // The statistic
     @ConfField
@@ -1303,7 +1307,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 120 * 60;
+    public static long statistic_collect_interval_sec = 5 * 60; // 5m
 
     /**
      * The column statistic update interval
@@ -1340,6 +1344,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+
+    @ConfField(mutable = true)
+    public static long statistic_collect_query_timeout = 3600; // 1h
 
     /**
      * Max row count in statistics collect per query
@@ -1636,7 +1643,7 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * Fqdn function switch, 
+     * Fqdn function switch,
      * this switch will be deleted after release the fqdn func
      */
     @ConfField(mutable = true)

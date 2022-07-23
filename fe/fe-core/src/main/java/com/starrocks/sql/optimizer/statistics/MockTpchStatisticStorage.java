@@ -260,11 +260,6 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         return Maps.newHashMap();
     }
 
-    @Override
-    public void expireHistogramStatistics(Long tableId, List<String> columns) {
-
-    }
-
     private LocalDateTime formatDateFromString(String dateStr) {
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         LocalDate date = LocalDate.parse(dateStr, fmt);

@@ -140,9 +140,13 @@ public class AnalyzeStmtTest {
         Partition partition = table.getPartition(10003L);
 
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  max(max), min(min) " +
-                        "FROM column_statistics WHERE table_id = 10004 and column_name in ('v1', 'v2') GROUP BY db_id, table_id, column_name",
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10004L, Lists.newArrayList("v1", "v2")));
+                        "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), " +
+                        "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
+                        "WHERE table_id = 10004 and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
+                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), cast(avg(data_size) as bigint), " +
+                        "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), cast(min(cast(min as bigint(20))) as string) " +
+                        "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" GROUP BY db_id, table_id, column_name",
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList("v1", "v2")));
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",

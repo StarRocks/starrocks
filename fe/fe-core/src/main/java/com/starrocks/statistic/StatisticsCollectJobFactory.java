@@ -100,7 +100,9 @@ public class StatisticsCollectJobFactory {
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
         if (basicStatsMeta != null) {
             if (basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.SAMPLE)
-                    && job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
+                    && job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)
+                    && ((OlapTable) table).getPartitions().stream()
+                    .noneMatch(p -> p.getDataSize() > Config.statistic_max_full_collect_data_size)) {
                 createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columns);
                 return;
             }
