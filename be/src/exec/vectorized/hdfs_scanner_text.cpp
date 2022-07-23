@@ -115,13 +115,11 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (const auto& slot : _scanner_params.materialize_slots) {
-        ConverterPtr conv;
-        if (slot->type().type == TYPE_ARRAY) {
-            // Use array converter with custom delimiter (Using it in Hive).
-            conv = csv::get_converter(slot->type(), true, _collection_delimiter.front(), _mapkey_delimiter.front());
-        } else {
-            conv = csv::get_converter(slot->type(), true);
+        // TODO: Why slot may be nullptr?
+        if (slot == nullptr) {
+            continue;
         }
+        ConverterPtr conv = csv::get_converter(slot->type(), true);
         RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
             return Status::InternalError(strings::Substitute("Unsupported CSV type $0", slot->type().debug_string()));
@@ -166,6 +164,12 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     }
 
     csv::Converter::Options options;
+    // Use to custom Hive array format
+    options.array_format_type = csv::ArrayFormatType::HIVE;
+    options.array_is_quoted_string = false;
+    options.array_element_delimiter = _collection_delimiter.front();
+    options.array_hive_mapkey_delimiter = _mapkey_delimiter.front();
+    options.array_hive_nested_level = 1;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -202,6 +206,12 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                                            _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
+            // ignore nullptr slot
+            const auto slot = _scanner_params.materialize_slots[j];
+            if (slot == nullptr) {
+                continue;
+            }
+
             int index = _scanner_params.materialize_index_in_chunk[j];
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
             Column* column = _column_raw_ptrs[index];

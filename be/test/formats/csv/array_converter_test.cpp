@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+#include "formats/csv/array_converter.h"
+
 #include <gtest/gtest.h>
 
 #include "column/column_helper.h"
@@ -159,16 +161,20 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_TINYINT);
 
-    const char COLLECTION_DELIMITER = '_';
-    const char MAPKEY_DELIMITER = '\003';
+    auto options = Converter::Options();
+    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_is_quoted_string = false;
+    options.array_element_delimiter = '_';
+    options.array_hive_nested_level = 1;
+    options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
 
-    EXPECT_TRUE(conv->read_string(col.get(), "", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), "10", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), "-1", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), "1_2_3_\\N", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "", options));
+    EXPECT_TRUE(conv->read_string(col.get(), "10", options));
+    EXPECT_TRUE(conv->read_string(col.get(), "-1", options));
+    EXPECT_TRUE(conv->read_string(col.get(), "1_2_3_\\N", options));
 
     EXPECT_EQ(4, col->size());
     // []
@@ -194,14 +200,18 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
     t.children.emplace_back(TYPE_VARCHAR);
     t.children.back().len = 6000;
 
-    const char COLLECTION_DELIMITER = '_';
-    const char MAPKEY_DELIMITER = '\003';
+    auto options = Converter::Options();
+    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_is_quoted_string = false;
+    options.array_element_delimiter = '_';
+    options.array_hive_nested_level = 1;
+    options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
 
-    EXPECT_TRUE(conv->read_string(col.get(), "", Converter::Options()));
-    EXPECT_TRUE(conv->read_string(col.get(), "apple_banana_\\N", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "", options));
+    EXPECT_TRUE(conv->read_string(col.get(), "apple_banana_\\N", options));
 
     EXPECT_EQ(2, col->size());
     // []
@@ -221,15 +231,18 @@ TEST(ArrayConverterTest, test_hive_read_string03) {
     t.children.back().children.emplace_back(TYPE_VARCHAR);
     t.children.back().children.back().len = 6000;
 
-    const char COLLECTION_DELIMITER = '_';
-    const char MAPKEY_DELIMITER = ':';
+    auto options = Converter::Options();
+    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_is_quoted_string = false;
+    options.array_element_delimiter = '_';
+    options.array_hive_nested_level = 1;
+    options.array_hive_mapkey_delimiter = ':';
 
-    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
 
     // [[],[null],["apple",null],["banana","pear"]]
-    EXPECT_TRUE(
-            conv->read_string(col.get(), "_\\N_apple:\\N_banana:pear", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "_\\N_apple:\\N_banana:pear", options));
     EXPECT_EQ(1, col->size());
 
     auto arr = col->get(0).get_array();
@@ -261,14 +274,18 @@ TEST(ArrayConverterTest, test_hive_read_string04) {
     t.children.back().children.back().children.emplace_back(TYPE_VARCHAR);
     t.children.back().children.back().children.back().len = 6000;
 
-    const char COLLECTION_DELIMITER = '\002';
-    const char MAPKEY_DELIMITER = '\003';
+    auto options = Converter::Options();
+    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_is_quoted_string = false;
+    options.array_element_delimiter = '\002';
+    options.array_hive_nested_level = 1;
+    options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+    auto conv = csv::get_converter(t, false);
     auto col = ColumnHelper::create_column(t, false);
 
     // [[[null, "smith"]]]
-    EXPECT_TRUE(conv->read_string(col.get(), "\\N\004smith", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "\\N\004smith", options));
     EXPECT_EQ(1, col->size());
 
     auto arr = col->get(0).get_array()[0].get_array()[0].get_array();
@@ -280,19 +297,25 @@ TEST(ArrayConverterTest, test_hive_read_string04) {
 // NOLINTNEXTLINE
 TEST(ArrayConverterTest, test_hive_read_string05) {
     // Super complex Hive array test
-    const char COLLECTION_DELIMITER = '\002';
-    const char MAPKEY_DELIMITER = ':';
+
+    auto options = Converter::Options();
+    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_is_quoted_string = false;
+    options.array_element_delimiter = '\002';
+    options.array_hive_nested_level = 1;
+    options.array_hive_mapkey_delimiter = ':';
+
     {
         // ARRAY<ARRAY<TINYINT>>
         TypeDescriptor t(TYPE_ARRAY);
         t.children.emplace_back(TYPE_ARRAY);
         t.children.back().children.emplace_back(TYPE_TINYINT);
 
-        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto conv = csv::get_converter(t, false);
         auto col = ColumnHelper::create_column(t, false);
 
         // [[1, 2, 3], [4, 5, 6], null, [7, 8, null]]
-        EXPECT_TRUE(conv->read_string(col.get(), "1:2:3\0024:5:6\002\\N\0027:8:\\N", Converter::Options()));
+        EXPECT_TRUE(conv->read_string(col.get(), "1:2:3\0024:5:6\002\\N\0027:8:\\N", options));
         EXPECT_EQ(1, col->size());
 
         auto arr = col->get(0).get_array();
@@ -314,7 +337,6 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         EXPECT_EQ(7, arr3[0].get_int8());
         EXPECT_EQ(8, arr3[1].get_int8());
         EXPECT_TRUE(arr3[2].is_null());
-
     }
     {
         // ARRAY<ARRAY<ARRAY<VARCHAR>>>
@@ -324,11 +346,11 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.back().children.back().children.emplace_back(TYPE_VARCHAR);
         t.children.back().children.back().children.back().len = 6000;
 
-        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto conv = csv::get_converter(t, false);
         auto col = ColumnHelper::create_column(t, false);
 
         // [[["null", "a", null], ["a"]], null, null]
-        EXPECT_TRUE(conv->read_string(col.get(), "null\004a\004\\N:a\002\\N\002\\N", Converter::Options()));
+        EXPECT_TRUE(conv->read_string(col.get(), "null\004a\004\\N:a\002\\N\002\\N", options));
         EXPECT_EQ(1, col->size());
 
         auto arr = col->get(0).get_array();
@@ -358,11 +380,11 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.emplace_back(TYPE_VARCHAR);
         t.children.back().len = 5000;
 
-        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto conv = csv::get_converter(t, false);
         auto col = ColumnHelper::create_column(t, false);
 
         // ["null", "a", null]
-        EXPECT_TRUE(conv->read_string(col.get(), "null\002a\002\\N", Converter::Options()));
+        EXPECT_TRUE(conv->read_string(col.get(), "null\002a\002\\N", options));
         EXPECT_EQ(1, col->size());
 
         auto arr = col->get(0).get_array();
@@ -376,15 +398,49 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.emplace_back(TYPE_VARCHAR);
         t.children.back().len = 5000;
 
-        auto conv = csv::get_converter(t, false, COLLECTION_DELIMITER, MAPKEY_DELIMITER);
+        auto conv = csv::get_converter(t, false);
         auto col = ColumnHelper::create_column(t, false);
 
         // []
-        EXPECT_TRUE(conv->read_string(col.get(), "", Converter::Options()));
+        EXPECT_TRUE(conv->read_string(col.get(), "", options));
         EXPECT_EQ(1, col->size());
 
         auto arr = col->get(0).get_array();
         EXPECT_EQ(0, arr.size());
+    }
+}
+
+// NOLINTNEXTLINE
+TEST(ConverterTest, test_get_collection_delimiter) {
+    // Rule refer to:
+    // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
+    std::vector<char> separators;
+
+    for (char i = 1; i <= 8; ++i) {
+        separators.push_back(i);
+    }
+
+    separators.push_back(11);
+
+    for (char i = 14; i <= 26; i++) {
+        separators.push_back(i);
+    }
+
+    for (char i = 28; i <= 31; i++) {
+        separators.push_back(i);
+    }
+
+    for (char i = -128; i <= -1; i++) {
+        separators.push_back(i);
+    }
+
+    const char DEFAULT_COLLECTION_DELIMITER = '\002';
+    const char DEFAULT_MAPKEY_DELIMITER = '\003';
+    // Start to check, ignore first element in separators, because array delimiter start from second element.
+    for (size_t i = 1, nested_array_level = 1; i < separators.size(); i++) {
+        char delimiter = csv::get_collection_delimiter(DEFAULT_COLLECTION_DELIMITER, DEFAULT_MAPKEY_DELIMITER,
+                                                       nested_array_level++);
+        EXPECT_EQ(delimiter, separators[i]);
     }
 }
 
