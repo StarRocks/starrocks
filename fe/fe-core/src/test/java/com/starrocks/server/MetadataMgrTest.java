@@ -94,7 +94,8 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Database database = metadataMgr.getDb("default_catalog", "default_cluster:db1");
         Assert.assertNotNull(database);
-        Assert.assertNull(metadataMgr.getDb("default_catalog", "db1"));
+        database = metadataMgr.getDb("default_catalog", "db1");
+        Assert.assertNotNull(database);
 
         com.starrocks.catalog.Database database1 = metadataMgr.getDb("hive_catalog", "db2");
         Assert.assertNotNull(database1);
