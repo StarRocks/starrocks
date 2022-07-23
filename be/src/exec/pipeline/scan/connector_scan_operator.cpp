@@ -31,14 +31,24 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
+<<<<<<< HEAD
     return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _buffer_limiter.get());
+=======
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, dop, _scan_node);
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 }
 
 // ==================== ConnectorScanOperator ====================
 
+<<<<<<< HEAD
 ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
                                              ScanNode* scan_node, ChunkBufferLimiter* buffer_limiter)
         : ScanOperator(factory, id, driver_sequence, scan_node, buffer_limiter) {}
+=======
+ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                                             ScanNode* scan_node)
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -47,6 +57,90 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
+<<<<<<< HEAD
+=======
+    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    ConnectorScanOperatorFactory* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
+                                                  std::move(morsel), this, scan_node, factory->get_chunk_buffer());
+}
+
+void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& active_inputs = factory->get_active_inputs();
+    auto key = std::make_pair(_driver_sequence, source_index);
+    DCHECK(!active_inputs.contains(key));
+    active_inputs.emplace(key);
+}
+
+void ConnectorScanOperator::detach_chunk_source(int32_t source_index) {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& active_inputs = factory->get_active_inputs();
+    auto key = std::make_pair(_driver_sequence, source_index);
+    DCHECK(active_inputs.contains(key));
+    active_inputs.erase(key);
+}
+
+bool ConnectorScanOperator::has_shared_chunk_source() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& active_inputs = factory->get_active_inputs();
+    return !active_inputs.empty();
+}
+
+size_t ConnectorScanOperator::num_buffered_chunks() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.size(_driver_sequence);
+}
+
+ChunkPtr ConnectorScanOperator::get_chunk_from_buffer() {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    vectorized::ChunkPtr chunk = nullptr;
+    if (buffer.try_get(_driver_sequence, &chunk)) {
+        return chunk;
+    }
+    return nullptr;
+}
+
+size_t ConnectorScanOperator::buffer_size() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->size();
+}
+
+size_t ConnectorScanOperator::buffer_capacity() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->capacity();
+}
+
+size_t ConnectorScanOperator::default_buffer_capacity() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->default_capacity();
+}
+
+ChunkBufferTokenPtr ConnectorScanOperator::pin_chunk(int num_chunks) {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->pin(num_chunks);
+}
+
+bool ConnectorScanOperator::is_buffer_full() const {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    return buffer.limiter()->is_full();
+}
+
+void ConnectorScanOperator::set_buffer_finished() {
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto& buffer = factory->get_chunk_buffer();
+    buffer.set_finished(_driver_sequence);
+}
+
+connector::ConnectorType ConnectorScanOperator::connector_type() {
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
     auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
     return std::make_shared<ConnectorChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                                   this, scan_node, _buffer_limiter);

@@ -18,14 +18,18 @@ using ChunkBufferLimiterPtr = std::unique_ptr<ChunkBufferLimiter>;
 
 class ScanOperator : public SourceOperator {
 public:
+<<<<<<< HEAD
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                  ChunkBufferLimiter* buffer_limiter);
+=======
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 
     ~ScanOperator() override;
 
-    static size_t max_buffer_capacity() { return config::pipeline_io_buffer_size; }
+    static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
 
     Status prepare(RuntimeState* state) override;
 
@@ -59,6 +63,26 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+<<<<<<< HEAD
+=======
+protected:
+    static constexpr size_t kIOTaskBatchSize = 64;
+
+    // TODO: remove this to the base ScanContext.
+    /// Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+    virtual size_t num_buffered_chunks() const = 0;
+    virtual size_t buffer_size() const = 0;
+    virtual size_t buffer_capacity() const = 0;
+    virtual size_t default_buffer_capacity() const = 0;
+    virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
+    virtual bool is_buffer_full() const = 0;
+    virtual void set_buffer_finished() = 0;
+
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -68,6 +92,7 @@ private:
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
+    size_t _buffer_unplug_threshold() const;
 
     inline void _set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
@@ -83,6 +108,11 @@ private:
 
 protected:
     ScanNode* _scan_node = nullptr;
+<<<<<<< HEAD
+=======
+    const int32_t _dop;
+    const int _io_tasks_per_scan_operator;
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
@@ -102,6 +132,12 @@ private:
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+<<<<<<< HEAD
+=======
+    int32_t _chunk_source_idx = -1;
+    mutable bool _unpluging = false;
+
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
@@ -119,6 +155,8 @@ private:
     // The number of morsels picked up by this scan operator.
     // A tablet may be divided into multiple morsels.
     RuntimeProfile::Counter* _morsels_counter = nullptr;
+    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
+    RuntimeProfile::Counter* _submit_task_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

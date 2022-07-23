@@ -30,14 +30,25 @@ Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
 void OlapScanOperatorFactory::do_close(RuntimeState*) {}
 
 OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
+<<<<<<< HEAD
     return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, _scan_node, _buffer_limiter.get(), _ctx);
+=======
+    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, dop, _scan_node,
+                                              _ctx_factory->get_or_create(driver_sequence));
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 }
 
 // ==================== OlapScanOperator ====================
 
+<<<<<<< HEAD
 OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
                                    ChunkBufferLimiter* buffer_limiter, OlapScanContextPtr ctx)
         : ScanOperator(factory, id, driver_sequence, scan_node, buffer_limiter), _ctx(std::move(ctx)) {
+=======
+OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                                   ScanNode* scan_node, OlapScanContextPtr ctx)
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(std::move(ctx)) {
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
     _ctx->ref();
 }
 
@@ -81,8 +92,61 @@ void OlapScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
+<<<<<<< HEAD
     return std::make_shared<OlapChunkSource>(_chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
                                              olap_scan_node, _ctx.get(), _buffer_limiter);
+=======
+    return std::make_shared<OlapChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
+                                             std::move(morsel), olap_scan_node, _ctx.get());
+}
+
+void OlapScanOperator::attach_chunk_source(int32_t source_index) {
+    _ctx->attach_shared_input(_driver_sequence, source_index);
+}
+
+void OlapScanOperator::detach_chunk_source(int32_t source_index) {
+    _ctx->detach_shared_input(_driver_sequence, source_index);
+}
+
+bool OlapScanOperator::has_shared_chunk_source() const {
+    return _ctx->has_active_input();
+}
+
+size_t OlapScanOperator::num_buffered_chunks() const {
+    return _ctx->get_chunk_buffer().size(_driver_sequence);
+}
+
+ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
+    vectorized::ChunkPtr chunk = nullptr;
+    if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
+        return chunk;
+    }
+    return nullptr;
+}
+
+size_t OlapScanOperator::buffer_size() const {
+    return _ctx->get_chunk_buffer().limiter()->size();
+}
+
+size_t OlapScanOperator::buffer_capacity() const {
+    return _ctx->get_chunk_buffer().limiter()->capacity();
+}
+
+size_t OlapScanOperator::default_buffer_capacity() const {
+    return _ctx->get_chunk_buffer().limiter()->default_capacity();
+}
+
+ChunkBufferTokenPtr OlapScanOperator::pin_chunk(int num_chunks) {
+    return _ctx->get_chunk_buffer().limiter()->pin(num_chunks);
+}
+
+bool OlapScanOperator::is_buffer_full() const {
+    return _ctx->get_chunk_buffer().limiter()->is_full();
+}
+
+void OlapScanOperator::set_buffer_finished() {
+    _ctx->get_chunk_buffer().set_finished(_driver_sequence);
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 }
 
 } // namespace starrocks::pipeline

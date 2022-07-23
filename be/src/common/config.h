@@ -649,8 +649,14 @@ CONF_Int64(pipeline_hdfs_scan_thread_pool_thread_num, "48");
 CONF_Int64(pipeline_scan_thread_pool_queue_size, "102400");
 // The number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
+<<<<<<< HEAD
 // The buffer size of io task.
 CONF_Int64(pipeline_io_buffer_size, "64");
+=======
+// The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
+CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+>>>>>>> 509a3b786 ([Enhance] introduce unplug mechanism to improve scalability (#8979))
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
