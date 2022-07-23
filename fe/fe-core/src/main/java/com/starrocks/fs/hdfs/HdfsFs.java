@@ -72,12 +72,12 @@ public class HdfsFs {
         }
     }
 
-    public FileSystem getDFSFileSystem() {
+    public synchronized FileSystem getDFSFileSystem() {
         this.lastAccessTimestamp = System.currentTimeMillis();
         return dfsFileSystem;
     }
 
-    public Configuration getConfiguration() {
+    public synchronized Configuration getConfiguration() {
         this.lastAccessTimestamp = System.currentTimeMillis();
         return configuration;
     }

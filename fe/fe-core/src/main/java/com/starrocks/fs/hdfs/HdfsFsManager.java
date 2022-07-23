@@ -103,6 +103,7 @@ class ConfigurationWrap extends Configuration {
                     tProperties.setDisable_cache(Boolean.parseBoolean(value));
                     break;
                 case HdfsFsManager.FS_S3A_CONNECTION_SSL_ENABLED:
+                case HdfsFsManager.FS_OSS_CONNECTION_SSL_ENABLED:
                     tProperties.setSsl_enable(Boolean.parseBoolean(value));
                     break;
                 case HdfsFsManager.FS_COS_BUCKET_REGION:
@@ -174,6 +175,7 @@ public class HdfsFsManager {
     public static final String FS_OSS_ENDPOINT = "fs.oss.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
     public static final String FS_OSS_IMPL_DISABLE_CACHE = "fs.oss.impl.disable.cache";
+    public static final String FS_OSS_CONNECTION_SSL_ENABLED = "fs.oss.connection.secure.enabled";
     public static final String FS_OSS_IMPL = "fs.oss.impl";
 
     // arguments for cos
@@ -367,7 +369,7 @@ public class HdfsFsManager {
         String secretKey = loadProperties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_S3A_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
-        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
 
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, S3 must provide access_key");
@@ -450,6 +452,7 @@ public class HdfsFsManager {
         String secretKey = loadProperties.getOrDefault(FS_KS3_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_KS3_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_KS3_IMPL_DISABLE_CACHE, "true");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
         // cache both.
@@ -491,6 +494,7 @@ public class HdfsFsManager {
                 conf.set(FS_KS3_ENDPOINT, endpoint);
                 conf.set(FS_KS3_IMPL, "com.ksyun.kmr.hadoop.fs.ks3.Ks3FileSystem");
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, disableCache);
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem ks3FileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(ks3FileSystem);
                 fileSystem.setConfiguration(conf);
@@ -531,6 +535,7 @@ public class HdfsFsManager {
         String secretKey = loadProperties.getOrDefault(FS_OBS_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_OBS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OBS_IMPL_DISABLE_CACHE, "true");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, OBS must provide access_key");
             throw new UserException("Invalid load_properties, OBS must provide access_key");
@@ -574,6 +579,7 @@ public class HdfsFsManager {
                 conf.set(FS_OBS_ENDPOINT, endpoint);
                 conf.set(FS_OBS_IMPL, "org.apache.hadoop.fs.obs.OBSFileSystem");
                 conf.set(FS_OBS_IMPL_DISABLE_CACHE, disableCache);
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem obsFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(obsFileSystem);
                 fileSystem.setConfiguration(conf);
@@ -614,6 +620,7 @@ public class HdfsFsManager {
         String secretKey = loadProperties.getOrDefault(FS_OSS_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_OSS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_OSS_CONNECTION_SSL_ENABLED, "false");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, OSS must provide access_key");
             throw new UserException("Invalid load_properties, OBS must provide access_key");
@@ -655,6 +662,8 @@ public class HdfsFsManager {
                 conf.set(FS_OSS_ENDPOINT, endpoint);
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
+                conf.set(FS_OSS_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem ossFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(ossFileSystem);
                 fileSystem.setConfiguration(conf);
@@ -688,6 +697,7 @@ public class HdfsFsManager {
         String secretKey = loadProperties.getOrDefault(FS_COS_SECRET_KEY, "");
         String endpoint = loadProperties.getOrDefault(FS_COS_ENDPOINT, "");
         String disableCache = loadProperties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
+        String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, COS must provide access_key");
             throw new UserException("Invalid load_properties, COS must provide access_key");
@@ -729,6 +739,7 @@ public class HdfsFsManager {
                 conf.set(FS_COS_ENDPOINT, endpoint);
                 conf.set(FS_COS_IMPL, "org.apache.hadoop.fs.CosFileSystem");
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
                 fileSystem.setConfiguration(conf);
