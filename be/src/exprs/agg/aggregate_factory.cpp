@@ -2,6 +2,7 @@
 
 #include "exprs/agg/aggregate_factory.h"
 
+#include <memory>
 #include <tuple>
 #include <unordered_map>
 
@@ -36,15 +37,131 @@
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
+class AggregateFactory {
+public:
+    // The function should be placed by alphabetical order
+    template <PrimitiveType PT>
+    static auto MakeAvgAggregateFunction();
+
+    template <PrimitiveType PT>
+    static auto MakeDecimalAvgAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeBitmapUnionIntAggregateFunction();
+
+    static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
+
+    static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
+
+    static AggregateFunctionPtr MakeBitmapUnionCountAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeWindowfunnelAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeIntersectCountAggregateFunction();
+
+    template <bool IsWindowFunc>
+    static AggregateFunctionPtr MakeCountAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
+
+    template <bool IsWindowFunc>
+    static AggregateFunctionPtr MakeCountNullableAggregateFunction();
+
+    template <PrimitiveType PT>
+    static auto MakeMaxAggregateFunction();
+
+    template <PrimitiveType PT>
+    static auto MakeMinAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeAnyValueAggregateFunction();
+
+    template <typename NestedState, bool IsWindowFunc, bool IgnoreNull = true,
+              typename NestedFunctionPtr = AggregateFunctionPtr>
+    static AggregateFunctionPtr MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function);
+
+    template <typename NestedState>
+    static AggregateFunctionPtr MakeNullableAggregateFunctionVariadic(AggregateFunctionPtr nested_function);
+
+    template <PrimitiveType PT>
+    static auto MakeSumAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeDecimalSumAggregateFunction();
+
+    template <PrimitiveType PT, bool is_sample>
+    static AggregateFunctionPtr MakeVarianceAggregateFunction();
+
+    template <PrimitiveType PT, bool is_sample>
+    static AggregateFunctionPtr MakeStddevAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeSumDistinctAggregateFunction();
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeDecimalSumDistinctAggregateFunction();
+
+    static AggregateFunctionPtr MakeDictMergeAggregateFunction();
+    static AggregateFunctionPtr MakeRetentionAggregateFunction();
+
+    // Hyperloglog functions:
+    static AggregateFunctionPtr MakeHllUnionAggregateFunction();
+
+    static AggregateFunctionPtr MakeHllUnionCountAggregateFunction();
+
+    template <PrimitiveType T>
+    static AggregateFunctionPtr MakeHllNdvAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
+
+    static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakePercentileContAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeArrayAggAggregateFunction();
+
+    // Windows functions:
+    static AggregateFunctionPtr MakeDenseRankWindowFunction();
+
+    static AggregateFunctionPtr MakeRankWindowFunction();
+
+    static AggregateFunctionPtr MakeRowNumberWindowFunction();
+
+    static AggregateFunctionPtr MakeNtileWindowFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeFirstValueWindowFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeLastValueWindowFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeLeadLagWindowFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeHistogramAggregationFunction();
+};
 
 // The function should be placed by alphabetical order
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeAvgAggregateFunction() {
+auto AggregateFactory::MakeAvgAggregateFunction() {
     return std::make_shared<AvgAggregateFunction<PT>>();
 }
+
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeDecimalAvgAggregateFunction() {
+auto AggregateFactory::MakeDecimalAvgAggregateFunction() {
     return std::make_shared<DecimalAvgAggregateFunction<PT>>();
 }
 
@@ -101,12 +218,12 @@ AggregateFunctionPtr AggregateFactory::MakeCountNullableAggregateFunction() {
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeMaxAggregateFunction() {
+auto AggregateFactory::MakeMaxAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MaxAggregateData<PT>, MaxElement<PT, MaxAggregateData<PT>>>>();
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeMinAggregateFunction() {
+auto AggregateFactory::MakeMinAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MinAggregateData<PT>, MinElement<PT, MinAggregateData<PT>>>>();
 }
 
@@ -116,10 +233,11 @@ AggregateFunctionPtr AggregateFactory::MakeAnyValueAggregateFunction() {
             AnyValueAggregateFunction<PT, AnyValueAggregateData<PT>, AnyValueElement<PT, AnyValueAggregateData<PT>>>>();
 }
 
-template <typename NestedState, bool IsWindowFunc, bool IgnoreNull>
-AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(AggregateFunctionPtr nested_function) {
+template <typename NestedState, bool IsWindowFunc, bool IgnoreNull, typename NestedFunctionPtr>
+AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, IsWindowFunc>;
-    return std::make_shared<NullableAggregateFunctionUnary<AggregateDataType, IsWindowFunc, IgnoreNull>>(
+    return std::make_shared<
+            NullableAggregateFunctionUnary<NestedFunctionPtr, AggregateDataType, IsWindowFunc, IgnoreNull>>(
             nested_function);
 }
 
@@ -130,7 +248,7 @@ AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionVariadic(Agg
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeSumAggregateFunction() {
+auto AggregateFactory::MakeSumAggregateFunction() {
     return std::make_shared<SumAggregateFunction<PT>>();
 }
 
@@ -446,12 +564,11 @@ public:
     // TODO(kks): simplify create_function method
     template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool IsWindowFunc, bool IsNull>
     std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
-        using ArgType = RunTimeCppType<ArgPT>;
         if constexpr (IsNull) {
             if (name == "count") {
                 return AggregateFactory::MakeCountNullableAggregateFunction<IsWindowFunc>();
             } else if (name == "sum") {
-                AggregateFunctionPtr sum = AggregateFactory::MakeSumAggregateFunction<ArgPT>();
+                auto sum = AggregateFactory::MakeSumAggregateFunction<ArgPT>();
                 using ResultType = RunTimeCppType<SumResultPT<ArgPT>>;
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<SumAggregateState<ResultType>,
                                                                             IsWindowFunc>(sum);
