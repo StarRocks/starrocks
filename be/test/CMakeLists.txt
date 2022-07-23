@@ -106,7 +106,6 @@ set(EXEC_FILES
         ./exprs/vectorized/utility_functions_test.cpp
         ./exprs/vectorized/runtime_filter_test.cpp
         ./formats/csv/array_converter_test.cpp
-        ./formats/csv/converter_test.cpp
         ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/date_converter_test.cpp
