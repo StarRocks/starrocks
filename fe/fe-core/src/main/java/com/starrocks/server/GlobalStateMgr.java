@@ -2816,6 +2816,15 @@ public class GlobalStateMgr {
         this.alter.getClusterHandler().cancel(stmt);
     }
 
+    // Change current catalog of this session.
+    // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
+    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws AnalysisException {
+        if (!catalogMgr.catalogExists(newCatalogName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+        }
+        ctx.setCurrentCatalog(newCatalogName);
+    }
+
     // Change current catalog and database of this session.
     // We can support 'USE CATALOG.DB'
     public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
@@ -2841,7 +2850,7 @@ public class GlobalStateMgr {
 
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
-        // So we didn't check UseStmt permission in PrivilegeChecker.
+        // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
                 !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,

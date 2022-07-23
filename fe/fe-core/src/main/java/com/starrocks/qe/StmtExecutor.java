@@ -103,7 +103,8 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.UseStmt;
+import com.starrocks.sql.ast.UseCatalogStmt;
+import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -434,8 +435,10 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
-            } else if (parsedStmt instanceof UseStmt) {
-                handleUseStmt();
+            } else if (parsedStmt instanceof UseDbStmt) {
+                handleUseDbStmt();
+            } else if (parsedStmt instanceof UseCatalogStmt) {
+                handleUseCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
                 if (execPlanBuildByNewPlanner) {
                     handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
@@ -872,12 +875,24 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
-    // Process use statement.
-    private void handleUseStmt() throws AnalysisException {
-        UseStmt useStmt = (UseStmt) parsedStmt;
+    // Process use [catalog].db statement.
+    private void handleUseDbStmt() throws AnalysisException {
+        UseDbStmt useDbStmt = (UseDbStmt) parsedStmt;
         try {
-            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getIdentifier());
-        } catch (DdlException e) {
+            context.getGlobalStateMgr().changeCatalogDb(context, useDbStmt.getIdentifier());
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    // Process use catalog statement
+    private void handleUseCatalogStmt() throws AnalysisException {
+        UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
+        try {
+            context.getGlobalStateMgr().changeCatalog(context, useCatalogStmt.getCatalogName());
+        } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
         }
