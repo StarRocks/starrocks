@@ -603,6 +603,9 @@ public class Coordinator {
 
     private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
+        if (queryOptions.query_delivery_timeout == 0) {
+            queryDeliveryTimeoutMs = queryOptions.query_timeout * 1000L;
+        }
         lock();
         try {
             // execute all instances from up to bottom
@@ -839,6 +842,9 @@ public class Coordinator {
      */
     private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
+        if (queryOptions.query_delivery_timeout == 0) {
+            queryDeliveryTimeoutMs = queryOptions.query_timeout * 1000L;
+        }
         List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
 
         lock();
