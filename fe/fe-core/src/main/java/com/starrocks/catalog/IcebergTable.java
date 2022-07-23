@@ -48,7 +48,7 @@ public class IcebergTable extends Table {
 
     public static final String ICEBERG_CATALOG = "starrocks.catalog-type";
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
-    private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
+    public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
     public static final String ICEBERG_DB = "database";
     public static final String ICEBERG_TABLE = "table";
     public static final String ICEBERG_RESOURCE = "resource";
@@ -73,6 +73,10 @@ public class IcebergTable extends Table {
         String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
         if (null != metastoreURI && !isInternalCatalog(metastoreURI)) {
             setHiveCatalogProperties(properties, metastoreURI);
+            return;
+        }
+        if (null != properties.get(ICEBERG_IMPL)) {
+            setCustomCatalogProperties(properties);
             return;
         }
         validate(properties);
@@ -137,6 +141,16 @@ public class IcebergTable extends Table {
         table = properties.get(ICEBERG_TABLE);
         icebergProperties.put(ICEBERG_METASTORE_URIS, metastoreURI);
         icebergProperties.put(ICEBERG_CATALOG, "HIVE_CATALOG");
+    }
+
+    private void setCustomCatalogProperties(Map<String, String> properties) {
+        db = properties.remove(ICEBERG_DB);
+        table = properties.remove(ICEBERG_TABLE);
+        icebergProperties.put(ICEBERG_CATALOG, "CUSTOM_CATALOG");
+        icebergProperties.put(ICEBERG_IMPL, properties.remove(ICEBERG_IMPL));
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            icebergProperties.put(entry.getKey(), entry.getValue());
+        }
     }
 
     private void validate(Map<String, String> properties) throws DdlException {

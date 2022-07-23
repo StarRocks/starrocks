@@ -73,7 +73,7 @@ public class CatalogLevelTest {
     public void testQueryIcebergCatalog(@Mocked MetadataMgr metadataMgr,
                                         @Mocked HiveTableOperations hiveTableOperations) throws Exception {
         String createCatalog = "CREATE EXTERNAL CATALOG iceberg_catalog PROPERTIES(\"type\"=\"iceberg\"," +
-                " \"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+                " \"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"starrocks.catalog-type\" = \"hive\")";
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.withCatalog(createCatalog);
         Configuration conf = new Configuration();
@@ -87,7 +87,7 @@ public class CatalogLevelTest {
         };
 
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
-        com.starrocks.catalog.Table icebergTable = IcebergUtil.convertToSRTable(tbl, "thrift://127.0.0.1:9083",
+        com.starrocks.catalog.Table icebergTable = IcebergUtil.convertHiveCatalogToSRTable(tbl, "thrift://127.0.0.1:9083",
                 "iceberg_db", "iceberg_table");
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
