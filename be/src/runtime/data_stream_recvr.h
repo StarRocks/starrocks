@@ -115,6 +115,8 @@ public:
 private:
     friend class DataStreamMgr;
     class SenderQueue;
+    class NonPipelineSenderQueue;
+    class PipelineSenderQueue;
 
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
