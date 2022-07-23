@@ -28,7 +28,7 @@ subdirs: ${SUBDIR}
 .PHONY: subdirs ${SUBDIR}
 ${SUBDIR}:
 	$(MAKE) -C $@
-# script will product new thrift file.
+# script will product new thrift file
 thrift: script
 
 clean:
