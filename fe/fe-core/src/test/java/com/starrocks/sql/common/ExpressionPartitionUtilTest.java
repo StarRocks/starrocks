@@ -55,13 +55,7 @@ public class ExpressionPartitionUtilTest {
         partitionColumn = new Column("k1", ScalarType.DATETIME);
         lowerBound = "2020-04-21 20:43:00";
         upperBound = "2021-04-21 20:43:00";
-        PartitionValue lowerValue = new PartitionValue(lowerBound);
-        PartitionValue upperValue = new PartitionValue(upperBound);
-        PartitionKey lowerBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(lowerValue),
-                Collections.singletonList(partitionColumn));
-        PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
-                Collections.singletonList(partitionColumn));
-        basePartitionKeyRange = Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
+        basePartitionKeyRange = getRange(lowerBound, upperBound);
     }
 
     @Test
@@ -95,20 +89,8 @@ public class ExpressionPartitionUtilTest {
 
         // date_trunc quarter test with exist ranges
         existPartitionKeyRanges = Lists.newArrayList();
-        PartitionKey lowerBound1 =
-                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2020-01-01 00:00:00")),
-                        Collections.singletonList(partitionColumn));
-        PartitionKey upperBound1 =
-                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2020-07-01 00:00:00")),
-                        Collections.singletonList(partitionColumn));
-        existPartitionKeyRanges.add(Range.closedOpen(lowerBound1, upperBound1));
-        PartitionKey lowerBound2 =
-                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2021-04-01 00:00:00")),
-                        Collections.singletonList(partitionColumn));
-        PartitionKey upperBound2 =
-                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2021-07-01 00:00:00")),
-                        Collections.singletonList(partitionColumn));
-        existPartitionKeyRanges.add(Range.closedOpen(lowerBound2, upperBound2));
+        existPartitionKeyRanges.add(getRange("2020-01-01 00:00:00", "2020-07-01 00:00:00"));
+        existPartitionKeyRanges.add(getRange("2021-04-01 00:00:00", "2021-07-01 00:00:00"));
         quarterPartitionKeyRange =
                 ExpressionPartitionUtil.getPartitionKeyRange(quarterFunctionCallExpr, partitionColumn,
                         existPartitionKeyRanges, basePartitionKeyRange, 0);
@@ -117,22 +99,39 @@ public class ExpressionPartitionUtilTest {
                 "2020-07-01 00:00:00");
         Assert.assertEquals(quarterPartitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue(),
                 "2021-04-01 00:00:00");
-        //date_trunc year test with exist ranges
+        // date_trunc year test with exist ranges
         existPartitionKeyRanges = Lists.newArrayList();
-        lowerBound1 = PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2020-01-01 00:00:00")),
-                Collections.singletonList(partitionColumn));
-        upperBound1 = PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2021-01-01 00:00:00")),
-                Collections.singletonList(partitionColumn));
-        existPartitionKeyRanges.add(Range.closedOpen(lowerBound1, upperBound1));
-        lowerBound2 = PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2021-01-01 00:00:00")),
-                Collections.singletonList(partitionColumn));
-        upperBound2 = PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue("2022-01-01 00:00:00")),
-                Collections.singletonList(partitionColumn));
-        existPartitionKeyRanges.add(Range.closedOpen(lowerBound2, upperBound2));
+        existPartitionKeyRanges.add(getRange("2020-01-01 00:00:00", "2021-01-01 00:00:00"));
+        existPartitionKeyRanges.add(getRange("2021-01-01 00:00:00", "2022-01-01 00:00:00"));
         yearPartitionKeyRange =
                 ExpressionPartitionUtil.getPartitionKeyRange(yearFunctionCallExpr, partitionColumn,
                         existPartitionKeyRanges, basePartitionKeyRange, 0);
         Assert.assertTrue(yearPartitionKeyRange == null);
+    }
+
+    @Test
+    public void testGetPartitionKeyRangeWithExist() throws AnalysisException {
+        List<Range<PartitionKey>> existPartitionKeyRanges = Lists.newArrayList();
+        existPartitionKeyRanges.add(getRange("2021-04-01","2022-04-01"));
+        existPartitionKeyRanges.add(getRange("2021-01-01","2021-04-01"));
+        existPartitionKeyRanges.add(getRange("2022-04-01","2022-07-01"));
+
+        Range<PartitionKey> basePartitionKeyRange = getRange("2021-01-15", "2022-01-15");
+
+        Range<PartitionKey> quarterPartitionKeyRange =
+                ExpressionPartitionUtil.getPartitionKeyRange(quarterFunctionCallExpr, partitionColumn,
+                        existPartitionKeyRanges, basePartitionKeyRange, 0);
+        Assert.assertTrue(quarterPartitionKeyRange == null);
+    }
+
+    private static Range<PartitionKey> getRange(String lowerBound, String  upperBound) throws AnalysisException {
+        PartitionKey lowerBoundPartitionKey =
+                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(lowerBound)),
+                        Collections.singletonList(partitionColumn));
+        PartitionKey upperBoundPartitionKey =
+                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(upperBound)),
+                Collections.singletonList(partitionColumn));
+        return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
     @Test
@@ -149,7 +148,7 @@ public class ExpressionPartitionUtilTest {
     }
 
     @Test
-    public void testGetPartitionKeyRangsHasNoSupportFunction() {
+    public void testGetPartitionKeyRangesHasNoSupportFunction() {
         List<Range<PartitionKey>> existPartitionKeyRanges = Lists.newArrayList();
         StringLiteral stringLiteral = new StringLiteral("yyyy-MM-dd");
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("date_format", Arrays.asList(slotRef, stringLiteral));
