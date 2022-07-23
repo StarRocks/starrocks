@@ -58,6 +58,9 @@ private:
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
+
+    constexpr static const size_t _kMaxErrorChunkNum = 10;
+    size_t _error_chunk_num = 0;
 };
 
 // Reader to parse the json.

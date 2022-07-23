@@ -65,38 +65,59 @@ Status JsonScanner::open() {
 StatusOr<ChunkPtr> JsonScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
     ChunkPtr src_chunk;
-    RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
-    if (_cur_file_eof) {
-        RETURN_IF_ERROR(_open_next_reader());
-        _cur_file_eof = false;
-    }
+    // Read until we get a non-empty chunk.
+    do {
+        RETURN_IF_ERROR(_create_src_chunk(&src_chunk));
 
-    Status status;
-    try {
-        status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = "Unrecognized json format, stop json loader.";
-        LOG(WARNING) << err_msg;
-        return Status::DataQualityError(err_msg);
-    }
-    if (!status.ok()) {
-        if (status.is_end_of_file()) {
-            _cur_file_eof = true;
-        } else if (!status.is_time_out()) {
-            return status;
+        if (_cur_file_eof) {
+            auto st = _open_next_reader();
+            if (!st.ok()) {
+                if (st.is_time_out()) {
+                    // Retry later when timeout.
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    continue;
+                } else if (st.is_end_of_file()) {
+                    // If all readers have been read, an EOF would be returned.
+                    return st;
+                } else {
+                    // Set _cur_file_eof to open a new reader, since the error is not recoverable by retrying.
+                    LOG(WARNING) << "open reader failed: : " << st;
+                    continue;
+                }
+            }
+            _cur_file_eof = false;
         }
-    }
 
-    if (src_chunk->num_rows() == 0) {
-        if (status.is_end_of_file()) {
-            return Status::EndOfFile("EOF of reading json file, nothing read");
-        } else if (status.is_time_out()) {
-            // if timeout happens at the beginning of reading src_chunk, we return the error state
-            // else we will _materialize the lines read before timeout and return ok()
-            return status;
+        Status status;
+        try {
+            status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
+        } catch (simdjson::simdjson_error& e) {
+            auto err_msg = "Unrecognized json format, stop json loader.";
+            LOG(WARNING) << err_msg;
+            status = Status::DataQualityError(err_msg);
         }
-    }
+
+        if (!status.ok()) {
+            if (status.is_time_out()) {
+                // Retry later when timeout.
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            } else if (status.is_end_of_file()) {
+                // Set _cur_file_eof to open a new reader.
+                _cur_file_eof = true;
+            } else {
+                if (++_error_chunk_num <= _kMaxErrorChunkNum) {
+                    LOG(WARNING) << "read chunk failed: : " << status;
+                }
+                // To read all readers, we just log and ignore the error returned by read_chunk.
+                // Set _cur_file_eof to open a new reader, since the error is not recoverable by retrying.
+                _cur_file_eof = true;
+            }
+        }
+    } while (src_chunk->num_rows() == 0);
+
+    // Materialize non-empty chunk.
     auto cast_chunk = _cast_chunk(src_chunk);
     return materialize(src_chunk, cast_chunk);
 }
@@ -274,8 +295,11 @@ Status JsonScanner::_open_next_reader() {
     if (_next_range >= _scan_range.ranges.size()) {
         return Status::EndOfFile("EOF of reading json file");
     }
+
     std::shared_ptr<SequentialFile> file;
     const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_range];
+    _next_range++;
+
     Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to create sequential files: " << st.to_string();
@@ -283,7 +307,6 @@ Status JsonScanner::_open_next_reader() {
     }
     _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors);
     RETURN_IF_ERROR(_cur_file_reader->open());
-    _next_range++;
     return Status::OK();
 }
 
@@ -322,7 +345,12 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
 }
 
 Status JsonReader::open() {
-    RETURN_IF_ERROR(_read_and_parse_json());
+    auto st = _read_and_parse_json();
+    if (!st.ok()) {
+        _counter->num_rows_filtered++;
+        return st;
+    }
+
     _empty_parser = false;
 
     if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
@@ -425,7 +453,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
             // the parser is exhausted.
             _empty_parser = true;
         } else if (!st.ok()) {
-            return st;
+            _empty_parser = true;
         }
     }
 
