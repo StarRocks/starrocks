@@ -106,6 +106,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         // FIXME: currently the cache root dir is set from be.conf, could be changed in future
         std::string cache_dir = config::starlet_cache_dir;
         auto cache_setting = info.get_cache_setting();
+        bool cache_enabled = cache_setting.enable_cache && !cache_dir.empty();
 
         std::string scheme = "file://";
         switch (info.obj_store_info.scheme) {
@@ -132,7 +133,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             return absl::InvalidArgumentError("Unknown shard storage scheme!");
         }
 
-        if (cache_setting.enable_cache) {
+        if (cache_enabled) {
             const static std::string conf_prefix("cachefs.");
 
             scheme = "cachefs://";
