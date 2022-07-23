@@ -49,6 +49,8 @@ public class ConfigBase {
         boolean mutable() default false;
 
         String comment() default "";
+
+        String[] alias() default {};
     }
 
     public static Properties props;
