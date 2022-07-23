@@ -17,10 +17,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -40,12 +39,24 @@ public class ModifyColumnClause extends AlterTableClause {
         return column;
     }
 
+    public void setColumn(Column column) {
+        this.column = column;
+    }
+
+    public ColumnDef getColumnDef() {
+        return columnDef;
+    }
+
     public ColumnPosition getColPos() {
         return colPos;
     }
 
     public String getRollupName() {
         return rollupName;
+    }
+
+    public void setRollupName(String rollupName) {
+        this.rollupName = rollupName;
     }
 
     public ModifyColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollup,
@@ -55,22 +66,6 @@ public class ModifyColumnClause extends AlterTableClause {
         this.colPos = colPos;
         this.rollupName = rollup;
         this.properties = properties;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnDef == null) {
-            throw new AnalysisException("No column definition in modify column clause.");
-        }
-        columnDef.analyze(true);
-        if (colPos != null) {
-            colPos.analyze();
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
-
-        column = columnDef.toColumn();
     }
 
     @Override
@@ -86,7 +81,7 @@ public class ModifyColumnClause extends AlterTableClause {
             sb.append(" ").append(colPos);
         }
         if (rollupName != null) {
-            sb.append(" IN `").append(rollupName).append("`");
+            sb.append(" FROM `").append(rollupName).append("`");
         }
         return sb.toString();
     }
@@ -94,5 +89,15 @@ public class ModifyColumnClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitModifyColumnClause(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
