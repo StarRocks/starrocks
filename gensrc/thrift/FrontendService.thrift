@@ -466,6 +466,7 @@ struct TMasterOpRequest {
     // TODO(zc): Should forward all session variables and connection context
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
+    32: optional string modified_variables_sql
 }
 
 struct TColumnDefinition {

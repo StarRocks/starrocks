@@ -3,6 +3,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.Assert;
@@ -50,4 +53,45 @@ public class AST2SQLTest {
                     "SELECT `test`.`t0`.`v1` AS `v1` FROM `test`.`t0` WHERE (NOT FALSE) IS NOT NULL");
         }
     }
+
+    @Test
+    public void testSet() {
+        // 1. one global statement
+        String sql = "SET GLOBAL time_zone = 'Asia/Shanghai'";
+
+        List<StatementBase> statementBase = SqlParser.parse(
+                sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, statementBase.size());
+        SetStmt originStmt = (SetStmt)statementBase.get(0);
+
+        System.err.println(sql + " -> " + AST2SQL.toString(originStmt));
+
+        statementBase = SqlParser.parse(
+                AST2SQL.toString(originStmt), AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, statementBase.size());
+        SetStmt convertStmt = (SetStmt)statementBase.get(0);
+
+        Assert.assertEquals(1, convertStmt.getSetVars().size());
+        Assert.assertEquals(SetType.GLOBAL, convertStmt.getSetVars().get(0).getType());
+        Assert.assertEquals(AST2SQL.toString(originStmt), AST2SQL.toString(convertStmt));
+
+        // 2. two default statement
+        sql = "SET time_zone = 'Asia/Shanghai', allow_default_partition=true;";
+        statementBase = SqlParser.parse(
+                sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, statementBase.size());
+        originStmt = (SetStmt)statementBase.get(0);
+
+        System.err.println(sql + " -> " + AST2SQL.toString(originStmt));
+
+        statementBase = SqlParser.parse(
+                AST2SQL.toString(originStmt), AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Assert.assertEquals(1, statementBase.size());
+        convertStmt = (SetStmt)statementBase.get(0);
+
+        Assert.assertEquals(2, convertStmt.getSetVars().size());
+        Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(0).getType());
+        Assert.assertEquals(SetType.DEFAULT, convertStmt.getSetVars().get(1).getType());
+        Assert.assertEquals(AST2SQL.toString(originStmt), AST2SQL.toString(convertStmt));
+     }
 }
