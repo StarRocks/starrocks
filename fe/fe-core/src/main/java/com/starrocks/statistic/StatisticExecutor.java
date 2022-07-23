@@ -59,7 +59,7 @@ public class StatisticExecutor {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -127,7 +127,6 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added
