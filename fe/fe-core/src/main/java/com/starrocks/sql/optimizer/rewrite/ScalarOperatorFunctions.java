@@ -31,7 +31,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rewrite.FEFunction;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 
 import java.math.BigDecimal;
@@ -52,6 +51,21 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import static com.starrocks.catalog.PrimitiveType.BIGINT;
+import static com.starrocks.catalog.PrimitiveType.DATE;
+import static com.starrocks.catalog.PrimitiveType.DATETIME;
+import static com.starrocks.catalog.PrimitiveType.DECIMAL128;
+import static com.starrocks.catalog.PrimitiveType.DECIMAL32;
+import static com.starrocks.catalog.PrimitiveType.DECIMAL64;
+import static com.starrocks.catalog.PrimitiveType.DECIMALV2;
+import static com.starrocks.catalog.PrimitiveType.DOUBLE;
+import static com.starrocks.catalog.PrimitiveType.INT;
+import static com.starrocks.catalog.PrimitiveType.LARGEINT;
+import static com.starrocks.catalog.PrimitiveType.SMALLINT;
+import static com.starrocks.catalog.PrimitiveType.TIME;
+import static com.starrocks.catalog.PrimitiveType.TINYINT;
+import static com.starrocks.catalog.PrimitiveType.VARCHAR;
+
 /**
  * Constant Functions List
  */
@@ -64,53 +78,53 @@ public class ScalarOperatorFunctions {
     /**
      * date and time function
      */
-    @FEFunction(name = "timediff", argTypes = {"DATETIME", "DATETIME"}, returnType = "TIME")
+    @ConstantFunction(name = "timediff", argTypes = {DATETIME, DATETIME}, returnType = TIME)
     public static ConstantOperator timeDiff(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createTime(Duration.between(second.getDatetime(), first.getDatetime()).getSeconds());
     }
 
-    @FEFunction(name = "datediff", argTypes = {"DATETIME", "DATETIME"}, returnType = "INT")
+    @ConstantFunction(name = "datediff", argTypes = {DATETIME, DATETIME}, returnType = INT)
     public static ConstantOperator dateDiff(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt((int) Duration.between(
                 second.getDatetime().truncatedTo(ChronoUnit.DAYS),
                 first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
     }
 
-    @FEFunction(name = "years_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "years_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator yearsAdd(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
     }
 
-    @FEFunction(name = "months_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "adddate", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME"),
-            @FEFunction(name = "date_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME"),
-            @FEFunction(name = "days_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "adddate", argTypes = {DATETIME, INT}, returnType = DATETIME),
+            @ConstantFunction(name = "date_add", argTypes = {DATETIME, INT}, returnType = DATETIME),
+            @ConstantFunction(name = "days_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
     })
     public static ConstantOperator daysAdd(ConstantOperator date, ConstantOperator day) {
         return ConstantOperator.createDatetime(date.getDatetime().plusDays(day.getInt()));
     }
 
-    @FEFunction(name = "hours_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "hours_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator hoursAdd(ConstantOperator date, ConstantOperator hour) {
         return ConstantOperator.createDatetime(date.getDatetime().plusHours(hour.getInt()));
     }
 
-    @FEFunction(name = "minutes_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "minutes_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator minutesAdd(ConstantOperator date, ConstantOperator minute) {
         return ConstantOperator.createDatetime(date.getDatetime().plusMinutes(minute.getInt()));
     }
 
-    @FEFunction(name = "seconds_add", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "seconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator secondsAdd(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
-    @FEFunction(name = "date_trunc", argTypes = {"VARCHAR", "DATETIME"}, returnType = "DATETIME")
+    @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME)
     public static ConstantOperator dateTrunc(ConstantOperator fmt, ConstantOperator date) {
         switch (fmt.getVarchar()) {
             case "second":
@@ -141,9 +155,9 @@ public class ScalarOperatorFunctions {
         }
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "date_format", argTypes = {"DATETIME", "VARCHAR"}, returnType = "VARCHAR"),
-            @FEFunction(name = "date_format", argTypes = {"DATE", "VARCHAR"}, returnType = "VARCHAR")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "date_format", argTypes = {DATETIME, VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "date_format", argTypes = {DATE, VARCHAR}, returnType = VARCHAR)
     })
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
@@ -160,7 +174,7 @@ public class ScalarOperatorFunctions {
         }
     }
 
-    @FEFunction(name = "str_to_date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATETIME")
+    @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
 
@@ -175,7 +189,7 @@ public class ScalarOperatorFunctions {
         }
     }
 
-    @FEFunction(name = "str2date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATE")
+    @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
         LocalDate ld = LocalDate.from(
@@ -183,83 +197,83 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
-    @FEFunction(name = "years_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().minusYears(year.getInt()));
     }
 
-    @FEFunction(name = "months_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "months_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator monthsSub(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().minusMonths(month.getInt()));
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "subdate", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME"),
-            @FEFunction(name = "date_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME"),
-            @FEFunction(name = "days_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "subdate", argTypes = {DATETIME, INT}, returnType = DATETIME),
+            @ConstantFunction(name = "date_sub", argTypes = {DATETIME, INT}, returnType = DATETIME),
+            @ConstantFunction(name = "days_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
     })
     public static ConstantOperator daysSub(ConstantOperator date, ConstantOperator day) {
         return ConstantOperator.createDatetime(date.getDatetime().minusDays(day.getInt()));
     }
 
-    @FEFunction(name = "hours_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator hoursSub(ConstantOperator date, ConstantOperator hour) {
         return ConstantOperator.createDatetime(date.getDatetime().minusHours(hour.getInt()));
     }
 
-    @FEFunction(name = "minutes_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "minutes_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator minutesSub(ConstantOperator date, ConstantOperator minute) {
         return ConstantOperator.createDatetime(date.getDatetime().minusMinutes(minute.getInt()));
     }
 
-    @FEFunction(name = "seconds_sub", argTypes = {"DATETIME", "INT"}, returnType = "DATETIME")
+    @ConstantFunction(name = "seconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME)
     public static ConstantOperator secondsSub(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetime(date.getDatetime().minusSeconds(second.getInt()));
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "year", argTypes = {"DATETIME"}, returnType = "SMALLINT"),
-            @FEFunction(name = "year", argTypes = {"DATE"}, returnType = "SMALLINT")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "year", argTypes = {DATETIME}, returnType = SMALLINT),
+            @ConstantFunction(name = "year", argTypes = {DATE}, returnType = SMALLINT)
     })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "month", argTypes = {"DATETIME"}, returnType = "TINYINT"),
-            @FEFunction(name = "month", argTypes = {"DATE"}, returnType = "TINYINT")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "month", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "month", argTypes = {DATE}, returnType = TINYINT)
     })
     public static ConstantOperator month(ConstantOperator arg) {
         return ConstantOperator.createTinyInt((byte) arg.getDatetime().getMonthValue());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "day", argTypes = {"DATETIME"}, returnType = "TINYINT"),
-            @FEFunction(name = "day", argTypes = {"DATE"}, returnType = "TINYINT")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "day", argTypes = {DATETIME}, returnType = TINYINT),
+            @ConstantFunction(name = "day", argTypes = {DATE}, returnType = TINYINT)
     })
     public static ConstantOperator day(ConstantOperator arg) {
         return ConstantOperator.createTinyInt((byte) arg.getDatetime().getDayOfMonth());
     }
 
-    @FEFunction(name = "date", argTypes = {"DATETIME"}, returnType = "DATE")
+    @ConstantFunction(name = "date", argTypes = {DATETIME}, returnType = DATE)
     public static ConstantOperator date(ConstantOperator arg) {
         LocalDateTime datetime = LocalDateTime.of(arg.getDate().toLocalDate(), LocalTime.MIN);
         return ConstantOperator.createDate(datetime);
     }
 
-    @FEFunction(name = "timestamp", argTypes = {"DATETIME"}, returnType = "DATETIME")
+    @ConstantFunction(name = "timestamp", argTypes = {DATETIME}, returnType = DATETIME)
     public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException {
         return arg;
     }
 
-    @FEFunction(name = "unix_timestamp", argTypes = {}, returnType = "INT")
+    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = INT)
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "unix_timestamp", argTypes = {"DATETIME"}, returnType = "INT"),
-            @FEFunction(name = "unix_timestamp", argTypes = {"DATE"}, returnType = "INT")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = INT),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = INT)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
@@ -270,7 +284,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createInt((int) zdt.toEpochSecond());
     }
 
-    @FEFunction(name = "from_unixtime", argTypes = {"INT"}, returnType = "VARCHAR")
+    @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         // if unixTime < 0, we should return null, throw a exception and let BE process
         if (unixTime.getInt() < 0) {
@@ -281,7 +295,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(dl.toString());
     }
 
-    @FEFunction(name = "from_unixtime", argTypes = {"INT", "VARCHAR"}, returnType = "VARCHAR")
+    @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
         // if unixTime < 0, we should return null, throw a exception and let BE process
@@ -293,7 +307,7 @@ public class ScalarOperatorFunctions {
         return dateFormat(dl, fmtLiteral);
     }
 
-    @FEFunction(name = "now", argTypes = {}, returnType = "DATETIME")
+    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
@@ -301,9 +315,9 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(startTime);
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "curdate", argTypes = {}, returnType = "DATE"),
-            @FEFunction(name = "current_date", argTypes = {}, returnType = "DATE")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "curdate", argTypes = {}, returnType = DATE),
+            @ConstantFunction(name = "current_date", argTypes = {}, returnType = DATE)
     })
     public static ConstantOperator curDate() {
         ConnectContext connectContext = ConnectContext.get();
@@ -312,7 +326,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDate(startTime.truncatedTo(ChronoUnit.DAYS));
     }
 
-    @FEFunction(name = "utc_timestamp", argTypes = {}, returnType = "DATETIME")
+    @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
         LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
@@ -323,7 +337,7 @@ public class ScalarOperatorFunctions {
      * Math function
      */
 
-    @FEFunction(name = "floor", argTypes = {"DOUBLE"}, returnType = "BIGINT")
+    @ConstantFunction(name = "floor", argTypes = {DOUBLE}, returnType = BIGINT)
     public static ConstantOperator floor(ConstantOperator expr) {
         return ConstantOperator.createBigint((long) Math.floor(expr.getDouble()));
     }
@@ -331,112 +345,112 @@ public class ScalarOperatorFunctions {
     /**
      * Arithmetic function
      */
-    @FEFunction(name = "add", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "add", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator addSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.addExact(first.getSmallint(), second.getSmallint()));
     }
 
-    @FEFunction(name = "add", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "add", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator addInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(Math.addExact(first.getInt(), second.getInt()));
     }
 
-    @FEFunction(name = "add", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "add", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator addBigInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(Math.addExact(first.getBigint(), second.getBigint()));
     }
 
-    @FEFunction(name = "add", argTypes = {"DOUBLE", "DOUBLE"}, returnType = "DOUBLE")
+    @ConstantFunction(name = "add", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator addDouble(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createDouble(first.getDouble() + second.getDouble());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "add", argTypes = {"DECIMALV2", "DECIMALV2"}, returnType = "DECIMALV2"),
-            @FEFunction(name = "add", argTypes = {"DECIMAL32", "DECIMAL32"}, returnType = "DECIMAL32"),
-            @FEFunction(name = "add", argTypes = {"DECIMAL64", "DECIMAL64"}, returnType = "DECIMAL64"),
-            @FEFunction(name = "add", argTypes = {"DECIMAL128", "DECIMAL128"}, returnType = "DECIMAL128")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "add", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "add", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "add", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "add", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
     })
     public static ConstantOperator addDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().add(second.getDecimal()));
     }
 
-    @FEFunction(name = "add", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "add", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator addLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().add(second.getLargeInt()));
     }
 
-    @FEFunction(name = "subtract", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "subtract", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator subtractSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.subtractExact(first.getSmallint(), second.getSmallint()));
     }
 
-    @FEFunction(name = "subtract", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "subtract", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator subtractInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(Math.subtractExact(first.getInt(), second.getInt()));
     }
 
-    @FEFunction(name = "subtract", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "subtract", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator subtractBigInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(Math.subtractExact(first.getBigint(), second.getBigint()));
     }
 
-    @FEFunction(name = "subtract", argTypes = {"DOUBLE", "DOUBLE"}, returnType = "DOUBLE")
+    @ConstantFunction(name = "subtract", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator subtractDouble(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createDouble(first.getDouble() - second.getDouble());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "subtract", argTypes = {"DECIMALV2", "DECIMALV2"}, returnType = "DECIMALV2"),
-            @FEFunction(name = "subtract", argTypes = {"DECIMAL32", "DECIMAL32"}, returnType = "DECIMAL32"),
-            @FEFunction(name = "subtract", argTypes = {"DECIMAL64", "DECIMAL64"}, returnType = "DECIMAL64"),
-            @FEFunction(name = "subtract", argTypes = {"DECIMAL128", "DECIMAL128"}, returnType = "DECIMAL128")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "subtract", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "subtract", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
     })
     public static ConstantOperator subtractDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().subtract(second.getDecimal()));
     }
 
-    @FEFunction(name = "subtract", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "subtract", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator subtractLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().subtract(second.getLargeInt()));
     }
 
-    @FEFunction(name = "multiply", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "multiply", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator multiplySmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) Math.multiplyExact(first.getSmallint(), second.getSmallint()));
     }
 
-    @FEFunction(name = "multiply", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "multiply", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator multiplyInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(Math.multiplyExact(first.getInt(), second.getInt()));
     }
 
-    @FEFunction(name = "multiply", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "multiply", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator multiplyBigInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(Math.multiplyExact(first.getBigint(), second.getBigint()));
     }
 
-    @FEFunction(name = "multiply", argTypes = {"DOUBLE", "DOUBLE"}, returnType = "DOUBLE")
+    @ConstantFunction(name = "multiply", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator multiplyDouble(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createDouble(first.getDouble() * second.getDouble());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "multiply", argTypes = {"DECIMALV2", "DECIMALV2"}, returnType = "DECIMALV2"),
-            @FEFunction(name = "multiply", argTypes = {"DECIMAL32", "DECIMAL32"}, returnType = "DECIMAL32"),
-            @FEFunction(name = "multiply", argTypes = {"DECIMAL64", "DECIMAL64"}, returnType = "DECIMAL64"),
-            @FEFunction(name = "multiply", argTypes = {"DECIMAL128", "DECIMAL128"}, returnType = "DECIMAL128")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "multiply", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "multiply", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
     })
     public static ConstantOperator multiplyDecimal(ConstantOperator first, ConstantOperator second) {
         return createDecimalConstant(first.getDecimal().multiply(second.getDecimal()));
     }
 
-    @FEFunction(name = "multiply", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "multiply", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator multiplyLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().multiply(second.getLargeInt()));
     }
 
-    @FEFunction(name = "divide", argTypes = {"DOUBLE", "DOUBLE"}, returnType = "DOUBLE")
+    @ConstantFunction(name = "divide", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
     public static ConstantOperator divideDouble(ConstantOperator first, ConstantOperator second) {
         if (second.getDouble() == 0.0) {
             return ConstantOperator.createNull(Type.DOUBLE);
@@ -444,11 +458,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDouble(first.getDouble() / second.getDouble());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "divide", argTypes = {"DECIMALV2", "DECIMALV2"}, returnType = "DECIMALV2"),
-            @FEFunction(name = "divide", argTypes = {"DECIMAL32", "DECIMAL32"}, returnType = "DECIMAL32"),
-            @FEFunction(name = "divide", argTypes = {"DECIMAL64", "DECIMAL64"}, returnType = "DECIMAL64"),
-            @FEFunction(name = "divide", argTypes = {"DECIMAL128", "DECIMAL128"}, returnType = "DECIMAL128")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "divide", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "divide", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
     })
     public static ConstantOperator divideDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
@@ -457,32 +471,32 @@ public class ScalarOperatorFunctions {
         return createDecimalConstant(first.getDecimal().divide(second.getDecimal()));
     }
 
-    @FEFunction(name = "int_divide", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT")
+    @ConstantFunction(name = "int_divide", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator intDivideTinyInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() / second.getTinyInt()));
     }
 
-    @FEFunction(name = "int_divide", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "int_divide", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator intDivideSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) (first.getSmallint() / second.getSmallint()));
     }
 
-    @FEFunction(name = "int_divide", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "int_divide", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator intDivideInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(first.getInt() / second.getInt());
     }
 
-    @FEFunction(name = "int_divide", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "int_divide", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator intDivideBigint(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(first.getBigint() / second.getBigint());
     }
 
-    @FEFunction(name = "int_divide", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "int_divide", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator intDivideLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().divide(second.getLargeInt()));
     }
 
-    @FEFunction(name = "mod", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT")
+    @ConstantFunction(name = "mod", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator modTinyInt(ConstantOperator first, ConstantOperator second) {
         if (second.getTinyInt() == 0) {
             return ConstantOperator.createNull(Type.TINYINT);
@@ -490,7 +504,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() % second.getTinyInt()));
     }
 
-    @FEFunction(name = "mod", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "mod", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator modSMALLINT(ConstantOperator first, ConstantOperator second) {
         if (second.getSmallint() == 0) {
             return ConstantOperator.createNull(Type.SMALLINT);
@@ -498,7 +512,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createSmallInt((short) (first.getSmallint() % second.getSmallint()));
     }
 
-    @FEFunction(name = "mod", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "mod", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator modInt(ConstantOperator first, ConstantOperator second) {
         if (second.getInt() == 0) {
             return ConstantOperator.createNull(Type.INT);
@@ -506,7 +520,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createInt(first.getInt() % second.getInt());
     }
 
-    @FEFunction(name = "mod", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "mod", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator modBigInt(ConstantOperator first, ConstantOperator second) {
         if (second.getBigint() == 0) {
             return ConstantOperator.createNull(Type.BIGINT);
@@ -514,7 +528,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createBigint(first.getBigint() % second.getBigint());
     }
 
-    @FEFunction(name = "mod", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "mod", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator modLargeInt(ConstantOperator first, ConstantOperator second) {
         if (second.getLargeInt().equals(new BigInteger("0"))) {
             return ConstantOperator.createNull(Type.LARGEINT);
@@ -522,11 +536,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "mod", argTypes = {"DECIMALV2", "DECIMALV2"}, returnType = "DECIMALV2"),
-            @FEFunction(name = "mod", argTypes = {"DECIMAL32", "DECIMAL32"}, returnType = "DECIMAL32"),
-            @FEFunction(name = "mod", argTypes = {"DECIMAL64", "DECIMAL64"}, returnType = "DECIMAL64"),
-            @FEFunction(name = "mod", argTypes = {"DECIMAL128", "DECIMAL128"}, returnType = "DECIMAL128")
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "mod", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL64, DECIMAL64}, returnType = DECIMAL64),
+            @ConstantFunction(name = "mod", argTypes = {DECIMAL128, DECIMAL128}, returnType = DECIMAL128)
     })
     public static ConstantOperator modDecimal(ConstantOperator first, ConstantOperator second) {
         if (BigDecimal.ZERO.compareTo(second.getDecimal()) == 0) {
@@ -539,82 +553,82 @@ public class ScalarOperatorFunctions {
     /**
      * Bitwise operation function
      */
-    @FEFunction(name = "bitand", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT")
+    @ConstantFunction(name = "bitand", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator bitandTinyInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() & second.getTinyInt()));
     }
 
-    @FEFunction(name = "bitand", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "bitand", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator bitandSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) (first.getSmallint() & second.getSmallint()));
     }
 
-    @FEFunction(name = "bitand", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "bitand", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator bitandInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(first.getInt() & second.getInt());
     }
 
-    @FEFunction(name = "bitand", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "bitand", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator bitandBigint(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(first.getBigint() & second.getBigint());
     }
 
-    @FEFunction(name = "bitand", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "bitand", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator bitandLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().and(second.getLargeInt()));
     }
 
-    @FEFunction(name = "bitor", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT")
+    @ConstantFunction(name = "bitor", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator bitorTinyInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() | second.getTinyInt()));
     }
 
-    @FEFunction(name = "bitor", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "bitor", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator bitorSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) (first.getSmallint() | second.getSmallint()));
     }
 
-    @FEFunction(name = "bitor", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "bitor", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator bitorInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(first.getInt() | second.getInt());
     }
 
-    @FEFunction(name = "bitor", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "bitor", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator bitorBigint(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(first.getBigint() | second.getBigint());
     }
 
-    @FEFunction(name = "bitor", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "bitor", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator bitorLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().or(second.getLargeInt()));
     }
 
-    @FEFunction(name = "bitxor", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT")
+    @ConstantFunction(name = "bitxor", argTypes = {TINYINT, TINYINT}, returnType = TINYINT)
     public static ConstantOperator bitxorTinyInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createTinyInt((byte) (first.getTinyInt() ^ second.getTinyInt()));
     }
 
-    @FEFunction(name = "bitxor", argTypes = {"SMALLINT", "SMALLINT"}, returnType = "SMALLINT")
+    @ConstantFunction(name = "bitxor", argTypes = {SMALLINT, SMALLINT}, returnType = SMALLINT)
     public static ConstantOperator bitxorSmallInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createSmallInt((short) (first.getSmallint() ^ second.getSmallint()));
     }
 
-    @FEFunction(name = "bitxor", argTypes = {"INT", "INT"}, returnType = "INT")
+    @ConstantFunction(name = "bitxor", argTypes = {INT, INT}, returnType = INT)
     public static ConstantOperator bitxorInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createInt(first.getInt() ^ second.getInt());
     }
 
-    @FEFunction(name = "bitxor", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT")
+    @ConstantFunction(name = "bitxor", argTypes = {BIGINT, BIGINT}, returnType = BIGINT)
     public static ConstantOperator bitxorBigint(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createBigint(first.getBigint() ^ second.getBigint());
     }
 
-    @FEFunction(name = "bitxor", argTypes = {"LARGEINT", "LARGEINT"}, returnType = "LARGEINT")
+    @ConstantFunction(name = "bitxor", argTypes = {LARGEINT, LARGEINT}, returnType = LARGEINT)
     public static ConstantOperator bitxorLargeInt(ConstantOperator first, ConstantOperator second) {
         return ConstantOperator.createLargeInt(first.getLargeInt().xor(second.getLargeInt()));
     }
 
-    @FEFunction(name = "concat", argTypes = {"VARCHAR"}, returnType = "VARCHAR")
+    @ConstantFunction(name = "concat", argTypes = {VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator concat(ConstantOperator... values) {
         Preconditions.checkArgument(values.length > 0);
         final StringBuilder resultBuilder = new StringBuilder();
@@ -624,7 +638,7 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(resultBuilder.toString());
     }
 
-    @FEFunction(name = "concat_ws", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "VARCHAR")
+    @ConstantFunction(name = "concat_ws", argTypes = {VARCHAR, VARCHAR}, returnType = VARCHAR)
     public static ConstantOperator concat_ws(ConstantOperator split, ConstantOperator... values) {
         Preconditions.checkArgument(values.length > 0);
         if (split.isNull()) {

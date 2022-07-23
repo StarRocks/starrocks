@@ -5,7 +5,6 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteRule;
 
 public class BaseScalarOperatorRewriteRule extends ScalarOperatorVisitor<ScalarOperator, ScalarOperatorRewriteContext>
         implements ScalarOperatorRewriteRule {

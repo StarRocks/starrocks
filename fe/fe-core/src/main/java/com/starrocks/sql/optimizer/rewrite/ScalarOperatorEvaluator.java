@@ -12,7 +12,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.rewrite.FEFunction;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -54,13 +53,13 @@ public enum ScalarOperatorEvaluator {
 
         Class<?> clazz = ScalarOperatorFunctions.class;
         for (Method method : clazz.getDeclaredMethods()) {
-            FEFunction annotation = method.getAnnotation(FEFunction.class);
+            ConstantFunction annotation = method.getAnnotation(ConstantFunction.class);
             registerFunction(mapBuilder, method, annotation);
 
-            FEFunction.List listAnnotation = method.getAnnotation(FEFunction.List.class);
+            ConstantFunction.List listAnnotation = method.getAnnotation(ConstantFunction.List.class);
 
             if (listAnnotation != null) {
-                for (FEFunction f : listAnnotation.list()) {
+                for (ConstantFunction f : listAnnotation.list()) {
                     registerFunction(mapBuilder, method, f);
                 }
             }
@@ -69,12 +68,12 @@ public enum ScalarOperatorEvaluator {
     }
 
     private void registerFunction(ImmutableMap.Builder<FunctionSignature, FunctionInvoker> mapBuilder,
-                                  Method method, FEFunction annotation) {
+                                  Method method, ConstantFunction annotation) {
         if (annotation != null) {
             String name = annotation.name().toUpperCase();
             Type returnType = ScalarType.createType(annotation.returnType());
             List<Type> argTypes = new ArrayList<>();
-            for (String type : annotation.argTypes()) {
+            for (PrimitiveType type : annotation.argTypes()) {
                 argTypes.add(ScalarType.createType(type));
             }
 
