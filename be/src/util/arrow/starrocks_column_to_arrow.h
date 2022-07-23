@@ -23,8 +23,13 @@
 namespace starrocks {
 namespace vectorized {
 
+Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _output_expr_ctxs,
+                                    const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
+                                    std::shared_ptr<arrow::RecordBatch>* result);
+
+// only used for UT test
 Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& _slot_types,
                                     const std::vector<SlotId>& _slot_ids, const std::shared_ptr<arrow::Schema>& schema,
                                     arrow::MemoryPool* pool, std::shared_ptr<arrow::RecordBatch>* result);
-}
+} // namespace vectorized
 } // namespace starrocks
