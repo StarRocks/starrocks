@@ -103,12 +103,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         fslib::Configuration localconf;
         ShardInfo& info = shard_iter->second.shard_info;
 
-        // properties["cache_enabled"] = "true"
-        auto iter_use_cache = info.properties.find("cache_enabled");
         // FIXME: currently the cache root dir is set from be.conf, could be changed in future
         std::string cache_dir = config::starlet_cache_dir;
-        bool cache_enabled = !cache_dir.empty() && iter_use_cache != info.properties.end() &&
-                             iter_use_cache->second.compare("true") == 0;
+        auto cache_setting = info.get_cache_setting();
 
         std::string scheme = "file://";
         switch (info.obj_store_info.scheme) {
@@ -135,7 +132,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             return absl::InvalidArgumentError("Unknown shard storage scheme!");
         }
 
-        if (cache_enabled) {
+        if (cache_setting.enable_cache) {
             const static std::string conf_prefix("cachefs.");
 
             scheme = "cachefs://";
@@ -150,6 +147,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             localconf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
             // use shard id as cache identifier
             localconf[fslib::kCacheFsIdentifier] = absl::StrFormat("%d", info.id);
+            localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_setting.cache_entry_ttl_sec);
 
             // set environ variable to cachefs directory
             setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);
