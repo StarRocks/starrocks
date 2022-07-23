@@ -29,16 +29,17 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         long totalRows = table.getRowCount();
         long sampleRows = Long.parseLong(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS));
+        double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
         long topN = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_TOPN_SIZE));
 
         for (String column : columns) {
-            String sql = buildCollectHistogram(db, table, totalRows, sampleRows, bucketNum, topN, column);
+            String sql = buildCollectHistogram(db, table, totalRows, sampleRows, sampleRatio, bucketNum, topN, column);
             collectStatisticSync(sql);
         }
     }
 
-    public String buildCollectHistogram(Database database, OlapTable table, Long totalRows, Long sampleRows,
+    public String buildCollectHistogram(Database database, OlapTable table, Long totalRows, Long sampleRows, double sampleRatio,
                                         Long bucketNum, Long topN, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
@@ -49,7 +50,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         context.put("tableName", table.getName());
 
         context.put("bucketNum", bucketNum);
-        context.put("sampleRatio", sampleRows / totalRows);
+        context.put("sampleRatio", sampleRatio);
         context.put("totalRows", totalRows);
         context.put("topN", topN);
 

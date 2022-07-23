@@ -11,7 +11,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
@@ -59,8 +58,8 @@ public class StatisticExecutor {
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
-        if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL) && Config.enable_collect_full_statistic) {
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
+        if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -128,7 +127,6 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added

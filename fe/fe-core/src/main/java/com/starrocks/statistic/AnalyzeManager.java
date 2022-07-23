@@ -98,10 +98,6 @@ public class AnalyzeManager implements Writable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddAnalyzeStatus(status);
     }
 
-    public void updateAnalyzeStatusWithoutEditLog(AnalyzeStatus status) {
-        analyzeStatusMap.put(status.getId(), status);
-    }
-
     public void replayAddAnalyzeStatus(AnalyzeStatus status) {
         analyzeStatusMap.put(status.getId(), status);
     }
@@ -199,8 +195,10 @@ public class AnalyzeManager implements Writable {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         for (Long tableId : tableIdHasDeleted) {
             BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
+            if (basicStatsMeta == null) {
+                continue;
+            }
             statisticExecutor.dropTableStatistics(tableId, basicStatsMeta.getType());
-
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
             basicStatsMetaMap.remove(tableId);
         }
