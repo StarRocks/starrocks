@@ -51,7 +51,15 @@ public:
 
     void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
 
+<<<<<<< HEAD
     const starrocks::TUniqueId& query_id() { return _query_id; }
+=======
+    void set_fragment_instance_id(const starrocks::TUniqueId& fragment_instance_id) {
+        _fragment_instance_id = fragment_instance_id;
+    }
+    void set_pipeline_driver_id(int32_t driver_id) { _driver_id = driver_id; }
+    int32_t get_driver_id() const { return _driver_id; }
+>>>>>>> 26f0d36d7 ([WIP] [Enahnce] make re2 driver-local to reduce contention (backport #8904) (#9042))
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {

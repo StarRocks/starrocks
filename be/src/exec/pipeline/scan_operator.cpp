@@ -200,7 +200,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
+<<<<<<< HEAD:be/src/exec/pipeline/scan_operator.cpp
         workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
                                                                     chunk_source_index](int worker_id) {
             if (auto sp = wp.lock()) {
@@ -211,6 +213,37 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                             _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
                     if (!status.ok() && !status.is_end_of_file()) {
                         set_scan_status(status);
+=======
+        workgroup::ScanTask task = workgroup::ScanTask(
+                _workgroup, [wp = _query_ctx, this, state, chunk_source_index, driver_id](int worker_id) {
+                    if (auto sp = wp.lock()) {
+                        // Set driver_id here to share some driver-local contents.
+                        // Current it's used by ExprContext's driver-local state
+                        CurrentThread::current().set_pipeline_driver_id(driver_id);
+                        DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+                        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+
+                        auto& chunk_source = _chunk_sources[chunk_source_index];
+                        size_t num_read_chunks = 0;
+                        int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+                        int64_t prev_scan_rows = chunk_source->get_scan_rows();
+                        int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+
+                        // Read chunk
+                        Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
+                                _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                        if (!status.ok() && !status.is_end_of_file()) {
+                            _set_scan_status(status);
+                        }
+
+                        int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+                        _workgroup->increment_real_runtime_ns(delta_cpu_time);
+                        _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
+
+                        _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                                  chunk_source->get_scan_rows() - prev_scan_rows,
+                                                  chunk_source->get_scan_bytes() - prev_scan_bytes);
+>>>>>>> 26f0d36d7 ([WIP] [Enahnce] make re2 driver-local to reduce contention (backport #8904) (#9042)):be/src/exec/pipeline/scan/scan_operator.cpp
                     }
                     // TODO (by laotan332): More detailed information is needed
                     _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
@@ -229,8 +262,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, driver_id]() {
             if (auto sp = wp.lock()) {
+<<<<<<< HEAD:be/src/exec/pipeline/scan_operator.cpp
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     Status status =
@@ -241,6 +275,24 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                     _last_growth_cpu_time_ns += _chunk_sources[chunk_source_index]->last_spent_cpu_time_ns();
                     _last_scan_rows_num += _chunk_sources[chunk_source_index]->last_scan_rows_num();
                     _last_scan_bytes += _chunk_sources[chunk_source_index]->last_scan_bytes();
+=======
+                // Set driver_id here to share some driver-local contents.
+                // Current it's used by ExprContext's driver-local state
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+
+                auto& chunk_source = _chunk_sources[chunk_source_index];
+                int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+                int64_t prev_scan_rows = chunk_source->get_scan_rows();
+                int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+
+                Status status =
+                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);
+                if (!status.ok() && !status.is_end_of_file()) {
+                    _set_scan_status(status);
+>>>>>>> 26f0d36d7 ([WIP] [Enahnce] make re2 driver-local to reduce contention (backport #8904) (#9042)):be/src/exec/pipeline/scan/scan_operator.cpp
                 }
 
                 _num_running_io_tasks--;
