@@ -114,7 +114,7 @@ public class ConnectContext {
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
-    // all the modified session variables, will forward to master
+    // all the modified session variables, will forward to leader
     protected List<SetVar> modifiedSessionVariables = new ArrayList<>();
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
