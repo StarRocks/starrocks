@@ -20,6 +20,9 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.catalog.InfoSchemaDb;
+import com.google.common.base.Strings;
 
 // SHOW OPEN TABLES
 public class ShowOpenTableStmt extends ShowStmt {
@@ -31,6 +34,44 @@ public class ShowOpenTableStmt extends ShowStmt {
                     .addColumn(new Column("Name_locked", ScalarType.createVarchar(64)))
                     .build();
 
+    private String  dbName;
+    private String  pattern;
+    private Expr  where;
+    public String getDbName() {return dbName;}
+    public String getPattern() {return pattern;}
+    public Expr getWhere() {return where;}
+    public void setDbName(String dbName) {this.dbName = dbName;}
+    public void setPattern(String pattern) {this.pattern = pattern;}
+    public void setWhere(Expr where) {this.where = where;}
+    public ShowOpenTableStmt () {}
+    public ShowOpenTableStmt (String dbName, String pattern, Expr where) {
+        setDbName( dbName);
+        setPattern( pattern);
+        setWhere( where);
+    }
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowOpenTablesStmt(this, context);
+    }
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder("SHOW OPEN TABLES");
+        if (!Strings.isNullOrEmpty(dbName)){
+            sb.append(" FROM ").append(dbName);
+        }
+        if (pattern != null) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
+        if (where != null) {
+            sb.append(" WHERE '").append(where).append("'");
+        }
+        return sb.toString();
+    }
+    public String toString() {
+        return toSql();
+    }
     @Override
     public void analyze(Analyzer analyzer) {
     }
