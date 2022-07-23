@@ -37,9 +37,6 @@
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
-template <class T>
-using SpecFunctionPtr = std::shared_ptr<T>;
-
 class AggregateFactory {
 public:
     // The function should be placed by alphabetical order
@@ -240,7 +237,7 @@ template <typename NestedState, bool IsWindowFunc, bool IgnoreNull, typename Nes
 AggregateFunctionPtr AggregateFactory::MakeNullableAggregateFunctionUnary(NestedFunctionPtr nested_function) {
     using AggregateDataType = NullableAggregateFunctionState<NestedState, IsWindowFunc>;
     return std::make_shared<
-            NullableAggregateFunctionUnary<AggregateDataType, IsWindowFunc, IgnoreNull, NestedFunctionPtr>>(
+            NullableAggregateFunctionUnary<NestedFunctionPtr, AggregateDataType, IsWindowFunc, IgnoreNull>>(
             nested_function);
 }
 
@@ -565,15 +562,14 @@ public:
     // TODO(kks): simplify create_function method
     template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool IsWindowFunc, bool IsNull>
     std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
-        using ArgType = RunTimeCppType<ArgPT>;
         if constexpr (IsNull) {
             if (name == "count") {
                 return AggregateFactory::MakeCountNullableAggregateFunction<IsWindowFunc>();
             } else if (name == "sum") {
                 auto sum = AggregateFactory::MakeSumAggregateFunction<ArgPT>();
                 using ResultType = RunTimeCppType<SumResultPT<ArgPT>>;
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<SumAggregateState<ResultType>, IsWindowFunc,
-                                                                            true>(sum);
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<SumAggregateState<ResultType>,
+                                                                            IsWindowFunc>(sum);
             } else if (name == "variance" || name == "variance_pop" || name == "var_pop") {
                 auto variance = AggregateFactory::MakeVarianceAggregateFunction<ArgPT, false>();
                 using ResultType = RunTimeCppType<DevFromAveResultPT<ArgPT>>;

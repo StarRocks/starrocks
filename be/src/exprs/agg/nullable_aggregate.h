@@ -52,8 +52,7 @@ struct NullableAggregateFunctionState
 // If an aggregate function has at least one nullable argument, we should use this class.
 // If all row all are NULL, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename State, bool IsWindowFunc, bool IgnoreNull = true,
-          typename NestedAggregateFunctionPtr = AggregateFunctionPtr>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
 public:
     explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
@@ -225,17 +224,18 @@ protected:
     NestedAggregateFunctionPtr nested_function;
 };
 
-template <typename State, bool IsWindowFunc, bool IgnoreNull = true,
-          typename NestedAggregateFunctionPtr = AggregateFunctionPtr>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
 class NullableAggregateFunctionUnary final
-        : public NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull, NestedAggregateFunctionPtr> {
+        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull> {
 public:
     explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull, NestedAggregateFunctionPtr>(
+            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull>(
                       nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {}
+                size_t row_num) const override {
+        CHECK(false) << "unsupported update in NullableAggregateFunctionUnary";
+    }
 
     // TODO(kks): abstract the AVX2 filter process later
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
@@ -608,10 +608,11 @@ public:
 };
 
 template <typename State>
-class NullableAggregateFunctionVariadic final : public NullableAggregateFunctionBase<State, false> {
+class NullableAggregateFunctionVariadic final
+        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false> {
 public:
     NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State, false>(nested_function) {}
+            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false>(nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
