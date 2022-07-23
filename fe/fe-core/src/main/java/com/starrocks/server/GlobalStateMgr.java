@@ -900,7 +900,6 @@ public class GlobalStateMgr {
 
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
-        canRead.set(false);
 
         // setup for journal
         try {
@@ -964,7 +963,6 @@ public class GlobalStateMgr {
 
             MetricRepo.init();
 
-            canRead.set(true);
             isReady.set(true);
 
             String msg = "master finished to replay journal, can write now.";
