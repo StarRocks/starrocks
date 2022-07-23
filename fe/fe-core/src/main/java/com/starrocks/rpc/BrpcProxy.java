@@ -25,7 +25,7 @@ public class BrpcProxy {
                 .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
     }
 
-    private BrpcProxy() {
+    public BrpcProxy() {
         final RpcClientOptions rpcOptions = new RpcClientOptions();
         // If false, different methods to a service endpoint use different connection pool,
         // which will create too many connections.
@@ -46,6 +46,13 @@ public class BrpcProxy {
 
     public static BrpcProxy getInstance() {
         return BrpcProxy.SingletonHolder.INSTANCE;
+    }
+
+    /**
+     * Only used for pseudo cluster or unittest
+     */
+    public static void setInstance(BrpcProxy proxy) {
+        BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
     public PBackendService getBackendService(TNetworkAddress address) {
@@ -71,6 +78,6 @@ public class BrpcProxy {
     }
 
     private static class SingletonHolder {
-        private static final BrpcProxy INSTANCE = new BrpcProxy();
+        private static BrpcProxy INSTANCE = new BrpcProxy();
     }
 }

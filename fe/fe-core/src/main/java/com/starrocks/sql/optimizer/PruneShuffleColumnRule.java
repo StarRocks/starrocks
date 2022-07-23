@@ -74,8 +74,10 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
         }
 
         @Override
-        public OptExpression visitPhysicalCTEAnchor(OptExpression optExpression, DistributionContext context) {
-            optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), context);
+        public OptExpression visitPhysicalCTEProduce(OptExpression optExpression, DistributionContext context) {
+            DistributionContext childContext = new DistributionContext();
+            visit(optExpression, childContext);
+            prune(childContext);
             return optExpression;
         }
 

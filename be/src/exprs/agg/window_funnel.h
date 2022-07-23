@@ -33,12 +33,38 @@ struct ComparePairFirst final {
 
 enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3 };
 
+namespace InteralTypeOfFunnel {
+template <PrimitiveType primitive_type>
+struct TypeTraits {};
+
+template <>
+struct TypeTraits<TYPE_INT> {
+    using Type = typename RunTimeTypeTraits<TYPE_INT>::CppType;
+    using ValueType = typename RunTimeTypeTraits<TYPE_INT>::CppType;
+};
+template <>
+struct TypeTraits<TYPE_BIGINT> {
+    using Type = typename RunTimeTypeTraits<TYPE_BIGINT>::CppType;
+    using ValueType = typename RunTimeTypeTraits<TYPE_BIGINT>::CppType;
+};
+template <>
+struct TypeTraits<TYPE_DATE> {
+    using Type = typename RunTimeTypeTraits<TYPE_DATE>::CppType;
+    using ValueType = typename RunTimeTypeTraits<TYPE_DATE>::CppType::type;
+};
+template <>
+struct TypeTraits<TYPE_DATETIME> {
+    using Type = typename RunTimeTypeTraits<TYPE_DATETIME>::CppType;
+    using ValueType = typename RunTimeTypeTraits<TYPE_DATETIME>::CppType::type;
+};
+} // namespace InteralTypeOfFunnel
+
 template <PrimitiveType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
-    using TimeType = typename RunTimeTypeTraits<PT>::CppType;
+    using TimeType = typename InteralTypeOfFunnel::TypeTraits<PT>::Type;
     using TimeTypeColumn = typename RunTimeTypeTraits<PT>::ColumnType;
-    using TimestampType = typename TimeType::type;
+    using TimestampType = typename InteralTypeOfFunnel::TypeTraits<PT>::ValueType;
 
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
@@ -338,7 +364,7 @@ class WindowFunnelAggregateFunction final
         : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
     using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
     using TimeType = typename WindowFunnelState<PT>::TimeType;
-    using TimestampType = typename TimeType::type;
+    using TimestampType = typename WindowFunnelState<PT>::TimestampType;
 
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
@@ -349,11 +375,8 @@ public:
         TimeType tv;
         if (!columns[1]->is_constant()) {
             const auto timestamp_column = down_cast<const TimeTypeColumn*>(columns[1]);
-            if constexpr (PT == TYPE_DATETIME) {
-                tv = timestamp_column->get(row_num).get_timestamp();
-            } else if constexpr (PT == TYPE_DATE) {
-                tv = timestamp_column->get(row_num).get_date();
-            }
+            DCHECK(PT == TYPE_DATETIME || PT == TYPE_DATE || PT == TYPE_INT || PT == TYPE_BIGINT);
+            tv = timestamp_column->get_data()[row_num];
         } else {
             tv = ColumnHelper::get_const_value<PT>(columns[1]);
         }
@@ -361,18 +384,47 @@ public:
         // get event
         uint8_t event_level = 0;
         const auto* event_column = down_cast<const ArrayColumn*>(columns[3]);
-        auto ele_vector = event_column->get(row_num).get_array();
-        for (uint8_t i = 0; i < ele_vector.size(); i++) {
-            if (!ele_vector[i].is_null() && ele_vector[i].get_uint8() > 0) {
-                event_level = i + 1;
-                if constexpr (PT == TYPE_DATETIME) {
-                    this->data(state).update(tv.to_unix_second(), event_level);
-                } else if constexpr (PT == TYPE_DATE) {
-                    this->data(state).update(tv.julian(), event_level);
+
+        const UInt32Column& offsets = event_column->offsets();
+        auto offsets_ptr = offsets.get_data().data();
+        size_t offset = offsets_ptr[row_num];
+        size_t array_size = offsets_ptr[row_num + 1] - offsets_ptr[row_num];
+
+        const Column& elements = event_column->elements();
+        if (elements.is_nullable()) {
+            const auto& null_column = down_cast<const NullableColumn&>(elements);
+            auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
+            const auto& null_vector = null_column.null_column()->get_data();
+            for (int i = 0; i < array_size; ++i) {
+                auto ele_offset = offset + i;
+                if (!null_vector[ele_offset] && data_column->get_data()[ele_offset]) {
+                    event_level = i + 1;
+                    if constexpr (PT == TYPE_DATETIME) {
+                        this->data(state).update(tv.to_unix_second(), event_level);
+                    } else if constexpr (PT == TYPE_DATE) {
+                        this->data(state).update(tv.julian(), event_level);
+                    } else {
+                        this->data(state).update(tv, event_level);
+                    }
+                }
+            }
+        } else {
+            const auto& data_column = down_cast<const BooleanColumn&>(elements);
+            for (int i = 0; i < array_size; ++i) {
+                auto ele_offset = offset + i;
+                if (data_column.get_data()[ele_offset]) {
+                    event_level = i + 1;
+                    if constexpr (PT == TYPE_DATETIME) {
+                        this->data(state).update(tv.to_unix_second(), event_level);
+                    } else if constexpr (PT == TYPE_DATE) {
+                        this->data(state).update(tv.julian(), event_level);
+                    } else {
+                        this->data(state).update(tv, event_level);
+                    }
                 }
             }
         }
-        this->data(state).events_size = ele_vector.size();
+        this->data(state).events_size = array_size;
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -395,14 +447,16 @@ public:
         auto* dst_column = down_cast<ArrayColumn*>((*dst).get());
         dst_column->reserve(chunk_size);
 
-        const TimeTypeColumn* timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
+        const auto timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
             if constexpr (PT == TYPE_DATETIME) {
-                tv = timestamp_column->get(i).get_timestamp().to_unix_second();
+                tv = timestamp_column->get_data()[i].to_unix_second();
             } else if constexpr (PT == TYPE_DATE) {
-                tv = timestamp_column->get(i).get_date().julian();
+                tv = timestamp_column->get_data()[i].julian();
+            } else {
+                tv = timestamp_column->get_data()[i];
             }
 
             // get 4th value: event cond array

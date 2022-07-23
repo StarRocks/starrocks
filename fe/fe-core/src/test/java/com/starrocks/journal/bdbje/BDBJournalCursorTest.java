@@ -17,6 +17,7 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.persist.OperationType;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -64,15 +65,7 @@ public class BDBJournalCursorTest {
 
     private BDBEnvironment initBDBEnv() throws Exception {
         tempDir = Files.createTempDirectory(Paths.get("."), "BDBJEJournalCursorTest").toFile();
-        // try to find a port that is not bind
-        String selfNodeHostPort = null;
-        for (int port = 9000; port != 120000; port ++) {
-            if(! NetUtils.isPortUsing("127.0.0.1", port)) {
-                selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
-                break;
-            }
-        }
-        Assert.assertNotNull(selfNodeHostPort);
+        String selfNodeHostPort = "127.0.0.1:" + UtFrameUtils.findValidPort();
         BDBEnvironment environment = new BDBEnvironment(
                 tempDir,
                 "test",

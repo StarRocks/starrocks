@@ -49,6 +49,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -1329,16 +1330,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
+        StorageInfo storageInfo = partitionInfo.getStorageInfo(oldPartition.getId());
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory);
+                        replicationNum, isInMemory, storageInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
         }
 
         return oldPartition;
@@ -1529,6 +1531,28 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public Boolean checkPersistentIndex() {
+        // check key type and length
+        int keyLength = 0;
+        for (Column column : getFullSchema()) {
+            if (!column.isKey()) {
+                continue;
+            }
+            if (column.getPrimitiveType() == PrimitiveType.VARCHAR 
+                    || column.getPrimitiveType() == PrimitiveType.CHAR) {
+                LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
+                return false;
+            }
+            // calculate key size
+            keyLength += column.getPrimitiveType().getSlotSize();
+        }
+        if (keyLength > 64) {
+            LOG.warn("Primary key size of primaryKey table using persistent index should be no more than 64Bytes");
+            return false;
+        }
+        return true;
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {

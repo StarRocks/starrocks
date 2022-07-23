@@ -37,6 +37,6 @@ public class DropHistogramStmt extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return null;
+        return RedirectStatus.FORWARD_WITH_SYNC;
     }
 }

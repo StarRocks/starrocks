@@ -345,6 +345,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
+        // used for remove cluster from stmt
+        dbName = ClusterNamespace.getFullName(dbName);
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -389,6 +391,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        // used for remove cluster from stmt
+        dbName = ClusterNamespace.getFullName(dbName);
         // 1. check if database exists
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -432,7 +436,7 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.remove(db.getFullName());
             final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
-            DropDbInfo info = new DropDbInfo(dbName, isForceDrop);
+            DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             editLog.logDropDb(info);
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
@@ -493,7 +497,8 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
         }
 
-        Database db = recycleBin.recoverDatabase(recoverStmt.getDbName());
+        // used for remove cluster from stmt
+        Database db = recycleBin.recoverDatabase(ClusterNamespace.getFullName(recoverStmt.getDbName()));
 
         // add db to globalStateMgr
         if (!tryLock(false)) {
@@ -605,7 +610,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.setReplicaQuotaWithLock(stmt.getQuota());
         }
         long quota = stmt.getQuota();
-        DatabaseInfo dbInfo = new DatabaseInfo(dbName, "", quota, quotaType);
+        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
         editLog.logAlterDb(dbInfo);
     }
 
@@ -620,8 +625,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
-        String fullDbName = stmt.getDbName();
-        String newFullDbName = stmt.getNewDbName();
+        // used for remove cluster from stmt
+        String fullDbName = ClusterNamespace.getFullName(stmt.getDbName());
+        String newFullDbName = ClusterNamespace.getFullName(stmt.getNewDbName());
 
         if (fullDbName.equals(newFullDbName)) {
             throw new DdlException("Same database name");
@@ -1953,6 +1959,13 @@ public class LocalMetastore implements ConnectorMetadata {
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
+        if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && olapTable.enablePersistentIndex()) {
+            if (!olapTable.checkPersistentIndex()) {
+                throw new DdlException("PrimaryKey table using persistent index don't support varchar(char) as key so far," +
+                                       " and key length should be no more than 64 Bytes");
+            }
+        }
+
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
             tabletType = PropertyAnalyzer.analyzeTabletType(properties);
@@ -2793,6 +2806,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public Database getDb(String name) {
+        // used for remove cluster from stmt
+        name = ClusterNamespace.getFullName(name);
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
@@ -3236,6 +3251,8 @@ public class LocalMetastore implements ConnectorMetadata {
                             TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
+                } else {
+                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
                 }
                 if (optHints != null) {
                     Map<String, String> taskProperties = task.getProperties();
@@ -3887,7 +3904,7 @@ public class LocalMetastore implements ConnectorMetadata {
         defaultCluster = cluster;
 
         // create info schema db
-        final InfoSchemaDb infoDb = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+        final InfoSchemaDb infoDb = new InfoSchemaDb();
         unprotectCreateDb(infoDb);
 
         // only need to create default cluster once.
@@ -3921,7 +3938,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (getFullNameToDb().containsKey(dbName)) {
                     db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
                 } else {
-                    db = new InfoSchemaDb(SystemInfoService.DEFAULT_CLUSTER);
+                    db = new InfoSchemaDb();
                 }
                 String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
                 // Every time we construct the InfoSchemaDb, which id will increment.
@@ -4076,16 +4093,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
+                if (copiedTbl.isLakeTable()) {
+                    partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
+                }
+
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (DdlException e) {
-            // create partition failed, remove all newly created tablets
-            for (Long tabletId : tabletIdSet) {
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-            }
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
             throw e;
         }
         Preconditions.checkState(origPartitions.size() == newPartitions.size());
@@ -4144,12 +4162,27 @@ public class LocalMetastore implements ConnectorMetadata {
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
             editLog.logTruncateTable(info);
+        } catch (DdlException e) {
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
+            throw e;
         } finally {
             db.writeUnlock();
         }
 
         LOG.info("finished to truncate table {}, partitions: {}",
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
+    }
+
+    private void deleteUselessTabletAndShard(Set<Long> tabletIdSet, OlapTable olapTable) {
+        // create partition failed, remove all newly created tablets
+        for (Long tabletId : tabletIdSet) {
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+        }
+        // lake table need to delete shard
+        if (olapTable.isLakeTable() && !tabletIdSet.isEmpty()) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
+        }
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
@@ -4202,12 +4235,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
-                                partitionId, indexId, schemaHash, medium);
+                                partitionId, indexId, schemaHash, medium, olapTable.isLakeTable());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                invertedIndex.addReplica(tabletId, replica);
+                            if (olapTable.isOlapTable()) {
+                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
                             }
                         }
                     }

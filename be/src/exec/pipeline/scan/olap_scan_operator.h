@@ -34,7 +34,7 @@ private:
 
 class OlapScanOperator final : public ScanOperator {
 public:
-    OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+    OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
                      OlapScanContextPtr ctx);
 
     ~OlapScanOperator() override;
@@ -50,12 +50,12 @@ protected:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
-    bool has_buffer_output() const override;
     ChunkPtr get_chunk_from_buffer() override;
+    size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
     size_t buffer_capacity() const override;
     size_t default_buffer_capacity() const override;
-    ChunkBufferTokenPtr pin_chunk(int num_chunks);
+    ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
 
