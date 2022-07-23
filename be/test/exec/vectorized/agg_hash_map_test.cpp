@@ -211,7 +211,7 @@ TEST(HashMapTest, Insert) {
             key_columns.back()->append_default();
         }
         key.compute_agg_states(
-                key_columns[0]->size(), key_columns, &pool, [&]() { return pool.allocate(16); }, &agg_states);
+                key_columns[0]->size(), key_columns, &pool, [&](auto& key) { return pool.allocate(16); }, &agg_states);
         using TestHashMapKey = TestAggHashMap::key_type;
         std::vector<TestHashMapKey> resv;
         for (auto [key, _] : key.hash_map) {
