@@ -96,13 +96,13 @@ public class VariableMgr {
     // and can modify its own variable.
     public static final int SESSION = 1;
     // Variables with this flag have only one instance in one process.
-    public static final int GLOBAL = 2;
+    public static final int GLOBAL = 1 << 1;
     // Variables with this flag only exist in each session.
-    public static final int SESSION_ONLY = 4;
+    public static final int SESSION_ONLY = 1 << 2;
     // Variables with this flag can only be read.
-    public static final int READ_ONLY = 8;
+    public static final int READ_ONLY = 1 << 3;
     // Variables with this flag can not be seen with `SHOW VARIABLES` statement.
-    public static final int INVISIBLE = 16;
+    public static final int INVISIBLE = 1 << 4;
     // Variables with this flag will not forward to leader when modified in session
     public static final int DISABLE_FORWARD_TO_LEADER = 1 << 5;
 
