@@ -6,13 +6,14 @@
 #include "column_reader.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/types.h"
+#include "simd/simd.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
 
 class RepeatedStoredColumnReader : public StoredColumnReader {
 public:
-    RepeatedStoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    RepeatedStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReader(opts) {}
     ~RepeatedStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
@@ -20,7 +21,6 @@ public:
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
                                                       _field->type_length, chunk_metadata, _opts);
         RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
-        _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
 
@@ -34,22 +34,20 @@ public:
         *num_levels = _levels_parsed;
     }
 
-private:
-    Status _next_page();
+protected:
+    bool select_page(size_t num_values) override;
 
+private:
     // Try to deocde enough levels in levels buffer, except there is no enough levels in current
     void _decode_levels(size_t num_levels);
 
     void _delimit_rows(size_t* num_rows, size_t* num_levels_parsed);
 
 private:
-    const ColumnReaderOptions& _opts;
-
     const ParquetField* _field = nullptr;
 
     bool _eof = false;
     bool _meet_first_record = false;
-    size_t _num_values_left_in_cur_page = 0;
 
     size_t _levels_parsed = 0;
     size_t _levels_decoded = 0;
@@ -63,8 +61,7 @@ private:
 
 class OptionalStoredColumnReader : public StoredColumnReader {
 public:
-    OptionalStoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
-
+    OptionalStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReader(opts) {}
     ~OptionalStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
@@ -72,7 +69,6 @@ public:
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
                                                       _field->type_length, chunk_metadata, _opts);
         RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
-        _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
 
@@ -99,13 +95,10 @@ public:
     }
 
 private:
-    Status _next_page();
-
     void _decode_levels(size_t num_levels);
     Status _read_records_only(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst);
     Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst);
 
-    const ColumnReaderOptions& _opts;
     const ParquetField* _field = nullptr;
 
     // When the flag is false, the information of levels does not need to be materialized,
@@ -114,7 +107,6 @@ private:
     bool _needs_levels = false;
 
     bool _eof = false;
-    size_t _num_values_left_in_cur_page = 0;
 
     size_t _levels_parsed = 0;
     size_t _levels_decoded = 0;
@@ -126,7 +118,7 @@ private:
 
 class RequiredStoredColumnReader : public StoredColumnReader {
 public:
-    RequiredStoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    RequiredStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReader(opts) {}
     ~RequiredStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
@@ -134,7 +126,6 @@ public:
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
                                                       _field->type_length, chunk_metadata, _opts);
         RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
-        _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
 
@@ -149,14 +140,10 @@ public:
     }
 
 private:
-    Status _next_page();
-
     RandomAccessFile* _file = nullptr;
     // TODO(zc): No need copy
     const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
-    const ColumnReaderOptions& _opts;
-    size_t _num_values_left_in_cur_page = 0;
 };
 
 void RepeatedStoredColumnReader::reset() {
@@ -181,7 +168,12 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
     size_t records_read = 0;
     do {
         if (_num_values_left_in_cur_page == 0) {
-            auto st = _next_page();
+            size_t records_to_skip = 0;
+            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
+            if (records_to_skip > 0) {
+                dst->append_default(records_to_skip);
+                records_read += records_to_skip;
+            }
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     if (_meet_first_record) {
@@ -194,6 +186,7 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
                 }
             }
         }
+
         // NOTE: must have values in current page.
         DCHECK_GT(_num_values_left_in_cur_page, 0);
 
@@ -227,12 +220,10 @@ Status RepeatedStoredColumnReader::read_records(size_t* num_records, ColumnConte
     return Status::OK();
 }
 
-Status RepeatedStoredColumnReader::_next_page() {
-    do {
-        RETURN_IF_ERROR(_reader->next_page());
-        _num_values_left_in_cur_page = _reader->num_values();
-    } while (_num_values_left_in_cur_page == 0);
-    return Status::OK();
+// For repeated columns, it is difficult to skip rows according the num_values in header because
+// there may be multiple values in one row. So we don't realize it util the page index is ready later.
+bool RepeatedStoredColumnReader::select_page(size_t num_values) {
+    return true;
 }
 
 void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_levels_parsed) {
@@ -312,7 +303,12 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
     do {
         if (_num_values_left_in_cur_page == 0) {
             SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
-            auto st = _next_page();
+            size_t records_to_skip = 0;
+            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
+            if (records_to_skip > 0) {
+                dst->append_default(records_to_skip);
+                records_read += records_to_skip;
+            }
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     _eof = true;
@@ -324,6 +320,10 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
         }
 
         size_t records_to_read = std::min(*num_records - records_read, _num_values_left_in_cur_page);
+        if (records_to_read == 0) {
+            break;
+        }
+
         {
             SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
             _decode_levels(records_to_read);
@@ -359,7 +359,12 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
     do {
         if (_num_values_left_in_cur_page == 0) {
             SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
-            auto st = _next_page();
+            size_t records_to_skip = 0;
+            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
+            if (records_to_skip > 0) {
+                dst->append_default(records_to_skip);
+                records_read += records_to_skip;
+            }
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     _eof = true;
@@ -371,6 +376,10 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
         }
 
         size_t records_to_read = std::min(*num_records - records_read, _num_values_left_in_cur_page);
+        if (records_to_read == 0) {
+            break;
+        }
+
         size_t repeated_count = _reader->def_level_decoder().next_repeated_count();
         if (repeated_count > 0) {
             records_to_read = std::min(records_to_read, repeated_count);
@@ -424,14 +433,6 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
     return Status::OK();
 }
 
-Status OptionalStoredColumnReader::_next_page() {
-    do {
-        RETURN_IF_ERROR(_reader->next_page());
-        _num_values_left_in_cur_page = _reader->num_values();
-    } while (_num_values_left_in_cur_page == 0);
-    return Status::OK();
-}
-
 void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
     constexpr size_t min_level_batch_size = 4096;
     size_t levels_remaining = _levels_decoded - _levels_parsed;
@@ -459,7 +460,12 @@ Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnConte
     size_t records_read = 0;
     while (records_read < *num_records) {
         if (_num_values_left_in_cur_page == 0) {
-            auto st = _next_page();
+            size_t records_to_skip = 0;
+            auto st = next_selected_page(*num_records - records_read, &records_to_skip);
+            if (records_to_skip > 0) {
+                dst->append_default(records_to_skip);
+                records_read += records_to_skip;
+            }
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     break;
@@ -468,20 +474,16 @@ Status RequiredStoredColumnReader::read_records(size_t* num_records, ColumnConte
                 }
             }
         }
+
         size_t records_to_read = std::min(*num_records - records_read, _num_values_left_in_cur_page);
+        if (records_to_read == 0) {
+            break;
+        }
         RETURN_IF_ERROR(_reader->decode_values(records_to_read, content_type, dst));
         records_read += records_to_read;
         _num_values_left_in_cur_page -= records_to_read;
     }
     *num_records = records_read;
-    return Status::OK();
-}
-
-Status RequiredStoredColumnReader::_next_page() {
-    do {
-        RETURN_IF_ERROR(_reader->next_page());
-        _num_values_left_in_cur_page = _reader->num_values();
-    } while (_num_values_left_in_cur_page == 0);
     return Status::OK();
 }
 
@@ -502,6 +504,47 @@ Status StoredColumnReader::create(const ColumnReaderOptions& opts, const Parquet
         *out = std::move(reader);
     }
     return Status::OK();
+}
+
+Status StoredColumnReader::next_selected_page(size_t records_to_read, size_t* records_to_skip) {
+    *records_to_skip = 0;
+    do {
+        RETURN_IF_ERROR(_reader->load_header());
+        size_t num_values = _reader->num_values();
+        if (num_values == 0) {
+            if (_reader->current_page_is_dict()) {
+                RETURN_IF_ERROR(_reader->load_page());
+            } else {
+                RETURN_IF_ERROR(_reader->skip_page());
+            }
+            continue;
+        }
+        if (select_page(num_values)) {
+            RETURN_IF_ERROR(_reader->load_page());
+            _num_values_left_in_cur_page = num_values;
+            _opts.context->advance(num_values);
+            break;
+        }
+        RETURN_IF_ERROR(_reader->skip_page());
+        *records_to_skip += num_values;
+        _opts.context->advance(num_values);
+    } while (*records_to_skip < records_to_read);
+
+    if (*records_to_skip > records_to_read) {
+        *records_to_skip = records_to_read;
+    }
+    return Status::OK();
+}
+
+bool StoredColumnReader::select_page(size_t num_values) {
+    auto filter = _opts.context->filter;
+    if (!filter) {
+        return true;
+    }
+
+    int start_row = _opts.context->next_row;
+    int end_row = std::min(start_row + num_values, filter->size()) - 1;
+    return SIMD::find_nonzero(*filter, start_row) <= end_row;
 }
 
 } // namespace starrocks::parquet
