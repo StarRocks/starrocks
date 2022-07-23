@@ -4111,16 +4111,17 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
+                if (copiedTbl.isLakeTable()) {
+                    partitionInfo.setStorageInfo(newPartitionId, partitionInfo.getStorageInfo(oldPartitionId));
+                }
+
                 Partition newPartition =
                         createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions);
         } catch (DdlException e) {
-            // create partition failed, remove all newly created tablets
-            for (Long tabletId : tabletIdSet) {
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
-            }
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
             throw e;
         }
         Preconditions.checkState(origPartitions.size() == newPartitions.size());
@@ -4179,12 +4180,27 @@ public class LocalMetastore implements ConnectorMetadata {
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
             editLog.logTruncateTable(info);
+        } catch (DdlException e) {
+            deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
+            throw e;
         } finally {
             db.writeUnlock();
         }
 
         LOG.info("finished to truncate table {}, partitions: {}",
                 tblRef.getName().toSql(), tblRef.getPartitionNames());
+    }
+
+    private void deleteUselessTabletAndShard(Set<Long> tabletIdSet, OlapTable olapTable) {
+        // create partition failed, remove all newly created tablets
+        for (Long tabletId : tabletIdSet) {
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+        }
+        // lake table need to delete shard
+        if (olapTable.isLakeTable() && !tabletIdSet.isEmpty()) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
+        }
     }
 
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
@@ -4237,12 +4253,14 @@ public class LocalMetastore implements ConnectorMetadata {
                         long indexId = mIndex.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                         TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
-                                partitionId, indexId, schemaHash, medium);
+                                partitionId, indexId, schemaHash, medium, olapTable.isLakeTable());
                         for (Tablet tablet : mIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
-                                invertedIndex.addReplica(tabletId, replica);
+                            if (olapTable.isOlapTable()) {
+                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                    invertedIndex.addReplica(tabletId, replica);
+                                }
                             }
                         }
                     }
