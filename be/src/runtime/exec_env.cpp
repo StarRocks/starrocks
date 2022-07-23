@@ -260,7 +260,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         _agent_server->init_or_die();
 
 #ifndef BE_TEST
-    _lake_tablet_manager->start_gc();
+        _lake_tablet_manager->start_gc();
 #endif
     }
     _broker_mgr->init();
