@@ -71,6 +71,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DISTRIBUTION_TYPE = "distribution_type";
     public static final String PROPERTIES_SEND_CLEAR_ALTER_TASK = "send_clear_alter_tasks";
+
+    public static final String PROPERTIES_COLOCATE_MV = "colocate_mv";
     /*
      * for upgrade alpha rowset to beta rowset, valid value: v1, v2
      * v1: alpha rowset
@@ -436,6 +438,16 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_TYPE);
         }
         return type;
+    }
+
+    public static boolean analyzeColocateMV(Map<String, String> properties) throws AnalysisException {
+        String colocateMV = null;
+        if (properties != null && properties.containsKey(PROPERTIES_COLOCATE_MV)) {
+            colocateMV = properties.get(PROPERTIES_COLOCATE_MV);
+            properties.remove(PROPERTIES_COLOCATE_MV);
+            return Boolean.parseBoolean(colocateMV);
+        }
+        return false;
     }
 
     public static long analyzeLongProp(Map<String, String> properties, String propKey, long defaultVal)

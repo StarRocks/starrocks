@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
@@ -1409,6 +1410,137 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("Materialized view query statement select item rand() " +
                     "not supported nondeterministic function", e.getMessage());
         }
+    }
+    // ========== test colocate mv ==========
+    @Test
+    public void testCreateColocateMVSingleTable() throws Exception{
+        String sql = "create materialized view colocate_mv\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "buckets 3\n" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+            String fullGroupName = testDb.getId() + "_" + testDb.getFullName() + ":"+ "colocate_mv";
+            System.out.println(fullGroupName);
+            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+            Assert.assertNotEquals(-1,tableId);
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertEquals(2,colocateTableIndex.getAllTableIds(groupId).size());
+
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            Table mv = testDb.getTable("colocate_mv");
+            dropMv("colocate_mv");
+            Assert.assertFalse(currentState.getColocateTableIndex().isColocateTable(mv.getId()));
+            currentState.getColocateTableIndex().clear();
+        }
+    }
+
+    @Test
+    public void testCreateColocateMVMuliTable() throws Exception{
+        String sql = "create materialized view colocate_mv2\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2)\n" +
+                "buckets 3\n" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select date_trunc('month',tb1.k1) s1, tb2.k2 s2 from tbl1 tb1 join tbl2 tb2 on tb1.k2 = tb2.k2;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+            String fullGroupName = testDb.getId() + "_" + testDb.getFullName() + ":"+ "colocate_mv2";
+            System.out.println(fullGroupName);
+            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+            Assert.assertNotEquals(-1,tableId);
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertEquals(3,colocateTableIndex.getAllTableIds(groupId).size());
+
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            dropMv("colocate_mv2");
+            currentState.getColocateTableIndex().clear();
+        }
+    }
+
+    @Test
+    public void testCreateColocateMVToExitGroup() throws Exception{
+        starRocksAssert.withTable("CREATE TABLE test.tbl1InGroup1\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2020-02-01'),\n" +
+                "    PARTITION p2 values less than('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"group1\"\n" +
+                ");")
+                .withTable("CREATE TABLE test.tbl2InGroup1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k2)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('10'),\n" +
+                        "    PARTITION p2 values less than('20')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"colocate_with\" = \"group1\"\n" +
+                        ");");
+        String sql = "create materialized view colocate_mv3\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2)\n" +
+                "buckets 3\n" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select date_trunc('month',tb1.k1) s1, tb2.k2 s2 from tbl1InGroup1 tb1 join tbl2InGroup1 tb2 on tb1.k2 = tb2.k2;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+            String fullGroupName = testDb.getId() + "_"+ "group1";
+            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+            Assert.assertNotEquals(-1,tableId);
+
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertEquals(5,colocateTableIndex.getAllTableIds(groupId).size());
+
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            dropMv("colocate_mv3");
+            currentState.getColocateTableIndex().clear();
+        }
+
     }
 
     // ========== other test ==========

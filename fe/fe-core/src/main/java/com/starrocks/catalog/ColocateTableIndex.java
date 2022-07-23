@@ -50,6 +50,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -436,6 +437,16 @@ public class ColocateTableIndex implements Writable {
         }
         return -1;
     }
+    // return  group name not fullGroupName
+    // fullGroupName = dbId + "_" + groupName
+    public String getGroupNameByGroupId(long dbId, GroupId groupId) {
+        for (Entry<String, GroupId> entry : groupName2Id.entrySet()) {
+            if (entry.getValue().equals(groupId)) {
+                return entry.getKey().split(dbId + "_")[1];
+            }
+        }
+        return null;
+    }
 
     public GroupId changeGroup(long dbId, OlapTable tbl, String oldGroup, String newGroup, GroupId assignedGroupId) {
         writeLock();
@@ -488,6 +499,7 @@ public class ColocateTableIndex implements Writable {
     public void clear() {
         writeLock();
         try {
+            groupName2Id.clear();
             group2Tables.clear();
             table2Group.clear();
             group2BackendsPerBucketSeq.clear();
