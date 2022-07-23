@@ -79,7 +79,7 @@ private:
     size_t _freed_bytes = 0;
 };
 
-void gc_tcmalloc_memory(void* arg_this) {
+void gc_memory(void* arg_this) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
@@ -93,10 +93,6 @@ void gc_tcmalloc_memory(void* arg_this) {
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-
-#ifdef USE_JEMALLOC
-        je_malloc_stats_print(nullptr, nullptr, nullptr);
-#endif
 
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
         size_t used_size = 0;
@@ -284,10 +280,9 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     TimezoneUtils::init_time_zones();
 
-    // @TODO change name
-    std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);
-    Thread::set_thread_name(tcmalloc_gc_thread, "tcmalloc_daemon");
-    _daemon_threads.emplace_back(std::move(tcmalloc_gc_thread));
+    std::thread gc_thread(gc_memory, this);
+    Thread::set_thread_name(gc_thread, "gc_daemon");
+    _daemon_threads.emplace_back(std::move(gc_thread));
 
     init_starrocks_metrics(paths);
 
