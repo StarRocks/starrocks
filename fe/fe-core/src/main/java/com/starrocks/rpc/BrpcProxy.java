@@ -69,6 +69,6 @@ public class BrpcProxy {
     }
 
     private static class SingletonHolder {
-        private static final BrpcProxy INSTANCE = new BrpcProxy();
+        private static BrpcProxy INSTANCE = new BrpcProxy();
     }
 }
