@@ -21,9 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.google.common.base.Strings;
 
@@ -53,35 +50,8 @@ public class ShowOpenTableStmt extends ShowStmt {
         setPattern( pattern);
         setWhere( where);
     }
-
     public boolean isSupportNewPlanner() {
         return true;
-    }
-    public QueryStatement toSelectStmt() {
-        if (where == null) {
-            return null;
-        }
-        SelectList selectList = new SelectList();
-        ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
-        //  Database
-        SelectListItem item = new SelectListItem(new SlotRef(TABLE_NAME, "DATABASE"), "Database");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Database"), item.getExpr().clone(null));
-        //  Table
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE"), "Table");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Table"), item.getExpr().clone(null));
-        //  In_use
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "IN_USE"), "In_use");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "In_use"), item.getExpr().clone(null));
-        //  Name_locked
-        item = new SelectListItem(new SlotRef(TABLE_NAME, "NAME_LOCKED"), "Name_locked");
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, "Name_locked"), item.getExpr().clone(null));
-
-        where = where.substitute(aliasMap);
-        return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME), where, null, null));
     }
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowOpenTablesStmt(this, context);
