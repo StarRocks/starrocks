@@ -3,6 +3,7 @@ package com.starrocks.sql.common;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -17,6 +18,7 @@ import org.junit.Test;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 
 public class SyncPartitionUtilsTest {
 
@@ -47,6 +49,49 @@ public class SyncPartitionUtilsTest {
         PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
                 Collections.singletonList(partitionColumn));
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
+    }
+
+    @Test
+    public void testGeneratePartitionRefMap() throws AnalysisException {
+        // normal condition
+        Map<String, Range<PartitionKey>> srcRangeMap = Maps.newHashMap();
+        srcRangeMap.put("p20201015_20201115", createRange("2020-10-15", "2020-11-15"));
+        srcRangeMap.put("p20201115_20201215", createRange("2020-11-15", "2020-12-15"));
+
+        Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
+        dstRangeMap.put("p202010_202011", createRange("2020-10-01", "2020-11-01"));
+        dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
+        dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
+
+
+        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+
+        Assert.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202010_202011"));
+        Assert.assertTrue(partitionRefMap.get("p20201015_20201115").contains("p202011_202012"));
+        Assert.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202011_202012"));
+        Assert.assertTrue(partitionRefMap.get("p20201115_20201215").contains("p202012_202101"));
+
+        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(dstRangeMap, srcRangeMap);
+
+        Assert.assertTrue(partitionRefMap.get("p202010_202011").contains("p20201015_20201115"));
+        Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p20201015_20201115"));
+        Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p20201115_20201215"));
+        Assert.assertTrue(partitionRefMap.get("p202012_202101").contains("p20201115_20201215"));
+
+
+        // test border
+        srcRangeMap = Maps.newHashMap();
+        srcRangeMap.put("p20201015", createRange("2020-10-15", "2020-11-01"));
+
+        dstRangeMap = Maps.newHashMap();
+        dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
+
+        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+        Assert.assertEquals(0, partitionRefMap.get("p20201015").size());
+
+        partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(dstRangeMap, srcRangeMap);
+        Assert.assertEquals(0, partitionRefMap.get("p202011_202012").size());
+
     }
 
     @Test

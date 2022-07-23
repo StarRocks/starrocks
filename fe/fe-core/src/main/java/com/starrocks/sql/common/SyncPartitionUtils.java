@@ -104,6 +104,45 @@ public class SyncPartitionUtils {
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
+    public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
+                                                             Map<String, Range<PartitionKey>> dstRangeMap) {
+        Map<String, Set<String>> result = Maps.newHashMap();
+        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
+            Iterator<Map.Entry<String, Range<PartitionKey>>> dstIter = dstRangeMap.entrySet().iterator();
+            result.put(srcEntry.getKey(), Sets.newHashSet());
+            while (dstIter.hasNext()) {
+                Map.Entry<String, Range<PartitionKey>> dstEntry = dstIter.next();
+                Range<PartitionKey> dstRange = dstEntry.getValue();
+                int upperLowerCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.lowerEndpoint());
+                if (upperLowerCmp <= 0) {
+                    continue;
+                }
+                int lowerUpperCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.upperEndpoint());
+                if (lowerUpperCmp >= 0) {
+                    continue;
+                }
+                Set<String> dstNames = result.get(srcEntry.getKey());
+                dstNames.add(dstEntry.getKey());
+            }
+        }
+        return result;
+    }
+
+    public static int gatherPotentialRefreshPartitionNames(Set<String> baseChangedPartitionNames,
+                                                     Set<String> needRefreshMvPartitionNames,
+                                                     Map<String, Set<String>> baseToMvNameRef,
+                                                     Map<String, Set<String>> mvToBaseNameRef) {
+        for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
+            Set<String> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
+            baseChangedPartitionNames.addAll(baseNames);
+            for (String baseName : baseNames) {
+                Set<String> mvNames = baseToMvNameRef.get(baseName);
+                needRefreshMvPartitionNames.addAll(mvNames);
+            }
+        }
+        return needRefreshMvPartitionNames.size();
+    }
+
     public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
                                             String granularity) {
         switch (granularity) {

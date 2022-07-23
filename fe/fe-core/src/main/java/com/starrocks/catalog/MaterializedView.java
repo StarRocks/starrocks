@@ -2,6 +2,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -271,6 +272,31 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTableId, k -> Maps.newHashMap())
                 .keySet();
+    }
+
+    public Set<String> getExistBasePartitionNames(long baseTableId) {
+        return this.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
+                .computeIfAbsent(baseTableId, k -> Maps.newHashMap()).keySet();
+    }
+
+    public Set<String> getNeedRefreshPartitionNames(OlapTable base) {
+        Map<String, BasePartitionInfo> baseTableVisibleVersionMap = getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(base.getId(), k -> Maps.newHashMap());
+
+        Set<String> result = Sets.newHashSet();
+        for (Map.Entry<String, BasePartitionInfo> versionEntry : baseTableVisibleVersionMap.entrySet()) {
+            String basePartitionName = versionEntry.getKey();
+            Partition baseTablePartition = base.getPartition(basePartitionName);
+            BasePartitionInfo basePartitionInfo = versionEntry.getValue();
+            if (basePartitionInfo == null
+                    || basePartitionInfo.getId() != baseTablePartition.getId()
+                    || baseTablePartition.getVisibleVersion() > basePartitionInfo.getVersion()) {
+                result.add(basePartitionName);
+            }
+        }
+        return result;
     }
 
     public boolean needRefreshPartition(long baseTableId, Partition baseTablePartition) {
