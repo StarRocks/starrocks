@@ -2536,12 +2536,18 @@ struct StringFunctionsState {
         if (driver_id == 0) {
             return regex.get();
         }
-        auto iter = driver_regex_map.lazy_emplace(driver_id, [&](auto build) {
-            auto regex = std::make_unique<re2::RE2>(pattern, *options);
-            DCHECK(regex->ok());
-            build(driver_id, std::move(regex));
-        });
-        return iter->second.get();
+
+        re2::RE2* res = nullptr;
+        driver_regex_map.lazy_emplace_l(
+                driver_id, [&](auto& value) { res = value.get(); },
+                [&](auto build) {
+                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
+                    DCHECK(regex->ok());
+                    res = regex.get();
+                    build(driver_id, std::move(regex));
+                });
+        DCHECK(!!res);
+        return res;
     }
 };
 
