@@ -346,6 +346,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
+        // used for remove cluster from stmt
+        dbName = ClusterNamespace.getFullName(dbName);
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -390,6 +392,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        // used for remove cluster from stmt
+        dbName = ClusterNamespace.getFullName(dbName);
         // 1. check if database exists
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -433,7 +437,7 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.remove(db.getFullName());
             final Cluster cluster = defaultCluster;
             cluster.removeDb(dbName, db.getId());
-            DropDbInfo info = new DropDbInfo(dbName, isForceDrop);
+            DropDbInfo info = new DropDbInfo(db.getFullName(), isForceDrop);
             editLog.logDropDb(info);
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
@@ -494,7 +498,8 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
         }
 
-        Database db = recycleBin.recoverDatabase(recoverStmt.getDbName());
+        // used for remove cluster from stmt
+        Database db = recycleBin.recoverDatabase(ClusterNamespace.getFullName(recoverStmt.getDbName()));
 
         // add db to globalStateMgr
         if (!tryLock(false)) {
@@ -606,7 +611,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.setReplicaQuotaWithLock(stmt.getQuota());
         }
         long quota = stmt.getQuota();
-        DatabaseInfo dbInfo = new DatabaseInfo(dbName, "", quota, quotaType);
+        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
         editLog.logAlterDb(dbInfo);
     }
 
@@ -621,8 +626,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
-        String fullDbName = stmt.getDbName();
-        String newFullDbName = stmt.getNewDbName();
+        // used for remove cluster from stmt
+        String fullDbName = ClusterNamespace.getFullName(stmt.getDbName());
+        String newFullDbName = ClusterNamespace.getFullName(stmt.getNewDbName());
 
         if (fullDbName.equals(newFullDbName)) {
             throw new DdlException("Same database name");
@@ -2820,6 +2826,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public Database getDb(String name) {
+        // used for remove cluster from stmt
+        name = ClusterNamespace.getFullName(name);
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
