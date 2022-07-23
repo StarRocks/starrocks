@@ -174,10 +174,10 @@ WorkGroupPtr ScanTaskQueueWithWorkGroup::_select_next_wg(int worker_id) {
         total += wg->get_select_factor();
 
         if (owner_wgs->find(wg) != owner_wgs->end()) {
-            if (max_owner_wg == nullptr || wg->get_cur_select_factor() > max_owner_wg->get_cur_select_factor()) {
+            if (max_owner_wg == nullptr || wg->vruntime_ns() > max_owner_wg->vruntime_ns()) {
                 max_owner_wg = wg;
             }
-        } else if (max_other_wg == nullptr || wg->get_cur_select_factor() > max_other_wg->get_cur_select_factor()) {
+        } else if (max_other_wg == nullptr || wg->vruntime_ns() > max_other_wg->vruntime_ns()) {
             max_other_wg = wg;
         }
     }
