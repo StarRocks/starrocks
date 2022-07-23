@@ -5,7 +5,9 @@
 #include <sstream>
 #include <string>
 
+#include "column/chunk.h"
 #include "common/status.h"
+#include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/ref_counted.h"
@@ -31,10 +33,11 @@ class TabletsChannel : public RefCountedThreadSafe<TabletsChannel> {
 public:
     TabletsChannel() = default;
 
-    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params) = 0;
+    [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params,
+                                      std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
-    virtual void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                           PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) = 0;
+    virtual void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+                           PTabletWriterAddBatchResult* response) = 0;
 
     virtual void cancel() = 0;
 
