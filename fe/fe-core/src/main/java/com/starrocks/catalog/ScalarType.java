@@ -518,6 +518,12 @@ public class ScalarType extends Type implements Cloneable {
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
     }
 
+    public static ScalarType createDefaultString() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
+        stringType.setAssignedStrLenInColDefinition();
+        return stringType;
+    }
+
     @Override
     public String toString() {
         if (type == PrimitiveType.CHAR) {

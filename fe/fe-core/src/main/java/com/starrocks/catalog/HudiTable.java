@@ -159,7 +159,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void refreshTableCache() throws DdlException {
+    public void refreshTableCache(String dbName, String tableName) throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository().refreshTableCache(hmsTableInfo);
     }
 
