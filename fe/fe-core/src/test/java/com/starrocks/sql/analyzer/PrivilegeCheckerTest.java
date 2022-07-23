@@ -55,18 +55,32 @@ public class PrivilegeCheckerTest {
     private void createUsers() throws Exception {
         String createUserSql = "CREATE USER 'test' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
-                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
-        testUser = new UserIdentity("test", "%");
-        testUser.analyze();
+        testUser = createUserStmt.getUserIdent();
 
         createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
-        createUserStmt = (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+        createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
-        testUser2 = new UserIdentity("test2", "%");
-        testUser2.analyze();
+        testUser2 = createUserStmt.getUserIdent();
+    }
+
+    @Test
+    public void testCreateUser() throws Exception {
+        starRocksAssert.getCtx().setQualifiedUser("root");
+        starRocksAssert.getCtx().setCurrentUserIdentity(rootUser);
+        String sql = "CREATE USER 'test2'";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertTrue(statementBase.isSupportNewPlanner());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
     }
 
     @Test

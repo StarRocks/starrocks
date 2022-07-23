@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
+import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
@@ -15,6 +16,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.mysql.privilege.Role;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -38,6 +40,19 @@ public class PrivilegeStmtAnalyzer {
          */
         private void analyseUserAndCheckExist(UserIdentity userIdent, ConnectContext session) {
             // validate user
+            analyseUser(userIdent, session);
+
+            // check if user exists
+            if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
+                throw new SemanticException("user " + userIdent + " not exist!");
+            }
+        }
+
+        /**
+         *  analyse user identity
+         */
+        private void analyseUser(UserIdentity userIdent, ConnectContext session) {
+            // validate user
             try {
                 userIdent.analyze();
             } catch (AnalysisException e) {
@@ -45,11 +60,6 @@ public class PrivilegeStmtAnalyzer {
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
-            }
-
-            // check if user exists
-            if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
-                throw new SemanticException("user " + userIdent + " not exist!");
             }
         }
 
@@ -113,29 +123,70 @@ public class PrivilegeStmtAnalyzer {
              * IDENTIFIED BY
              */
             // convert password to hashed password
-            byte[] scramblePassword;
-            if (!Strings.isNullOrEmpty(stmt.getOriginalPassword())) {
-                try {
-                    if (stmt.isPasswordPlain()) {
-                        // plain password should check for validation & reuse
-                        Auth.validatePassword(stmt.getOriginalPassword());
-                        GlobalStateMgr.getCurrentState().getAuth()
-                                .checkPasswordReuse(stmt.getUserIdent(), stmt.getOriginalPassword());
-                        // convert plain password to scramble
-                        scramblePassword = MysqlPassword.makeScrambledPassword(stmt.getOriginalPassword());
+            stmt.setScramblePassword(
+                    analysePassword(stmt.getUserIdent(), stmt.getOriginalPassword(), stmt.isPasswordPlain()));
+
+            /*
+             * IDENTIFIED WITH
+             */
+            if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
+                stmt.setAuthPlugin(stmt.getAuthPlugin().toUpperCase());
+                if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPlugin())) {
+                    stmt.setUserForAuthPlugin(stmt.getAuthString());
+                } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
+                    // in this case, authString is password
+                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthString(),
+                            stmt.isPasswordPlain()));
+                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPlugin()) &&
+                        GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
+                    // In kerberos authentication, userForAuthPlugin represents the user principal realm.
+                    // If user realm is not specified when creating user, the service principal realm will be used as
+                    // the user principal realm by default.
+                    if (stmt.getAuthString() != null) {
+                        stmt.setUserForAuthPlugin(stmt.getAuthString());
                     } else {
-                        scramblePassword = MysqlPassword.checkPassword(stmt.getOriginalPassword());
+                        stmt.setUserForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
                     }
-                } catch (DdlException | AnalysisException e) {
-                    // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                    // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                    // Remove it after all old methods migrate to the new framework
-                    throw new SemanticException(e.getMessage());
+                } else {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPlugin());
                 }
-            } else {
-                scramblePassword = new byte[0];
             }
-            stmt.setScramblePassword(scramblePassword);
+            return null;
+        }
+
+        /**
+         * convert password to hashed password
+         */
+        private byte[] analysePassword(UserIdentity userIdent, String originalPassword, boolean isPasswordPlain) {
+            if (Strings.isNullOrEmpty(originalPassword)) {
+                return new byte[0];
+            }
+            try {
+                if (isPasswordPlain) {
+                    // plain password should check for validation & reuse
+                    Auth.validatePassword(originalPassword);
+                    GlobalStateMgr.getCurrentState().getAuth().checkPasswordReuse(userIdent, originalPassword);
+                    // convert plain password to scramble
+                    return MysqlPassword.makeScrambledPassword(originalPassword);
+                } else {
+                    return MysqlPassword.checkPassword(originalPassword);
+                }
+            } catch (DdlException | AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        @Override
+        public Void visitCreateUserStatement(CreateUserStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdent(), session);
+            /*
+             * IDENTIFIED BY
+             */
+            stmt.setScramblePassword(
+                    analysePassword(stmt.getUserIdent(), stmt.getOriginalPassword(), stmt.isPasswordPlain()));
 
             /*
              * IDENTIFIED WITH
@@ -145,25 +196,8 @@ public class PrivilegeStmtAnalyzer {
                     stmt.setUserForAuthPlugin(stmt.getAuthString());
                 } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
                     // in this case, authString is password
-                    // convert password to hashed password
-                    if (!Strings.isNullOrEmpty(stmt.getAuthString())) {
-                        if (stmt.isPasswordPlain()) {
-                            // convert plain password to scramble
-                            scramblePassword = MysqlPassword.makeScrambledPassword(stmt.getAuthString());
-                        } else {
-                            try {
-                                scramblePassword = MysqlPassword.checkPassword(stmt.getAuthString());
-                            } catch (AnalysisException e) {
-                                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
-                                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
-                                // Remove it after all old methods migrate to the new framework
-                                throw new SemanticException(e.getMessage());
-                            }
-                        }
-                    } else {
-                        scramblePassword = new byte[0];
-                    }
-                    stmt.setScramblePassword(scramblePassword);
+                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthString(),
+                            stmt.isPasswordPlain()));
                 } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equals(stmt.getAuthPlugin()) &&
                         GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
                     // In kerberos authentication, userForAuthPlugin represents the user principal realm.
@@ -177,6 +211,14 @@ public class PrivilegeStmtAnalyzer {
                 } else {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPlugin());
                 }
+            }
+
+            if (stmt.hasRole()) {
+                if (stmt.getQualifiedRole().equalsIgnoreCase("SUPERUSER")) {
+                    // for forward compatibility
+                    stmt.setRole(Role.ADMIN_ROLE);
+                }
+                stmt.setRole(analyseRoleName(stmt.getQualifiedRole(), session));
             }
             return null;
         }

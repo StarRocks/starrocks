@@ -22,14 +22,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
-import mockit.Expectations;
-import mockit.Injectable;
-import mockit.Mocked;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,26 +43,15 @@ public class CreateUserStmtTest {
     }
 
     @Test
-    public void testToString(@Injectable Analyzer analyzer,
-                             @Mocked Auth auth) throws UserException, AnalysisException {
-
-        new Expectations() {
-            {
-                auth.checkHasPriv((ConnectContext) any, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth
-                        .PrivLevel.DATABASE);
-                result = true;
-            }
-        };
-
-        CreateUserStmt stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), "passwd", true));
-        stmt.analyze(analyzer);
+    public void testToString() throws Exception {
+        String sql = "CREATE USER 'user' IDENTIFIED BY 'passwd'";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED BY '*XXX'", stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
-        stmt = new CreateUserStmt(
-                new UserDesc(new UserIdentity("user", "%"), "*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0", false));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("default_cluster:user", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals(
                 "CREATE USER 'default_cluster:user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
@@ -75,40 +59,36 @@ public class CreateUserStmtTest {
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertNull(stmt.getAuthPlugin());
 
-        stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), "", false));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user'";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'default_cluster:user'@'%'", stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertNull(stmt.getAuthPlugin());
 
-        stmt = new CreateUserStmt(
-                new UserDesc(new UserIdentity("user", "%"), AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), "passwd", true));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'passwd'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
-        stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), AuthPlugin.MYSQL_NATIVE_PASSWORD.name(),
-                "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0", false));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD AS '*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0'",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "*59C70DA2F3E3A5BDF46B68F5C8B8F25762BCCEF0");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
-        stmt = new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), AuthPlugin.MYSQL_NATIVE_PASSWORD.name()));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD",
                 stmt.toString());
         Assert.assertEquals(new String(stmt.getPassword()), "");
         Assert.assertEquals(AuthPlugin.MYSQL_NATIVE_PASSWORD.name(), stmt.getAuthPlugin());
 
-        stmt = new CreateUserStmt(
-                new UserDesc(new UserIdentity("user", "%"), AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(),
-                        "uid=gengjun,ou=people,dc=example,dc=io", false));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE AS 'uid=gengjun,ou=people,dc=example,dc=io'",
                 stmt.toString());
@@ -116,10 +96,8 @@ public class CreateUserStmtTest {
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
         Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getUserForAuthPlugin());
 
-        stmt = new CreateUserStmt(
-                new UserDesc(new UserIdentity("user", "%"), AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(),
-                        "uid=gengjun,ou=people,dc=example,dc=io", true));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals(
                 "CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE BY 'uid=gengjun,ou=people,dc=example,dc=io'",
                 stmt.toString());
@@ -127,9 +105,8 @@ public class CreateUserStmtTest {
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
         Assert.assertEquals("uid=gengjun,ou=people,dc=example,dc=io", stmt.getUserForAuthPlugin());
 
-        stmt = new CreateUserStmt(
-                new UserDesc(new UserIdentity("user", "%"), AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name()));
-        stmt.analyze(analyzer);
+        sql = "CREATE USER 'user' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.assertEquals("CREATE USER 'default_cluster:user'@'%' IDENTIFIED WITH AUTHENTICATION_LDAP_SIMPLE",
                 stmt.toString());
         Assert.assertEquals(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name(), stmt.getAuthPlugin());
@@ -137,24 +114,23 @@ public class CreateUserStmtTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testEmptyUser(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
-        CreateUserStmt stmt = new CreateUserStmt(new UserDesc(new UserIdentity("", "%"), "passwd", true));
-        stmt.analyze(analyzer);
+    public void testEmptyUser() throws Exception {
+        String sql = "CREATE USER '' IDENTIFIED BY 'passwd'";
+        UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.fail("No exception throws.");
     }
 
     @Test(expected = AnalysisException.class)
-    public void testBadPass(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
-        CreateUserStmt stmt = new CreateUserStmt(new UserDesc(new UserIdentity("", "%"), "passwd", false));
-        stmt.analyze(analyzer);
+    public void testBadPass() throws Exception {
+        String sql = "CREATE USER 'user' IDENTIFIED BY PASSWORD 'passwd'";
+        UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.fail("No exception throws.");
     }
 
     @Test(expected = AnalysisException.class)
-    public void testInvalidAuthPlugin(@Injectable Analyzer analyzer) throws UserException, AnalysisException {
-        CreateUserStmt stmt =
-                new CreateUserStmt(new UserDesc(new UserIdentity("user", "%"), "authentication_ldap_sasl"));
-        stmt.analyze(analyzer);
+    public void testInvalidAuthPlugin() throws Exception {
+        String sql = "CREATE USER 'user' IDENTIFIED WITH authentication_ldap_sasl";
+        UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
         Assert.fail("No exception throws.");
     }
 }
