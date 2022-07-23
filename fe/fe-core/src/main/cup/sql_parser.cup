@@ -2260,6 +2260,7 @@ show_param ::=
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
     :}
+
     | KW_PROPERTY opt_user:user opt_wild_where
     {:
         RESULT = new ShowUserPropertyStmt(user, parser.wild);
