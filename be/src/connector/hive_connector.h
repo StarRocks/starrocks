@@ -5,6 +5,8 @@
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/vectorized/hdfs_scanner.h"
+#include "exec/vectorized/hudi_mor_scanner.h"
+
 namespace starrocks {
 
 namespace connector {
