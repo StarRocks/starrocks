@@ -16,6 +16,7 @@ import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -439,6 +440,12 @@ public class Analyzer {
         @Override
         public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
+            CreateRepositoryAnalyzer.analyze(statement, context);
             return null;
         }
     }

@@ -136,6 +136,10 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    //  Backup Store Satement
+    | createRepositoryStatement                                                              #createRepository
+
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -834,6 +838,14 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+// ---------------------------------------- Backup Store Statement -----------------------------------------------------
+createRepositoryStatement
+    : CREATE (READ ONLY)? REPOSITORY identifier
+    WITH BROKER identifier
+    ON 'LOCATION' string
+    PROPERTIES propertyList
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
