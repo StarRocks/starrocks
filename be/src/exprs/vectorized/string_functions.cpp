@@ -1651,8 +1651,8 @@ ColumnPtr StringFunctions::upper(FunctionContext* context, const Columns& column
 
 static inline void ascii_reverse_per_slice(const char* src_begin, const char* src_end, char* dst_curr) {
     auto src_curr = src_begin;
-    auto const size = src_end - src_begin;
 #if defined(__SSSE3__) && defined(__SSE2__)
+    auto const size = src_end - src_begin;
     constexpr auto SSE2_SIZE = sizeof(__m128i);
     const auto ctrl_masks = _mm_set_epi64((__m64)0x00'01'02'03'04'05'06'07ull, (__m64)0x08'09'0a'0b'0c'0d'0e'0full);
     const auto sse2_end = src_begin + (size & ~(SSE2_SIZE - 1));
