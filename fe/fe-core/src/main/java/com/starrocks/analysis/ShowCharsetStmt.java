@@ -65,11 +65,6 @@ public class ShowCharsetStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) {
-
-    }
-
-    @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
     }

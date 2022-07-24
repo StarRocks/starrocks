@@ -42,11 +42,6 @@ public class KillStmt extends StatementBase {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) {
-        // No operation.
-    }
-
-    @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("KILL ");
