@@ -46,6 +46,7 @@ import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
@@ -92,6 +93,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -98,6 +98,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
+import com.starrocks.analysis.ShowGrantsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
@@ -2711,6 +2712,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowRolesStatement(StarRocksParser.ShowRolesStatementContext context) {
         return new ShowRolesStmt();
+    }
+
+    @Override
+    public ParseNode visitShowGrantsStatement(StarRocksParser.ShowGrantsStatementContext context) {
+        boolean isAll = context.ALL() != null;
+        UserIdentity userId =
+                context.user() == null ? null : ((UserIdentifier) visit(context.user())).getUserIdentity();
+        return new ShowGrantsStmt(userId, isAll);
     }
 
     @Override
