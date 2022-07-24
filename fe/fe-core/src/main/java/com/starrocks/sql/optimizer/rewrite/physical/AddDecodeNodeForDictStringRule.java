@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.sql.optimizer.rewrite;
+package com.starrocks.sql.optimizer.rewrite.physical;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
