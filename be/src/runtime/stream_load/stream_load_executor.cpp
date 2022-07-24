@@ -198,7 +198,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         return Status::ServiceUnavailable(fmt::format(
                 "Commit transaction fail cause {}, Transaction status unknown, you can retry with same label.",
                 st.get_error_msg()));
-    } else {
+    } else if (!st.ok()) {
         return st;
     }
 #else
