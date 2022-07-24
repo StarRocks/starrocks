@@ -30,6 +30,7 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
@@ -245,6 +246,12 @@ public class Analyzer {
 
         @Override
         public Void visitGrantPrivilegeStatement(GrantStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitRevokePrivilegeStatement(RevokeStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }

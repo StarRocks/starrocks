@@ -34,6 +34,7 @@ import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ResourcePattern;
+import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
@@ -560,6 +561,17 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitGrantPrivilegeStatement(GrantStmt statement, ConnectContext session) {
+            if (statement.getTblPattern() != null) {
+                checkPrivileges(statement.getPrivileges(), statement.getQualifiedRole(), statement.getTblPattern());
+            } else {
+                checkPrivileges(statement.getPrivileges(), statement.getQualifiedRole(),
+                        statement.getResourcePattern());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRevokePrivilegeStatement(RevokeStmt statement, ConnectContext context) {
             if (statement.getTblPattern() != null) {
                 checkPrivileges(statement.getPrivileges(), statement.getQualifiedRole(), statement.getTblPattern());
             } else {

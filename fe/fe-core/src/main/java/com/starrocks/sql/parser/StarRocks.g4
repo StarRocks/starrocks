@@ -132,6 +132,8 @@ statement
     | ALTER USER user authOption                                                            #alterUser
     | GRANT identifier (',' identifier)* ON (tablePattern | RESOURCE resourcePattern)
         TO (user | ROLE string)                                                             #grantPrivilege
+    | REVOKE identifier (',' identifier)* ON (tablePattern | RESOURCE resourcePattern)
+        FROM (user | ROLE string)                                                           #revokePrivilege
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure

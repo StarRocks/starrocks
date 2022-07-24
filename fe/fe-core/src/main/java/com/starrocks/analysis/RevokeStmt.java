@@ -20,11 +20,9 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.privilege.PrivBitSet;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -85,31 +83,12 @@ public class RevokeStmt extends DdlStmt {
         return privileges;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (userIdent != null) {
-            userIdent.analyze();
-        } else {
-            FeNameFormat.checkRoleName(role, false /* can not be superuser */, "Can not revoke from role");
-            role = ClusterNamespace.getFullName(role);
-        }
+    public void setQualifiedRole(String role) {
+        this.role = role;
+    }
 
-        if (tblPattern != null) {
-            tblPattern.analyze();
-        } else {
-            resourcePattern.analyze();
-        }
-
-        if (privileges == null || privileges.isEmpty()) {
-            throw new AnalysisException("No privileges in revoke statement.");
-        }
-
-        // Revoke operation obey the same rule as Grant operation. reuse the same method
-        if (tblPattern != null) {
-            GrantStmt.checkPrivileges(analyzer, privileges, role, tblPattern);
-        } else {
-            GrantStmt.checkPrivileges(analyzer, privileges, role, resourcePattern);
-        }
+    public boolean hasPrivileges() {
+        return !(privileges == null || privileges.isEmpty());
     }
 
     @Override
@@ -132,5 +111,15 @@ public class RevokeStmt extends DdlStmt {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitRevokePrivilegeStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

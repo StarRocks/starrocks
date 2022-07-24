@@ -110,6 +110,7 @@ import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ResourcePattern;
+import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -2157,46 +2158,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantPrivilege(StarRocksParser.GrantPrivilegeContext context) {
-        // visit privileges
-        List<String> parts = visit(context.identifier(), Identifier.class).stream()
-                .map(Identifier::getValue)
-                .collect(Collectors.toList());
-        List<AccessPrivilege> privileges = new ArrayList<>(parts.size());
-        for (String name : parts) {
-            AccessPrivilege accessPrivilege = AccessPrivilege.fromName(name);
-            if (accessPrivilege == null) {
-                throw new ParsingException("Unknown privilege type " + name);
-            }
-            privileges.add(accessPrivilege);
-        }
+        List<AccessPrivilege> privileges = getPrivileges(context.identifier());
 
         boolean onTable = context.RESOURCE() == null;
         TablePattern tblPattern = null;
         ResourcePattern resourcePattern = null;
         if (onTable) {
-            // visit table pattern
-            String db;
-            if (context.tablePattern().identifier(0) != null) {
-                db = ((Identifier) visit(context.tablePattern().identifier(0))).getValue();
-            } else {
-                db = "*";
-            }
-            String tbl;
-            if (context.tablePattern().identifier(1) != null) {
-                tbl = ((Identifier) visit(context.tablePattern().identifier(1))).getValue();
-            } else {
-                tbl = "*";
-            }
-            tblPattern = new TablePattern(db, tbl);
+            tblPattern = getTablePattern(context.tablePattern());
         } else {
-            // visit resource pattern
-            String resource;
-            if (context.resourcePattern().ASTERISK_SYMBOL() == null) {
-                resource = ((StringLiteral) visit(context.resourcePattern().string())).getStringValue();
-            } else {
-                resource = "*";
-            }
-            resourcePattern = new ResourcePattern(resource);
+            resourcePattern = getResourcePattern(context.resourcePattern());
         }
 
         boolean toUser = context.ROLE() == null;
@@ -2214,6 +2184,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return new GrantStmt(null, role, tblPattern, privileges);
             }
             return new GrantStmt(null, role, resourcePattern, privileges);
+        }
+    }
+
+    @Override
+    public ParseNode visitRevokePrivilege(StarRocksParser.RevokePrivilegeContext context) {
+        List<AccessPrivilege> privileges = getPrivileges(context.identifier());
+
+        boolean onTable = context.RESOURCE() == null;
+        TablePattern tblPattern = null;
+        ResourcePattern resourcePattern = null;
+        if (onTable) {
+            tblPattern = getTablePattern(context.tablePattern());
+        } else {
+            resourcePattern = getResourcePattern(context.resourcePattern());
+        }
+
+        boolean fromUser = context.ROLE() == null;
+        UserIdentity userId;
+        String role;
+        if (fromUser) {
+            userId = ((UserIdentifier) visit(context.user())).getUserIdentity();
+            if (onTable) {
+                return new RevokeStmt(userId, null, tblPattern, privileges);
+            }
+            return new RevokeStmt(userId, null, resourcePattern, privileges);
+        } else {
+            role = ((StringLiteral) visit(context.string())).getStringValue();
+            if (onTable) {
+                return new RevokeStmt(null, role, tblPattern, privileges);
+            }
+            return new RevokeStmt(null, role, resourcePattern, privileges);
         }
     }
 
@@ -3487,6 +3488,47 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 .collect(Collectors.toList());
 
         return QualifiedName.of(parts);
+    }
+
+    private List<AccessPrivilege> getPrivileges(List<StarRocksParser.IdentifierContext> context) {
+        List<String> parts = visit(context, Identifier.class).stream()
+                .map(Identifier::getValue)
+                .collect(Collectors.toList());
+        List<AccessPrivilege> privileges = new ArrayList<>(parts.size());
+        for (String name : parts) {
+            AccessPrivilege accessPrivilege = AccessPrivilege.fromName(name);
+            if (accessPrivilege == null) {
+                throw new ParsingException("Unknown privilege type " + name);
+            }
+            privileges.add(accessPrivilege);
+        }
+        return privileges;
+    }
+
+    private TablePattern getTablePattern(StarRocksParser.TablePatternContext context) {
+        String db;
+        if (context.identifier(0) != null) {
+            db = ((Identifier) visit(context.identifier(0))).getValue();
+        } else {
+            db = "*";
+        }
+        String tbl;
+        if (context.identifier(1) != null) {
+            tbl = ((Identifier) visit(context.identifier(1))).getValue();
+        } else {
+            tbl = "*";
+        }
+        return new TablePattern(db, tbl);
+    }
+
+    private ResourcePattern getResourcePattern(StarRocksParser.ResourcePatternContext context) {
+        String resource;
+        if (context.ASTERISK_SYMBOL() == null) {
+            resource = ((StringLiteral) visit(context.string())).getStringValue();
+        } else {
+            resource = "*";
+        }
+        return new ResourcePattern(resource);
     }
 
     private TableName qualifiedNameToTableName(QualifiedName qualifiedName) {

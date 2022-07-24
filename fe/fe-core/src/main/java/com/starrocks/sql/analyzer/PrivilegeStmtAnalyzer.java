@@ -5,6 +5,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ResourcePattern;
+import com.starrocks.analysis.RevokeStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
@@ -240,6 +241,26 @@ public class PrivilegeStmtAnalyzer {
                 throw new SemanticException("No privileges in grant statement.");
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitRevokePrivilegeStatement(RevokeStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() != null) {
+                analyseUser(stmt.getUserIdent(), session);
+            } else {
+                stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not revoke from role"));
+            }
+
+            if (stmt.getTblPattern() != null) {
+                analyseTablePattern(stmt.getTblPattern(), session);
+            } else {
+                analyseResourcePattern(stmt.getResourcePattern());
+            }
+
+            if (!stmt.hasPrivileges()) {
+                throw new SemanticException("No privileges in revoke statement.");
+            }
             return null;
         }
     }

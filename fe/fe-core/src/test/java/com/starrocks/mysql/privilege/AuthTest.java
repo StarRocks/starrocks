@@ -36,7 +36,6 @@ import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.catalog.DomainResolver;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -533,13 +532,11 @@ public class AuthTest {
          */
 
         // 16. revoke privs from non exist user
-        TablePattern tablePattern = new TablePattern("*", "*");
-        List<AccessPrivilege> privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
-        RevokeStmt revokeStmt = new RevokeStmt(new UserIdentity("nouser", "%"), null, tablePattern, privileges);
-
+        String revokeSql = "REVOKE SELECT_PRIV ON *.* FROM 'nouser'";
+        RevokeStmt revokeStmt = null;
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -554,13 +551,10 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 17. revoke privs from non exist host
-        tablePattern = new TablePattern("*", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
-        revokeStmt = new RevokeStmt(new UserIdentity("cmy", "172.%"), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE SELECT_PRIV ON *.* FROM 'cmy'@'172.%'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -575,13 +569,10 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 18. revoke privs from non exist db
-        tablePattern = new TablePattern("nodb", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.SELECT_PRIV);
-        revokeStmt = new RevokeStmt(new UserIdentity("cmy", "%"), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE SELECT_PRIV ON nodb FROM 'cmy'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -596,13 +587,10 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 19. revoke privs from user @ ip
-        tablePattern = new TablePattern("*", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.CREATE_PRIV);
-        revokeStmt = new RevokeStmt(new UserIdentity("cmy", "%"), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE CREATE_PRIV ON *.* FROM 'cmy'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -624,13 +612,10 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 19. revoke tbl privs from user @ ip
-        tablePattern = new TablePattern("db2", "tbl2");
-        privileges = Lists.newArrayList(AccessPrivilege.ALTER_PRIV);
-        revokeStmt = new RevokeStmt(new UserIdentity("zhangsan", "192.%"), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE ALTER_PRIV ON db2.tbl2 FROM 'zhangsan'@'192.%'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -656,13 +641,10 @@ public class AuthTest {
                 PrivPredicate.SELECT));
 
         // 20. revoke privs from non exist user @ domain
-        tablePattern = new TablePattern("db2", "tbl2");
-        privileges = Lists.newArrayList(AccessPrivilege.ALTER_PRIV);
-        revokeStmt = new RevokeStmt(new UserIdentity("zhangsan", "nodomain", true), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE ALTER_PRIV ON db2.tbl2 FROM 'zhangsan'@['nodomain']";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -677,14 +659,10 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 21. revoke privs from non exist db from user @ domain
-        tablePattern = new TablePattern("nodb", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.ALTER_PRIV);
-        revokeStmt =
-                new RevokeStmt(new UserIdentity("zhangsan", "starrocks.domain1", true), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE ALTER_PRIV ON nodb FROM 'zhangsan'@['starrocks.domain1']";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -699,14 +677,10 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 22. revoke privs from exist user @ domain
-        tablePattern = new TablePattern("db3", "*");
-        privileges = Lists.newArrayList(AccessPrivilege.DROP_PRIV);
-        revokeStmt =
-                new RevokeStmt(new UserIdentity("zhangsan", "starrocks.domain1", true), null, tablePattern, privileges);
-
+        revokeSql = "REVOKE DROP_PRIV ON db3 FROM 'zhangsan'@['starrocks.domain1']";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -865,11 +839,10 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 29. revoke auth on non exist db from role1
-        privileges = Lists.newArrayList(AccessPrivilege.DROP_PRIV);
-        revokeStmt = new RevokeStmt(null, "role1", new TablePattern("nodb", "*"), privileges);
+        revokeSql = "REVOKE DROP_PRIV ON nodb FROM ROLE 'role1'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -884,11 +857,10 @@ public class AuthTest {
         Assert.assertTrue(hasException);
 
         // 30. revoke auth from role1
-        privileges = Lists.newArrayList(AccessPrivilege.DROP_PRIV);
-        revokeStmt = new RevokeStmt(null, "role1", new TablePattern("*", "*"), privileges);
+        revokeSql = "REVOKE DROP_PRIV ON *.* FROM ROLE 'role1'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1114,10 +1086,10 @@ public class AuthTest {
         }
 
         // 38.2 revoke node_priv from user
-        revokeStmt = new RevokeStmt(userIdentity, null, tablePattern, privileges);
+        revokeSql = "REVOKE NODE_PRIV ON *.* FROM 'zhaoliu'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1173,10 +1145,10 @@ public class AuthTest {
         Assert.assertEquals(1, currentUser2.size());
         Assert.assertTrue(auth.checkGlobalPriv(currentUser2.get(0), PrivPredicate.OPERATOR));
 
-        revokeStmt = new RevokeStmt(null, "role3", tablePattern, privileges);
+        revokeSql = "REVOKE NODE_PRIV ON *.* FROM ROLE 'role3'";
         try {
-            revokeStmt.analyze(analyzer);
-        } catch (AnalysisException e) {
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1307,11 +1279,12 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 3. revoke usage_priv on resource 'spark0' from 'testUser'@'%'
-        RevokeStmt revokeStmt = new RevokeStmt(userIdentity, null, resourcePattern, usagePrivileges);
+        String revokeSql = "revoke usage_priv on resource 'spark0' from 'testUser'";
+        RevokeStmt revokeStmt = null;
         try {
-            revokeStmt.analyze(analyzer);
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
             auth.revoke(revokeStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1361,11 +1334,11 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 3. revoke usage_priv on resource 'spark0' from role 'role0'
-        revokeStmt = new RevokeStmt(null, role, resourcePattern, usagePrivileges);
+        revokeSql = "revoke usage_priv on resource 'spark0' from role 'role0'";
         try {
-            revokeStmt.analyze(analyzer);
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
             auth.revoke(revokeStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1415,11 +1388,11 @@ public class AuthTest {
         Assert.assertTrue(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 3. revoke usage_priv on resource '*' from 'testUser'@'%'
-        revokeStmt = new RevokeStmt(userIdentity, null, anyResourcePattern, usagePrivileges);
+        revokeSql = "revoke usage_priv on resource '*' from 'testUser'";
         try {
-            revokeStmt.analyze(analyzer);
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
             auth.revoke(revokeStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1469,11 +1442,11 @@ public class AuthTest {
         Assert.assertTrue(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 3. revoke usage_priv on resource '*' from role 'role0'
-        revokeStmt = new RevokeStmt(null, role, anyResourcePattern, usagePrivileges);
+        revokeSql = "revoke usage_priv on resource '*' from role 'role0'";
         try {
-            revokeStmt.analyze(analyzer);
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
             auth.revoke(revokeStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1567,11 +1540,11 @@ public class AuthTest {
         Assert.assertTrue(auth.checkGlobalPriv(userIdentity, PrivPredicate.OPERATOR));
 
         // 2. revoke node_priv on resource '*' from role 'role0'
-        revokeStmt = new RevokeStmt(null, role, anyResourcePattern, nodePrivileges);
+        revokeSql = "revoke node_priv on resource '*' from role 'role0'";
         try {
-            revokeStmt.analyze(analyzer);
+            revokeStmt = (RevokeStmt) UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
             auth.revoke(revokeStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }

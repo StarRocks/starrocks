@@ -24,15 +24,8 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.Auth.PrivLevel;
 import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
@@ -124,92 +117,6 @@ public class GrantStmt extends DdlStmt {
 
     public boolean hasPrivileges() {
         return !(privileges == null || privileges.isEmpty());
-    }
-
-    /*
-     * Rules:
-     * 1. NODE_PRIV can only be granted/revoked on GLOBAL level
-     * 2. ADMIN_PRIV can only be granted/revoked on GLOBAL level
-     * 3. Privileges can not be granted/revoked to/from ADMIN and OPERATOR role
-     * 4. Only user with GLOBAL level's GRANT_PRIV can grant/revoke privileges to/from roles.
-     * 5.1 User should has GLOBAL level GRANT_PRIV
-     * 5.2 or user has DATABASE/TABLE level GRANT_PRIV if grant/revoke to/from certain database or table.
-     * 5.3 or user should has 'resource' GRANT_PRIV if grant/revoke to/from certain 'resource'
-     */
-    public static void checkPrivileges(Analyzer analyzer, List<Privilege> privileges,
-                                       String role, TablePattern tblPattern) throws AnalysisException {
-        // Rule 1
-        if (tblPattern.getPrivLevel() != PrivLevel.GLOBAL && privileges.contains(Privilege.NODE_PRIV)) {
-            throw new AnalysisException("NODE_PRIV privilege can only be granted on *.*");
-        }
-
-        // Rule 2
-        if (tblPattern.getPrivLevel() != PrivLevel.GLOBAL && privileges.contains(Privilege.ADMIN_PRIV)) {
-            throw new AnalysisException("ADMIN_PRIV privilege can only be granted on *.*");
-        }
-
-        if (role != null) {
-            // Rule 3 and 4
-            if (!GlobalStateMgr.getCurrentState().getAuth()
-                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-        } else {
-            // Rule 5.1 and 5.2
-            if (tblPattern.getPrivLevel() == PrivLevel.GLOBAL) {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                }
-            } else if (tblPattern.getPrivLevel() == PrivLevel.DATABASE) {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkDbPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), PrivPredicate.GRANT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                }
-            } else {
-                // table level
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkTblPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), tblPattern.getTbl(),
-                                PrivPredicate.GRANT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                }
-            }
-        }
-    }
-
-    public static void checkPrivileges(Analyzer analyzer, List<Privilege> privileges,
-                                       String role, ResourcePattern resourcePattern) throws AnalysisException {
-        // Rule 1
-        if (resourcePattern.getPrivLevel() != PrivLevel.GLOBAL && privileges.contains(Privilege.NODE_PRIV)) {
-            throw new AnalysisException("NODE_PRIV privilege can only be granted on resource *");
-        }
-
-        // Rule 2
-        if (resourcePattern.getPrivLevel() != PrivLevel.GLOBAL && privileges.contains(Privilege.ADMIN_PRIV)) {
-            throw new AnalysisException("ADMIN_PRIV privilege can only be granted on resource *");
-        }
-
-        if (role != null) {
-            // Rule 3 and 4
-            if (!GlobalStateMgr.getCurrentState().getAuth()
-                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-        } else {
-            // Rule 5.1 and 5.3
-            if (resourcePattern.getPrivLevel() == PrivLevel.GLOBAL) {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                }
-            } else {
-                if (!GlobalStateMgr.getCurrentState().getAuth()
-                        .checkResourcePriv(ConnectContext.get(), resourcePattern.getResourceName(),
-                                PrivPredicate.GRANT)) {
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-                }
-            }
-        }
     }
 
     @Override
