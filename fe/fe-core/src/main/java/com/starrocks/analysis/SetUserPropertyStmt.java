@@ -17,14 +17,8 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
@@ -58,30 +52,6 @@ public class SetUserPropertyStmt extends DdlStmt {
                     ((SetUserPropertyVar) var).getPropertyValue()));
         }
         return list;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(user)) {
-            // If param 'user' is not set, use the login user name.
-            // The login user name is full-qualified with cluster name.
-            user = ConnectContext.get().getQualifiedUser();
-        } else {
-            // If param 'user' is set, check if it need to be full-qualified
-            if (!user.equals(Auth.ROOT_USER)) {
-                user = ClusterNamespace.getFullName(user);
-            }
-        }
-
-        if (propertyList == null || propertyList.isEmpty()) {
-            throw new AnalysisException("Empty properties");
-        }
-
-        boolean isSelf = user.equals(ConnectContext.get().getQualifiedUser());
-        for (SetVar var : propertyList) {
-            ((SetUserPropertyVar) var).analyze(isSelf);
-        }
     }
 
     @Override
