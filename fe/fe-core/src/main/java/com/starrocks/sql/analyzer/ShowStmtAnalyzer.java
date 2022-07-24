@@ -222,10 +222,21 @@ public class ShowStmtAnalyzer {
             return db;
         }
 
+        // used for remove default_cluster from stmt
+        String getDatabaseName(String db, ConnectContext session) {
+            if (Strings.isNullOrEmpty(db)) {
+                db = session.getDatabase();
+                if (Strings.isNullOrEmpty(db)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            }
+            return db;
+        }
+
         @Override
         public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
             String dbName = node.getDb();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);
             return null;
         }
@@ -233,7 +244,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowDataStmt(ShowDataStmt node, ConnectContext context) {
             String dbName = node.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
             return null;
         }
