@@ -352,10 +352,10 @@ public:
                 auto retentoin = AggregateFactory::MakeRetentionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<RetentionState>(retentoin);
             } else if (name == "window_funnel") {
-                if constexpr (ArgPT == TYPE_INT || ArgPT == TYPE_BIGINT || ArgPT == TYPE_DATE ||
-                              ArgPT == TYPE_DATETIME) {
-                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
-                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<ArgPT>>(
+                if constexpr (arg_type == TYPE_INT || arg_type == TYPE_BIGINT || arg_type == TYPE_DATE ||
+                              arg_type == TYPE_DATETIME) {
+                    auto windowfunnel = AggregateFactory::MakeWindowfunnelAggregateFunction<arg_type>();
+                    return AggregateFactory::MakeNullableAggregateFunctionVariadic<WindowFunnelState<arg_type>>(
                             windowfunnel);
                 }
             }
@@ -365,9 +365,9 @@ public:
             } else if (name == "retention") {
                 return AggregateFactory::MakeRetentionAggregateFunction();
             } else if (name == "window_funnel") {
-                if constexpr (ArgPT == TYPE_INT || ArgPT == TYPE_BIGINT || ArgPT == TYPE_DATE ||
-                              ArgPT == TYPE_DATETIME) {
-                    return AggregateFactory::MakeWindowfunnelAggregateFunction<ArgPT>();
+                if constexpr (arg_type == TYPE_INT || arg_type == TYPE_BIGINT || arg_type == TYPE_DATE ||
+                              arg_type == TYPE_DATETIME) {
+                    return AggregateFactory::MakeWindowfunnelAggregateFunction<arg_type>();
                 }
             }
         }
