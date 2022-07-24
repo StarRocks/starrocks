@@ -9,6 +9,7 @@ import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
@@ -56,17 +57,7 @@ public class BDBEnvironmentTest {
     }
 
     private String findUnbindHostPort() throws Exception {
-        // try to find a port that is not bind
-        String selfNodeHostPort = null;
-        int seed = new Random().nextInt() % 4000;
-        for (int port = 8000 + seed; port != 8100 + seed; port ++) {
-            if(! NetUtils.isPortUsing("127.0.0.1", port)) {
-                selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
-                break;
-            }
-        }
-        Assert.assertNotNull(selfNodeHostPort);
-        return selfNodeHostPort;
+        return "127.0.0.1:" + UtFrameUtils.findValidPort();
     }
 
     private DatabaseEntry randomEntry() {
