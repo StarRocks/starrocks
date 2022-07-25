@@ -32,10 +32,13 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -46,6 +49,8 @@ import java.util.Set;
 // and then replace the formal partitions with these temp partitions
 // to make a overwrite load.
 public class TempPartitions implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(TempPartitions.class);
+
     @SerializedName(value = "idToPartition")
     private Map<Long, Partition> idToPartition = Maps.newHashMap();
     private Map<String, Partition> nameToPartition = Maps.newHashMap();
@@ -66,8 +71,9 @@ public class TempPartitions implements Writable, GsonPostProcessable {
      * Drop temp partitions.
      * If needDropTablet is true, also drop the tablet from tablet inverted index.
      */
-    public void dropPartition(String partitionName, boolean needDropTablet) {
+    public Set<Long> dropPartition(String partitionName, boolean needDropTablet) {
         Partition partition = nameToPartition.get(partitionName);
+        Set<Long> tabletIdSet = new HashSet<Long>();
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
@@ -75,11 +81,19 @@ public class TempPartitions implements Writable, GsonPostProcessable {
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
+                        long tabletId = tablet.getId();
+                        TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                        if (tabletMeta.isLakeTablet()) {
+                            // for debug
+                            LOG.info("tablet {} is lake tablet", tabletId);
+                            tabletIdSet.add(tabletId);
+                        }
                         invertedIndex.deleteTablet(tablet.getId());
                     }
                 }
             }
         }
+        return tabletIdSet;
     }
 
     public Partition getPartition(long partitionId) {

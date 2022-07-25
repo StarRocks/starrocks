@@ -3146,8 +3146,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public void onErasePartition(Partition partition) {
-        localMetastore.onErasePartition(partition);
+    public Set<Long> onErasePartition(Partition partition) {
+        return localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {
