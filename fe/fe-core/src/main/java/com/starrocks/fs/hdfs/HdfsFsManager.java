@@ -848,7 +848,7 @@ public class HdfsFsManager {
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path);
             fileSystem.closeFileSystem();
-            throw new UserException("errors while check if path" + path + "exist");
+            throw new UserException("errors while check if path " + path + " exist");
         }
     }
 

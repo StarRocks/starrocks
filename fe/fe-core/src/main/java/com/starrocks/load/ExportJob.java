@@ -58,6 +58,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
@@ -71,6 +72,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -349,8 +351,12 @@ public class ExportJob implements Writable {
         fragment.setOutputExprs(createOutputExprs());
 
         scanNode.setFragmentId(fragment.getFragmentId());
+        THdfsProperties hdfsProperties = new THdfsProperties();
+        if (!brokerDesc.hasBroker()) {
+            HdfsUtil.getTProperties(exportTempPath, brokerDesc, hdfsProperties);
+        }
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, brokerDesc));
+                rowDelimiter, brokerDesc, hdfsProperties));
         try {
             fragment.finalize(analyzer, false);
         } catch (Exception e) {
@@ -622,7 +628,11 @@ public class ExportJob implements Writable {
 
         // try to remove exported temp files
         try {
-            BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            if (!brokerDesc.hasBroker()) {
+                HdfsUtil.deletePath(exportTempPath, brokerDesc);
+            } else {
+                BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            }
             LOG.info("remove export temp path success, path: {}", exportTempPath);
         } catch (UserException e) {
             LOG.warn("remove export temp path fail, path: {}", exportTempPath);
@@ -630,7 +640,11 @@ public class ExportJob implements Writable {
         // try to remove exported files
         for (String exportedFile : exportedFiles) {
             try {
-                BrokerUtil.deletePath(exportedFile, brokerDesc);
+                if (!brokerDesc.hasBroker()) {
+                    HdfsUtil.deletePath(exportTempPath, brokerDesc);
+                } else {
+                    BrokerUtil.deletePath(exportedFile, brokerDesc);
+                }
                 LOG.info("remove exported file success, path: {}", exportedFile);
             } catch (UserException e) {
                 LOG.warn("remove exported file fail, path: {}", exportedFile);
@@ -649,7 +663,11 @@ public class ExportJob implements Writable {
 
         // try to remove exported temp files
         try {
-            BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            if (!brokerDesc.hasBroker()) {
+                HdfsUtil.deletePath(exportTempPath, brokerDesc);
+            } else {
+                BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            }
             LOG.info("remove export temp path success, path: {}", exportTempPath);
         } catch (UserException e) {
             LOG.warn("remove export temp path fail, path: {}", exportTempPath);
