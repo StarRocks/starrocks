@@ -23,9 +23,8 @@
 
 #include "configbase.h"
 
-namespace starrocks {
-namespace config {
-// cluster id
+namespace starrocks::config {
+// The cluster id.
 CONF_Int32(cluster_id, "-1");
 // port on which ImpalaInternalService is exported
 CONF_Int32(be_port, "9060");
@@ -689,6 +688,13 @@ CONF_Bool(enable_schema_change_v2, "false");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
-} // namespace config
+CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
-} // namespace starrocks
+// A comma-separated list of debug contexts to enable.
+// Producer debug context: broker, topic, msg
+// Consumer debug context: consumer, cgrp, topic, fetch
+// Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
+// admin, eos, mock, assigner, conf
+CONF_String(dependency_librdkafka_debug, "all");
+
+} // namespace starrocks::config
