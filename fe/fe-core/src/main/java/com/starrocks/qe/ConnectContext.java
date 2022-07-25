@@ -23,6 +23,9 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
@@ -124,8 +127,11 @@ public class ConnectContext {
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
     protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
+<<<<<<< HEAD
     // user define variable in this session
     protected HashMap<String, UserVariable> userVariables;
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -290,6 +296,7 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
+<<<<<<< HEAD
     public Set<Long> getCurrentRoleIds() {
         return currentRoleIds;
     }
@@ -298,6 +305,8 @@ public class ConnectContext {
         this.currentRoleIds = roleIds;
     }
 
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
         VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
         if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
@@ -305,6 +314,7 @@ public class ConnectContext {
         }
     }
 
+<<<<<<< HEAD
     public void modifyUserVariable(SetVar setVar) {
         UserVariable userDefineVariable = (UserVariable) setVar;
         if (userVariables.size() > 1024 && !userVariables.containsKey(setVar.getVariable())) {
@@ -313,6 +323,8 @@ public class ConnectContext {
         userVariables.put(setVar.getVariable(), userDefineVariable);
     }
 
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
     public SetStmt getModifiedSessionVariables() {
         if (!modifiedSessionVariables.isEmpty()) {
             return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));

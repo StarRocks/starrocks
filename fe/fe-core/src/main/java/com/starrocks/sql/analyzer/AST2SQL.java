@@ -30,6 +30,14 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.SelectList;
+import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
@@ -92,14 +100,22 @@ public class AST2SQL {
                     sb.append(", ");
                 }
                 // `SET DEFAULT` is not supported
+<<<<<<< HEAD
                 if (!setVar.getType().equals(SetType.DEFAULT)) {
                     sb.append(setVar.getType().toString() + " ");
                 }
                 sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
+=======
+                if (! setVar.getType().equals(SetType.DEFAULT)) {
+                    sb.append(setVar.getType().toString() + " ");
+                }
+                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
                 idx++;
             }
             return sb.toString();
         }
+<<<<<<< HEAD
 
         @Override
         public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
@@ -200,6 +216,8 @@ public class AST2SQL {
             return sb.toString();
         }
 
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
         @Override
         public String visitQueryStatement(QueryStatement stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();

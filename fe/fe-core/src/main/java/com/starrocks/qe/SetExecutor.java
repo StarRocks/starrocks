@@ -75,6 +75,7 @@ public class SetExecutor {
             // do nothing
             return;
         } else {
+<<<<<<< HEAD
             if (var.getType().equals(SetType.USER)) {
                 UserVariable userVariable = (UserVariable) var;
                 if (userVariable.getResolvedExpression() == null) {
@@ -85,6 +86,9 @@ public class SetExecutor {
             } else {
                 ctx.modifySessionVariable(var, false);
             }
+=======
+            ctx.modifySessionVariable(var, false);
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
         }
     }
 

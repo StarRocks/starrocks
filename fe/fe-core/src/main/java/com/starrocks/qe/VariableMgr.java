@@ -553,6 +553,7 @@ public class VariableMgr {
     }
 
     public static boolean shouldForwardToLeader(String name) {
+<<<<<<< HEAD
         VarContext varContext = getVarContext(name);
         if (varContext == null) {
             // DEPRECATED_VARIABLES like enable_cbo don't have flag
@@ -561,6 +562,9 @@ public class VariableMgr {
         } else {
             return (varContext.getFlag() & DISABLE_FORWARD_TO_LEADER) == 0;
         }
+=======
+        return (getVarContext(name).getFlag() & DISABLE_FORWARD_TO_LEADER) == 0;
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
     }
 
     @Retention(RetentionPolicy.RUNTIME)

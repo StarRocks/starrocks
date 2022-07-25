@@ -19,6 +19,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
+<<<<<<< HEAD
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -27,6 +28,14 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
+=======
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SetNamesVar;
+import com.starrocks.analysis.SetPassVar;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -37,12 +46,16 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.thrift.TExplainLevel;
+=======
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -97,7 +110,11 @@ public class SetExecutorTest {
         vars.add(new SetVar("query_timeout", new IntLiteral(10L)));
 
         SetStmt stmt = new SetStmt(vars);
+<<<<<<< HEAD
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+=======
+        stmt.analyze();
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
         SetExecutor executor = new SetExecutor(ctx, stmt);
 
         executor.execute();
@@ -107,7 +124,11 @@ public class SetExecutorTest {
     public void testSetSessionAndGlobal(@Mocked EditLog editLog) throws Exception {
         new Expectations(editLog) {
             {
+<<<<<<< HEAD
                 editLog.logGlobalVariableV2((GlobalVarPersistInfo) any);
+=======
+                editLog.logGlobalVariableV2((GlobalVarPersistInfo)any);
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
                 minTimes = 1;
             }
         };
@@ -127,6 +148,7 @@ public class SetExecutorTest {
         Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
     }
+<<<<<<< HEAD
 
     public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
         String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
@@ -194,4 +216,6 @@ public class SetExecutorTest {
         String sql = String.format("set @var = cast(%s as %s)", json, type.toSql());
         UtFrameUtils.parseStmtWithNewParser(sql, ctx);
     }
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
 }
