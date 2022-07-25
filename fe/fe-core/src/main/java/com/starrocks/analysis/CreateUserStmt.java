@@ -21,11 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.mysql.privilege.Role;
-import com.starrocks.sql.ast.AstVisitor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 
 /*
  * We support the following create user stmts:
@@ -41,38 +38,17 @@ import org.apache.logging.log4j.Logger;
  * 3. create user user@xx [identified by 'password' | identified with auth_plugin [AS | BY auth_string]] role role_name
  *      not only create the specified user, but also grant all privs of the specified role to the user.
  */
-// TODO: CreateUserStmt and AlterUserStmt should share the same parameter and check logic with BaseCreateAlterUserStmt
-public class CreateUserStmt extends DdlStmt {
+public class CreateUserStmt extends BaseCreateAlterUserStmt {
 
     private boolean ifNotExist;
-    private UserIdentity userIdent;
-    private String password;
-    private byte[] scramblePassword;
-    private boolean isPasswordPlain;
-    private String authPlugin;
-    private String authString;
-    private String userForAuthPlugin;
-    private String role;
-
-    public CreateUserStmt() {
-    }
 
     public CreateUserStmt(UserDesc userDesc) {
-        userIdent = userDesc.getUserIdent();
-        password = userDesc.getPassword();
-        isPasswordPlain = userDesc.isPasswordPlain();
-        authPlugin = userDesc.getAuthPlugin();
-        authString = userDesc.getAuthString();
+        super(userDesc, "CREATE");
     }
 
     public CreateUserStmt(boolean ifNotExist, UserDesc userDesc, String role) {
+        super(userDesc, role, "CREATE");
         this.ifNotExist = ifNotExist;
-        this.role = role;
-        userIdent = userDesc.getUserIdent();
-        password = userDesc.getPassword();
-        isPasswordPlain = userDesc.isPasswordPlain();
-        authPlugin = userDesc.getAuthPlugin();
-        authString = userDesc.getAuthString();
     }
 
     public boolean isIfNotExist() {
@@ -81,108 +57,5 @@ public class CreateUserStmt extends DdlStmt {
 
     public boolean isSuperuser() {
         return role.equalsIgnoreCase(Role.ADMIN_ROLE);
-    }
-
-    public boolean hasRole() {
-        return role != null;
-    }
-
-    public String getQualifiedRole() {
-        return role;
-    }
-
-    public byte[] getPassword() {
-        return scramblePassword;
-    }
-
-    public UserIdentity getUserIdent() {
-        return userIdent;
-    }
-
-    public String getAuthPlugin() {
-        return authPlugin;
-    }
-
-    public String getUserForAuthPlugin() {
-        return userForAuthPlugin;
-    }
-
-    public String getOriginalPassword() {
-        return password;
-    }
-
-    public boolean isPasswordPlain() {
-        return isPasswordPlain;
-    }
-
-    public String getAuthString() {
-        return authString;
-    }
-
-    public void setScramblePassword(byte[] scramblePassword) {
-        this.scramblePassword = scramblePassword;
-    }
-
-    public void setAuthPlugin(String authPlugin) {
-        this.authPlugin = authPlugin;
-    }
-
-    public void setUserForAuthPlugin(String userForAuthPlugin) {
-        this.userForAuthPlugin = userForAuthPlugin;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
-
-    @Override
-    public boolean needAuditEncryption() {
-        return true;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE USER ").append(userIdent);
-        if (!Strings.isNullOrEmpty(password)) {
-            if (isPasswordPlain) {
-                sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
-            } else {
-                sb.append(" IDENTIFIED BY PASSWORD '").append(password).append("'");
-            }
-        }
-
-        if (!Strings.isNullOrEmpty(authPlugin)) {
-            sb.append(" IDENTIFIED WITH ").append(authPlugin);
-            if (!Strings.isNullOrEmpty(authString)) {
-                if (isPasswordPlain) {
-                    sb.append(" BY '");
-                } else {
-                    sb.append(" AS '");
-                }
-                sb.append(authString).append("'");
-            }
-        }
-
-        if (!Strings.isNullOrEmpty(role)) {
-            sb.append(" DEFAULT ROLE '").append(role).append("'");
-        }
-
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitCreateUserStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }
