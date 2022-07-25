@@ -712,8 +712,9 @@ public class StmtExecutor {
         List<Expr> outputExprs = execPlan.getOutputExprs();
         int colId = 0;
         for (Expr expr : outputExprs) {
-            if (expr.getType().getPrimitiveType().equals(PrimitiveType.CONVERT_FAILED)) {
-                throw new SemanticException("Column " + colNames.get(colId) + " convert failed!");
+            if (expr.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE)) {
+                throw new SemanticException("Column " + colNames.get(colId) +
+                        " convert failed, and column type is known!");
             }
             colId++;
         }

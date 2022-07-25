@@ -84,7 +84,6 @@ static FieldType t_primitive_type_to_field_type(TPrimitiveType::type primitive_t
     case TPrimitiveType::NULL_TYPE:
     case TPrimitiveType::BINARY:
     case TPrimitiveType::TIME:
-    case TPrimitiveType::CONVERT_FAILED:
         return OLAP_FIELD_TYPE_UNKNOWN;
     case TPrimitiveType::BOOLEAN:
         return OLAP_FIELD_TYPE_BOOL;

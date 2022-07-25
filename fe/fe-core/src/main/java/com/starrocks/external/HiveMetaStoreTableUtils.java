@@ -157,8 +157,8 @@ public class HiveMetaStoreTableUtils {
             case "BOOLEAN":
                 return primitiveType == PrimitiveType.BOOLEAN;
             case "BINARY":
-                // for BINARY type, we transfer it to CONVERT_FAILED
-                return primitiveType == PrimitiveType.CONVERT_FAILED;
+                // for BINARY type, we transfer it to UNKNOWN_TYPE
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
             case "ARRAY":
                 if (!type.isArrayType()) {
                     return false;
@@ -214,7 +214,7 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case "BINARY":
-                primitiveType = PrimitiveType.CONVERT_FAILED;
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
             case "ARRAY":
                 Type type = Utils.convertToArrayType(hiveType);

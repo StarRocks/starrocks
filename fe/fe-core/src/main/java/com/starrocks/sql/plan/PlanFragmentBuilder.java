@@ -661,7 +661,7 @@ public class PlanFragmentBuilder {
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                if (slotDescriptor.getColumn().getPrimitiveType().equals(PrimitiveType.CONVERT_FAILED)) {
+                if (slotDescriptor.getColumn().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE)) {
                     slotDescriptor.setIsMaterialized(false);
                 } else {
                     slotDescriptor.setIsMaterialized(true);

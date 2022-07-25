@@ -43,7 +43,6 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
     switch (ttype) {
     // TODO(mofei) rename these two type
     case TPrimitiveType::INVALID_TYPE:
-    case TPrimitiveType::CONVERT_FAILED:
         return INVALID_TYPE;
     case TPrimitiveType::NULL_TYPE:
         return TYPE_NULL;
