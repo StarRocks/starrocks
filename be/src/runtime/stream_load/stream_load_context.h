@@ -80,6 +80,7 @@ class MessageBodySink;
 
 const std::string TXN_BEGIN = "begin";
 const std::string TXN_COMMIT = "commit";
+const std::string TXN_PREPARE = "prepare";
 const std::string TXN_ROLLBACK = "rollback";
 const std::string TXN_LOAD = "load";
 const std::string TXN_LIST = "list";
@@ -150,6 +151,7 @@ public:
     // only used to check if we receive whole body
     size_t body_bytes = 0;
     size_t receive_bytes = 0;
+    size_t total_receive_bytes = 0;
 
     // when use_streaming is true, we use stream_pipe to send source data,
     // otherwise we save source data to file first, then process it.
@@ -202,6 +204,8 @@ public:
     // max buffer size for JSON format is 4GB.
     static constexpr int64_t kJSONMaxBufferSize = 4294967296;
     ByteBufferPtr buffer = nullptr;
+
+    TStreamLoadPutRequest request;
 
 public:
     ExecEnv* exec_env() { return _exec_env; }
