@@ -21,6 +21,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
@@ -44,8 +45,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,8 +54,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedViewAnalyzer {
-
-    private static final Logger LOG = LoggerFactory.getLogger(MaterializedViewAnalyzer.class);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -411,6 +408,17 @@ public class MaterializedViewAnalyzer {
         public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
                                                           ConnectContext context) {
             statement.getMvName().normalization(context);
+            TableName mvName = statement.getMvName();
+            Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
+            if (db == null) {
+                throw new SemanticException("Can not find database:" + mvName.getDb());
+            }
+            Table table = db.getTable(mvName.getTbl());
+            Preconditions.checkState(table instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) table;
+            if (!mv.isActive()) {
+                throw new SemanticException("Refresh materialized view failed because " + mv.getName() + " is not active.");
+            }
             return null;
         }
 
