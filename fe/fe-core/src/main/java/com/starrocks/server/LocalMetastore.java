@@ -1411,7 +1411,14 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isTempPartition) {
             // for debug
             LOG.info("isTempPartition");
-            olapTable.dropTempPartition(partitionName, true);
+            Set<Long> tabletIdSet = olapTable.dropTempPartition(partitionName, true);
+            if (!tabletIdSet.isEmpty()) {
+                // for debug
+                LOG.info("delete lake tablet : {}", tabletIdSet);
+                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                editLog.logAddUnusedShard(tabletIdSet);
+            }
+
         } else {
             if (!clause.isForceDrop()) {
                 Partition partition = olapTable.getPartition(partitionName);
@@ -1426,7 +1433,13 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
-            olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            Set<Long> tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            if (!tabletIdSet.isEmpty()) {
+                // for debug
+                LOG.info("delete lake tablet : {}", tabletIdSet);
+                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                editLog.logAddUnusedShard(tabletIdSet);
+            }
         }
 
         // log
@@ -4537,7 +4550,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return batchTaskMap;
     }
 
-    public void onErasePartition(Partition partition) {
+    public Set<Long> onErasePartition(Partition partition) {
         // for debug
         LOG.info("enter onErasePartition");
         // remove tablet in inverted index
@@ -4547,7 +4560,7 @@ public class LocalMetastore implements ConnectorMetadata {
             for (Tablet tablet : index.getTablets()) {
                 long tabletId = tablet.getId();
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
-                if (tabletMeta.isLakeTablet()) {
+                if (tabletMeta != null && tabletMeta.isLakeTablet()) {
                     // for debug
                     LOG.info("tablet {} is lake tablet", tabletId);
                     tabletIdSet.add(tabletId);
@@ -4555,12 +4568,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 invertedIndex.deleteTablet(tabletId);
             }
         }
-        if (!tabletIdSet.isEmpty()) {
-            // for debug
-            LOG.info("delete lake tablet : {}", tabletIdSet);
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-            editLog.logAddUnusedShard(tabletIdSet);
-        }
+        return tabletIdSet;
     }
 
     // for test only

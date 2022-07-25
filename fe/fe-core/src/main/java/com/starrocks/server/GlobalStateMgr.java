@@ -3138,8 +3138,8 @@ public class GlobalStateMgr {
         return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
     }
 
-    public void onErasePartition(Partition partition) {
-        localMetastore.onErasePartition(partition);
+    public Set<Long> onErasePartition(Partition partition) {
+        return localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {

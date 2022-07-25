@@ -421,12 +421,19 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
             Partition partition = partitionInfo.getPartition();
             if (partition.getName().equals(partitionName)) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                Set<Long> tabletIdSet = GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
 
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
                         partition.getId(), partitionName);
+
+                if (!tabletIdSet.isEmpty()) {
+                    // for debug
+                    LOG.info("delete lake tablet : {}", tabletIdSet);
+                    GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                    GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIdSet);
+                }
             }
         }
     }
