@@ -163,12 +163,11 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::HIVE;
-    options.array_is_quoted_string = false;
-    options.array_element_delimiter = '_';
+    options.array_hive_collection_delimiter = '_';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false);
+    auto conv = csv::get_converter(t, false, options);
     auto col = ColumnHelper::create_column(t, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "", options));
@@ -202,12 +201,11 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::HIVE;
-    options.array_is_quoted_string = false;
-    options.array_element_delimiter = '_';
+    options.array_hive_collection_delimiter = '_';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false);
+    auto conv = csv::get_converter(t, false, options);
     auto col = ColumnHelper::create_column(t, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "", options));
@@ -233,12 +231,11 @@ TEST(ArrayConverterTest, test_hive_read_string03) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::HIVE;
-    options.array_is_quoted_string = false;
-    options.array_element_delimiter = '_';
+    options.array_hive_collection_delimiter = '_';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = ':';
 
-    auto conv = csv::get_converter(t, false);
+    auto conv = csv::get_converter(t, false, options);
     auto col = ColumnHelper::create_column(t, false);
 
     // [[],[null],["apple",null],["banana","pear"]]
@@ -276,12 +273,11 @@ TEST(ArrayConverterTest, test_hive_read_string04) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::HIVE;
-    options.array_is_quoted_string = false;
-    options.array_element_delimiter = '\002';
+    options.array_hive_collection_delimiter = '\002';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
 
-    auto conv = csv::get_converter(t, false);
+    auto conv = csv::get_converter(t, false, options);
     auto col = ColumnHelper::create_column(t, false);
 
     // [[[null, "smith"]]]
@@ -300,8 +296,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
 
     auto options = Converter::Options();
     options.array_format_type = ArrayFormatType::HIVE;
-    options.array_is_quoted_string = false;
-    options.array_element_delimiter = '\002';
+    options.array_hive_collection_delimiter = '\002';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = ':';
 
@@ -311,7 +306,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.emplace_back(TYPE_ARRAY);
         t.children.back().children.emplace_back(TYPE_TINYINT);
 
-        auto conv = csv::get_converter(t, false);
+        auto conv = csv::get_converter(t, false, options);
         auto col = ColumnHelper::create_column(t, false);
 
         // [[1, 2, 3], [4, 5, 6], null, [7, 8, null]]
@@ -346,7 +341,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.back().children.back().children.emplace_back(TYPE_VARCHAR);
         t.children.back().children.back().children.back().len = 6000;
 
-        auto conv = csv::get_converter(t, false);
+        auto conv = csv::get_converter(t, false, options);
         auto col = ColumnHelper::create_column(t, false);
 
         // [[["null", "a", null], ["a"]], null, null]
@@ -380,7 +375,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.emplace_back(TYPE_VARCHAR);
         t.children.back().len = 5000;
 
-        auto conv = csv::get_converter(t, false);
+        auto conv = csv::get_converter(t, false, options);
         auto col = ColumnHelper::create_column(t, false);
 
         // ["null", "a", null]
@@ -398,7 +393,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
         t.children.emplace_back(TYPE_VARCHAR);
         t.children.back().len = 5000;
 
-        auto conv = csv::get_converter(t, false);
+        auto conv = csv::get_converter(t, false, options);
         auto col = ColumnHelper::create_column(t, false);
 
         // []
