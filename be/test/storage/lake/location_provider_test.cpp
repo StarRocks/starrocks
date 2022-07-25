@@ -45,8 +45,9 @@ TEST_F(StarletLocationProviderTest, test_location) {
 
     std::set<std::string> roots;
     auto st = _provider->list_root_locations(&roots);
-    // TODO
-    ASSERT_TRUE(st.is_not_supported());
+    EXPECT_TRUE(st.ok());
+    // TODO: mock g_worker to inject shard info
+    EXPECT_TRUE(roots.empty());
 }
 
 } // namespace starrocks
