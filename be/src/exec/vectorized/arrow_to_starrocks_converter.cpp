@@ -860,6 +860,14 @@ struct ArrowListConverter {
         }
 
         auto last_arrow_type = list_layers.back()->type();
+        // for timestamp type, state->timezone is specified by user. convert function
+        // obtains timezone from array. thus timezone in array should be rectified to
+        // state->timezone.
+        if (list_layers.back()->type_id() == ArrowTypeId::TIMESTAMP) {
+            auto* timestamp_type = down_cast<arrow::TimestampType*>(last_arrow_type.get());
+            auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+            mutable_timezone = ctx->state->timezone();
+        }
         auto conv_func = get_arrow_converter(last_arrow_type->id(), last_type_desc->type, true, false);
         if (conv_func == nullptr) {
             return illegal_converting_error(last_arrow_type->name(), last_type_desc->debug_string());
