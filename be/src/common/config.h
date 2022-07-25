@@ -23,8 +23,7 @@
 
 #include "configbase.h"
 
-namespace starrocks {
-namespace config {
+namespace starrocks::config {
 // The cluster id.
 CONF_Int32(cluster_id, "-1");
 // The port on which ImpalaInternalService is exported.
@@ -743,11 +742,18 @@ CONF_String(starmgr_addr, "");
 CONF_Int32(starlet_port, "9070");
 #endif
 
-// Enable compression in chunk sending.
+CONF_mBool(dependency_librdkafka_debug_enable, "false");
+
+// A comma-separated list of debug contexts to enable.
+// Producer debug context: broker, topic, msg
+// Consumer debug context: consumer, cgrp, topic, fetch
+// Other debug context: generic, metadata, feature, queue, protocol, security, interceptor, plugin
+// admin, eos, mock, assigner, conf
+CONF_String(dependency_librdkafka_debug, "all");
+
+// Enable compression in table sink.
 // The BE supports compression would get error when communicate with BE dose not support compression.
 // For compatible consideration, we disable it by default.
 CONF_Bool(table_sink_compression_enable, "false");
 
-} // namespace config
-
-} // namespace starrocks
+} // namespace starrocks::config

@@ -822,6 +822,11 @@ public class AggregateTest extends PlanTestBase {
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
+
+        sql =
+                "select L_ORDERKEY,window_funnel(1800, L_LINENUMBER, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 4: L_LINENUMBER, 3, 18: expr)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1549,7 +1554,7 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  16:CROSS JOIN\n" +
+        assertContains(plan, "28:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
         connectContext.getSessionVariable().setCboCteReuse(false);
