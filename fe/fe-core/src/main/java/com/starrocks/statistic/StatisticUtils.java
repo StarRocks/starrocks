@@ -3,6 +3,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -75,23 +76,27 @@ public class StatisticUtils {
 
     public static boolean checkStatisticTableStateNormal() {
         Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+        List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
+                StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
 
         // check database
         if (db == null) {
             return false;
         }
 
-        // check table
-        OlapTable table = (OlapTable) db.getTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
-        if (table == null) {
-            return false;
-        }
-
-        // check replicate miss
-        for (Partition partition : table.getPartitions()) {
-            if (partition.getBaseIndex().getTablets().stream()
-                    .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+        for (String tableName : tableNameList) {
+            // check table
+            OlapTable table = (OlapTable) db.getTable(tableName);
+            if (table == null) {
                 return false;
+            }
+
+            // check replicate miss
+            for (Partition partition : table.getPartitions()) {
+                if (partition.getBaseIndex().getTablets().stream()
+                        .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
+                    return false;
+                }
             }
         }
 
