@@ -38,6 +38,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utility;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.rpc.LakeServiceClient;
@@ -273,7 +274,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
         for (MaterializedIndex index : indexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = choosePublishVersionBackend((LakeTablet) tablet);
+                Long beId = Utility.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     LOG.warn("No available backend can execute publish version task");
                     return false;
@@ -330,20 +331,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
         }
         return finished;
-    }
-
-    // Returns null if no backend available.
-    private Long choosePublishVersionBackend(LakeTablet tablet) {
-        try {
-            return tablet.getPrimaryBackendId();
-        } catch (UserException e) {
-            LOG.info("Fail to get primary backend for tablet {}, choose a random alive backend", tablet.getId());
-        }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds.isEmpty()) {
-            return null;
-        }
-        return backendIds.get(0);
     }
 
     /**

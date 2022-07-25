@@ -2,22 +2,36 @@
 
 package com.starrocks.transaction;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.Utility;
+import com.starrocks.lake.proto.AbortTxnRequest;
+import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.RpcException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TNetworkAddress;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 public class LakeTableTxnStateListener implements TransactionStateListener {
+    private static final Logger LOG = LogManager.getLogger(LakeTableTxnStateListener.class);
     private final DatabaseTransactionMgr dbTxnMgr;
     private final LakeTable table;
 
@@ -90,4 +104,44 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         // nothing to do
     }
 
+    @Override
+    public void postAbort(TransactionState txnState) {
+        Map<Long, List<Long>> tabletGroup;
+        Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
+        if (db == null) {
+            return;
+        }
+
+        db.readLock();
+        try {
+            // Preconditions: has acquired the database's reader or writer lock.
+            tabletGroup = Utility.groupTabletID(table);
+        } catch (NoAliveBackendException e) {
+            LOG.warn(e);
+            return;
+        } finally {
+            db.readUnlock();
+        }
+
+        for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            if (backend == null) {
+                // It's ok to skip sending abort transaction request.
+                continue;
+            }
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.txnIds = Lists.newArrayList();
+            request.txnIds.add(txnState.getTransactionId());
+            request.tabletIds = entry.getValue();
+
+            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
+            LakeServiceClient client = new LakeServiceClient(address);
+            try {
+                // Does not care about the response.
+                client.abortTxn(request);
+            } catch (RpcException e) {
+                LOG.error(e);
+            }
+        }
+    }
 }
