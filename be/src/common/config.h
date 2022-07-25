@@ -746,7 +746,7 @@ CONF_Int32(starlet_port, "9070");
 // Enable compression in chunk sending.
 // The BE supports compression would get error when communicate with BE dose not support compression.
 // For compatible consideration, we disable it by default.
-CONF_Bool(enable_sending_chunk_compression, "false");
+CONF_Bool(table_sink_compression_enable, "false");
 
 } // namespace config
 

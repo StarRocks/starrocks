@@ -236,7 +236,7 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
     }
 
     // try compress the ChunkPB data
-    if (config::enable_sending_chunk_compression && _compress_codec != nullptr && uncompressed_size > 0) {
+    if (config::table_sink_compression_enable && _compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_parent->_compress_timer);
 
         // Try compressing data to _compression_scratch, swap if compressed data is smaller
