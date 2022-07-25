@@ -283,7 +283,9 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
                 filtered_rows -= include_num;
             }
         }
-        COUNTER_UPDATE(_sort_filter_rows, filtered_rows);
+        if (_sort_filter_rows) {
+            COUNTER_UPDATE(_sort_filter_rows, filtered_rows);
+        }
     }
 
     return _partial_sort_col_wise(state, permutations, segments);
