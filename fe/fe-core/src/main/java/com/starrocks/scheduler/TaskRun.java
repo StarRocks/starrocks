@@ -87,14 +87,12 @@ public class TaskRun {
         newCtx.setCurrentUserIdentity(ctx.getCurrentUserIdentity());
         newCtx.getState().reset();
         newCtx.setQueryId(UUID.fromString(status.getQueryId()));
-        SessionVariable sessionVariable = (SessionVariable) ctx.getSessionVariable().clone();
+        newCtx.resetSessionVariable();
         if (properties != null) {
             for (String key : properties.keySet()) {
-                VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))),
-                        true);
+                newCtx.modifySessionVariable(new SetVar(key, new StringLiteral(properties.get(key))), true);
             }
         }
-        newCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(newCtx);
         taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
         processor.processTaskRun(taskRunContext);
