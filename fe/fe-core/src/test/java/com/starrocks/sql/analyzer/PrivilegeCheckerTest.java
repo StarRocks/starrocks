@@ -568,13 +568,32 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testRefreshMaterializedView() throws Exception {
+        Config.enable_experimental_mv = true;
+        starRocksAssert.withDatabase("db_mv").useDatabase("db_mv")
+                .withTable("CREATE TABLE db_mv.tbl_with_mv\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("default_cluster:db_mv");
 
-        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        TablePattern db1TablePattern = new TablePattern("db_mv", "*");
         db1TablePattern.analyze();
 
         String sql = "refresh materialized view mv1;";
@@ -872,6 +891,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testAnalyzeStatement() throws Exception {
+        starRocksAssert.useDatabase("db1");
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze();
