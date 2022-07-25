@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
 
 public abstract class Predicate extends Expr {
     protected boolean isEqJoinConjunct;
@@ -37,19 +36,7 @@ public abstract class Predicate extends Expr {
         isEqJoinConjunct = other.isEqJoinConjunct;
     }
 
-    public void setIsEqJoinConjunct(boolean v) {
-        isEqJoinConjunct = v;
-    }
-
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    /**
-     * If predicate is of the form "<slotref> = <slotref>", returns both SlotRefs,
-     * otherwise returns null.
-     */
-    public Pair<SlotId, SlotId> getEqSlots() {
-        return null;
     }
 }

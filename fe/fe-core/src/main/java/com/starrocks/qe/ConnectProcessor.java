@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.QueryStmt;
@@ -31,7 +32,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -85,8 +85,15 @@ public class ConnectProcessor {
     private void handleInitDb() {
         String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         try {
-            ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
-        } catch (DdlException e) {
+            String[] parts = identifier.trim().split("\\s+");
+            if (parts.length == 2) {
+                Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
+                        "You might want to use \"USE 'CATALOG <catalog_name>'\"");
+                ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+            } else {
+                ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
+            }
+        } catch (Exception e) {
             ctx.getState().setError(e.getMessage());
             return;
         }
@@ -561,6 +568,11 @@ public class ConnectProcessor {
 
         StmtExecutor executor = null;
         try {
+            // set session variables first
+            if (request.isSetModified_variables_sql()) {
+                LOG.info("Set session variables first: {}", request.modified_variables_sql);
+                new StmtExecutor(ctx, new OriginStatement(request.modified_variables_sql, 0), true).execute();
+            }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
             executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);

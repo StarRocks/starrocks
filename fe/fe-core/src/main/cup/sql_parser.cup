@@ -735,10 +735,6 @@ alter_stmt ::=
     {:
         RESULT = new AlterSystemStmt(clause);
     :}
-    | KW_ALTER KW_USER grant_user:user
-    {:
-        RESULT = new AlterUserStmt(user);
-    :}
     | KW_ALTER KW_ROUTINE KW_LOAD KW_FOR job_label:jobLabel
       opt_load_property_list:loadPropertyList
       opt_properties:jobProperties
@@ -2136,11 +2132,6 @@ show_param ::=
     {:
         RESULT = new ShowVariablesStmt(type, parser.wild, parser.where);
     :}
-    /* show open tables */
-    | KW_OPEN KW_TABLES opt_db:db opt_wild_where
-    {:
-        RESULT = new ShowOpenTableStmt();
-    :}
     /* show table status */
     | KW_TABLE KW_STATUS opt_db:db opt_wild_where
     {:
@@ -2155,16 +2146,6 @@ show_param ::=
     | KW_MATERIALIZED KW_VIEW opt_db:db
     {:
         RESULT = new ShowMaterializedViewStmt(db);
-    :}
-    /* routine */
-    | procedure_or_function KW_STATUS opt_wild_where
-    {:
-        RESULT = new ShowProcedureStmt();
-    :}
-    /* status */
-    | opt_var_type KW_STATUS opt_wild_where
-    {:
-        RESULT = new ShowStatusStmt();
     :}
     /* triggers */
     | opt_full KW_TRIGGERS opt_db:db opt_wild_where
@@ -2200,11 +2181,6 @@ show_param ::=
     {:
         RESULT = new ShowDbStmt(parser.wild, parser.where);
     :}
-    /* Dynamic Partition */
-    | KW_DYNAMIC KW_PARTITION KW_TABLES opt_db:db
-    {:
-        RESULT = new ShowDynamicPartitionStmt(db);
-    :}
     /* Columns */
     | opt_full KW_COLUMNS from_or_in table_name:table opt_db:db opt_wild_where
     {:
@@ -2214,11 +2190,6 @@ show_param ::=
     | KW_COLLATION opt_wild_where
     {:
         RESULT = new ShowCollationStmt(parser.wild);
-    :}
-    /* Show charset */
-    | charset opt_wild_where
-    {:
-        RESULT = new ShowCharsetStmt(parser.wild);
     :}
     /* Show Warnings */
     | KW_COUNT LPAREN STAR RPAREN KW_WARNINGS
@@ -2259,10 +2230,6 @@ show_param ::=
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
         RESULT = new ShowExportStmt(db, parser.where, orderByClause, limitClause);
-    :}
-    | KW_PROPERTY opt_user:user opt_wild_where
-    {:
-        RESULT = new ShowUserPropertyStmt(user, parser.wild);
     :}
     | KW_BACKUP opt_db:db
     {:
@@ -2877,32 +2844,12 @@ restore_stmt ::=
     :}
     ;
 
-// Kill statement
-kill_stmt ::=
-    KW_KILL INTEGER_LITERAL:value
-    {:
-        RESULT = new KillStmt(true, value.longValue());
-    :}
-    | KW_KILL KW_CONNECTION INTEGER_LITERAL:value
-    {:
-        RESULT = new KillStmt(true, value.longValue());
-    :}
-    | KW_KILL KW_QUERY INTEGER_LITERAL:value
-    {:
-        RESULT = new KillStmt(false, value.longValue());
-    :}
-    ;
-
 // TODO(zhaochun): stolen from MySQL. Why not use value list, maybe avoid shift/reduce conflict
 // Set statement
 set_stmt ::=
     KW_SET start_option_value_list:list
     {:
         RESULT = new SetStmt(list);
-    :}
-    | KW_SET KW_PROPERTY opt_user:user user_property_list:property_list
-    {:
-        RESULT = new SetUserPropertyStmt(user, property_list);
     :}
     ;
 

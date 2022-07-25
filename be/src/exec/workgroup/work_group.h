@@ -272,10 +272,14 @@ public:
     void update_metrics();
 
 private:
+    using MutexType = std::shared_mutex;
+    using UniqueLockType = std::unique_lock<MutexType>;
+    using SharedLockType = std::shared_lock<MutexType>;
+
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
     // WorkGroupManager::_mutex is held when invoking these method.
-    void create_workgroup_unlocked(const WorkGroupPtr& wg);
-    void alter_workgroup_unlocked(const WorkGroupPtr& wg);
+    void create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueLockType& lock);
+    void alter_workgroup_unlocked(const WorkGroupPtr& wg, UniqueLockType& lock);
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
 
     // Label each executor thread to a specific workgroup by cpu limit.
@@ -306,7 +310,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
 
-    void add_metrics_unlocked(const WorkGroupPtr& wg);
+    void add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock);
     void update_metrics_unlocked();
 };
 

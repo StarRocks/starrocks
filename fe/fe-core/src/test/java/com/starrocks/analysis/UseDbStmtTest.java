@@ -19,7 +19,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class UseStmtTest {
+public class UseDbStmtTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext ctx;
 

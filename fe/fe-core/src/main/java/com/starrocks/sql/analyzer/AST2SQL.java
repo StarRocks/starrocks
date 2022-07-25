@@ -31,6 +31,9 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SysVariableDesc;
@@ -66,6 +69,24 @@ public class AST2SQL {
     }
 
     public static class SQLBuilder extends AstVisitor<String, Void> {
+        @Override
+        public String visitSetStatement(SetStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("SET ");
+            int idx = 0;
+            for (SetVar setVar : stmt.getSetVars()) {
+                if (idx != 0) {
+                    sb.append(", ");
+                }
+                // `SET DEFAULT` is not supported
+                if (! setVar.getType().equals(SetType.DEFAULT)) {
+                    sb.append(setVar.getType().toString() + " ");
+                }
+                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
+                idx++;
+            }
+            return sb.toString();
+        }
         @Override
         public String visitQueryStatement(QueryStatement stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();

@@ -372,7 +372,6 @@ public class Analyzer {
 
         @Override
         public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext context) {
-            RecoverDbAnalyzer.analyze(statement, context);
             return null;
         }
 
