@@ -47,7 +47,7 @@ public:
         // TODO: user configurable.
         bool bool_alpha = true;
 
-        // HERE used to control array parse format.
+        // Here used to control array parse format.
         // Considering Hive array format is different from traditional array format,
         // so here we provide some variables to customize array format, and you can
         // also add variables to customize array format in the future.
@@ -56,12 +56,9 @@ public:
         // Default array format like: [[1,2], [3, 4]]
         // Hive array format like: 1^C2^B3^4
         ArrayFormatType array_format_type = ArrayFormatType::DEFAULT;
-        // In Hive nested array, string is not quoted, you should set false here if you want
-        // to parse Hive array format.
-        bool array_is_quoted_string = true;
-        // Control array's element delimiter.
-        // element_delimiter equals to collection_delimiter in Hive.
-        char array_element_delimiter = ',';
+        // [Only used in Hive now!]
+        // Control hive array's element delimiter.
+        char array_hive_collection_delimiter = '\002';
         // [Only used in Hive now!]
         // mapkey_delimiter is the separator between key and value in map.
         // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter
@@ -102,7 +99,8 @@ protected:
     }
 };
 
-std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable);
+std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable,
+                                         const Converter::Options& options = Converter::Options());
 
 } // namespace csv
 } // namespace starrocks::vectorized

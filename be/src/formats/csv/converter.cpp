@@ -16,7 +16,8 @@
 
 namespace starrocks::vectorized::csv {
 
-static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
+static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t, const Converter::Options& options) {
+    Converter::Options sub_options;
     switch (t.type) {
     case TYPE_BOOLEAN:
         return std::make_unique<BooleanConverter>();
@@ -44,7 +45,11 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
     case TYPE_ARRAY:
-        return std::make_unique<ArrayConverter>(get_converter(t.children[0], true));
+        sub_options = options;
+        if (sub_options.array_format_type == ArrayFormatType::HIVE) {
+            sub_options.array_hive_nested_level++;
+        }
+        return std::make_unique<ArrayConverter>(get_converter(t.children[0], true, sub_options), options);
     case TYPE_DECIMAL32:
         return std::make_unique<DecimalV3Converter<int32_t>>(t.precision, t.scale);
     case TYPE_DECIMAL64:
@@ -67,8 +72,9 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     return nullptr;
 }
 
-std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable) {
-    auto c = get_converter(type_desc);
+std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable,
+                                         const Converter::Options& options) {
+    auto c = get_converter(type_desc, options);
     if (c == nullptr) {
         return nullptr;
     }
