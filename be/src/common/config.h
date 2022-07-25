@@ -751,4 +751,9 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 // admin, eos, mock, assigner, conf
 CONF_String(dependency_librdkafka_debug, "all");
 
+// Enable compression in table sink.
+// The BE supports compression would get error when communicate with BE dose not support compression.
+// For compatible consideration, we disable it by default.
+CONF_Bool(table_sink_compression_enable, "false");
+
 } // namespace starrocks::config
