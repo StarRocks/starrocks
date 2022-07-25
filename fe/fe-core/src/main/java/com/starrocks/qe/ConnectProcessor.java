@@ -304,7 +304,7 @@ public class ConnectProcessor {
 
                 // Only add the last running stmt for multi statement,
                 // because the audit log will only show the last stmt and
-                if (i == stmts.size() -1) {
+                if (i == stmts.size() - 1) {
                     addRunningQueryDetail(parsedStmt);
                 }
 
