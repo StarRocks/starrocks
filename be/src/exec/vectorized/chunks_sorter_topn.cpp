@@ -95,7 +95,7 @@ Status ChunksSorterTopn::done(RuntimeState* state) {
 }
 
 Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
-    ScopedTimer<MonotonicStopWatch> timer(_output_timer);
+    SCOPED_TIMER(_output_timer);
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
         *eos = true;
@@ -149,7 +149,7 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
 
 Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& permutation_second,
                                              DataSegments& segments) {
-    ScopedTimer<MonotonicStopWatch> timer(_build_timer);
+    SCOPED_TIMER(_build_timer);
 
     size_t row_count = _raw_chunks.size_of_rows;
     auto& raw_chunks = _raw_chunks.chunks;
@@ -246,11 +246,11 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
         // so we can only use the index of `0` as the left boundary to filter the coming input chunks into two parts, `SMALLER_THAN_MIN_OF_SEGMENT` and `INCLUDE_IN_SEGMENT`
 
         if (_merged_segment.chunk->num_rows() >= rows_to_sort) {
-            ScopedTimer<MonotonicStopWatch> timer(_sort_filter_timer);
+            SCOPED_TIMER(_sort_filter_timer);
             RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, rows_to_sort, filter_array, _sort_order_flag,
                                                              _null_first_flag, smaller_num, include_num));
         } else {
-            ScopedTimer<MonotonicStopWatch> timer(_sort_filter_timer);
+            SCOPED_TIMER(_sort_filter_timer);
             RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, 1, filter_array, _sort_order_flag,
                                                              _null_first_flag, smaller_num, include_num));
         }
@@ -261,7 +261,7 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
         }
 
         {
-            ScopedTimer<MonotonicStopWatch> timer(_build_timer);
+            SCOPED_TIMER(_build_timer);
             permutations.first.resize(smaller_num);
             // `SMALLER_THAN_MIN_OF_SEGMENT` part is enough, so we ignore the `INCLUDE_IN_SEGMENT` part.
             if (smaller_num >= rows_to_sort) {
@@ -294,7 +294,7 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
 Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
                                                 DataSegments& segments) {
     const size_t rows_to_sort = _get_number_of_rows_to_sort();
-    ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
+    SCOPED_TIMER(_sort_timer);
 
     std::vector<Columns> vertical_chunks;
     for (auto& segment : segments) {
@@ -325,7 +325,7 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
 Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
                                                             std::pair<Permutation, Permutation>& new_permutation,
                                                             DataSegments& segments) {
-    ScopedTimer<MonotonicStopWatch> timer(_merge_timer);
+    SCOPED_TIMER(_merge_timer);
 
     if (_init_merged_segment) {
         RETURN_IF_ERROR(_hybrid_sort_common(state, new_permutation, segments));
