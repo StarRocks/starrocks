@@ -131,7 +131,8 @@ public class HiveMetaStoreTableUtils {
 
     public static Type convertColumnType(String hiveType) throws DdlException {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
-        PrimitiveType primitiveType;
+        PrimitiveType primitiveType = null;
+        Type type = null;
         switch (typeUpperCase) {
             case "TINYINT":
                 primitiveType = PrimitiveType.TINYINT;
@@ -174,15 +175,15 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case "ARRAY":
-                Type type = Utils.convertToArrayType(hiveType);
-                if (type.isArrayType()) {
-                    return type;
-                }
+                type = Utils.convertToArrayType(hiveType);
+                break;
             default:
                 throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
         }
 
-        if (primitiveType != PrimitiveType.DECIMAL32) {
+        if (type != null && type.isArrayType()) {
+            return type;
+        } else if (primitiveType != PrimitiveType.DECIMAL32) {
             return ScalarType.createType(primitiveType);
         } else {
             int[] parts = Utils.getPrecisionAndScale(hiveType);

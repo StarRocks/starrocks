@@ -210,9 +210,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     private void refreshTableCache(Map<String, Column> nameToColumn) throws DdlException {
-        HiveMetaStoreTableInfo hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
+        HiveMetaStoreTableInfo refreshHmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
                 partColumnNames, new ArrayList<>(nameToColumn.keySet()), nameToColumn, TableType.HIVE);
-        hiveRepository.refreshTableCache(hmsTableInfo);
+        hiveRepository.refreshTableCache(refreshHmsTableInfo);
     }
 
     public boolean isRefreshColumn(Map<String, FieldSchema> updatedTableSchema) throws DdlException {
@@ -220,12 +220,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (!needRefreshColumn) {
             for (Column column : nameToColumn.values()) {
                 FieldSchema fieldSchema = updatedTableSchema.get(column.getName());
-                if (fieldSchema == null) {
-                    needRefreshColumn = true;
-                    break;
-                }
                 Type type = convertColumnType(fieldSchema.getType());
-                if (!type.equals(column.getType())) {
+                if ((fieldSchema == null) || (!type.equals(column.getType()))) {
                     needRefreshColumn = true;
                     break;
                 }
@@ -262,15 +258,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         db.readLock();
         try {
-            Table hiveTable = db.getTable(tableName);
-            if (hiveTable == null) {
+            Table modifiedHiveTable = db.getTable(tableName);
+            if (modifiedHiveTable == null) {
                 throw new DdlException("Not found table " + dbName + "." + tableName);
             }
-            ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-            Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
         } finally {
             db.readUnlock();
         }
+
+        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+        Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
     }
 
     @Override

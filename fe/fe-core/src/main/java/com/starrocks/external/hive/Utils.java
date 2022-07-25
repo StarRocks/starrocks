@@ -27,7 +27,7 @@ public class Utils {
 
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";
-    public static final String CHAR_PATTERN = "^char\\(([0-9,-1]+)\\)";
+    public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
@@ -159,7 +159,7 @@ public class Utils {
     public static int[] getPrecisionAndScale(String typeStr) throws DdlException {
         Matcher matcher = Pattern.compile(DECIMAL_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
-            return new int[]{Integer.parseInt(matcher.group(1), Integer.parseInt(matcher.group(2)))};
+            return new int[]{Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
         }
         throw new DdlException("Failed to get precision and scale at " + typeStr);
     }
