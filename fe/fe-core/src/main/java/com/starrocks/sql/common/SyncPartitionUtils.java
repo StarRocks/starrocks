@@ -33,6 +33,18 @@ import java.util.stream.Collectors;
  * only support SlotRef and FunctionCallExpr
  */
 public class SyncPartitionUtils {
+
+    public static final String MINUTE = "minute";
+    public static final String HOUR = "hour";
+    public static final String DAY = "day";
+    public static final String MONTH = "month";
+    public static final String QUARTER = "quarter";
+    public static final String YEAR = "year";
+
+    private SyncPartitionUtils() throws IllegalAccessException {
+        throw new IllegalAccessException("Utility class");
+    }
+
     private static final String DEFAULT_PREFIX = "p";
 
     public static PartitionDiff calcSyncSamePartition(Map<String, Range<PartitionKey>> baseRangeMap,
@@ -165,22 +177,22 @@ public class SyncPartitionUtils {
     public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
                                             String granularity) {
         switch (granularity) {
-            case "minute":
+            case MINUTE:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MINUTE_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.MINUTE_FORMATTER);
-            case "hour":
+            case HOUR:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.HOUR_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.HOUR_FORMATTER);
-            case "day":
+            case DAY:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.DATEKEY_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.DATEKEY_FORMATTER);
-            case "month":
+            case MONTH:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.MONTH_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.MONTH_FORMATTER);
-            case "quarter":
+            case QUARTER:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.QUARTER_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.QUARTER_FORMATTER);
-            case "year":
+            case YEAR:
                 return DEFAULT_PREFIX + lowerDateTime.format(DateUtils.YEAR_FORMATTER) +
                         "_" + upperDateTime.format(DateUtils.YEAR_FORMATTER);
             default:
@@ -193,35 +205,35 @@ public class SyncPartitionUtils {
     private static LocalDateTime getUpperDateTime(LocalDateTime upperDateTime, String granularity) {
         LocalDateTime truncUpperDateTime;
         switch (granularity) {
-            case "minute":
+            case MINUTE:
                 if (upperDateTime.withNano(0).withSecond(0).equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
                     truncUpperDateTime = upperDateTime.plusMinutes(1).withNano(0).withSecond(0);
                 }
                 break;
-            case "hour":
+            case HOUR:
                 if (upperDateTime.withNano(0).withSecond(0).withMinute(0).equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
                     truncUpperDateTime = upperDateTime.plusHours(1).withNano(0).withSecond(0).withMinute(0);
                 }
                 break;
-            case "day":
+            case DAY:
                 if (upperDateTime.with(LocalTime.MIN).equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
                     truncUpperDateTime = upperDateTime.plusDays(1).with(LocalTime.MIN);
                 }
                 break;
-            case "month":
+            case MONTH:
                 if (upperDateTime.with(TemporalAdjusters.firstDayOfMonth()).equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
                     truncUpperDateTime = upperDateTime.plusMonths(1).with(TemporalAdjusters.firstDayOfMonth());
                 }
                 break;
-            case "quarter":
+            case QUARTER:
                 if (upperDateTime.with(upperDateTime.getMonth().firstMonthOfQuarter())
                         .with(TemporalAdjusters.firstDayOfMonth()).equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
@@ -231,7 +243,7 @@ public class SyncPartitionUtils {
                             .with(TemporalAdjusters.firstDayOfMonth());
                 }
                 break;
-            case "year":
+            case YEAR:
                 if (upperDateTime.with(TemporalAdjusters.firstDayOfYear()).equals(upperDateTime)) {
                     truncUpperDateTime = upperDateTime;
                 } else {
@@ -247,23 +259,23 @@ public class SyncPartitionUtils {
     private static LocalDateTime getLowerDateTime(LocalDateTime lowerDateTime, String granularity) {
         LocalDateTime truncLowerDateTime;
         switch (granularity) {
-            case "minute":
+            case MINUTE:
                 truncLowerDateTime = lowerDateTime.withNano(0).withSecond(0);
                 break;
-            case "hour":
+            case HOUR:
                 truncLowerDateTime = lowerDateTime.withNano(0).withSecond(0).withMinute(0);
                 break;
-            case "day":
+            case DAY:
                 truncLowerDateTime = lowerDateTime.with(LocalTime.MIN);
                 break;
-            case "month":
+            case MONTH:
                 truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfMonth());
                 break;
-            case "quarter":
+            case QUARTER:
                 truncLowerDateTime = lowerDateTime.with(lowerDateTime.getMonth().firstMonthOfQuarter())
                         .with(TemporalAdjusters.firstDayOfMonth());
                 break;
-            case "year":
+            case YEAR:
                 truncLowerDateTime = lowerDateTime.with(TemporalAdjusters.firstDayOfYear());
                 break;
             default:
