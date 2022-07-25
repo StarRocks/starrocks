@@ -118,7 +118,23 @@ public class BDBEnvironmentTest {
     private File[] followerPaths = new File[2];
     private String[] followerNames = new String[2];
 
+
     private void initClusterMasterFollower() throws Exception {
+        for (int i = 0; i != 3; ++ i) {
+            // might fail on high load, will sleep and retry
+            try {
+                initClusterMasterFollowerNoRetry();
+                return;
+            } catch (Exception e) {
+                // sleep 5 ~ 15 seconds
+                int sleepSeconds = new Random().nextInt() % 10 + 5;
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
+                Thread.sleep(sleepSeconds * 1000L);
+            }
+        }
+
+    }
+    private void initClusterMasterFollowerNoRetry() throws Exception {
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();
