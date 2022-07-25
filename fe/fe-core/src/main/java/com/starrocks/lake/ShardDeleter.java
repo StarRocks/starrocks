@@ -103,8 +103,6 @@ public class ShardDeleter extends LeaderDaemon {
         }
 
         // 3. succ both, remove from the map
-        // for debug
-        LOG.info("delete shard {} succ", deletedShards);
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
             shardIds.removeAll(deletedShards);
         }
