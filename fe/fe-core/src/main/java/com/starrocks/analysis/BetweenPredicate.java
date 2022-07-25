@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
@@ -54,10 +53,6 @@ public class BetweenPredicate extends Predicate {
 
     public boolean isNotBetween() {
         return isNotBetween;
-    }
-
-    @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     @Override

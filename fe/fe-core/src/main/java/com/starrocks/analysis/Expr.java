@@ -45,8 +45,6 @@ import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -62,8 +60,6 @@ import java.util.Map;
  * Root of the expr node hierarchy.
  */
 abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
-    private static final Logger LOG = LogManager.getLogger(Expr.class);
-
     // Name of the function that needs to be implemented by every Expr that
     // supports negation.
     private static final String NEGATE_FN = "negate";
@@ -315,19 +311,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return childTypes;
     }
 
-    public List<Expr> getChildrenWithoutCast() {
-        List<Expr> result = new ArrayList<>();
-        for (int i = 0; i < children.size(); ++i) {
-            if (children.get(i) instanceof CastExpr) {
-                CastExpr castExpr = (CastExpr) children.get(i);
-                result.add(castExpr.getChild(0));
-            } else {
-                result.add(children.get(i));
-            }
-        }
-        return result;
-    }
-
     public static List<TExpr> treesToThrift(List<? extends Expr> exprs) {
         List<TExpr> result = Lists.newArrayList();
         for (Expr expr : exprs) {
@@ -450,37 +433,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         }
 
         return result;
-    }
-
-    /**
-     * Compute the intersection of l1 and l2, given the smap, and
-     * return the intersecting l1 elements in i1 and the intersecting l2 elements in i2.
-     *
-     * @throws AnalysisException
-     */
-    public static void intersect(Analyzer analyzer,
-                                 List<Expr> l1, List<Expr> l2, ExprSubstitutionMap smap,
-                                 List<Expr> i1, List<Expr> i2) throws AnalysisException {
-        i1.clear();
-        i2.clear();
-        List<Expr> s1List = Expr.trySubstituteList(l1, smap, analyzer, false);
-        Preconditions.checkState(s1List.size() == l1.size());
-        List<Expr> s2List = Expr.trySubstituteList(l2, smap, analyzer, false);
-        Preconditions.checkState(s2List.size() == l2.size());
-
-        for (int i = 0; i < s1List.size(); ++i) {
-            Expr s1 = s1List.get(i);
-
-            for (int j = 0; j < s2List.size(); ++j) {
-                Expr s2 = s2List.get(j);
-
-                if (s1.equals(s2)) {
-                    i1.add(l1.get(i));
-                    i2.add(l2.get(j));
-                    break;
-                }
-            }
-        }
     }
 
     /**
@@ -880,6 +832,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * Return 'this' with all sub-exprs substituted according to
      * sMap. Ids of 'this' and its children are retained.
      */
+    @Deprecated
     public Expr substitute(ExprSubstitutionMap sMap) {
         Preconditions.checkNotNull(sMap);
         for (int i = 0; i < sMap.getLhs().size(); ++i) {
@@ -895,13 +848,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             children.set(i, children.get(i).substitute(sMap));
         }
         return this;
-    }
-
-    /**
-     * Returns true if expr is fully bound by tid, otherwise false.
-     */
-    public boolean isBound(TupleId tid) {
-        return isBoundByTupleIds(Lists.newArrayList(tid));
     }
 
     /**
@@ -994,23 +940,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Whether the expr itself is nullable
     public boolean isNullable() {
         return true;
-    }
-
-    /**
-     * Checks whether this expr returns a boolean type or NULL type.
-     * If not, throws an AnalysisException with an appropriate error message using
-     * 'name' as a prefix. For example, 'name' could be "WHERE clause".
-     * The error message only contains this.toSql() if printExpr is true.
-     */
-    public void checkReturnsBool(String name, boolean printExpr) throws AnalysisException {
-        if (!type.isBoolean() && !type.isNull()) {
-            if (this instanceof BoolLiteral) {
-                return;
-            }
-            throw new AnalysisException(
-                    String.format("%s%s requires return type 'BOOLEAN'. " + "Actual type is '%s'.", name,
-                            (printExpr) ? " '" + toSql() + "'" : "", type.toString()));
-        }
     }
 
     /**
@@ -1174,44 +1103,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public boolean isImplicitCast() {
         return this instanceof CastExpr && ((CastExpr) this).isImplicit();
-    }
-
-    public boolean contains(Expr expr) {
-        if (this.equals(expr)) {
-            return true;
-        }
-
-        for (Expr child : getChildren()) {
-            if (child.contains(expr)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public boolean contains(List<Expr> exprs) {
-        if (exprs.isEmpty()) {
-            return false;
-        }
-        for (Expr expr : exprs) {
-            if (contains(expr)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public Expr findEqual(List<Expr> exprs) {
-        if (exprs.isEmpty()) {
-            return null;
-        }
-        for (Expr expr : exprs) {
-            if (contains(expr)) {
-                return expr;
-            }
-        }
-        return null;
     }
 
     /**
@@ -1411,26 +1302,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // If one expr implement write/readFields, must override this function
     public boolean supportSerializable() {
         return false;
-    }
-
-    /**
-     * Determine the common supertype of a list of input expressions.
-     *
-     * @param exprs is a *nonempty* list of expressions.
-     * @return the common super type of the input expressions.
-     * @throws AnalysisException if no such common supertype exists.
-     */
-    public static Type findCommonType(List<Expr> exprs) throws AnalysisException {
-        Type commonType = exprs.get(0).getType();
-        for (int i = 1; i < exprs.size(); i++) {
-            Type nextType = Type.getCommonType(commonType, exprs.get(i).getType());
-            if (nextType.isInvalid()) {
-                throw new AnalysisException("types " + commonType + " and " + exprs.get(i).getType()
-                        + " cannot be matched");
-            }
-            commonType = nextType;
-        }
-        return commonType;
     }
 
     /**
