@@ -2,6 +2,7 @@
 
 package com.starrocks.external;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
@@ -25,7 +26,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
@@ -111,22 +111,11 @@ public class HiveMetaStoreTableUtils {
         return numRows;
     }
 
-    public static Map<String, FieldSchema> getAllHiveColumns(Table table) {
-        List<FieldSchema> unPartHiveColumns = table.getSd().getCols();
+    public static List<FieldSchema> getAllHiveColumns(Table table) {
+        ImmutableList.Builder<FieldSchema> allColumns = ImmutableList.builder();
+        List<FieldSchema> unHivePartColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
-                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
-        for (FieldSchema hiveColumn : partHiveColumns) {
-            allHiveColumns.put(hiveColumn.getName(), hiveColumn);
-        }
-        return allHiveColumns;
-    }
-
-    public static List<FieldSchema> getAllColumns(Table table) {
-        List<FieldSchema> allColumns = table.getSd().getCols();
-        List<FieldSchema> partHiveColumns = table.getPartitionKeys();
-        allColumns.addAll(partHiveColumns);
-        return allColumns;
+        return allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
     }
 
     public static Type convertColumnType(String hiveType) throws DdlException {

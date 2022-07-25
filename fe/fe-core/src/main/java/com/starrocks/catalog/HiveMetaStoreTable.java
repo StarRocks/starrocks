@@ -30,7 +30,4 @@ public interface HiveMetaStoreTable {
 
     void refreshTableColumnStats() throws DdlException;
 
-    default void modifyTableSchema(String dbName, String tableName) throws DdlException {
-
-    }
 }

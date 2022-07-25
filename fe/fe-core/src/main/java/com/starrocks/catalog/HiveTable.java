@@ -23,6 +23,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -189,15 +191,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         org.apache.hadoop.hive.metastore.api.Table table;
         try {
             table = hiveRepository.getTable(resourceName, this.hiveDb, this.hiveTable);
-            Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
+            List<FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
             boolean needRefreshColumn = isRefreshColumn(updatedTableSchemas);
 
             if (!needRefreshColumn) {
                 refreshTableCache(nameToColumn);
             } else {
-                refreshSchemaCache(table.getSd().getCols(), HiveMetaStoreTableUtils.getAllColumns(table));
+                modifyTableSchema(dbName, tableName, table.getSd().getCols(), updatedTableSchemas);
                 refreshTableCache(nameToColumn);
-                modifyTableSchema(dbName, tableName);
                 this.hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, hiveDb, hiveTable,
                         partColumnNames, dataColumnNames, nameToColumn, type);
             }
@@ -215,11 +216,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         hiveRepository.refreshTableCache(refreshHmsTableInfo);
     }
 
-    public boolean isRefreshColumn(Map<String, FieldSchema> updatedTableSchema) throws DdlException {
-        boolean needRefreshColumn = updatedTableSchema.size() != nameToColumn.size();
+    public boolean isRefreshColumn(List<FieldSchema> tableSchemas) throws DdlException {
+        Map<String, FieldSchema> updatedTableSchemas = tableSchemas.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
+        boolean needRefreshColumn = updatedTableSchemas.size() != nameToColumn.size();
         if (!needRefreshColumn) {
             for (Column column : nameToColumn.values()) {
-                FieldSchema fieldSchema = updatedTableSchema.get(column.getName());
+                FieldSchema fieldSchema = updatedTableSchemas.get(column.getName());
                 if (fieldSchema == null) {
                     needRefreshColumn = true;
                     break;
@@ -234,40 +237,42 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return needRefreshColumn;
     }
 
-    private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, List<FieldSchema> allHiveCols)
+    private void modifyTableSchema(String dbName, String tableName,
+                                   List<FieldSchema> unpartHiveCols, List<FieldSchema> allHiveColumns)
         throws DdlException {
-        fullSchema.clear();
-        nameToColumn.clear();
-        for (FieldSchema fieldSchema : allHiveCols) {
+        ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
+        ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
+        ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
+
+        // TODO: Column type conversion should not throw an exception, use invalidate type instead.
+        for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
-            fullSchema.add(column);
-            nameToColumn.put(column.getName(), column);
+            fullSchemaTemp.add(column);
+            nameToColumnTemp.put(column.getName(), column);
         }
 
-        dataColumnNames.clear();
-        for (FieldSchema s : unpartHiveCols) {
-            this.dataColumnNames.add(s.getName());
-        }
-    }
-
-    @Override
-    public void modifyTableSchema(String dbName, String tableName) throws DdlException {
-        if (!Catalog.getCurrentCatalog().isMaster()) {
-            return;
-        }
+        unpartHiveCols.forEach(fieldSchema -> dataColumnNamesTemp.add(fieldSchema.getName()));
         Database db = Catalog.getCurrentCatalog().getDb(dbName);
         if (db == null) {
             throw new DdlException("Not found database " + dbName);
         }
-        db.readLock();
+        db.writeLock();
         try {
-            Table modifiedHiveTable = db.getTable(tableName);
-            if (modifiedHiveTable == null) {
-                throw new DdlException("Not found table " + dbName + "." + tableName);
+            fullSchema.clear();
+            nameToColumn.clear();
+            dataColumnNames.clear();
+
+            fullSchema.addAll(fullSchemaTemp.build());
+            nameToColumn.putAll(nameToColumnTemp.build());
+            dataColumnNames.addAll(dataColumnNamesTemp.build());
+
+            if (Catalog.getCurrentCatalog().isMaster()) {
+                ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+                Catalog.getCurrentCatalog().getEditLog().logModifyTableColumn(log);
             }
         } finally {
-            db.readUnlock();
+            db.writeUnlock();
         }
 
         ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
@@ -362,7 +367,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
         List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()
+        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable).stream()
                 .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
         for (FieldSchema hiveColumn : partHiveColumns) {
             allHiveColumns.put(hiveColumn.getName(), hiveColumn);
