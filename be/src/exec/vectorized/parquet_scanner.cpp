@@ -160,7 +160,7 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
     if (pt == TYPE_ARRAY) {
         (*column) = ColumnHelper::create_column(type_desc, slot_desc->is_nullable());
         *expr = _pool.add(new ColumnRef(slot_desc));
-        return Status::InternalError(strings::Substitute("ARRAY type($0) is not supported", slot_desc->col_name()));
+        return Status::OK();
     }
 
     auto optimized_conv_func = get_arrow_converter(at, pt, slot_desc->is_nullable(), _strict_mode);
@@ -243,13 +243,10 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
         data_column = column.get();
     }
     if (type_desc->type == TYPE_ARRAY) {
-        // TODO: (by satanson)
-        //  ArrayColumn support is very complex and need more time to test well,
-        //  it will be devoted into in some next version.
-        //auto list_conv_func = get_arrow_list_converter();
-        //return list_conv_func(array, _batch_start_idx, num_elements, 16, type_desc, data_column,
-        //                      _chunk_start_idx, null_data);
-        return illegal_converting_error(array->type()->name(), type_desc->debug_string());
+        // only base types are supported, nested types are not supported
+        auto list_conv_func = get_arrow_list_converter();
+        return list_conv_func(array, _batch_start_idx, num_elements, 1 /* non nested */, type_desc, data_column,
+                              _chunk_start_idx, null_data, &_conv_ctx);
     } else {
         auto* filter_data = (&_chunk_filter.front()) + _chunk_start_idx;
         return conv_func(array, _batch_start_idx, num_elements, data_column, _chunk_start_idx, null_data, filter_data,
