@@ -108,7 +108,7 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 
 - [Ingestion and export](../faq/loading/Loading_faq.md)
 - [Deployment](../faq/Deploy_faq.md)
-- [SQL](../faq/Sql_fa.md)
+- [SQL](../faq/Sql_faq.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
