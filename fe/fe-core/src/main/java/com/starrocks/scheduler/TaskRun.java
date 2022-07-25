@@ -7,8 +7,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,6 +76,7 @@ public class TaskRun {
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
+<<<<<<< HEAD
         // copy a ConnectContext to avoid concurrency leading to abnormal results.
         ConnectContext newCtx = new ConnectContext();
         newCtx.setCluster(ctx.getClusterName());
@@ -97,6 +96,30 @@ public class TaskRun {
         newCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(newCtx);
         taskRunContext.setRemoteIp(ctx.getMysqlChannel().getRemoteHostPortString());
+=======
+        runCtx = new ConnectContext(null);
+        runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        runCtx.setDatabase(task.getDbName());
+        runCtx.setQualifiedUser(status.getUser());
+        runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
+        runCtx.getState().reset();
+        runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+        Map<String, String> taskRunContextProperties = Maps.newHashMap();
+        runCtx.resetSessionVariable();
+        if (properties != null) {
+            for (String key : properties.keySet()) {
+                try {
+                    runCtx.modifySessionVariable(new SetVar(key, new StringLiteral(properties.get(key))), true);
+                } catch (DdlException e) {
+                    // not session variable
+                    taskRunContextProperties.put(key, properties.get(key));
+                }
+            }
+        }
+        taskRunContext.setCtx(runCtx);
+        taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
+        taskRunContext.setProperties(taskRunContextProperties);
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
         processor.processTaskRun(taskRunContext);
         QueryState queryState = newCtx.getState();
         if (newCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {

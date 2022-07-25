@@ -54,7 +54,7 @@ public class SetExecutor {
             // do nothing
             return;
         } else {
-            VariableMgr.setVar(ctx.getSessionVariable(), var, false);
+            ctx.modifySessionVariable(var, false);
         }
     }
 
@@ -75,6 +75,10 @@ public class SetExecutor {
         }
     }
 
+    /**
+     * This method is only called after a set statement is forward to the leader.
+     * In this case, the follower should change this session variable as well.
+     */
     public void setSessionVars() throws DdlException {
         for (SetVar var : stmt.getSetVars()) {
             if (isSessionVar(var)) {
