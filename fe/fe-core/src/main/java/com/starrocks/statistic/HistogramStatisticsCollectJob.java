@@ -13,8 +13,9 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
-            "SELECT $tableId, '$columnName', '$dbName.$tableName', histogram($columnName, $bucketNum, $sampleRatio, $topN )"
-                    + " FROM (SELECT * FROM $dbName.$tableName $sampleTabletHint ORDER BY $columnName LIMIT $totalRows) t";
+            "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName'," +
+                    " histogram($columnName, $bucketNum, $sampleRatio, $topN), NOW()" +
+                    " FROM (SELECT * FROM $dbName.$tableName $sampleTabletHint ORDER BY $columnName LIMIT $totalRows) t";
 
     public HistogramStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
                                          StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
@@ -46,6 +47,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
         context.put("columnName", columnName);
+        context.put("dbId", database.getId());
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
 
