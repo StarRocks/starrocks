@@ -743,6 +743,11 @@ CONF_String(starmgr_addr, "");
 CONF_Int32(starlet_port, "9070");
 #endif
 
+// Enable compression in chunk sending.
+// The BE supports compression would get error when communicate with BE dose not support compression.
+// For compatible consideration, we disable it by default.
+CONF_Bool(enable_sending_chunk_compression, "false");
+
 } // namespace config
 
 } // namespace starrocks
