@@ -38,10 +38,13 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<Histogram>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
+    private static DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     @Override
-    public @NonNull CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
-                                                                     @NonNull Executor executor) {
+    public @NonNull
+    CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
+                                                     @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 List<TStatisticData> statisticData =
@@ -129,13 +132,13 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             double low;
             double high;
             if (type.isDate()) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd");
-                low = (double) getLongFromDateTime(LocalDate.parse(bucketJsonArray.get(0).getAsString(), dtf).atStartOfDay());
-                high = (double) getLongFromDateTime(LocalDate.parse(bucketJsonArray.get(1).getAsString(), dtf).atStartOfDay());
+                low = (double) getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
+                high = (double) getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(1).getAsString(), dateFormatter).atStartOfDay());
             } else if (type.isDatetime()) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-                low = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dtf));
-                high = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(1).getAsString(), dtf));
+                low = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
+                high = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(1).getAsString(), dateTimeFormatter));
             } else {
                 low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
                 high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
@@ -159,11 +162,10 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
             double key;
             if (type.isDate()) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd");
-                key = (double) getLongFromDateTime(LocalDate.parse(bucketJsonArray.get(0).getAsString(), dtf).atStartOfDay());
+                key = (double) getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
             } else if (type.isDatetime()) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-                key = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dtf));
+                key = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
             } else {
                 key = Double.parseDouble(bucketJsonArray.get(0).getAsString());
             }
