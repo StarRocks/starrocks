@@ -330,7 +330,11 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitUseStatement(UseStmt statement, C context) {
+    public R visitUseDbStatement(UseDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
