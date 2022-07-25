@@ -36,7 +36,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -400,9 +399,8 @@ public class OlapScanNode extends ScanNode {
                 (System.currentTimeMillis() - start), selectedPartitionIds);
     }
 
-    public void selectBestRollupByRollupSelector(Analyzer analyzer) throws UserException {
+    public void selectBestRollupByRollupSelector() {
         selectedIndexId = olapTable.getBaseIndexId();
-        LOG.debug("The best index will be selected later in mv selector");
     }
 
     private void getScanRangeLocations() throws UserException {
