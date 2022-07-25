@@ -127,6 +127,7 @@ import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
@@ -853,7 +854,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
     }
-
+    
     @Override
     public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
         Map<String, String> properties = null;
@@ -899,7 +900,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
-
+    
+    @Override
+    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext  context) {
+        return new ShowOpenTableStmt();
+    }
     // ------------------------------------------- View Statement ------------------------------------------------------
 
     @Override
