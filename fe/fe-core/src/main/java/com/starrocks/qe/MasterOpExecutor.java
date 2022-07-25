@@ -29,6 +29,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -134,7 +135,12 @@ public class MasterOpExecutor {
         params.setQuery_options(queryOptions);
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
-        LOG.info("Forward statement {} to Master {}", ctx.getStmtId(), thriftAddress);
+        // forward all session variables
+        SetStmt setStmt = ctx.getModifiedSessionVariables();
+        if (setStmt != null) {
+            params.setModified_variables_sql(AST2SQL.toString(setStmt));
+        }
+        LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
         result = FrontendServiceProxy.call(thriftAddress,
                 thriftTimeoutMs,

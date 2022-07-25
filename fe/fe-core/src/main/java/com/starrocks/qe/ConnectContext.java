@@ -23,9 +23,13 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -39,7 +43,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -98,6 +105,8 @@ public class ConnectContext {
     protected volatile MysqlSerializer serializer;
     // Variables belong to this session.
     protected volatile SessionVariable sessionVariable;
+    // all the modified session variables, will forward to leader
+    protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
     // Scheduler this connection belongs to
     protected volatile ConnectScheduler connectScheduler;
     // Executor
@@ -255,6 +264,20 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
+    public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
+        VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
+        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+            modifiedSessionVariables.put(setVar.getVariable(), setVar);
+        }
+    }
+
+    public SetStmt getModifiedSessionVariables() {
+        if (!modifiedSessionVariables.isEmpty()) {
+            return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
+        }
+        return null;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
@@ -264,6 +287,7 @@ public class ConnectContext {
         String resourceGroup = this.sessionVariable.getResourceGroup();
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.sessionVariable.setResourceGroup(resourceGroup);
+        modifiedSessionVariables.clear();
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {
