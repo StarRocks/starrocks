@@ -155,7 +155,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 // we do not allow finishing stream load pipe without data.
                 //
                 // But if the offset have already moved, such as the control msg,
-                // we need to commit and tell fe to move offset to the newest offset, otherwise, fe we retry consume.
+                // we need to commit and tell fe to move offset to the newest offset, otherwise, fe will retry consume.
                 for (auto& item : cmt_offset) {
                     if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
                         kafka_pipe->finish();
