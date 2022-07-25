@@ -10,6 +10,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -24,6 +26,8 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 
 public class StatisticSQLBuilder {
+    private static final Logger LOG = LogManager.getLogger(StatisticSQLBuilder.class);
+
     private static final String QUERY_SAMPLE_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), update_time, db_id, table_id, column_name,"
                     + " row_count, data_size, distinct_count, null_count, max, min"
@@ -97,6 +101,14 @@ public class StatisticSQLBuilder {
         List<Type> colTypes = Lists.newArrayList();
         for (String colName : columnNames) {
             Column column = table.getColumn(colName);
+
+            if (column == null) {
+                LOG.warn("column name not invalid " + colName +
+                        "tableType " +table.getType() +
+                        "tableId " + tableId
+                );
+            }
+
             colTypes.add(column.getType());
         }
 
