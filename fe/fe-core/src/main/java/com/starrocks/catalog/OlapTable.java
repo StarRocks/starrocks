@@ -1535,7 +1535,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 return false;
             }
             // calculate key size
-            keyLength += column.getPrimitiveType().getSlotSize();
+            keyLength += column.getPrimitiveType().getOlapColumnIndexSize();
         }
         if (keyLength > 64) {
             LOG.warn("Primary key size of primaryKey table using persistent index should be no more than 64Bytes");
