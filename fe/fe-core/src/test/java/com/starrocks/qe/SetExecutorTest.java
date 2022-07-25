@@ -23,6 +23,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SetNamesVar;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -33,6 +34,10 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -87,7 +92,11 @@ public class SetExecutorTest {
         vars.add(new SetVar("query_timeout", new IntLiteral(10L)));
 
         SetStmt stmt = new SetStmt(vars);
+<<<<<<< HEAD
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+=======
+        stmt.analyze();
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
         SetExecutor executor = new SetExecutor(ctx, stmt);
 
         executor.execute();

@@ -119,8 +119,11 @@ public class ConnectContext {
     protected SessionVariable sessionVariable;
     // all the modified session variables, will forward to leader
     protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
+<<<<<<< HEAD
     // user define variable in this session
     protected HashMap<String, UserVariable> userVariables;
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -278,6 +281,7 @@ public class ConnectContext {
         }
     }
 
+<<<<<<< HEAD
     public void modifyUserVariable(SetVar setVar) {
         UserVariable userDefineVariable = (UserVariable) setVar;
         if (userVariables.size() > 1024 && !userVariables.containsKey(setVar.getVariable())) {
@@ -286,6 +290,8 @@ public class ConnectContext {
         userVariables.put(setVar.getVariable(), userDefineVariable);
     }
 
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
     public SetStmt getModifiedSessionVariables() {
         if (!modifiedSessionVariables.isEmpty()) {
             return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));

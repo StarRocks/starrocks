@@ -79,15 +79,25 @@ public class AST2SQL {
                     sb.append(", ");
                 }
                 // `SET DEFAULT` is not supported
+<<<<<<< HEAD
                 if (!setVar.getType().equals(SetType.DEFAULT)) {
                     sb.append(setVar.getType().toString() + " ");
                 }
                 sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
+=======
+                if (! setVar.getType().equals(SetType.DEFAULT)) {
+                    sb.append(setVar.getType().toString() + " ");
+                }
+                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
                 idx++;
             }
             return sb.toString();
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> f5e68fbfb ([BugFix] When forwarding SQL to leader, forward all modified session variable as well (#8966))
         @Override
         public String visitQueryStatement(QueryStatement stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
