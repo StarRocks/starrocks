@@ -173,10 +173,10 @@ public class MvTaskRunProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p0, p0 insert data after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        Map<Long, OlapTable> olapTables = Maps.newHashMap();
         new MockUp<MvTaskRunProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
-                Map<Long, OlapTable> olapTables = Maps.newHashMap();
                 Set<Long> baseTableIds = materializedView.getBaseTableIds();
                 database.readLock();
                 try {
@@ -194,12 +194,12 @@ public class MvTaskRunProcessorTest {
                 } finally {
                     database.readUnlock();
                 }
-                setPartitionVersion(tbl1.getPartition("p0"), 3);
+                setPartitionVersion(olapTables.get(tbl1.getId()).getPartition("p0"), 2);
                 return olapTables;
             }
         };
         // change partition and replica versions
-        setPartitionVersion(tbl1.getPartition("p0"), 2);
+        setPartitionVersion(tbl1.getPartition("p0"), 3);
         taskRun.executeTaskRun();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();

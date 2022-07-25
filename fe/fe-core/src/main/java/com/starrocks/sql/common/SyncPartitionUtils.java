@@ -46,16 +46,19 @@ public class SyncPartitionUtils {
 
     public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
                                                         Map<String, Range<PartitionKey>> mvRangeMap,
-                                                        String granularity) {
-        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity);
+                                                        String granularity, PrimitiveType partitionType) {
+        Map<String, Range<PartitionKey>> rollupRange = mappingRangeList(baseRangeMap, granularity, partitionType);
+        Map<String, Set<String>> partitionRefMap = generatePartitionRefMap(rollupRange, baseRangeMap);
         Map<String, Range<PartitionKey>> adds = diffRange(rollupRange, mvRangeMap);
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, rollupRange);
-        return new PartitionDiff(adds, deletes);
+        PartitionDiff diff = new PartitionDiff(adds, deletes);
+        diff.setRollupToBasePartitionMap(partitionRefMap);
+        return diff;
 
     }
 
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                              String granularity) {
+                                                              String granularity, PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
         for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
             PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), granularity);
@@ -73,12 +76,15 @@ public class SyncPartitionUtils {
             try {
                 PartitionKey lowerPartitionKey = new PartitionKey();
                 LocalDateTime lowerDateTime = timePointList.get(i - 1);
-                lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime,
-                        Type.DATETIME), PrimitiveType.DATETIME);
                 LocalDateTime upperDateTime = timePointList.get(i);
                 PartitionKey upperPartitionKey = new PartitionKey();
-                upperPartitionKey.pushColumn(new DateLiteral(upperDateTime,
-                        Type.DATETIME), PrimitiveType.DATETIME);
+                if (partitionType == PrimitiveType.DATE) {
+                    lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime, Type.DATE), partitionType);
+                    upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, Type.DATE), partitionType);
+                } else {
+                    lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime, Type.DATETIME), partitionType);
+                    upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, Type.DATETIME), partitionType);
+                }
                 String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime, granularity);
                 result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
             } catch (AnalysisException ex) {

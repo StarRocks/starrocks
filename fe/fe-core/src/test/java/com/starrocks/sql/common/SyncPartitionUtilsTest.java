@@ -9,6 +9,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
@@ -303,7 +304,8 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-05-04", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "month");
+        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+                "month", PrimitiveType.DATETIME);
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
 
@@ -328,7 +330,8 @@ public class SyncPartitionUtilsTest {
 
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "day");
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+                "day", PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
 
@@ -346,7 +349,8 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p2", createRange("2020-10-12", "2020-11-12"));
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
-        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, granularity);
+        PartitionDiff diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+                granularity, PrimitiveType.DATETIME);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -372,7 +376,8 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, granularity);
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+                granularity, PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
@@ -391,7 +396,8 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "month");
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+                "month", PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
@@ -410,7 +416,8 @@ public class SyncPartitionUtilsTest {
         baseRange.put("p20200503", createRange("2020-05-03", "2020-06-05"));
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
-        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange, "month");
+        diff = SyncPartitionUtils.calcSyncRollupPartition(baseRange, mvRange,
+                "month", PrimitiveType.DATETIME);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(2, adds.size());

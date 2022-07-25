@@ -273,11 +273,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .keySet();
     }
 
-    public Set<String> getExistBasePartitionNames(long baseTableId) {
-        return this.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
-                .computeIfAbsent(baseTableId, k -> Maps.newHashMap()).keySet();
-    }
-
     public Set<String> getNeedRefreshPartitionNames(OlapTable base) {
         Map<String, BasePartitionInfo> baseTableVisibleVersionMap = getRefreshScheme()
                 .getAsyncRefreshContext()
@@ -287,11 +282,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Set<String> result = Sets.newHashSet();
         for (Map.Entry<String, BasePartitionInfo> versionEntry : baseTableVisibleVersionMap.entrySet()) {
             String basePartitionName = versionEntry.getKey();
-            Partition baseTablePartition = base.getPartition(basePartitionName);
+            Partition basePartition = base.getPartition(basePartitionName);
+            if (basePartition == null) {
+                result.addAll(base.getPartitionNames());
+                return result;
+            }
             BasePartitionInfo basePartitionInfo = versionEntry.getValue();
             if (basePartitionInfo == null
-                    || basePartitionInfo.getId() != baseTablePartition.getId()
-                    || baseTablePartition.getVisibleVersion() > basePartitionInfo.getVersion()) {
+                    || basePartitionInfo.getId() != basePartition.getId()
+                    || basePartition.getVisibleVersion() > basePartitionInfo.getVersion()) {
                 result.add(basePartitionName);
             }
         }

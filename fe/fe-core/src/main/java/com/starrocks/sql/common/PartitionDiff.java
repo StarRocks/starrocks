@@ -7,10 +7,13 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 
 import java.util.Map;
+import java.util.Set;
 
 public class PartitionDiff {
 
     Map<String, Range<PartitionKey>> adds = Maps.newHashMap();
+
+    Map<String, Set<String>> rollupToBasePartitionMap = Maps.newHashMap();
 
     Map<String, Range<PartitionKey>> deletes = Maps.newHashMap();
 
@@ -20,6 +23,14 @@ public class PartitionDiff {
     public PartitionDiff(Map<String, Range<PartitionKey>> adds, Map<String, Range<PartitionKey>> deletes) {
         this.adds = adds;
         this.deletes = deletes;
+    }
+
+    public Map<String, Set<String>> getRollupToBasePartitionMap() {
+        return rollupToBasePartitionMap;
+    }
+
+    public void setRollupToBasePartitionMap(Map<String, Set<String>> rollupToBasePartitionMap) {
+        this.rollupToBasePartitionMap = rollupToBasePartitionMap;
     }
 
     public Map<String, Range<PartitionKey>> getAdds() {

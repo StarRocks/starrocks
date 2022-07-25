@@ -318,6 +318,7 @@ public class CreateMaterializedViewTest {
         Collection<Partition> mvPartitions = materializedView.getPartitions();
         Assert.assertEquals(2, mvPartitions.size());
         Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+
         // add partition p3
         String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
         new StmtExecutor(connectContext, addPartitionSql).execute();
@@ -325,6 +326,7 @@ public class CreateMaterializedViewTest {
         waitingTaskFinish();
         Assert.assertEquals(3, baseTablePartitions.size());
         Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+
         // delete partition p3
         String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
         new StmtExecutor(connectContext, dropPartitionSql).execute();
