@@ -39,11 +39,6 @@ namespace starrocks::vectorized {
        << " to " << type_to_string(TOTYPE) << " failed";                  \
     throw std::runtime_error(ss.str())
 
-#define THROW_RUNTIME_ERROR_WITH_TYPE_AND_VALUE(TYPE, VALUE)           \
-    std::stringstream ss;                                              \
-    ss << VALUE << " conflict with range of " << type_to_string(TYPE); \
-    throw std::runtime_error(ss.str())
-
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_fn(ColumnPtr& column);
 
@@ -317,7 +312,6 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
     auto result = (value < (Type)std::numeric_limits<ResultType>::lowest()) |
                   (value > (Type)std::numeric_limits<ResultType>::max());
     if (result) {
-        //THROW_RUNTIME_ERROR_WITH_TYPE_AND_VALUE(ResultType, value);
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {
             ss << LargeIntValue::to_string(value) << " conflict with range of "
