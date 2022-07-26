@@ -214,6 +214,9 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case "BINARY":
+            case "MAP":
+            case "STRUCT":
+            case "UNIONTYPE":
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
             case "ARRAY":
