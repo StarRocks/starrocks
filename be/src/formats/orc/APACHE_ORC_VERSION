@@ -1,12 +1,4 @@
-Merge:
+Merge Status:
 github: https://github.com/apache/orc
-commit: 6b69228f52f13e33f0bdb35a84dd9902b7a969f9
-date: 2022-03-02
-
-Merge process is following:
-1. fork repo https://github.com/dirtysalt/apache-orc. The main purpose of this repository is to trace apache/orc.
-2. Merge apache/orc under dirtysalt/apache-orc, and run `run-all.sh`(to normalize cpp/header files)
-3. run 'apply-patch.sh` to apply before patch to current apache/orc old.
-3. Merge StarRocks/orc with StarRocks/be/src/formats/orc code with `copyto-starrocks.sh`
-4. After the merge is complete, you can verify it with `run-test.sh`
-5. After everything is OK, run `gen-patch.sh` under `dirtysalt/apache-orc`
+PRs: https://github.com/apache/orc/commits/main/c%2B%2B
+date: 2022-07-13 https://github.com/apache/orc/commit/df8ed032440114ca63e4d4fd4a0d3e222a15757f

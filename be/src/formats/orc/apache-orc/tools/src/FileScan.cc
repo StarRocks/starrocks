@@ -16,19 +16,16 @@
  * limitations under the License.
  */
 
-#include <getopt.h>
-
 #include <iostream>
-#include <memory>
-#include <string>
 
-#include "orc/ColumnPrinter.hh"
-#include "orc/Exceptions.hh"
+#include "ToolsHelper.hh"
 
-void scanFile(std::ostream& out, const char* filename, uint64_t batchSize) {
+void scanFile(std::ostream& out, const char* filename, uint64_t batchSize, const orc::RowReaderOptions& rowReaderOpts,
+              bool showMetrics) {
     orc::ReaderOptions readerOpts;
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readFile(filename), readerOpts);
-    std::unique_ptr<orc::RowReader> rowReader = reader->createRowReader();
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readFile(filename, readerOpts.getReaderMetrics()), readerOpts);
+    std::unique_ptr<orc::RowReader> rowReader = reader->createRowReader(rowReaderOpts);
     std::unique_ptr<orc::ColumnVectorBatch> batch = rowReader->createRowBatch(batchSize);
 
     unsigned long rows = 0;
@@ -39,48 +36,28 @@ void scanFile(std::ostream& out, const char* filename, uint64_t batchSize) {
     }
     out << "Rows: " << rows << std::endl;
     out << "Batches: " << batches << std::endl;
+    if (showMetrics) {
+        printReaderMetrics(out, reader->getReaderMetrics());
+    }
 }
 
 int main(int argc, char* argv[]) {
-    static struct option longOptions[] = {{"help", no_argument, ORC_NULLPTR, 'h'},
-                                          {"batch", required_argument, ORC_NULLPTR, 'b'},
-                                          {ORC_NULLPTR, 0, ORC_NULLPTR, 0}};
-    bool helpFlag = false;
     uint64_t batchSize = 1024;
-    int opt;
-    char* tail;
-    do {
-        opt = getopt_long(argc, argv, "hb:", longOptions, ORC_NULLPTR);
-        switch (opt) {
-        case '?':
-        case 'h':
-            helpFlag = true;
-            opt = -1;
-            break;
-        case 'b':
-            batchSize = strtoul(optarg, &tail, 10);
-            if (*tail != '\0') {
-                fprintf(stderr, "The --batch parameter requires an integer option.\n");
-                return 1;
-            }
-            break;
-        }
-    } while (opt != -1);
-    argc -= optind;
-    argv += optind;
-
-    if (argc < 1 || helpFlag) {
-        std::cerr << "Usage: orc-scan [-h] [--help]\n"
-                  << "                [-b<size>] [--batch=<size>] <filename>\n";
+    bool showMetrics = false;
+    orc::RowReaderOptions rowReaderOptions;
+    bool success = parseOptions(&argc, &argv, &batchSize, &rowReaderOptions, &showMetrics);
+    if (argc < 1 || !success) {
+        std::cerr << "Usage: orc-scan [options] <filename>...\n";
+        printOptions(std::cerr);
+        std::cerr << "Scans and displays the row count of the ORC files.\n";
         return 1;
-    } else {
-        for (int i = 0; i < argc; ++i) {
-            try {
-                scanFile(std::cout, argv[i], batchSize);
-            } catch (std::exception& ex) {
-                std::cerr << "Caught exception in " << argv[i] << ": " << ex.what() << "\n";
-                return 1;
-            }
+    }
+    for (int i = 0; i < argc; ++i) {
+        try {
+            scanFile(std::cout, argv[i], batchSize, rowReaderOptions, showMetrics);
+        } catch (std::exception& ex) {
+            std::cerr << "Caught exception in " << argv[i] << ": " << ex.what() << "\n";
+            return 1;
         }
     }
     return 0;

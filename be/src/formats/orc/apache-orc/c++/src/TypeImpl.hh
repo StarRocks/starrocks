@@ -103,8 +103,7 @@ public:
      */
     void addChildType(std::unique_ptr<Type> childType);
 
-    static std::vector<std::pair<std::string, std::unique_ptr<Type>>> parseType(const std::string& input, size_t start,
-                                                                                size_t end);
+    static std::pair<ORC_UNIQUE_PTR<Type>, size_t> parseType(const std::string& input, size_t start, size_t end);
 
 private:
     /**
@@ -150,6 +149,14 @@ private:
      * @param end end position of the input string
      */
     static std::unique_ptr<Type> parseUnionType(const std::string& input, size_t start, size_t end);
+
+    /**
+     * Parse field name from string
+     * @param input the input string of a field name
+     * @param start start position of the input string
+     * @param end end position of the input string
+     */
+    static std::pair<std::string, size_t> parseName(const std::string& input, const size_t start, const size_t end);
 
     /**
      * Parse decimal type from string

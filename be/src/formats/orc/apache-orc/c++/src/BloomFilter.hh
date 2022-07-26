@@ -161,7 +161,7 @@ public:
 
 private:
     friend struct BloomFilterUTF8Utils;
-
+    friend class TestBloomFilter_testBloomFilterBasicOperations_Test;
     // compute k hash values from hash64 and set bits
     void addHash(int64_t hash64);
 
