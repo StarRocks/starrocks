@@ -99,7 +99,7 @@ public:
         _null_column->resize(n);
     }
 
-    void resize_uninitialized(size_t n) {
+    void resize_uninitialized(size_t n) override {
         _data_column->resize_uninitialized(n);
         _null_column->resize_uninitialized(n);
     }
