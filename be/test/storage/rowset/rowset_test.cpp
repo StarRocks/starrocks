@@ -549,7 +549,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     const uint32_t rows_per_segment = 1024;
     config::vertical_compaction_max_columns_per_group = 1;
     RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
-    std::vector<int32_t> column_indexes = {0, 1, 2};
+    std::vector<int32_t> column_indexes = {0, 1, 2, 3};
     std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
     create_partial_rowset_writer_context(column_indexes, partial_schema, &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;

@@ -127,6 +127,8 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
+            RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
+                      Status::InternalError("segment number not equal to partial_rowset_footers size"));
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
