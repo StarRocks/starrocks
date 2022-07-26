@@ -2,6 +2,7 @@
 
 package com.starrocks.transaction;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex;
@@ -57,6 +58,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
+        List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
@@ -66,9 +68,16 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                 if (!unfinishedTablet.isPresent()) {
                     continue;
                 }
-                long tabletId = unfinishedTablet.get().getId();
-                throw new TransactionCommitFailedException("table '" + table.getName() + "\" has unfinished tablet: " + tabletId);
+                if (unfinishedTablets == null) {
+                    unfinishedTablets = Lists.newArrayList();
+                }
+                unfinishedTablets.add(unfinishedTablet.get().getId());
             }
+        }
+
+        if (unfinishedTablets != null && !unfinishedTablets.isEmpty()) {
+            throw new TransactionCommitFailedException(
+                    "table '" + table.getName() + "\" has unfinished tablets: " + unfinishedTablets);
         }
     }
 
