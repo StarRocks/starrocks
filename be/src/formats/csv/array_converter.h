@@ -21,19 +21,12 @@ namespace starrocks::vectorized::csv {
 // each element in this array.
 char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level);
 
+std::unique_ptr<ArrayReader> create_array_reader(const Converter::Options& options);
+
 class ArrayConverter final : public Converter {
 public:
-    ArrayConverter(std::unique_ptr<Converter> elem_converter, const Options& options) {
-        _element_converter = std::move(elem_converter);
-        if (options.array_format_type == ArrayFormatType::HIVE) {
-            char delimiter =
-                    get_collection_delimiter(options.array_hive_collection_delimiter,
-                                             options.array_hive_mapkey_delimiter, options.array_hive_nested_level);
-            _array_reader = std::make_unique<HiveTextArrayReader>(delimiter);
-        } else {
-            _array_reader = std::make_unique<DefaultArrayReader>();
-        }
-    }
+    explicit ArrayConverter(std::unique_ptr<Converter> elem_converter)
+            : _element_converter(std::move(elem_converter)){};
 
     Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
     Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
@@ -42,7 +35,6 @@ public:
     bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
 
 private:
-    std::unique_ptr<ArrayReader> _array_reader;
     std::unique_ptr<Converter> _element_converter;
 };
 
