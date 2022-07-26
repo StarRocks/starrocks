@@ -2,7 +2,6 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -90,7 +89,13 @@ public class CompoundPredicateOperator extends PredicateOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType, type, Sets.newHashSet(this.getChildren()).hashCode());
+        int h = 0;
+        for (ScalarOperator scalarOperator : this.getChildren()) {
+            if (scalarOperator != null) {
+                h += scalarOperator.hashCode();
+            }
+        }
+        return Objects.hash(opType, type, h);
     }
 
     public static ScalarOperator or(List<ScalarOperator> nodes) {
