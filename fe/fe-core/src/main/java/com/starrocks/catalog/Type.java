@@ -47,8 +47,10 @@ import java.util.List;
  */
 public abstract class Type implements Cloneable {
     private static final Logger LOG = LogManager.getLogger(Type.class);
+    public static final int BINARY = 63;
+    public static final int CHARSET_UTF8 = 33;
 
-    // Maximum nesting depth of a type. This limit my be changed after running more
+    // Maximum nesting depth of a type. This limit may be changed after running more
     // performance tests.
     public static int MAX_NESTING_DEPTH = 15;
 
@@ -1459,9 +1461,9 @@ public abstract class Type implements Cloneable {
             case VARCHAR:
             case HLL:
             case BITMAP:
-                return 33;
+                return CHARSET_UTF8;
             default:
-                return 63;
+                return BINARY;
         }
     }
 
