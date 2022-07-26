@@ -4,6 +4,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -18,7 +19,7 @@ import java.util.List;
 public class ExternalTablesProcDir implements ProcDirInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TableName").add("Type").add("Comment")
+            .add("TableName")
             .build();
 
     private String catalogName;
@@ -44,15 +45,9 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         if (db == null) {
             throw new AnalysisException("db: " + dbName + " not exists");
         }
-        db.readLock();
-        Table tbl = null;
-        try {
-            tbl = metadataMgr.getTable(catalogName, dbName, name);
-            if (tbl == null || tbl.isOlapTable()) {
-                throw new AnalysisException("table : " + name + " not exists, or is not external table");
-            }
-        } finally {
-            db.readUnlock();
+        Table tbl = metadataMgr.getTable(catalogName, dbName, name);
+        if (tbl == null) {
+            throw new AnalysisException("table : " + name + " not exists");
         }
         return new ExternalTableProcDir(tbl);
     }
@@ -65,25 +60,19 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         try {
             tables = metadataMgr.listTableNames(catalogName, dbName);
         } catch (DdlException e) {
-            throw new SemanticException(String.format("Get external tables error: ", e.getMessage()));
+            throw new SemanticException(String.format("Get external tables error: %s", e.getMessage()));
         }
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();
         for (String tableName : tables) {
-            Table table = metadataMgr.getTable(catalogName, dbName, tableName);
-            if (table == null) {
-                continue;
-            }
             List<Comparable> tableInfo = new ArrayList<Comparable>();
             tableInfo.add(tableName);
-            tableInfo.add(table.getType());
-            tableInfo.add(table.getComment());
             tableInfos.add(tableInfo);
         }
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        metadataMgr.convertToMetaResult(result, tableInfos);
+        CatalogUtils.convertToMetaResult(result, tableInfos);
         return result;
     }
 }

@@ -84,12 +84,12 @@ public class ExternalProcDirTest {
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
 
-        Assert.assertEquals(Lists.newArrayList("DbName", "Type"),
+        Assert.assertEquals(Lists.newArrayList("DbName"),
                 result.getColumnNames());
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Arrays.asList("hive_test", "hive"));
-        rows.add(Arrays.asList("ods", "hive"));
-        rows.add(Arrays.asList("temp_db", "hive"));
+        rows.add(Arrays.asList("hive_test"));
+        rows.add(Arrays.asList("ods"));
+        rows.add(Arrays.asList("temp_db"));
         Assert.assertEquals(rows, result.getRows());
     }
 
@@ -99,13 +99,13 @@ public class ExternalProcDirTest {
         ProcResult result = dir.fetchResult();
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
-        Assert.assertEquals(Lists.newArrayList("TableName", "Type", "Comment"),
+        Assert.assertEquals(Lists.newArrayList("TableName"),
                 result.getColumnNames());
         Assert.assertEquals(3, result.getRows().size());
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Arrays.asList("sr", "HIVE", "HIVE"));
-        rows.add(Arrays.asList("starrocks", "HIVE", "HIVE"));
-        rows.add(Arrays.asList("test1", "HIVE", "HIVE"));
+        rows.add(Arrays.asList("sr"));
+        rows.add(Arrays.asList("starrocks"));
+        rows.add(Arrays.asList("test1"));
         Assert.assertEquals(rows, result.getRows());
     }
 

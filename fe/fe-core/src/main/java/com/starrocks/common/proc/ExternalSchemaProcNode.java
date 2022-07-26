@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 
@@ -37,7 +38,7 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
 
         List<Column> schema = table.getFullSchema();
         List<String> partitionColumns = Lists.newArrayList();
-        if (table.isHiveTable()) {
+        if (table.getType() == TableType.HIVE) {
             partitionColumns = ((HiveTable) table).getPartitionColumnNames();
         }
 

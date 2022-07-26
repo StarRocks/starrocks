@@ -5,13 +5,20 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.proc.CatalogProcNode;
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.DbsProcDir;
+import com.starrocks.common.proc.ExternalDbsProcDir;
+import com.starrocks.common.proc.ProcDirInterface;
+import com.starrocks.common.proc.ProcNodeInterface;
+import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.persist.DropCatalogLog;
@@ -223,5 +230,36 @@ public class CatalogMgr {
 
     private void writeUnLock() {
         this.catalogLock.writeLock().unlock();
+    }
+
+    public class CatalogProcNode implements ProcDirInterface {
+
+        @Override
+        public boolean register(String name, ProcNodeInterface node) {
+            return false;
+        }
+
+        @Override
+        public ProcNodeInterface lookup(String catalogName) throws AnalysisException {
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return new DbsProcDir(GlobalStateMgr.getCurrentState());
+            }
+            return new ExternalDbsProcDir(catalogName);
+        }
+
+        @Override
+        public ProcResult fetchResult() {
+            BaseProcResult result = new BaseProcResult();
+            result.setNames(CATALOG_PROC_NODE_TITLE_NAMES);
+            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+                Catalog catalog = entry.getValue();
+                if (catalog == null) {
+                    continue;
+                }
+                catalog.getProcNodeData(result);
+            }
+            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
+            return result;
+        }
     }
 }

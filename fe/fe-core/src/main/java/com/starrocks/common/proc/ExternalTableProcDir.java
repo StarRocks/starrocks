@@ -17,6 +17,8 @@ public class ExternalTableProcDir implements ProcDirInterface {
             .build();
 
     public static final String SCHEMA = "schema";
+
+    // todo implementing show proc external table partitions
     private static final String PARTITIONS = "partitions";
     private static final ImmutableList<String> CHILDREN_NODES = new ImmutableList.Builder<String>()
             .add(PARTITIONS)

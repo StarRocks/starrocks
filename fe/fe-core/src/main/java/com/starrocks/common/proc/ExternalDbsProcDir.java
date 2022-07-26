@@ -3,6 +3,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
@@ -14,7 +15,7 @@ import java.util.List;
 
 public class ExternalDbsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("DbName").add("Type")
+            .add("DbName")
             .build();
     private String catalogName;
 
@@ -48,17 +49,11 @@ public class ExternalDbsProcDir implements ProcDirInterface {
                 continue;
             }
             List<Comparable> dbInfo = new ArrayList<Comparable>();
-            db.readLock();
-            try {
-                dbInfo.add(dbName);
-                dbInfo.add(GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().get(catalogName).getType());
-            } finally {
-                db.readUnlock();
-            }
+            dbInfo.add(dbName);
             dbInfos.add(dbInfo);
         }
 
-        metadataMgr.convertToMetaResult(result, dbInfos);
+        CatalogUtils.convertToMetaResult(result, dbInfos);
         return result;
     }
 

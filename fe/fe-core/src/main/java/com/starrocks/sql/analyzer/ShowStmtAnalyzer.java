@@ -273,7 +273,7 @@ public class ShowStmtAnalyzer {
                     try {
                         node.setNode(ProcService.getInstance().open(procString));
                     } catch (AnalysisException e) {
-                        throw new SemanticException(String.format("Unknown proc node path: ", procString));
+                        throw new SemanticException(String.format("Unknown proc node path: %s", procString));
                     }
                 } else {
                     if (table.isNativeTable()) {
@@ -358,7 +358,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(procString));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: ", procString));
+                throw new SemanticException(String.format("Unknown proc node path: %s", procString));
             }
         }
 
@@ -371,7 +371,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(path));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: ", path));
+                throw new SemanticException(String.format("Unknown proc node path: %s", path));
             }
             return null;
         }

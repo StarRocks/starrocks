@@ -202,10 +202,6 @@ public class Table extends MetaObject implements Writable {
         return fullSchema;
     }
 
-    public boolean isHiveTable() {
-        return type == TableType.HIVE;
-    }
-
     public void setNewFullSchema(List<Column> newSchema) {
         this.fullSchema = newSchema;
         this.nameToColumn.clear();
