@@ -100,6 +100,10 @@ public:
     // must be non-inline!
     virtual ~RleDecoder();
 
+    RleDecoder(ReaderMetrics* _metrics) : metrics(_metrics) {
+        // pass
+    }
+
     /**
      * Seek to a particular spot.
      */
@@ -118,6 +122,9 @@ public:
      *    pointer is not null, positions that are false are skipped.
      */
     virtual void next(int64_t* data, uint64_t numValues, const char* notNull) = 0;
+
+protected:
+    ReaderMetrics* metrics;
 };
 
 /**
@@ -138,7 +145,7 @@ std::unique_ptr<RleEncoder> createRleEncoder(std::unique_ptr<BufferedOutputStrea
    * @param pool memory pool to use for allocation
    */
 std::unique_ptr<RleDecoder> createRleDecoder(std::unique_ptr<SeekableInputStream> input, bool isSigned,
-                                             RleVersion version, MemoryPool& pool,
-                                             DataBuffer<char>* sharedBufferPtr = nullptr);
+                                             RleVersion version, MemoryPool& pool, ReaderMetrics* metrics,
+                                             DataBuffer<char>* sharedBufferPtr);
 
 } // namespace orc

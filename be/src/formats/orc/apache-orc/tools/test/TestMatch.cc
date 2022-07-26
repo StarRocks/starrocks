@@ -40,6 +40,7 @@ public:
     std::string json;
     std::string typeString;
     std::string formatVersion;
+    std::string softwareVersion;
     uint64_t rowCount;
     uint64_t contentLength;
     uint64_t stripeCount;
@@ -49,13 +50,15 @@ public:
     std::map<std::string, std::string> userMeta;
 
     OrcFileDescription(const std::string& _filename, const std::string& _json, const std::string& _typeString,
-                       const std::string& _version, uint64_t _rowCount, uint64_t _contentLength, uint64_t _stripeCount,
-                       CompressionKind _compression, size_t _compressionSize, uint64_t _rowIndexStride,
+                       const std::string& _version, const std::string& _softwareVersion, uint64_t _rowCount,
+                       uint64_t _contentLength, uint64_t _stripeCount, CompressionKind _compression,
+                       size_t _compressionSize, uint64_t _rowIndexStride,
                        const std::map<std::string, std::string>& _meta)
             : filename(_filename),
               json(_json),
               typeString(_typeString),
               formatVersion(_version),
+              softwareVersion(_softwareVersion),
               rowCount(_rowCount),
               contentLength(_contentLength),
               stripeCount(_stripeCount),
@@ -89,7 +92,8 @@ FileParam::~FileParam() {
 
 TEST_P(FileParam, Metadata) {
     orc::ReaderOptions readerOpts;
-    std::unique_ptr<Reader> reader = createReader(readLocalFile(getFilename()), readerOpts);
+    std::unique_ptr<Reader> reader =
+            createReader(readLocalFile(getFilename(), readerOpts.getReaderMetrics()), readerOpts);
     std::unique_ptr<RowReader> rowReader = reader->createRowReader();
 
     EXPECT_EQ(GetParam().compression, reader->getCompression());
@@ -99,6 +103,7 @@ TEST_P(FileParam, Metadata) {
     EXPECT_EQ(GetParam().rowIndexStride, reader->getRowIndexStride());
     EXPECT_EQ(GetParam().contentLength, reader->getContentLength());
     EXPECT_EQ(GetParam().formatVersion, reader->getFormatVersion().toString());
+    EXPECT_EQ(GetParam().softwareVersion, reader->getSoftwareVersion());
     EXPECT_EQ(getFilename(), reader->getStreamName());
     EXPECT_EQ(GetParam().userMeta.size(), reader->getMetadataKeys().size());
     for (std::map<std::string, std::string>::const_iterator itr = GetParam().userMeta.begin();
@@ -115,7 +120,8 @@ TEST_P(FileParam, Metadata) {
 
 TEST_P(FileParam, Contents) {
     orc::ReaderOptions readerOpts;
-    std::unique_ptr<RowReader> rowReader = createReader(readLocalFile(getFilename()), readerOpts)->createRowReader();
+    std::unique_ptr<RowReader> rowReader =
+            createReader(readLocalFile(getFilename(), readerOpts.getReaderMetrics()), readerOpts)->createRowReader();
 
     unsigned long rowCount = 0;
     std::unique_ptr<ColumnVectorBatch> batch = rowReader->createRowBatch(1024);
@@ -143,7 +149,7 @@ std::map<std::string, std::string> makeMetadata();
 INSTANTIATE_TEST_CASE_P(
         TestMatchParam, FileParam,
         testing::Values(OrcFileDescription("TestOrcFile.columnProjection.orc", "TestOrcFile.columnProjection.jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.12", 21000, 428406, 5,
+                                           "struct<int1:int,string1:string>", "0.12", "ORC Java", 21000, 428406, 5,
                                            CompressionKind_NONE, 262144, 1000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.emptyFile.orc", "TestOrcFile.emptyFile.jsn.gz",
                                            "struct<boolean1:boolean,byte1:tinyint,"
@@ -155,7 +161,7 @@ INSTANTIATE_TEST_CASE_P(
                                            "list:array<struct<int1:int,string1:"
                                            "string>>,map:map<string,struct<int1:"
                                            "int,string1:string>>>",
-                                           "0.12", 0, 3, 0, CompressionKind_NONE, 262144, 10000,
+                                           "0.12", "ORC Java", 0, 3, 0, CompressionKind_NONE, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.metaData.orc", "TestOrcFile.metaData.jsn.gz",
                                            "struct<boolean1:boolean,byte1:tinyint,"
@@ -167,7 +173,8 @@ INSTANTIATE_TEST_CASE_P(
                                            "list:array<struct<int1:int,string1:"
                                            "string>>,map:map<string,struct<int1:"
                                            "int,string1:string>>>",
-                                           "0.12", 1, 980, 1, CompressionKind_NONE, 262144, 10000, makeMetadata()),
+                                           "0.12", "ORC Java", 1, 980, 1, CompressionKind_NONE, 262144, 10000,
+                                           makeMetadata()),
                         OrcFileDescription("TestOrcFile.test1.orc", "TestOrcFile.test1.jsn.gz",
                                            "struct<boolean1:boolean,byte1:tinyint,"
                                            "short1:smallint,int1:int,long1:bigint,"
@@ -178,24 +185,24 @@ INSTANTIATE_TEST_CASE_P(
                                            "list:array<struct<int1:int,string1:"
                                            "string>>,map:map<string,struct<int1:"
                                            "int,string1:string>>>",
-                                           "0.12", 2, 1015, 1, CompressionKind_ZLIB, 10000, 10000,
+                                           "0.12", "ORC Java", 2, 1015, 1, CompressionKind_ZLIB, 10000, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testMemoryManagementV11"
                                            ".orc",
                                            "TestOrcFile.testMemoryManagementV11"
                                            ".jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.11", 2500, 18779, 25,
+                                           "struct<int1:int,string1:string>", "0.11", "ORC Java", 2500, 18779, 25,
                                            CompressionKind_NONE, 262144, 0, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testMemoryManagementV12"
                                            ".orc",
                                            "TestOrcFile.testMemoryManagementV12"
                                            ".jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.12", 2500, 10618, 4,
+                                           "struct<int1:int,string1:string>", "0.12", "ORC Java", 2500, 10618, 4,
                                            CompressionKind_NONE, 262144, 0, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testPredicatePushdown.orc",
                                            "TestOrcFile.testPredicatePushdown"
                                            ".jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.12", 3500, 15529, 1,
+                                           "struct<int1:int,string1:string>", "0.12", "ORC Java", 3500, 15529, 1,
                                            CompressionKind_NONE, 262144, 1000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testSeek.orc", "TestOrcFile.testSeek.jsn.gz",
                                            "struct<boolean1:boolean,byte1:tinyint,"
@@ -206,64 +213,64 @@ INSTANTIATE_TEST_CASE_P(
                                            "string>>>,list:array<struct<int1:int,"
                                            "string1:string>>,map:map<string,"
                                            "struct<int1:int,string1:string>>>",
-                                           "0.12", 32768, 1896379, 7, CompressionKind_ZLIB, 65536, 1000,
+                                           "0.12", "ORC Java", 32768, 1896379, 7, CompressionKind_ZLIB, 65536, 1000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testSnappy.orc", "TestOrcFile.testSnappy.jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.12", 10000, 126061, 2,
+                                           "struct<int1:int,string1:string>", "0.12", "ORC Java", 10000, 126061, 2,
                                            CompressionKind_SNAPPY, 100, 10000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testStringAndBinaryStat"
                                            "istics.orc",
                                            "TestOrcFile.testStringAndBinaryStat"
                                            "istics.jsn.gz",
-                                           "struct<bytes1:binary,string1:string>", "0.12", 4, 185, 1,
+                                           "struct<bytes1:binary,string1:string>", "0.12", "ORC Java", 4, 185, 1,
                                            CompressionKind_ZLIB, 10000, 10000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testStripeLevelStats.orc",
                                            "TestOrcFile.testStripeLevelStats"
                                            ".jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.12", 11000, 597, 3,
+                                           "struct<int1:int,string1:string>", "0.12", "ORC Java", 11000, 597, 3,
                                            CompressionKind_ZLIB, 10000, 10000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testTimestamp.orc", "TestOrcFile.testTimestamp.jsn.gz",
-                                           "timestamp", "0.11", 12, 188, 1, CompressionKind_ZLIB, 10000, 10000,
-                                           std::map<std::string, std::string>()),
+                                           "timestamp", "0.11", "ORC Java", 12, 188, 1, CompressionKind_ZLIB, 10000,
+                                           10000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testUnionAndTimestamp.orc",
                                            "TestOrcFile.testUnionAndTimestamp"
                                            ".jsn.gz",
                                            "struct<time:timestamp,union:uniontype"
                                            "<int,string>,decimal:decimal(38,18)>",
-                                           "0.12", 5077, 20906, 2, CompressionKind_NONE, 262144, 10000,
+                                           "0.12", "ORC Java", 5077, 20906, 2, CompressionKind_NONE, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("TestOrcFile.testWithoutIndex.orc", "TestOrcFile.testWithoutIndex.jsn.gz",
-                                           "struct<int1:int,string1:string>", "0.12", 50000, 214643, 10,
+                                           "struct<int1:int,string1:string>", "0.12", "ORC Java", 50000, 214643, 10,
                                            CompressionKind_SNAPPY, 1000, 0, std::map<std::string, std::string>()),
-                        OrcFileDescription("decimal.orc", "decimal.jsn.gz", "struct<_col0:decimal(10,5)>", "0.12", 6000,
-                                           16186, 1, CompressionKind_NONE, 262144, 10000,
+                        OrcFileDescription("decimal.orc", "decimal.jsn.gz", "struct<_col0:decimal(10,5)>", "0.12",
+                                           "ORC Java", 6000, 16186, 1, CompressionKind_NONE, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("demo-11-none.orc", "demo-12-zlib.jsn.gz",
                                            ("struct<_col0:int,_col1:string,"
                                             "_col2:string,_col3:string,_col4:int,"
                                             "_col5:string,_col6:int,_col7:int,"
                                             "_col8:int>"),
-                                           "0.11", 1920800, 5069718, 385, CompressionKind_NONE, 262144, 10000,
-                                           std::map<std::string, std::string>()),
+                                           "0.11", "ORC Java", 1920800, 5069718, 385, CompressionKind_NONE, 262144,
+                                           10000, std::map<std::string, std::string>()),
                         OrcFileDescription("demo-11-zlib.orc", "demo-12-zlib.jsn.gz",
                                            ("struct<_col0:int,_col1:string,"
                                             "_col2:string,_col3:string,_col4:int,"
                                             "_col5:string,_col6:int,_col7:int,"
                                             "_col8:int>"),
-                                           "0.11", 1920800, 396823, 385, CompressionKind_ZLIB, 262144, 10000,
-                                           std::map<std::string, std::string>()),
+                                           "0.11", "ORC Java", 1920800, 396823, 385, CompressionKind_ZLIB, 262144,
+                                           10000, std::map<std::string, std::string>()),
                         OrcFileDescription("demo-12-zlib.orc", "demo-12-zlib.jsn.gz",
                                            ("struct<_col0:int,_col1:string,"
                                             "_col2:string,_col3:string,_col4:int,"
                                             "_col5:string,_col6:int,_col7:int,"
                                             "_col8:int>"),
-                                           "0.12", 1920800, 45592, 1, CompressionKind_ZLIB, 262144, 10000,
+                                           "0.12", "ORC Java", 1920800, 45592, 1, CompressionKind_ZLIB, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("nulls-at-end-snappy.orc", "nulls-at-end-snappy.jsn.gz",
                                            ("struct<_col0:tinyint,_col1:smallint,"
                                             "_col2:int,_col3:bigint,_col4:float,"
                                             "_col5:double,_col6:boolean>"),
-                                           "0.12", 70000, 366347, 1, CompressionKind_SNAPPY, 262144, 10000,
+                                           "0.12", "ORC Java", 70000, 366347, 1, CompressionKind_SNAPPY, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("orc-file-11-format.orc", "orc-file-11-format.jsn.gz",
                                            ("struct<boolean1:boolean,"
@@ -277,17 +284,24 @@ INSTANTIATE_TEST_CASE_P(
                                             "<string,struct<int1:int,string1:"
                                             "string>>,ts:timestamp,"
                                             "decimal1:decimal(0,0)>"),
-                                           "0.11", 7500, 372542, 2, CompressionKind_NONE, 262144, 10000,
+                                           "0.11", "ORC Java", 7500, 372542, 2, CompressionKind_NONE, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("orc_split_elim_new.orc", "orc_split_elim_new.jsn.gz",
                                            ("struct<userid:bigint,string1:string,"
                                             "subtype:double,"
                                             "decimal1:decimal(16,6),"
                                             "ts:timestamp>"),
-                                           "0.12", 25000, 1981, 1, CompressionKind_ZLIB, 262144, 10000,
-                                           std::map<std::string, std::string>()),
+                                           "0.12", "ORC Java 1.8.0-SNAPSHOT", 25000, 1980, 1, CompressionKind_ZLIB,
+                                           262144, 10000, std::map<std::string, std::string>()),
+                        OrcFileDescription("orc_split_elim_cpp.orc", "orc_split_elim_cpp.jsn.gz",
+                                           ("struct<userid:bigint,string1:string,"
+                                            "subtype:double,"
+                                            "decimal1:decimal(16,6),"
+                                            "ts:timestamp>"),
+                                           "0.12", "ORC C++ 1.8.0-SNAPSHOT", 25000, 2942, 1, CompressionKind_ZLIB,
+                                           65536, 10000, std::map<std::string, std::string>()),
                         OrcFileDescription("orc_index_int_string.orc", "orc_index_int_string.jsn.gz",
-                                           ("struct<_col0:int,_col1:varchar(4)>"), "0.12", 6000, 11280, 1,
+                                           ("struct<_col0:int,_col1:varchar(4)>"), "0.12", "ORC Java", 6000, 11280, 1,
                                            CompressionKind_ZLIB, 262144, 2000, std::map<std::string, std::string>()),
                         OrcFileDescription("over1k_bloom.orc", "over1k_bloom.jsn.gz",
                                            "struct<_col0:tinyint,_col1:smallint,"
@@ -295,20 +309,20 @@ INSTANTIATE_TEST_CASE_P(
                                            "_col5:double,_col6:boolean,"
                                            "_col7:string,_col8:timestamp,"
                                            "_col9:decimal(4,2),_col10:binary>",
-                                           "0.12", 2098, 41780, 2, CompressionKind_ZLIB, 262144, 10000,
+                                           "0.12", "ORC Java", 2098, 41780, 2, CompressionKind_ZLIB, 262144, 10000,
                                            std::map<std::string, std::string>()),
                         OrcFileDescription("TestVectorOrcFile.testLz4.orc", "TestVectorOrcFile.testLz4.jsn.gz",
-                                           "struct<x:bigint,y:int,z:bigint>", "0.12", 10000, 120952, 2,
+                                           "struct<x:bigint,y:int,z:bigint>", "0.12", "ORC Java", 10000, 120952, 2,
                                            CompressionKind_LZ4, 1000, 10000, std::map<std::string, std::string>()),
                         OrcFileDescription("TestVectorOrcFile.testLzo.orc", "TestVectorOrcFile.testLzo.jsn.gz",
-                                           "struct<x:bigint,y:int,z:bigint>", "0.12", 10000, 120955, 2,
+                                           "struct<x:bigint,y:int,z:bigint>", "0.12", "ORC Java", 10000, 120955, 2,
                                            CompressionKind_LZO, 1000, 10000, std::map<std::string, std::string>())));
 
 #ifdef HAS_PRE_1970
 INSTANTIATE_TEST_CASE_P(
         TestMatch1900, FileParam,
         testing::Values(OrcFileDescription("TestOrcFile.testDate1900.orc", "TestOrcFile.testDate1900.jsn.gz",
-                                           "struct<time:timestamp,date:date>", "0.12", 70000, 30478, 8,
+                                           "struct<time:timestamp,date:date>", "0.12", "ORC Java", 70000, 30478, 8,
                                            CompressionKind_ZLIB, 10000, 10000, std::map<std::string, std::string>())));
 #endif
 
@@ -316,7 +330,7 @@ INSTANTIATE_TEST_CASE_P(
 INSTANTIATE_TEST_CASE_P(
         TestMatch2038, FileParam,
         testing::Values(OrcFileDescription("TestOrcFile.testDate2038.orc", "TestOrcFile.testDate2038.jsn.gz",
-                                           "struct<time:timestamp,date:date>", "0.12", 212000, 94762, 28,
+                                           "struct<time:timestamp,date:date>", "0.12", "ORC Java", 212000, 94762, 28,
                                            CompressionKind_ZLIB, 10000, 10000, std::map<std::string, std::string>())));
 #endif
 
@@ -329,7 +343,7 @@ TEST(TestMatch, columnSelectionTest) {
     }
     rowReaderOpts.include(includes);
     std::string filename = findExample("demo-11-none.orc");
-    std::unique_ptr<Reader> reader = createReader(readLocalFile(filename), readerOpts);
+    std::unique_ptr<Reader> reader = createReader(readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     std::unique_ptr<RowReader> rowReader = reader->createRowReader(rowReaderOpts);
 
     EXPECT_EQ(CompressionKind_NONE, reader->getCompression());
@@ -396,7 +410,7 @@ TEST(TestMatch, columnSelectionTest) {
 TEST(TestMatch, stripeInformationTest) {
     ReaderOptions opts;
     std::string filename = findExample("demo-11-none.orc");
-    std::unique_ptr<Reader> reader = createReader(readLocalFile(filename), opts);
+    std::unique_ptr<Reader> reader = createReader(readLocalFile(filename, opts.getReaderMetrics()), opts);
 
     EXPECT_EQ(385, reader->getNumberOfStripes());
 
@@ -419,7 +433,7 @@ TEST(TestMatch, readRangeTest) {
     // stripes[7, 16]
     offsetOpts.range(80000, 130722);
     std::string filename = findExample("demo-11-none.orc");
-    std::unique_ptr<Reader> reader = createReader(readLocalFile(filename), opts);
+    std::unique_ptr<Reader> reader = createReader(readLocalFile(filename, opts.getReaderMetrics()), opts);
     std::unique_ptr<RowReader> fullReader = reader->createRowReader(fullOpts);
     std::unique_ptr<RowReader> lastReader = reader->createRowReader(lastOpts);
     std::unique_ptr<RowReader> oobReader = reader->createRowReader(oobOpts);
@@ -484,7 +498,8 @@ TEST(TestMatch, readRangeTest) {
 TEST(TestMatch, columnStatistics) {
     orc::ReaderOptions opts;
     std::string filename = findExample("demo-11-none.orc");
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), opts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, opts.getReaderMetrics()), opts);
 
     // corrupt stats test
     EXPECT_EQ(true, reader->hasCorrectStatistics());
@@ -513,7 +528,8 @@ TEST(TestMatch, columnStatistics) {
 TEST(TestMatch, stripeStatistics) {
     orc::ReaderOptions opts;
     std::string filename = findExample("demo-11-none.orc");
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), opts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, opts.getReaderMetrics()), opts);
 
     // test stripe statistics
     EXPECT_EQ(385, reader->getNumberOfStripeStatistics());
@@ -543,7 +559,8 @@ TEST(TestMatch, corruptStatistics) {
     orc::ReaderOptions opts;
     // read the file has corrupt statistics
     std::string filename = findExample("orc_split_elim.orc");
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), opts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, opts.getReaderMetrics()), opts);
 
     EXPECT_EQ(true, !reader->hasCorrectStatistics());
 
@@ -569,7 +586,8 @@ TEST(TestMatch, noStripeStatistics) {
     orc::ReaderOptions opts;
     // read the file has no stripe statistics
     std::string filename = findExample("orc-file-11-format.orc");
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), opts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, opts.getReaderMetrics()), opts);
 
     EXPECT_EQ(0, reader->getNumberOfStripeStatistics());
 }
@@ -579,7 +597,8 @@ TEST(TestMatch, seekToRow) {
     {
         orc::ReaderOptions readerOpts;
         std::string filename = findExample("demo-11-none.orc");
-        std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+        std::unique_ptr<orc::Reader> reader =
+                orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
         std::unique_ptr<orc::RowReader> rowReader = reader->createRowReader();
         EXPECT_EQ(1920800, reader->getNumberOfRows());
 
@@ -614,7 +633,8 @@ TEST(TestMatch, seekToRow) {
         std::string filename = findExample("demo-11-none.orc");
         rowReaderOpts.range(13126, 13145); // Read only the second stripe (rows 5000..9999)
 
-        std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+        std::unique_ptr<orc::Reader> reader =
+                orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
         std::unique_ptr<orc::RowReader> rowReader = reader->createRowReader(rowReaderOpts);
         EXPECT_EQ(1920800, reader->getNumberOfRows());
 
@@ -642,7 +662,8 @@ TEST(TestMatch, seekToRow) {
     {
         orc::ReaderOptions readerOpts;
         std::string filename = findExample("TestOrcFile.emptyFile.orc");
-        std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+        std::unique_ptr<orc::Reader> reader =
+                orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
         std::unique_ptr<orc::RowReader> rowReader = reader->createRowReader();
         EXPECT_EQ(0, reader->getNumberOfRows());
 
@@ -667,7 +688,8 @@ TEST(TestMatch, futureFormatVersion) {
     orc::ReaderOptions opts;
     std::ostringstream errorMsg;
     opts.setErrorStream(errorMsg);
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), opts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, opts.getReaderMetrics()), opts);
     EXPECT_EQ(("Warning: ORC file " + filename + " was written in an unknown format version 19.99\n"), errorMsg.str());
     EXPECT_EQ("19.99", reader->getFormatVersion().toString());
 }
@@ -678,7 +700,8 @@ TEST(TestMatch, selectColumns) {
     std::string filename = findExample("TestOrcFile.testSeek.orc");
 
     // All columns
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     std::unique_ptr<orc::RowReader> rowReader = reader->createRowReader(rowReaderOpts);
     std::vector<bool> c = rowReader->getSelectedColumns();
     EXPECT_EQ(24, c.size());
@@ -843,8 +866,7 @@ TEST(TestMatch, selectColumns) {
     batch = rowReader->createRowBatch(1);
     std::ostringstream expectedMapSchema;
     expectedMapSchema << "Struct vector <0 of 1; Map vector <key not selected, "
-                      << "Struct vector <0 of 1; Long vector <0 of 1>; Byte vector <0 of 1>; > "
-                         "with 0 of 1>; >";
+                      << "Struct vector <0 of 1; Long vector <0 of 1>; Byte vector <0 of 1>; > with 0 of 1>; >";
     EXPECT_EQ(expectedMapSchema.str(), batch->toString());
     EXPECT_EQ(45, batch->getMemoryUsage());
 
@@ -886,7 +908,7 @@ TEST(Reader, memoryUse) {
     // Int column
     cols.push_back(1);
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(483517, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -899,7 +921,7 @@ TEST(Reader, memoryUse) {
     cols.clear();
     cols.push_back(7);
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(835906, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -910,7 +932,7 @@ TEST(Reader, memoryUse) {
     cols.clear();
     cols.push_back(8);
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(901442, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -921,7 +943,7 @@ TEST(Reader, memoryUse) {
     cols.clear();
     cols.push_back(9);
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(1294658, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -932,7 +954,7 @@ TEST(Reader, memoryUse) {
     cols.clear();
     cols.push_back(10);
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(1229122, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -943,7 +965,7 @@ TEST(Reader, memoryUse) {
     cols.clear();
     cols.push_back(11);
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(1491266, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -956,7 +978,7 @@ TEST(Reader, memoryUse) {
         cols.push_back(c);
     }
     rowReaderOpts.include(cols);
-    reader = orc::createReader(orc::readLocalFile(filename), readerOpts);
+    reader = orc::createReader(orc::readLocalFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
     EXPECT_EQ(4112706, reader->getMemoryUseByFieldId(cols));
     batch = rowReader->createRowBatch(1);
@@ -2896,7 +2918,8 @@ TEST(TestMatch, serializedConstructor) {
     std::string filename = findExample("demo-12-zlib.orc");
 
     // open a file
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readLocalFile(filename), opts);
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readLocalFile(filename, opts.getReaderMetrics()), opts);
 
     // for the next reader copy the serialized tail
     std::string tail = reader->getSerializedFileTail();

@@ -49,7 +49,8 @@ public:
 class PositionProviderMap {
 public:
     std::unordered_map<uint64_t, PositionProvider> providers;
-    std::vector<std::list<uint64_t>> positions;
+    // https://github.com/apache/orc/pull/903
+    std::list<std::list<uint64_t>> positions;
     PositionProvider& at(uint64_t columnId);
 };
 

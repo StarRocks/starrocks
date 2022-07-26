@@ -62,7 +62,12 @@ public:
 
     PredicateLeaf(Operator op, PredicateDataType type, std::string colName, const Literal& literal);
 
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, Literal literal);
+
     PredicateLeaf(Operator op, PredicateDataType type, std::string colName,
+                  const std::initializer_list<Literal>& literalList);
+
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
                   const std::initializer_list<Literal>& literalList);
 
     PredicateLeaf(Operator op, PredicateDataType type, std::string colName, const std::vector<Literal>& literalList);
@@ -78,9 +83,19 @@ public:
     PredicateDataType getType() const;
 
     /**
+     * Get whether the predicate is created using column name.
+     */
+    bool hasColumnName() const;
+
+    /**
      * Get the simple column name.
      */
     const std::string& getColumnName() const;
+
+    /**
+     * Get the column id.
+     */
+    uint64_t getColumnId() const;
 
     /**
      * Get the literal half of the predicate leaf.
@@ -108,6 +123,9 @@ private:
     size_t hashCode() const;
 
     void validate() const;
+    void validateColumn() const;
+
+    std::string columnDebugString() const;
 
     TruthValue evaluatePredicateMinMax(const proto::ColumnStatistics& colStats) const;
 
@@ -117,6 +135,7 @@ private:
     Operator mOperator;
     PredicateDataType mType;
     std::string mColumnName;
+    bool mHasColumnName;
     uint64_t mColumnId;
     std::vector<Literal> mLiterals;
     size_t mHashCode;

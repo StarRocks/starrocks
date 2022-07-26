@@ -76,7 +76,9 @@ void printStripeInformation(std::ostream& out, uint64_t index, uint64_t columns,
 
 void printRawTail(std::ostream& out, const char* filename) {
     out << "Raw file tail: " << filename << "\n";
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readFile(filename), orc::ReaderOptions());
+    orc::ReaderOptions readerOpts;
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     // Parse the file tail from the serialized one.
     orc::proto::FileTail tail;
     if (!tail.ParseFromString(reader->getSerializedFileTail())) {
@@ -126,7 +128,9 @@ void printAttributes(std::ostream& out, const orc::Type& type, const std::string
 }
 
 void printMetadata(std::ostream& out, const char* filename, bool verbose) {
-    std::unique_ptr<orc::Reader> reader = orc::createReader(orc::readFile(filename), orc::ReaderOptions());
+    orc::ReaderOptions readerOpts;
+    std::unique_ptr<orc::Reader> reader =
+            orc::createReader(orc::readFile(filename, readerOpts.getReaderMetrics()), readerOpts);
     out << "{ \"name\": \"" << filename << "\",\n";
     uint64_t numberColumns = reader->getType().getMaximumColumnId() + 1;
     out << "  \"type\": \"" << reader->getType().toString() << "\",\n";
@@ -138,7 +142,8 @@ void printMetadata(std::ostream& out, const char* filename, bool verbose) {
     uint64_t stripeCount = reader->getNumberOfStripes();
     out << "  \"stripe count\": " << stripeCount << ",\n";
     out << "  \"format\": \"" << reader->getFormatVersion().toString() << "\", \"writer version\": \""
-        << orc::writerVersionToString(reader->getWriterVersion()) << "\",\n";
+        << orc::writerVersionToString(reader->getWriterVersion()) << "\", \"software version\": \""
+        << reader->getSoftwareVersion() << "\",\n";
     out << "  \"compression\": \"" << orc::compressionKindToString(reader->getCompression()) << "\",";
     if (reader->getCompression() != orc::CompressionKind_NONE) {
         out << " \"compression block\": " << reader->getCompressionSize() << ",";

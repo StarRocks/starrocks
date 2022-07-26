@@ -86,7 +86,8 @@ ColumnWriter::ColumnWriter(const Type& type, const StreamsFactory& factory, cons
           enableBloomFilter(false),
           memPool(*options.getMemoryPool()),
           indexStream(),
-          bloomFilterStream() {
+          bloomFilterStream(),
+          hasNullValue(false) {
     std::unique_ptr<BufferedOutputStream> presentStream = factory.createStream(proto::Stream_Kind_PRESENT);
     notNullEncoder = createBooleanRleEncoder(std::move(presentStream));
 
@@ -115,10 +116,22 @@ ColumnWriter::~ColumnWriter() {
 }
 
 void ColumnWriter::add(ColumnVectorBatch& batch, uint64_t offset, uint64_t numValues, const char* incomingMask) {
-    notNullEncoder->add(batch.notNull.data() + offset, numValues, incomingMask);
+    const char* notNull = batch.notNull.data() + offset;
+    notNullEncoder->add(notNull, numValues, incomingMask);
+    hasNullValue |= batch.hasNulls;
+    for (uint64_t i = 0; !hasNullValue && i < numValues; ++i) {
+        if (!notNull[i]) {
+            hasNullValue = true;
+        }
+    }
 }
 
 void ColumnWriter::flush(std::vector<proto::Stream>& streams) {
+    if (!hasNullValue) {
+        // supress the present stream
+        notNullEncoder->suppress();
+        return;
+    }
     proto::Stream stream;
     stream.set_kind(proto::Stream_Kind_PRESENT);
     stream.set_column(static_cast<uint32_t>(columnId));
@@ -173,6 +186,21 @@ void ColumnWriter::addBloomFilterEntry() {
 }
 
 void ColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
+    if (!hasNullValue) {
+        // remove positions of present stream
+        int presentCount = indexStream->isCompressed() ? 4 : 3;
+        for (int i = 0; i != rowIndex->entry_size(); ++i) {
+            proto::RowIndexEntry* entry = rowIndex->mutable_entry(i);
+            std::vector<uint64_t> positions;
+            for (int j = presentCount; j < entry->positions_size(); ++j) {
+                positions.push_back(entry->positions(j));
+            }
+            entry->clear_positions();
+            for (size_t j = 0; j != positions.size(); ++j) {
+                entry->add_positions(positions[j]);
+            }
+        }
+    }
     // write row index to output stream
     rowIndex->SerializeToZeroCopyStream(indexStream.get());
 
@@ -1584,7 +1612,7 @@ void TimestampColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, ui
             // TimestampVectorBatch already stores data in UTC
             int64_t millsUTC = secs[i] * 1000 + nanos[i] / 1000000;
             if (!isUTC) {
-                millsUTC = timezone.convertToUTC(millsUTC);
+                millsUTC = timezone.convertToUTC(secs[i]) * 1000 + nanos[i] / 1000000;
             }
             ++count;
             if (enableBloomFilter) {
@@ -1823,6 +1851,105 @@ void Decimal64ColumnWriter::recordPosition() const {
     ColumnWriter::recordPosition();
     valueStream->recordPosition(rowIndexPosition.get());
     scaleEncoder->recordPosition(rowIndexPosition.get());
+}
+
+class Decimal64ColumnWriterV2 : public ColumnWriter {
+public:
+    Decimal64ColumnWriterV2(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
+
+    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
+                     const char* incomingMask) override;
+
+    virtual void flush(std::vector<proto::Stream>& streams) override;
+
+    virtual uint64_t getEstimatedSize() const override;
+
+    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+
+    virtual void recordPosition() const override;
+
+protected:
+    uint64_t precision;
+    uint64_t scale;
+    std::unique_ptr<RleEncoder> valueEncoder;
+};
+
+Decimal64ColumnWriterV2::Decimal64ColumnWriterV2(const Type& type, const StreamsFactory& factory,
+                                                 const WriterOptions& options)
+        : ColumnWriter(type, factory, options), precision(type.getPrecision()), scale(type.getScale()) {
+    std::unique_ptr<BufferedOutputStream> dataStream = factory.createStream(proto::Stream_Kind_DATA);
+    valueEncoder = createRleEncoder(std::move(dataStream), true, RleVersion_2, memPool, options.getAlignedBitpacking());
+
+    if (enableIndex) {
+        recordPosition();
+    }
+}
+
+void Decimal64ColumnWriterV2::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
+                                  const char* incomingMask) {
+    const Decimal64VectorBatch* decBatch = dynamic_cast<const Decimal64VectorBatch*>(&rowBatch);
+    if (decBatch == nullptr) {
+        throw InvalidArgument("Failed to cast to Decimal64VectorBatch");
+    }
+
+    DecimalColumnStatisticsImpl* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
+    if (decStats == nullptr) {
+        throw InvalidArgument("Failed to cast to DecimalColumnStatisticsImpl");
+    }
+
+    ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
+
+    const int64_t* data = decBatch->values.data() + offset;
+    const char* notNull = decBatch->hasNulls ? decBatch->notNull.data() + offset : nullptr;
+
+    valueEncoder->add(data, numValues, notNull);
+
+    uint64_t count = 0;
+    for (uint64_t i = 0; i < numValues; ++i) {
+        if (!notNull || notNull[i]) {
+            ++count;
+            if (enableBloomFilter) {
+                std::string decimal = Decimal(data[i], static_cast<int32_t>(scale)).toString(true);
+                bloomFilter->addBytes(decimal.c_str(), static_cast<int64_t>(decimal.size()));
+            }
+            decStats->update(Decimal(data[i], static_cast<int32_t>(scale)));
+        }
+    }
+    decStats->increase(count);
+    if (count < numValues) {
+        decStats->setHasNull(true);
+    }
+}
+
+void Decimal64ColumnWriterV2::flush(std::vector<proto::Stream>& streams) {
+    ColumnWriter::flush(streams);
+
+    proto::Stream dataStream;
+    dataStream.set_kind(proto::Stream_Kind_DATA);
+    dataStream.set_column(static_cast<uint32_t>(columnId));
+    dataStream.set_length(valueEncoder->flush());
+    streams.push_back(dataStream);
+}
+
+uint64_t Decimal64ColumnWriterV2::getEstimatedSize() const {
+    uint64_t size = ColumnWriter::getEstimatedSize();
+    size += valueEncoder->getBufferSize();
+    return size;
+}
+
+void Decimal64ColumnWriterV2::getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const {
+    proto::ColumnEncoding encoding;
+    encoding.set_kind(RleVersionMapper(RleVersion_2));
+    encoding.set_dictionarysize(0);
+    if (enableBloomFilter) {
+        encoding.set_bloomencoding(BloomFilterVersion::UTF8);
+    }
+    encodings.push_back(encoding);
+}
+
+void Decimal64ColumnWriterV2::recordPosition() const {
+    ColumnWriter::recordPosition();
+    valueEncoder->recordPosition(rowIndexPosition.get());
 }
 
 class Decimal128ColumnWriter : public Decimal64ColumnWriter {
@@ -2574,6 +2701,9 @@ std::unique_ptr<ColumnWriter> buildWriter(const Type& type, const StreamsFactory
         return std::unique_ptr<ColumnWriter>(new TimestampColumnWriter(type, factory, options, true));
     case DECIMAL:
         if (type.getPrecision() <= Decimal64ColumnWriter::MAX_PRECISION_64) {
+            if (options.getFileVersion() == FileVersion::UNSTABLE_PRE_2_0()) {
+                return std::unique_ptr<ColumnWriter>(new Decimal64ColumnWriterV2(type, factory, options));
+            }
             return std::unique_ptr<ColumnWriter>(new Decimal64ColumnWriter(type, factory, options));
         } else if (type.getPrecision() <= Decimal64ColumnWriter::MAX_PRECISION_128) {
             return std::unique_ptr<ColumnWriter>(new Decimal128ColumnWriter(type, factory, options));

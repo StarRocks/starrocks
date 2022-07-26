@@ -85,7 +85,7 @@ void decodeAndVerify(RleVersion version, const MemoryOutputStream& memStream, in
     std::unique_ptr<RleDecoder> decoder =
             createRleDecoder(std::unique_ptr<SeekableArrayInputStream>(
                                      new SeekableArrayInputStream(memStream.getData(), memStream.getLength())),
-                             isSinged, version, *getDefaultPool());
+                             isSinged, version, *getDefaultPool(), nullptr, nullptr);
 
     int64_t* decodedData = new int64_t[numValues];
     decoder->next(decodedData, numValues, notNull);

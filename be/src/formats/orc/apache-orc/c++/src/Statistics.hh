@@ -846,7 +846,23 @@ public:
         _stats.setSum(sum);
     }
 
-    void update(int64_t value, int repetitions);
+    void update(int64_t value, int repetitions) {
+        _stats.updateMinMax(value);
+
+        if (_stats.hasSum()) {
+            if (repetitions > 1) {
+                _stats.setHasSum(multiplyExact(value, repetitions, &value));
+            }
+
+            if (_stats.hasSum()) {
+                _stats.setHasSum(addExact(_stats.getSum(), value, &value));
+
+                if (_stats.hasSum()) {
+                    _stats.setSum(value);
+                }
+            }
+        }
+    }
 
     void merge(const MutableColumnStatistics& other) override {
         const IntegerColumnStatisticsImpl& intStats = dynamic_cast<const IntegerColumnStatisticsImpl&>(other);
@@ -856,10 +872,10 @@ public:
         // update sum and check overflow
         _stats.setHasSum(_stats.hasSum() && intStats.hasSum());
         if (_stats.hasSum()) {
-            bool wasPositive = _stats.getSum() >= 0;
-            _stats.setSum(_stats.getSum() + intStats.getSum());
-            if ((intStats.getSum() >= 0) == wasPositive) {
-                _stats.setHasSum((_stats.getSum() >= 0) == wasPositive);
+            int64_t value;
+            _stats.setHasSum(addExact(_stats.getSum(), intStats.getSum(), &value));
+            if (_stats.hasSum()) {
+                _stats.setSum(value);
             }
         }
     }

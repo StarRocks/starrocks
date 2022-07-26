@@ -163,44 +163,43 @@ TEST(TestFileMetadata, testRaw) {
 TEST(TestFileMetadata, testJson) {
     const std::string pgm = findProgram("tools/src/orc-metadata");
     const std::string file = findExample("orc_split_elim.orc");
-    const std::string expected = "{ \"name\": \"" + file +
-                                 "\",\n"
-                                 "  \"type\": "
-                                 "\"struct<userid:bigint,string1:string,subtype:double,decimal1:decimal(0,0),ts:"
-                                 "timestamp>\",\n"
-                                 "  \"attributes\": {},\n"
-                                 "  \"rows\": 25000,\n"
-                                 "  \"stripe count\": 5,\n"
-                                 "  \"format\": \"0.12\", \"writer version\": \"original\",\n"
-                                 "  \"compression\": \"none\",\n"
-                                 "  \"file length\": 246402,\n"
-                                 "  \"content\": 245568, \"stripe stats\": 526, \"footer\": 288, \"postscript\": 19,\n"
-                                 "  \"row index stride\": 10000,\n"
-                                 "  \"user metadata\": {\n"
-                                 "  },\n"
-                                 "  \"stripes\": [\n"
-                                 "    { \"stripe\": 0, \"rows\": 5000,\n"
-                                 "      \"offset\": 3, \"length\": 45568,\n"
-                                 "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
-                                 "    },\n"
-                                 "    { \"stripe\": 1, \"rows\": 5000,\n"
-                                 "      \"offset\": 45571, \"length\": 45568,\n"
-                                 "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
-                                 "    },\n"
-                                 "    { \"stripe\": 2, \"rows\": 5000,\n"
-                                 "      \"offset\": 91139, \"length\": 45568,\n"
-                                 "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
-                                 "    },\n"
-                                 "    { \"stripe\": 3, \"rows\": 5000,\n"
-                                 "      \"offset\": 136707, \"length\": 45570,\n"
-                                 "      \"index\": 138, \"data\": 45283, \"footer\": 149\n"
-                                 "    },\n"
-                                 "    { \"stripe\": 4, \"rows\": 5000,\n"
-                                 "      \"offset\": 200000, \"length\": 45568,\n"
-                                 "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
-                                 "    }\n"
-                                 "  ]\n"
-                                 "}\n";
+    const std::string expected =
+            "{ \"name\": \"" + file +
+            "\",\n"
+            "  \"type\": \"struct<userid:bigint,string1:string,subtype:double,decimal1:decimal(0,0),ts:timestamp>\",\n"
+            "  \"attributes\": {},\n"
+            "  \"rows\": 25000,\n"
+            "  \"stripe count\": 5,\n"
+            "  \"format\": \"0.12\", \"writer version\": \"original\", \"software version\": \"ORC Java\",\n"
+            "  \"compression\": \"none\",\n"
+            "  \"file length\": 246402,\n"
+            "  \"content\": 245568, \"stripe stats\": 526, \"footer\": 288, \"postscript\": 19,\n"
+            "  \"row index stride\": 10000,\n"
+            "  \"user metadata\": {\n"
+            "  },\n"
+            "  \"stripes\": [\n"
+            "    { \"stripe\": 0, \"rows\": 5000,\n"
+            "      \"offset\": 3, \"length\": 45568,\n"
+            "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
+            "    },\n"
+            "    { \"stripe\": 1, \"rows\": 5000,\n"
+            "      \"offset\": 45571, \"length\": 45568,\n"
+            "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
+            "    },\n"
+            "    { \"stripe\": 2, \"rows\": 5000,\n"
+            "      \"offset\": 91139, \"length\": 45568,\n"
+            "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
+            "    },\n"
+            "    { \"stripe\": 3, \"rows\": 5000,\n"
+            "      \"offset\": 136707, \"length\": 45570,\n"
+            "      \"index\": 138, \"data\": 45283, \"footer\": 149\n"
+            "    },\n"
+            "    { \"stripe\": 4, \"rows\": 5000,\n"
+            "      \"offset\": 200000, \"length\": 45568,\n"
+            "      \"index\": 137, \"data\": 45282, \"footer\": 149\n"
+            "    }\n"
+            "  ]\n"
+            "}\n";
 
     std::string output;
     std::string error;
@@ -216,13 +215,11 @@ TEST(TestFileMetadata, testNoFormat) {
     const std::string expected =
             "{ \"name\": \"" + file +
             "\",\n"
-            "  \"type\": "
-            "\"struct<_col0:array<string>,_col1:map<int,string>,_col2:struct<name:string,score:int>"
-            ">\",\n"
+            "  \"type\": \"struct<_col0:array<string>,_col1:map<int,string>,_col2:struct<name:string,score:int>>\",\n"
             "  \"attributes\": {},\n"
             "  \"rows\": 5,\n"
             "  \"stripe count\": 1,\n"
-            "  \"format\": \"0.11\", \"writer version\": \"original\",\n"
+            "  \"format\": \"0.11\", \"writer version\": \"original\", \"software version\": \"ORC Java\",\n"
             "  \"compression\": \"zlib\", \"compression block\": 262144,\n"
             "  \"file length\": 745,\n"
             "  \"content\": 525, \"stripe stats\": 0, \"footer\": 210, \"postscript\": 9,\n"
@@ -243,6 +240,40 @@ TEST(TestFileMetadata, testNoFormat) {
     EXPECT_EQ(0, runProgram({pgm, file}, output, error));
     EXPECT_EQ(expected, output);
     EXPECT_EQ("", error);
+}
+
+TEST(TestFileMetadata, testV2Format) {
+    const std::string pgm = findProgram("tools/src/orc-metadata");
+    const std::string file = findExample("decimal64_v2.orc");
+    const std::string expected_out =
+            "{ \"name\": \"" + file +
+            "\",\n"
+            "  \"type\": \"struct<a:bigint,b:decimal(12,0),c:decimal(20,2),d:decimal(12,2),e:decimal(2,2)>\",\n"
+            "  \"attributes\": {},\n"
+            "  \"rows\": 10,\n"
+            "  \"stripe count\": 1,\n"
+            "  \"format\": \"UNSTABLE-PRE-2.0\", \"writer version\": \"ORC-135\", \"software version\": \"ORC Java\",\n"
+            "  \"compression\": \"zlib\", \"compression block\": 262144,\n"
+            "  \"file length\": 738,\n"
+            "  \"content\": 377, \"stripe stats\": 130, \"footer\": 204, \"postscript\": 26,\n"
+            "  \"row index stride\": 10000,\n"
+            "  \"user metadata\": {\n"
+            "  },\n"
+            "  \"stripes\": [\n"
+            "    { \"stripe\": 0, \"rows\": 10,\n"
+            "      \"offset\": 3, \"length\": 374,\n"
+            "      \"index\": 192, \"data\": 112, \"footer\": 70\n"
+            "    }\n"
+            "  ]\n"
+            "}\n";
+    const std::string expected_err =
+            "Warning: ORC file " + file + " was written in an unknown format version UNSTABLE-PRE-2.0\n";
+
+    std::string output;
+    std::string error;
+    EXPECT_EQ(0, runProgram({pgm, file}, output, error)) << error;
+    EXPECT_EQ(expected_out, output);
+    EXPECT_EQ(expected_err, error);
 }
 
 TEST(TestFileMetadata, testAttributes) {

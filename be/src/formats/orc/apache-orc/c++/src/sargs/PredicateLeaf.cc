@@ -35,7 +35,14 @@
 namespace orc {
 
 PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string colName, const Literal& literal)
-        : mOperator(op), mType(type), mColumnName(std::move(colName)) {
+        : mOperator(op), mType(type), mColumnName(std::move(colName)), mHasColumnName(true), mColumnId(0) {
+    mLiterals.emplace_back(literal);
+    mHashCode = hashCode();
+    validate();
+}
+
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, Literal literal)
+        : mOperator(op), mType(type), mHasColumnName(false), mColumnId(columnId) {
     mLiterals.emplace_back(literal);
     mHashCode = hashCode();
     validate();
@@ -43,24 +50,49 @@ PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string co
 
 PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string colName,
                              const std::initializer_list<Literal>& literals)
-        : mOperator(op), mType(type), mColumnName(std::move(colName)), mLiterals(literals.begin(), literals.end()) {
+        : mOperator(op),
+          mType(type),
+          mColumnName(std::move(colName)),
+          mHasColumnName(true),
+          mLiterals(literals.begin(), literals.end()) {
+    mHashCode = hashCode();
+    validate();
+}
+
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId,
+                             const std::initializer_list<Literal>& literals)
+        : mOperator(op),
+          mType(type),
+          mHasColumnName(false),
+          mColumnId(columnId),
+          mLiterals(literals.begin(), literals.end()) {
     mHashCode = hashCode();
     validate();
 }
 
 PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string colName,
                              const std::vector<Literal>& literals)
-        : mOperator(op), mType(type), mColumnName(std::move(colName)), mLiterals(literals.begin(), literals.end()) {
+        : mOperator(op),
+          mType(type),
+          mColumnName(std::move(colName)),
+          mHasColumnName(true),
+          mLiterals(literals.begin(), literals.end()) {
     mHashCode = hashCode();
     validate();
+}
+
+void PredicateLeaf::validateColumn() const {
+    if (mHasColumnName && mColumnName.empty()) {
+        throw std::invalid_argument("column name should not be empty");
+    } else if (!mHasColumnName && mColumnId == INVALID_COLUMN_ID) {
+        throw std::invalid_argument("invalid column id");
+    }
 }
 
 void PredicateLeaf::validate() const {
     switch (mOperator) {
     case Operator::IS_NULL:
-        if (mColumnName.empty()) {
-            throw std::invalid_argument("column name should not be empty");
-        }
+        validateColumn();
         if (!mLiterals.empty()) {
             throw std::invalid_argument("No literal is required!");
         }
@@ -69,9 +101,7 @@ void PredicateLeaf::validate() const {
     case Operator::NULL_SAFE_EQUALS:
     case Operator::LESS_THAN:
     case Operator::LESS_THAN_EQUALS:
-        if (mColumnName.empty()) {
-            throw std::invalid_argument("column name should not be empty");
-        }
+        validateColumn();
         if (mLiterals.size() != 1) {
             throw std::invalid_argument("One literal is required!");
         }
@@ -80,9 +110,7 @@ void PredicateLeaf::validate() const {
         }
         break;
     case Operator::IN:
-        if (mColumnName.empty()) {
-            throw std::invalid_argument("column name should not be empty");
-        }
+        validateColumn();
         if (mLiterals.size() < 1) {
             throw std::invalid_argument("At least one literal are required!");
         }
@@ -93,9 +121,7 @@ void PredicateLeaf::validate() const {
         }
         break;
     case Operator::BETWEEN:
-        if (mColumnName.empty()) {
-            throw std::invalid_argument("column name should not be empty");
-        }
+        validateColumn();
         for (const auto& literal : mLiterals) {
             if (static_cast<int>(literal.getType()) != static_cast<int>(mType)) {
                 throw std::invalid_argument("leaf and literal types do not match!");
@@ -115,11 +141,19 @@ PredicateDataType PredicateLeaf::getType() const {
     return mType;
 }
 
+bool PredicateLeaf::hasColumnName() const {
+    return mHasColumnName;
+}
+
 /**
    * Get the simple column name.
    */
 const std::string& PredicateLeaf::getColumnName() const {
     return mColumnName;
+}
+
+uint64_t PredicateLeaf::getColumnId() const {
+    return mColumnId;
 }
 
 /**
@@ -153,33 +187,41 @@ static std::string getLiteralsString(const std::vector<Literal>& literals) {
     return sstream.str();
 }
 
+std::string PredicateLeaf::columnDebugString() const {
+    if (mHasColumnName) return mColumnName;
+    std::ostringstream sstream;
+    sstream << "column(id=" << mColumnId << ')';
+    return sstream.str();
+}
+
 std::string PredicateLeaf::toString() const {
     std::ostringstream sstream;
     sstream << '(';
     switch (mOperator) {
     case Operator::IS_NULL:
-        sstream << mColumnName << " is null";
+        sstream << columnDebugString() << " is null";
         break;
     case Operator::EQUALS:
-        sstream << mColumnName << " = " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " = " << getLiteralString(mLiterals);
         break;
     case Operator::NULL_SAFE_EQUALS:
-        sstream << mColumnName << " null_safe_= " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " null_safe_= " << getLiteralString(mLiterals);
         break;
     case Operator::LESS_THAN:
-        sstream << mColumnName << " < " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " < " << getLiteralString(mLiterals);
         break;
     case Operator::LESS_THAN_EQUALS:
-        sstream << mColumnName << " <= " << getLiteralString(mLiterals);
+        sstream << columnDebugString() << " <= " << getLiteralString(mLiterals);
         break;
     case Operator::IN:
-        sstream << mColumnName << " in " << getLiteralsString(mLiterals);
+        sstream << columnDebugString() << " in " << getLiteralsString(mLiterals);
         break;
     case Operator::BETWEEN:
-        sstream << mColumnName << " between " << getLiteralsString(mLiterals);
+        sstream << columnDebugString() << " between " << getLiteralsString(mLiterals);
         break;
     default:
-        sstream << "unknown operator, colName: " << mColumnName << ", literals: " << getLiteralsString(mLiterals);
+        sstream << "unknown operator, colName: " << columnDebugString()
+                << ", literals: " << getLiteralsString(mLiterals);
     }
     sstream << ')';
     return sstream.str();
@@ -189,17 +231,19 @@ size_t PredicateLeaf::hashCode() const {
     size_t value = 0;
     std::for_each(mLiterals.cbegin(), mLiterals.cend(),
                   [&](const Literal& literal) { value = value * 17 + literal.getHashCode(); });
+    auto colHash = mHasColumnName ? std::hash<std::string>{}(mColumnName) : std::hash<uint64_t>{}(mColumnId);
     return value * 103 * 101 * 3 * 17 + std::hash<int>{}(static_cast<int>(mOperator)) +
            std::hash<int>{}(static_cast<int>(mType)) * 17 + std::hash<std::string>{}(mColumnName)*3 * 17 +
-           std::hash<uint64_t>{}(mColumnId)*3 * 17 * 17;
+           colHash * 3 * 17 * 17;
 }
 
 bool PredicateLeaf::operator==(const PredicateLeaf& r) const {
     if (this == &r) {
         return true;
     }
-    if (mHashCode != r.mHashCode || mType != r.mType || mOperator != r.mOperator || mColumnName != r.mColumnName ||
-        mColumnId != r.mColumnId || mLiterals.size() != r.mLiterals.size()) {
+    if (mHashCode != r.mHashCode || mType != r.mType || mOperator != r.mOperator ||
+        mHasColumnName != r.mHasColumnName || mColumnName != r.mColumnName || mColumnId != r.mColumnId ||
+        mLiterals.size() != r.mLiterals.size()) {
         return false;
     }
     for (size_t i = 0; i != mLiterals.size(); ++i) {

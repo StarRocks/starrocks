@@ -33,10 +33,11 @@ namespace orc {
    * @param input the input stream that is the underlying source
    * @param bufferSize the maximum size of the buffer
    * @param pool the memory pool
+   * @param metrics the reader metrics
    */
 std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
                                                         std::unique_ptr<SeekableInputStream> input, uint64_t bufferSize,
-                                                        MemoryPool& pool);
+                                                        MemoryPool& pool, ReaderMetrics* metrics);
 
 /**
    * Create a compressor for the given compression kind.

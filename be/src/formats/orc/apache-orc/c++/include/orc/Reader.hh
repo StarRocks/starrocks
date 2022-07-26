@@ -30,7 +30,7 @@
 #include "orc/sargs/SearchArgument.hh"
 #include "orc/Type.hh"
 #include "orc/Vector.hh"
-
+#include <atomic>
 #include <map>
 #include <memory>
 #include <set>
@@ -39,6 +39,28 @@
 // clang-format on
 
 namespace orc {
+
+/**
+   * Expose the reader metrics including the latency and
+   * number of calls of the decompression/decoding/IO modules.
+   */
+struct ReaderMetrics {
+    std::atomic<uint64_t> ReaderCall{0};
+    // ReaderInclusiveLatencyUs contains the latency of
+    // the decompression/decoding/IO modules.
+    std::atomic<uint64_t> ReaderInclusiveLatencyUs{0};
+    std::atomic<uint64_t> DecompressionCall{0};
+    std::atomic<uint64_t> DecompressionLatencyUs{0};
+    std::atomic<uint64_t> DecodingCall{0};
+    std::atomic<uint64_t> DecodingLatencyUs{0};
+    std::atomic<uint64_t> ByteDecodingCall{0};
+    std::atomic<uint64_t> ByteDecodingLatencyUs{0};
+    std::atomic<uint64_t> IOCount{0};
+    std::atomic<uint64_t> IOBlockingLatencyUs{0};
+    std::atomic<uint64_t> SelectedRowGroupCount{0};
+    std::atomic<uint64_t> EvaluatedRowGroupCount{0};
+};
+ReaderMetrics* getDefaultReaderMetrics();
 
 // classes that hold data members so we can maintain binary compatibility
 struct ReaderOptionsPrivate;
@@ -82,6 +104,13 @@ public:
     ReaderOptions& setMemoryPool(MemoryPool& pool);
 
     /**
+     * Set the reader metrics.
+     *
+     * When set to nullptr, the reader metrics will be disabled.
+     */
+    ReaderOptions& setReaderMetrics(ReaderMetrics* metrics);
+
+    /**
      * Set the location of the tail as defined by the logical length of the
      * file.
      */
@@ -107,6 +136,11 @@ public:
      * Get the memory allocator.
      */
     MemoryPool* getMemoryPool() const;
+
+    /**
+     * Get the reader metrics.
+     */
+    ReaderMetrics* getReaderMetrics() const;
 };
 
 /**
@@ -433,6 +467,12 @@ public:
      * Check if the file has correct column statistics.
      */
     virtual bool hasCorrectStatistics() const = 0;
+
+    /**
+     * Get metrics of the reader
+     * @return the accumulated reader metrics to current state.
+     */
+    virtual const ReaderMetrics* getReaderMetrics() const = 0;
 
     /**
      * Get the serialized file tail.

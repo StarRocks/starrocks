@@ -27,6 +27,7 @@
 #include <iostream>
 #include <utility>
 
+#include "Utils.hh"
 #include "orc/Exceptions.hh"
 
 namespace orc {
@@ -65,6 +66,13 @@ public:
 
     void recordPosition(PositionRecorder* recorder) const override;
 
+    void suppress() override;
+
+    /**
+     * Reset to initial state
+     */
+    void reset();
+
 protected:
     std::unique_ptr<BufferedOutputStream> outputStream;
     char* literals;
@@ -82,12 +90,7 @@ protected:
 
 ByteRleEncoderImpl::ByteRleEncoderImpl(std::unique_ptr<BufferedOutputStream> output) : outputStream(std::move(output)) {
     literals = new char[MAX_LITERAL_SIZE];
-    numLiterals = 0;
-    tailRunLength = 0;
-    repeat = false;
-    bufferPosition = 0;
-    bufferLength = 0;
-    buffer = nullptr;
+    reset();
 }
 
 ByteRleEncoderImpl::~ByteRleEncoderImpl() {
@@ -201,6 +204,21 @@ void ByteRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
     recorder->add(static_cast<uint64_t>(numLiterals));
 }
 
+void ByteRleEncoderImpl::reset() {
+    numLiterals = 0;
+    tailRunLength = 0;
+    repeat = false;
+    bufferPosition = 0;
+    bufferLength = 0;
+    buffer = nullptr;
+}
+
+void ByteRleEncoderImpl::suppress() {
+    // written data can be just ignored because they are only flushed in memory
+    outputStream->suppress();
+    reset();
+}
+
 std::unique_ptr<ByteRleEncoder> createByteRleEncoder(std::unique_ptr<BufferedOutputStream> output) {
     return std::unique_ptr<ByteRleEncoder>(new ByteRleEncoderImpl(std::move(output)));
 }
@@ -287,7 +305,7 @@ ByteRleDecoder::~ByteRleDecoder() {
 
 class ByteRleDecoderImpl : public ByteRleDecoder {
 public:
-    ByteRleDecoderImpl(std::unique_ptr<SeekableInputStream> input);
+    ByteRleDecoderImpl(std::unique_ptr<SeekableInputStream> input, ReaderMetrics* metrics);
 
     ~ByteRleDecoderImpl() override;
 
@@ -307,6 +325,7 @@ public:
     void next(char* data, uint64_t numValues, char* notNull) override;
 
 protected:
+    void nextInternal(char* data, uint64_t numValues, char* notNull);
     inline void nextBuffer();
     inline signed char readByte();
     inline void readHeader();
@@ -317,9 +336,11 @@ protected:
     const char* bufferStart;
     const char* bufferEnd;
     bool repeating;
+    ReaderMetrics* metrics;
 };
 
 void ByteRleDecoderImpl::nextBuffer() {
+    SCOPED_MINUS_STOPWATCH(metrics, ByteDecodingLatencyUs);
     int bufferLength;
     const void* bufferPointer;
     bool result = inputStream->Next(&bufferPointer, &bufferLength);
@@ -349,7 +370,8 @@ void ByteRleDecoderImpl::readHeader() {
     }
 }
 
-ByteRleDecoderImpl::ByteRleDecoderImpl(std::unique_ptr<SeekableInputStream> input) {
+ByteRleDecoderImpl::ByteRleDecoderImpl(std::unique_ptr<SeekableInputStream> input, ReaderMetrics* _metrics)
+        : metrics(_metrics) {
     inputStream = std::move(input);
     repeating = false;
     remainingValues = 0;
@@ -374,6 +396,7 @@ void ByteRleDecoderImpl::seek(PositionProvider& location) {
 }
 
 void ByteRleDecoderImpl::skip(uint64_t numValues) {
+    SCOPED_STOPWATCH(metrics, ByteDecodingLatencyUs, ByteDecodingCall);
     while (numValues > 0) {
         if (remainingValues == 0) {
             readHeader();
@@ -399,6 +422,11 @@ void ByteRleDecoderImpl::skip(uint64_t numValues) {
 }
 
 void ByteRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) {
+    SCOPED_STOPWATCH(metrics, ByteDecodingLatencyUs, ByteDecodingCall);
+    nextInternal(data, numValues, notNull);
+}
+
+void ByteRleDecoderImpl::nextInternal(char* data, uint64_t numValues, char* notNull) {
     uint64_t position = 0;
     // skip over null values
     while (notNull && position < numValues && !notNull[position]) {
@@ -456,14 +484,14 @@ void ByteRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) {
     }
 }
 
-std::unique_ptr<ByteRleDecoder> createByteRleDecoder(std::unique_ptr<SeekableInputStream> input) {
-    return std::unique_ptr<ByteRleDecoder>(new ByteRleDecoderImpl(std::move(input)));
+std::unique_ptr<ByteRleDecoder> createByteRleDecoder(std::unique_ptr<SeekableInputStream> input,
+                                                     ReaderMetrics* metrics) {
+    return std::unique_ptr<ByteRleDecoder>(new ByteRleDecoderImpl(std::move(input), metrics));
 }
 
 class BooleanRleDecoderImpl : public ByteRleDecoderImpl {
 public:
-    BooleanRleDecoderImpl(std::unique_ptr<SeekableInputStream> input);
-
+    BooleanRleDecoderImpl(std::unique_ptr<SeekableInputStream> input, ReaderMetrics* metrics);
     ~BooleanRleDecoderImpl() override;
 
     /**
@@ -486,8 +514,8 @@ protected:
     char lastByte;
 };
 
-BooleanRleDecoderImpl::BooleanRleDecoderImpl(std::unique_ptr<SeekableInputStream> input)
-        : ByteRleDecoderImpl(std::move(input)) {
+BooleanRleDecoderImpl::BooleanRleDecoderImpl(std::unique_ptr<SeekableInputStream> input, ReaderMetrics* _metrics)
+        : ByteRleDecoderImpl(std::move(input), _metrics) {
     remainingBits = 0;
     lastByte = 0;
 }
@@ -526,6 +554,7 @@ void BooleanRleDecoderImpl::skip(uint64_t numValues) {
 }
 
 void BooleanRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) {
+    SCOPED_STOPWATCH(metrics, ByteDecodingLatencyUs, ByteDecodingCall);
     // next spot to fill in
     uint64_t position = 0;
 
@@ -565,7 +594,7 @@ void BooleanRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) 
     } else if (position < numValues) {
         // read the new bytes into the array
         uint64_t bytesRead = (nonNulls + 7) / 8;
-        ByteRleDecoderImpl::next(data + position, bytesRead, nullptr);
+        ByteRleDecoderImpl::nextInternal(data + position, bytesRead, nullptr);
         lastByte = data[position + bytesRead - 1];
         remainingBits = bytesRead * 8 - nonNulls;
         // expand the array backwards so that we don't clobber the data
@@ -590,8 +619,9 @@ void BooleanRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) 
     }
 }
 
-std::unique_ptr<ByteRleDecoder> createBooleanRleDecoder(std::unique_ptr<SeekableInputStream> input) {
-    BooleanRleDecoderImpl* decoder = new BooleanRleDecoderImpl(std::move(input));
+std::unique_ptr<ByteRleDecoder> createBooleanRleDecoder(std::unique_ptr<SeekableInputStream> input,
+                                                        ReaderMetrics* metrics) {
+    BooleanRleDecoderImpl* decoder = new BooleanRleDecoderImpl(std::move(input), metrics);
     return std::unique_ptr<ByteRleDecoder>(reinterpret_cast<ByteRleDecoder*>(decoder));
 }
 } // namespace orc
