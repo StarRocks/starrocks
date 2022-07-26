@@ -777,7 +777,7 @@ public class ReportHandler extends Daemon {
         DropReplicaTask task =
                 new DropReplicaTask(backendId, tabletId, schemaHash, false);
         batchTask.addTask(task);
-        LOG.warn("delete tablet[{}] from backend[{}] because {}",
+        LOG.info("delete tablet[{}] from backend[{}] because {}",
                 tabletId, backendId, reason);
     }
 
