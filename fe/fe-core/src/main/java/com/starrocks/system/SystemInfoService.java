@@ -52,6 +52,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -251,8 +252,8 @@ public class SystemInfoService {
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
             }
             opMessage = String.format(
-                formatSb.toString(), willBeModifiedHost,
-                updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
+                    formatSb.toString(), willBeModifiedHost,
+                    updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
         } else {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
         }
@@ -564,6 +565,10 @@ public class SystemInfoService {
             }
             return backendIds;
         }
+    }
+
+    public int getAliveBackendSize() {
+        return getBackendIds(true).size();
     }
 
     public int backendSize() {

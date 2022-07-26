@@ -114,7 +114,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public JoinNode(String planNodename, PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
                     List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super(id, planNodename);
-//        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
+        //        Preconditions.checkArgument(eqJoinConjuncts != null && !eqJoinConjuncts.isEmpty());
         Preconditions.checkArgument(otherJoinConjuncts != null);
         tupleIds.addAll(outer.getTupleIds());
         tupleIds.addAll(inner.getTupleIds());
@@ -145,6 +145,47 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
     }
 
+    private int computeEqualCount(List<BinaryPredicate> eqJoinConjuncts) {
+        // we want to find the case that
+        // [1:a] = [2:c]
+        // [3:d] = [2:c]
+        // so actually there is only one equal count [2:c]
+        int size = eqJoinConjuncts.size();
+        if (size < 2) {
+            return size;
+        }
+        // make sure all operators are the same.
+        BinaryPredicate.Operator op = eqJoinConjuncts.get(0).getOp();
+        for (int i = 0; i < size; i++) {
+            if (!op.equals(eqJoinConjuncts.get(i).getOp())) {
+                return size;
+            }
+        }
+        // enumerate the first two conjuncts, check if there are overlapped item.
+        Expr a = eqJoinConjuncts.get(0).getChild(0);
+        Expr b = eqJoinConjuncts.get(0).getChild(1);
+        Expr c = eqJoinConjuncts.get(1).getChild(0);
+        Expr d = eqJoinConjuncts.get(1).getChild(1);
+        Expr common = null;
+        if (a.equals(c) || a.equals(d)) {
+            common = a;
+        } else if (b.equals(c) || b.equals(d)) {
+            common = b;
+        }
+        if (common == null) {
+            return size;
+        }
+        // check following conjuncts are overlapped with `common`
+        for (int i = 2; i < size; i++) {
+            Expr l = eqJoinConjuncts.get(i).getChild(0);
+            Expr r = eqJoinConjuncts.get(i).getChild(0);
+            if (!common.equals(l) && !common.equals(r)) {
+                return size;
+            }
+        }
+        return 1;
+    }
+
     @Override
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
@@ -167,6 +208,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
+        int equalCount = computeEqualCount(eqJoinConjuncts);
+
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
@@ -176,7 +219,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setExprOrder(i);
             rf.setJoinMode(distrMode);
-            rf.setEqualCount(eqJoinConjuncts.size());
+            rf.setEqualCount(equalCount);
             rf.setBuildCardinality(inner.getCardinality());
             rf.setEqualForNull(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct));
 

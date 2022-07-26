@@ -422,7 +422,7 @@ public class UtFrameUtils {
         connectContext.setSessionVariable(replayDumpInfo.getSessionVariable());
         // create table
         int backendId = 10002;
-        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
+        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendSize();
         for (int i = 1; i < backendIdSize; ++i) {
             UtFrameUtils.dropMockBackend(backendId++);
         }
@@ -482,7 +482,7 @@ public class UtFrameUtils {
 
     private static void tearMockEnv() {
         int backendId = 10002;
-        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
+        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendSize();
         for (int i = 1; i < backendIdSize; ++i) {
             try {
                 UtFrameUtils.dropMockBackend(backendId++);

@@ -447,7 +447,7 @@ public class Utils {
                                               Collection<Long> selectedPartitionId,
                                               Collection<Long> selectedTabletId) {
         int backendSize = GlobalStateMgr.getCurrentSystemInfo().backendSize();
-        int aliveBackendSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
+        int aliveBackendSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendSize();
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
