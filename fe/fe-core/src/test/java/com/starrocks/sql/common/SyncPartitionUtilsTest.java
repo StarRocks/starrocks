@@ -96,6 +96,29 @@ public class SyncPartitionUtilsTest {
     }
 
     @Test
+    public void testGeneratePartitionRefMapOneByOne() throws AnalysisException {
+        Map<String, Range<PartitionKey>> srcRangeMap = Maps.newHashMap();
+        srcRangeMap.put("p202010_202011", createRange("2020-10-01", "2020-11-01"));
+        srcRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
+        srcRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
+
+        Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
+        dstRangeMap.put("p202010_202011", createRange("2020-10-01", "2020-11-01"));
+        dstRangeMap.put("p202011_202012", createRange("2020-11-01", "2020-12-01"));
+        dstRangeMap.put("p202012_202101", createRange("2020-12-01", "2021-01-01"));
+
+        Map<String, Set<String>> partitionRefMap = SyncPartitionUtils.generatePartitionRefMap(srcRangeMap, dstRangeMap);
+
+        Assert.assertEquals(1, partitionRefMap.get("p202010_202011").size());
+        Assert.assertEquals(1, partitionRefMap.get("p202011_202012").size());
+        Assert.assertEquals(1, partitionRefMap.get("p202012_202101").size());
+
+        Assert.assertTrue(partitionRefMap.get("p202010_202011").contains("p202010_202011"));
+        Assert.assertTrue(partitionRefMap.get("p202011_202012").contains("p202011_202012"));
+        Assert.assertTrue(partitionRefMap.get("p202012_202101").contains("p202012_202101"));
+    }
+
+    @Test
     public void testDiffRange() throws AnalysisException {
 
         // normal condition
