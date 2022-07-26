@@ -553,7 +553,14 @@ public class VariableMgr {
     }
 
     public static boolean shouldForwardToLeader(String name) {
-        return (getVarContext(name).getFlag() & DISABLE_FORWARD_TO_LEADER) == 0;
+        VarContext varContext = getVarContext(name);
+        if (varContext == null) {
+            // DEPRECATED_VARIABLES like enable_cbo don't have flag
+            // we simply assume they all can forward to leader
+            return true;
+        } else {
+            return (varContext.getFlag() & DISABLE_FORWARD_TO_LEADER) == 0;
+        }
     }
 
     @Retention(RetentionPolicy.RUNTIME)
