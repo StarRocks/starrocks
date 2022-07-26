@@ -296,6 +296,16 @@ inline const Status& to_status(const StatusOr<T>& st) {
         }                                                                                             \
     } while (false)
 
+#define EXIT_IF_ERROR(stmt)                        \
+    do {                                           \
+        auto&& status__ = (stmt);                  \
+        if (UNLIKELY(!status__.ok())) {            \
+            string msg = status__.get_error_msg(); \
+            LOG(ERROR) << msg;                     \
+            exit(1);                               \
+        }                                          \
+    } while (false)
+
 /// @brief Emit a warning if @c to_call returns a bad status.
 #define WARN_IF_ERROR(to_call, warning_prefix)                \
     do {                                                      \
