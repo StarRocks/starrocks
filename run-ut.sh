@@ -38,6 +38,7 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --use-staros                   enable to build with staros
+     --use-jemalloc                 enable to build with jemalloc
      -j                             build parallel
 
   Eg.
@@ -60,6 +61,7 @@ OPTS=$(getopt \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'use-staros' \
+  -l 'use-jemalloc' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -77,6 +79,7 @@ HELP=0
 WITH_AWS=OFF
 WITH_BENCH=OFF
 USE_STAROS=OFF
+USE_JEMALLOC=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -86,6 +89,7 @@ while true; do
         --with-aws) WITH_AWS=ON; shift ;;
         --with-bench) WITH_BENCH=ON; shift ;;
         --use-staros) USE_STAROS=ON; shift ;;
+        --use-jemalloc) USE_JEMALLOC=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -105,6 +109,7 @@ fi
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
+
 echo "Build Backend UT"
 
 CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/ut_build_${CMAKE_BUILD_TYPE}
@@ -130,6 +135,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DUSE_JEMALLOC=$USE_JEMALLOC \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
               -DUSE_STAROS=${USE_STAROS} \
               -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
@@ -144,6 +150,7 @@ else
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DUSE_JEMALLOC=$USE_JEMALLOC \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
 fi
 time ${BUILD_SYSTEM} -j${PARALLEL}

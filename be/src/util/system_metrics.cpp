@@ -302,10 +302,10 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 }
 
 void SystemMetrics::_update_memory_metrics() {
+    size_t value = 0;
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #elif defined(USE_JEMALLOC)
-    size_t value = 0;
     size_t sz = sizeof(size_t);
     if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_allocated_bytes.set_value(value);
@@ -330,7 +330,6 @@ void SystemMetrics::_update_memory_metrics() {
     }
 #else
     MallocExtension* ext = MallocExtension::instance();
-    size_t value = 0;
     (void)ext->GetNumericProperty("generic.current_allocated_bytes", &value);
     _memory_metrics->allocated_bytes.set_value(value);
 
