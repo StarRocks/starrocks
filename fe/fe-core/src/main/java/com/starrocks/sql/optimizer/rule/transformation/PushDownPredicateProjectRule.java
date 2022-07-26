@@ -11,11 +11,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 

@@ -838,7 +838,7 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         } finally {
             FeConstants.runningUnitTest = false;
-        }        
+        }
     }
 
     @Test
@@ -852,7 +852,7 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         } finally {
             FeConstants.runningUnitTest = false;
-        } 
+        }
     }
 
     @Test
@@ -1378,6 +1378,26 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
         connectContext.getSessionVariable().setCboCteReuse(false);
+
+
+        int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        try {
+            connectContext.getSessionVariable().setNewPlanerAggStage(3);
+            sql = "select count(distinct t1b) from test_all_type";
+
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            assertContains(execPlan.getFragments().get(1).getExplainString(TExplainLevel.NORMAL),
+                    "  4:AGGREGATE (update serialize)\n" +
+                            "  |  output: count(2: t1b)\n" +
+                            "  |  group by: \n" +
+                            "  |  \n" +
+                            "  3:AGGREGATE (merge serialize)\n" +
+                            "  |  group by: 2: t1b\n" +
+                            "  |  ");
+            Assert.assertFalse(execPlan.getFragments().get(1).isEnableSharedScan());
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(prevAggStage);
+        }
     }
 
     @Test
@@ -1412,7 +1432,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  equal join conjunct: 14: t1b <=> 17: t1b\n" +
                 "  |  equal join conjunct: 15: t1c <=> 18: t1c");
 
-        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
+        sql =
+                "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
@@ -1423,7 +1444,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1c <=> 17: t1c");
 
-        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        sql =
+                "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
                 "  |  <slot 2> : 2: t1b\n" +
@@ -1435,7 +1457,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 20: expr");
 
-        sql =  "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        sql =
+                "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "4:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +

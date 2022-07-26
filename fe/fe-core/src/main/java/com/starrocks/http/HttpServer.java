@@ -114,6 +114,10 @@ public class HttpServer {
         registerActions();
     }
 
+    public ActionController getController() {
+        return controller;
+    }
+
     private void registerActions() throws IllegalArgException {
         // add rest action
         LoadAction.registerAction(controller);

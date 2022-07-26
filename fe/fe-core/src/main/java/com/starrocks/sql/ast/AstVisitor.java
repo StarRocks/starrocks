@@ -331,7 +331,11 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitUseStatement(UseStmt statement, C context) {
+    public R visitUseDbStatement(UseDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -403,6 +407,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitCreateFunction(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+    
+    public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     public R visitShowOpenTablesStmt(ShowOpenTableStmt statement, C context) {

@@ -76,6 +76,26 @@ public class ShowOpenTableStmt extends ShowStmt {
     }
 
     @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowOpenTableStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    @Override
+    public String toSql() {
+        return "SHOW OPEN TABLES";
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
+    @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
     }

@@ -114,7 +114,8 @@ statement
 
 
     // Other statement
-    | USE qualifiedName                                                                     #use
+    | USE qualifiedName                                                                     #useDb
+    | USE CATALOG identifierOrString                                                        #useCatalog
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
@@ -348,7 +349,10 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-
+    
+showOpenTableStatement
+    : SHOW OPEN TABLES
+    ;
 recoverPartitionStatement
     : RECOVER PARTITION identifier FROM table=qualifiedName
     ;

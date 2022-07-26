@@ -466,6 +466,7 @@ struct TMasterOpRequest {
     // TODO(zc): Should forward all session variables and connection context
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
+    32: optional string modified_variables_sql
 }
 
 struct TColumnDefinition {
@@ -988,6 +989,7 @@ service FrontendService {
     TLoadTxnBeginResult loadTxnBegin(1: TLoadTxnBeginRequest request)
     TLoadTxnCommitResult loadTxnCommit(1: TLoadTxnCommitRequest request)
     TLoadTxnRollbackResult loadTxnRollback(1: TLoadTxnRollbackRequest request)
+    TLoadTxnCommitResult loadTxnPrepare(1: TLoadTxnCommitRequest request)
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
 

@@ -13,12 +13,10 @@ import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.MetaUtils;
@@ -85,12 +83,7 @@ public class DropStmtAnalyzer {
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
-            String catalog = context.getCurrentCatalog();
-            if (CatalogMgr.isInternalCatalog(catalog)) {
-                dbName = ClusterNamespace.getFullName(dbName);
-            }
-            statement.setDbName(dbName);
-            if (dbName.equalsIgnoreCase(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
+            if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
             }
             return null;

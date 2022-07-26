@@ -648,6 +648,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_timeout_second = 259200; // 3days
 
     /**
+     * Default prepared transaction timeout
+     */
+    @ConfField(mutable = true)
+    public static int prepared_transaction_default_timeout_second = 86400; // 1day
+
+    /**
      * Max load timeout applicable to all type of load except for stream load
      */
     @ConfField(mutable = true)
@@ -758,11 +764,13 @@ public class Config extends ConfigBase {
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
      *
-     * The default value is true because if user has a deployment with only SSD or HDD medium storage paths,
+     * The default value should better set to true because if user
+     * has a deployment with only SSD or HDD medium storage paths,
      * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
+     * But currently for compatible reason, we keep it to false.
      */
     @ConfField(mutable = true)
-    public static boolean enable_strict_storage_medium_check = true;
+    public static boolean enable_strict_storage_medium_check = false;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).

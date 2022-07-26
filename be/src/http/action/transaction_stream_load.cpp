@@ -104,7 +104,7 @@ void TransactionManagerAction::handle(HttpRequest* req) {
 
     if (boost::iequals(txn_op, TXN_BEGIN)) {
         st = _exec_env->transaction_mgr()->begin_transaction(req, &resp);
-    } else if (boost::iequals(txn_op, TXN_COMMIT)) {
+    } else if (boost::iequals(txn_op, TXN_COMMIT) || boost::iequals(txn_op, TXN_PREPARE)) {
         st = _exec_env->transaction_mgr()->commit_transaction(req, &resp);
     } else if (boost::iequals(txn_op, TXN_ROLLBACK)) {
         st = _exec_env->transaction_mgr()->rollback_transaction(req, &resp);
@@ -112,8 +112,6 @@ void TransactionManagerAction::handle(HttpRequest* req) {
         return _send_error_reply(req,
                                  Status::InvalidArgument(fmt::format("unsupport transaction operation {}", txn_op)));
     }
-
-    LOG(INFO) << "Execute transaction label=" << req->header(HTTP_LABEL_KEY) << " op=" << txn_op << " status=" << st;
 
     _send_reply(req, resp);
 }
@@ -188,14 +186,21 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
+    if (ctx->table != req->header(HTTP_TABLE_KEY)) {
+        _send_error_reply(req, Status::InvalidArgument(fmt::format("Request table {} not equal transaction table {}",
+                                                                   req->header(HTTP_TABLE_KEY), ctx->table)));
+        return -1;
+    }
+
     if (!ctx->lock.try_lock()) {
         _send_error_reply(req, Status::TransactionInProcessing("Transaction in processing, please retry later"));
         return -1;
     }
-    ctx->table = req->header(HTTP_TABLE_KEY);
     ctx->last_active_ts = MonotonicNanos();
+    ctx->received_data_cost_nanos = 0;
+    ctx->receive_bytes = 0;
 
-    LOG(INFO) << "new streaming load request." << ctx->brief() << ", db=" << ctx->db << ", tbl=" << ctx->table;
+    LOG(INFO) << "new transaction load request." << ctx->brief() << ", tbl=" << ctx->table;
 
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
@@ -259,27 +264,15 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
     return _exec_plan_fragment(http_req, ctx);
 }
 
-Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx) {
-    // put request
-    TStreamLoadPutRequest request;
-
-    // setup stream pipe
-    auto pipe = _exec_env->load_stream_mgr()->get(ctx->id);
-    if (pipe == nullptr) {
-        auto pipe = std::make_shared<StreamLoadPipe>();
-        RETURN_IF_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe));
-        request.fileType = TFileType::FILE_STREAM;
-        ctx->body_sink = pipe;
-    } else {
-        return Status::OK();
-    }
-
+Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, StreamLoadContext* ctx,
+                                                   TStreamLoadPutRequest& request) {
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.formatType = ctx->format;
     request.__set_loadId(ctx->id.to_thrift());
+    request.fileType = TFileType::FILE_STREAM;
 
     if (!http_req->header(HTTP_COLUMNS).empty()) {
         request.__set_columns(http_req->header(HTTP_COLUMNS));
@@ -369,6 +362,30 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
     }
+
+    return Status::OK();
+}
+
+Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx) {
+    TStreamLoadPutRequest request;
+    RETURN_IF_ERROR(_parse_request(http_req, ctx, request));
+    if (ctx->request.db != "") {
+        if (ctx->request != request) {
+            return Status::InternalError("load request not equal last.");
+        }
+    } else {
+        ctx->request = request;
+    }
+    // setup stream pipe
+    auto pipe = _exec_env->load_stream_mgr()->get(ctx->id);
+    if (pipe == nullptr) {
+        auto pipe = std::make_shared<StreamLoadPipe>();
+        RETURN_IF_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe));
+        ctx->body_sink = pipe;
+    } else {
+        return Status::OK();
+    }
+
     request.__set_thrift_rpc_timeout_ms(config::thrift_rpc_timeout_ms);
     // plan this load
     auto master_addr = get_master_address();
@@ -469,9 +486,11 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
         ctx->buffer->pos += remove_bytes;
         ctx->receive_bytes += remove_bytes;
+        ctx->total_receive_bytes += remove_bytes;
     }
-    ctx->received_data_cost_nanos = ctx->last_active_ts - start_read_data_time;
-    ctx->total_received_data_cost_nanos += ctx->received_data_cost_nanos;
+    ctx->last_active_ts = MonotonicNanos();
+    ctx->received_data_cost_nanos += ctx->last_active_ts - start_read_data_time;
+    ctx->total_received_data_cost_nanos += ctx->last_active_ts - start_read_data_time;
 }
 
 } // namespace starrocks
