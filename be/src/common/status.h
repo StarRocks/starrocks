@@ -58,6 +58,25 @@ public:
 
     Status(const StatusPB& pstatus); // NOLINT
 
+    // Inspired by absl::Status::Update()
+    // https://github.com/abseil/abseil-cpp/blob/63c9eeca0464c08ccb861b21e33e10faead414c9/absl/status/status.h#L467
+    //
+    // Status::update()
+    //
+    // Updates the existing status with `new_status` provided that `this->ok()`.
+    // If the existing status already contains a non-OK error, this update has no
+    // effect and preserves the current data.
+    //
+    // `update()` provides a convenient way of keeping track of the first error
+    // encountered.
+    //
+    // Example:
+    //   // Instead of "if (overall_status.ok()) overall_status = new_status"
+    //   overall_status.update(new_status);
+    //
+    void update(const Status& new_status);
+    void update(Status&& new_status);
+
     static Status OK() { return Status(); }
 
     static Status Unknown(const Slice& msg) { return Status(TStatusCode::UNKNOWN, msg); }
@@ -238,6 +257,18 @@ private:
     const char* _state = nullptr;
 };
 
+inline void Status::update(const Status& new_status) {
+    if (ok()) {
+        *this = new_status;
+    }
+}
+
+inline void Status::update(Status&& new_status) {
+    if (ok()) {
+        *this = std::move(new_status);
+    }
+}
+
 inline std::ostream& operator<<(std::ostream& os, const Status& st) {
     return os << st.to_string();
 }
@@ -263,24 +294,6 @@ inline const Status& to_status(const StatusOr<T>& st) {
         if (UNLIKELY(!status__.ok())) {                                                               \
             return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
         }                                                                                             \
-    } while (false)
-
-#define RETURN_IF_STATUS_ERROR(status, stmt) \
-    do {                                     \
-        status = (stmt);                     \
-        if (UNLIKELY(!status.ok())) {        \
-            return;                          \
-        }                                    \
-    } while (false)
-
-#define EXIT_IF_ERROR(stmt)                        \
-    do {                                           \
-        auto&& status__ = (stmt);                  \
-        if (UNLIKELY(!status__.ok())) {            \
-            string msg = status__.get_error_msg(); \
-            LOG(ERROR) << msg;                     \
-            exit(1);                               \
-        }                                          \
     } while (false)
 
 /// @brief Emit a warning if @c to_call returns a bad status.
@@ -328,13 +341,6 @@ inline const Status& to_status(const StatusOr<T>& st) {
         if (UNLIKELY(cond)) {         \
             return ret;               \
         }                             \
-    } while (0)
-
-#define THROW_BAD_ALLOC_IF_NULL(ptr)    \
-    do {                                \
-        if (UNLIKELY(ptr == nullptr)) { \
-            throw std::bad_alloc();     \
-        }                               \
     } while (0)
 
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
