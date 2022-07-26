@@ -93,7 +93,8 @@ bool HiveTextArrayReader::read_quoted_string(const std::unique_ptr<Converter>& e
     return elem_converter->read_string(column, s, options);
 }
 
-char HiveTextArrayReader::get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level) {
+char HiveTextArrayReader::get_collection_delimiter(char collection_delimiter, char mapkey_delimiter,
+                                                   size_t nested_array_level) {
     DCHECK(nested_array_level >= 1 && nested_array_level <= 153);
 
     // tmp maybe negative, dont use size_t.
