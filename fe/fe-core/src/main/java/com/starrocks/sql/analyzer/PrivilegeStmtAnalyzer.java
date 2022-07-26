@@ -38,7 +38,7 @@ public class PrivilegeStmtAnalyzer {
         /**
          * analyse user identity + check if user exists in UserPrivTable
          */
-        private void analyseUserAndCheckExist(UserIdentity userIdent, ConnectContext session, boolean checkExist) {
+        private void analyseUser(UserIdentity userIdent, ConnectContext session, boolean checkExist) {
             // analyse user identity
             try {
                 userIdent.analyze();
@@ -82,7 +82,7 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            analyseUserAndCheckExist(stmt.getUserIdent(), session, true);
+            analyseUser(stmt.getUserIdent(), session, true);
             stmt.setQualifiedRole(analyseRoleName(stmt.getRole(), session));
             return null;
         }
@@ -93,8 +93,8 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            analyseUserAndCheckExist(stmt.getAuthorizedUser(), session, true);
-            analyseUserAndCheckExist(stmt.getSecuredUser(), session, true);
+            analyseUser(stmt.getAuthorizedUser(), session, true);
+            analyseUser(stmt.getSecuredUser(), session, true);
             return null;
         }
 
@@ -106,7 +106,7 @@ public class PrivilegeStmtAnalyzer {
             if (stmt.isAllowRevert()) {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
-            analyseUserAndCheckExist(stmt.getToUser(), session, true);
+            analyseUser(stmt.getToUser(), session, true);
             return null;
         }
 
@@ -139,7 +139,7 @@ public class PrivilegeStmtAnalyzer {
         }
 
         public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
-            analyseUserAndCheckExist(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
+            analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
             /*
              * IDENTIFIED BY
              */
@@ -150,7 +150,6 @@ public class PrivilegeStmtAnalyzer {
              * IDENTIFIED WITH
              */
             if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
-                stmt.setAuthPlugin(stmt.getAuthPlugin().toUpperCase());
                 if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPlugin())) {
                     stmt.setUserForAuthPlugin(stmt.getAuthString());
                 } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
