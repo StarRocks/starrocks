@@ -24,8 +24,8 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
           _max_buffered_chunks(max_buffered_chunks),
           _init_merged_segment(false),
           _limit(limit),
-          _topn_type(topn_type),
-          _offset(offset) {
+          _offset(offset),
+          _topn_type(topn_type) {
     DCHECK_GT(_get_number_of_rows_to_sort(), 0) << "output rows can't be empty";
     DCHECK(_topn_type == TTopNType::ROW_NUMBER || _offset == 0);
     auto& raw_chunks = _raw_chunks.chunks;
@@ -33,6 +33,12 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
 }
 
 ChunksSorterTopn::~ChunksSorterTopn() = default;
+
+void ChunksSorterTopn::setup_runtime(RuntimeProfile* profile) {
+    ChunksSorter::setup_runtime(profile);
+    _sort_filter_timer = ADD_TIMER(profile, "SortFilterTime");
+    _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
+}
 
 // Cumulative chunks into _raw_chunks for sorting.
 Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
@@ -89,7 +95,7 @@ Status ChunksSorterTopn::done(RuntimeState* state) {
 }
 
 Status ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
-    ScopedTimer<MonotonicStopWatch> timer(_output_timer);
+    SCOPED_TIMER(_output_timer);
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;
         *eos = true;
@@ -113,8 +119,6 @@ size_t ChunksSorterTopn::get_output_rows() const {
 }
 
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
-    const size_t chunk_size = _raw_chunks.size_of_rows;
-
     // Chunks for this batch.
     DataSegments segments;
 
@@ -133,7 +137,7 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
 
     // Step 2: filter batch-chunks as permutations.first and permutations.second when _init_merged_segment == true.
     // sort part chunks in permutations.first and permutations.second, if _init_merged_segment == false means permutations.first is empty.
-    RETURN_IF_ERROR(_filter_and_sort_data(state, permutations, segments, chunk_size));
+    RETURN_IF_ERROR(_filter_and_sort_data(state, permutations, segments));
 
     // Step 3: merge sort of two ordered groups
     // the first ordered group only contains permutations.first
@@ -145,7 +149,7 @@ Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
 
 Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& permutation_second,
                                              DataSegments& segments) {
-    ScopedTimer<MonotonicStopWatch> timer(_build_timer);
+    SCOPED_TIMER(_build_timer);
 
     size_t row_count = _raw_chunks.size_of_rows;
     auto& raw_chunks = _raw_chunks.chunks;
@@ -225,11 +229,8 @@ void ChunksSorterTopn::_set_permutation_complete(std::pair<Permutation, Permutat
 // The `SMALLER_THAN_MIN_OF_SEGMENT` part is stored in permutations.first while
 // the `INCLUDE_IN_SEGMENT` part is stored in permutations.second. And these two parts will be sorted separately
 Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                               DataSegments& segments, const size_t chunk_size) {
-    ScopedTimer<MonotonicStopWatch> timer(_sort_timer);
-
+                                               DataSegments& segments) {
     DCHECK(_get_number_of_order_by_columns() > 0) << "order by columns can't be empty";
-
     const size_t rows_to_sort = _get_number_of_rows_to_sort();
 
     if (_init_merged_segment) {
@@ -245,21 +246,28 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
         // so we can only use the index of `0` as the left boundary to filter the coming input chunks into two parts, `SMALLER_THAN_MIN_OF_SEGMENT` and `INCLUDE_IN_SEGMENT`
 
         if (_merged_segment.chunk->num_rows() >= rows_to_sort) {
+            SCOPED_TIMER(_sort_filter_timer);
             RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, rows_to_sort, filter_array, _sort_order_flag,
                                                              _null_first_flag, smaller_num, include_num));
         } else {
+            SCOPED_TIMER(_sort_filter_timer);
             RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, 1, filter_array, _sort_order_flag,
                                                              _null_first_flag, smaller_num, include_num));
         }
 
-        timer.stop();
+        size_t filtered_rows = 0;
+        for (auto& segment : segments) {
+            filtered_rows += segment.chunk->num_rows();
+        }
+
         {
-            ScopedTimer<MonotonicStopWatch> timer(_build_timer);
+            SCOPED_TIMER(_build_timer);
             permutations.first.resize(smaller_num);
             // `SMALLER_THAN_MIN_OF_SEGMENT` part is enough, so we ignore the `INCLUDE_IN_SEGMENT` part.
             if (smaller_num >= rows_to_sort) {
                 // Use filter_array to set permutations.first.
                 _set_permutation_before(permutations.first, segments.size(), filter_array);
+                filtered_rows -= smaller_num;
             } else if (rows_to_sort > 1 || _topn_type == TTopNType::RANK) {
                 // If rows_to_sort == 1, here are two cases:
                 // case 1: _topn_type is TTopNType::ROW_NUMBER, first row and last row is the same identity. so we do nothing.
@@ -271,17 +279,22 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
 
                 // Use filter_array to set permutations.first and permutations.second.
                 _set_permutation_complete(permutations, segments.size(), filter_array);
+                filtered_rows -= smaller_num;
+                filtered_rows -= include_num;
             }
         }
-        timer.start();
+        if (_sort_filter_rows) {
+            COUNTER_UPDATE(_sort_filter_rows, filtered_rows);
+        }
     }
 
-    return _partial_sort_col_wise(state, permutations, segments, chunk_size);
+    return _partial_sort_col_wise(state, permutations, segments);
 }
 
 Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                                DataSegments& segments, const size_t chunk_size) {
+                                                DataSegments& segments) {
     const size_t rows_to_sort = _get_number_of_rows_to_sort();
+    SCOPED_TIMER(_sort_timer);
 
     std::vector<Columns> vertical_chunks;
     for (auto& segment : segments) {
@@ -312,7 +325,7 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
 Status ChunksSorterTopn::_merge_sort_data_as_merged_segment(RuntimeState* state,
                                                             std::pair<Permutation, Permutation>& new_permutation,
                                                             DataSegments& segments) {
-    ScopedTimer<MonotonicStopWatch> timer(_merge_timer);
+    SCOPED_TIMER(_merge_timer);
 
     if (_init_merged_segment) {
         RETURN_IF_ERROR(_hybrid_sort_common(state, new_permutation, segments));
