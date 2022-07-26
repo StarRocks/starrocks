@@ -65,6 +65,7 @@ public enum PrimitiveType {
     DECIMAL128("DECIMAL128", 16, TPrimitiveType.DECIMAL128),
 
     JSON("JSON", 16, TPrimitiveType.JSON),
+
     // Unsupported scalar types.
     BINARY("BINARY", -1, TPrimitiveType.BINARY);
 
