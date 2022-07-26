@@ -24,8 +24,11 @@ PriorityScanTaskQueue::PriorityScanTaskQueue(size_t max_elements) : _queue(max_e
 
 StatusOr<ScanTask> PriorityScanTaskQueue::take(int worker_id) {
     ScanTask task;
-    _queue.blocking_get(&task);
-    return task;
+    if (_queue.blocking_get(&task)) {
+        return task;
+    }
+
+    return Status::Cancelled("Shutdown");
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
