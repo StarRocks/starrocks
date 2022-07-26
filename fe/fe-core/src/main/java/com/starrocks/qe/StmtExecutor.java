@@ -50,7 +50,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -710,14 +709,6 @@ public class StmtExecutor {
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         List<String> colNames = execPlan.getColNames();
         List<Expr> outputExprs = execPlan.getOutputExprs();
-        int colId = 0;
-        for (Expr expr : outputExprs) {
-            if (expr.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE)) {
-                throw new SemanticException("Column " + colNames.get(colId) +
-                        " convert failed, and column type is known!");
-            }
-            colId++;
-        }
 
         coord = new Coordinator(context, fragments, scanNodes, descTable);
 
