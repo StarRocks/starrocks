@@ -26,7 +26,7 @@ SHOW PROPERTY FOR 'root';
 
 - 查询并发度相关变量。
   - Pipeline 执行引擎相关变量（推荐）
-  > 自 StarRocks 2.2 版本，Pipeline 执行引擎已经默认开启。
+  > 自 StarRocks 2.2 版本起，正式发布 Pipeline 引擎。如果新部署的 StarRocks 为 2.2 版本， 则已经默认开启 Pipeline 执行引擎。如果升级 StarRocks 至 2.2 版本，则需要手动开启 Pipeline 执行引擎。
 
     ```sql
     set enable_pipeline_engine = true;
@@ -99,7 +99,6 @@ mysql> select connection_id();
 +-----------------+
 |              98 |
 +-----------------+
-
 
 mysql> kill 114;
 Query OK, 0 rows affected (0.02 sec)
