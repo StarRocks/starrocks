@@ -21,9 +21,7 @@
 
 package com.starrocks.analysis;
 
-import java.util.HashSet;
-import java.util.Set;
-
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -36,13 +34,14 @@ import com.starrocks.sql.ast.AstVisitor;
 // SHOW PROC statement. Used to show proc information, only admin can use.
 public class ShowProcStmt extends ShowStmt {
 
-    public static final Set<String> needForwardPathRoot;
+    public static final ImmutableSet<String> needForwardPathRoot;
     static {
-        needForwardPathRoot = new HashSet<String>();
-        needForwardPathRoot.add("backends");
-        needForwardPathRoot.add("cluster_balance");
-        needForwardPathRoot.add("routine_loads");
-        needForwardPathRoot.add("transactions");
+        needForwardPathRoot = new ImmutableSet.Builder<String>()
+            .add("backends")
+            .add("cluster_balance")
+            .add("routine_loads")
+            .add("transactions")
+            .build();
     }
 
     private String path;
