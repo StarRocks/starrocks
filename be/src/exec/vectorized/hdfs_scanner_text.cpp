@@ -117,10 +117,8 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (const auto slot : _scanner_params.materialize_slots) {
-        // TODO: Why slot may be nullptr?
-        if (slot == nullptr) {
-            continue;
-        }
+        // TODO slot maybe null?
+        DCHECK(slot != nullptr);
         ConverterPtr conv = csv::get_converter(slot->type(), true);
         RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
@@ -167,7 +165,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
     csv::Converter::Options options;
     // Use to custom Hive array format
-    options.array_format_type = csv::ArrayFormatType::HIVE;
+    options.array_format_type = csv::ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = _collection_delimiter.front();
     options.array_hive_mapkey_delimiter = _mapkey_delimiter.front();
     options.array_hive_nested_level = 1;
@@ -207,11 +205,9 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                                            _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
-            // ignore nullptr slot
+            // TODO slot maybe null?
             const auto slot = _scanner_params.materialize_slots[j];
-            if (slot == nullptr) {
-                continue;
-            }
+            DCHECK(slot != nullptr);
 
             int index = _scanner_params.materialize_index_in_chunk[j];
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];

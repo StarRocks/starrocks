@@ -162,7 +162,7 @@ TEST(ArrayConverterTest, test_hive_read_string01) {
     t.children.emplace_back(TYPE_TINYINT);
 
     auto options = Converter::Options();
-    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_format_type = ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = '_';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
@@ -200,7 +200,7 @@ TEST(ArrayConverterTest, test_hive_read_string02) {
     t.children.back().len = 6000;
 
     auto options = Converter::Options();
-    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_format_type = ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = '_';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
@@ -230,7 +230,7 @@ TEST(ArrayConverterTest, test_hive_read_string03) {
     t.children.back().children.back().len = 6000;
 
     auto options = Converter::Options();
-    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_format_type = ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = '_';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = ':';
@@ -272,7 +272,7 @@ TEST(ArrayConverterTest, test_hive_read_string04) {
     t.children.back().children.back().children.back().len = 6000;
 
     auto options = Converter::Options();
-    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_format_type = ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = '\002';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = '\003';
@@ -295,7 +295,7 @@ TEST(ArrayConverterTest, test_hive_read_string05) {
     // Super complex Hive array test
 
     auto options = Converter::Options();
-    options.array_format_type = ArrayFormatType::HIVE;
+    options.array_format_type = ArrayFormatType::kHive;
     options.array_hive_collection_delimiter = '\002';
     options.array_hive_nested_level = 1;
     options.array_hive_mapkey_delimiter = ':';
@@ -431,10 +431,11 @@ TEST(ArrayConverterTest, test_get_collection_delimiter) {
 
     const char DEFAULT_COLLECTION_DELIMITER = '\002';
     const char DEFAULT_MAPKEY_DELIMITER = '\003';
+
     // Start to check, ignore first element in separators, because array delimiter start from second element.
     for (size_t i = 1, nested_array_level = 1; i < separators.size(); i++) {
-        char delimiter = csv::get_collection_delimiter(DEFAULT_COLLECTION_DELIMITER, DEFAULT_MAPKEY_DELIMITER,
-                                                       nested_array_level++);
+        char delimiter = HiveTextArrayReader::get_collection_delimiter(DEFAULT_COLLECTION_DELIMITER,
+                                                                       DEFAULT_MAPKEY_DELIMITER, nested_array_level++);
         EXPECT_EQ(delimiter, separators[i]);
     }
 }

@@ -6,19 +6,38 @@ import com.starrocks.thrift.TTextFileDesc;
 
 public class TextFileFormatDesc {
 
-    private String fieldDelim;
+    private final String fieldDelim;
 
-    private String lineDelim;
+    private final String lineDelim;
 
-    private String collectionDelim;
+    // Control hive array's element delimiter.
+    private final String collectionDelim;
 
-    private String mapkeyDelim;
+    // mapkey_delimiter is the separator between key and value in map.
+    // For example, {"smith": age} mapkey_delimiter is ':'.
+    private final String mapkeyDelim;
 
     public TextFileFormatDesc(String fieldDelim, String lineDelim, String collectionDelim, String mapkeyDelim) {
         this.fieldDelim = fieldDelim;
         this.lineDelim = lineDelim;
         this.collectionDelim = collectionDelim;
         this.mapkeyDelim = mapkeyDelim;
+    }
+
+    public String getFieldDelim() {
+        return fieldDelim;
+    }
+
+    public String getLineDelim() {
+        return lineDelim;
+    }
+
+    public String getCollectionDelim() {
+        return collectionDelim;
+    }
+
+    public String getMapkeyDelim() {
+        return mapkeyDelim;
     }
 
     public TTextFileDesc toThrift() {

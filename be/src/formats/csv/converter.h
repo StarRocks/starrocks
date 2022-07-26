@@ -29,9 +29,9 @@ class Column;
 
 namespace csv {
 
-enum ArrayFormatType {
-    DEFAULT = 0,
-    HIVE,
+enum class ArrayFormatType {
+    kDefault = 0,
+    kHive,
 };
 
 class Converter {
@@ -55,13 +55,13 @@ public:
         // default value is enough.
         // Default array format like: [[1,2], [3, 4]]
         // Hive array format like: 1^C2^B3^4
-        ArrayFormatType array_format_type = ArrayFormatType::DEFAULT;
+        ArrayFormatType array_format_type = ArrayFormatType::kDefault;
         // [Only used in Hive now!]
         // Control hive array's element delimiter.
         char array_hive_collection_delimiter = '\002';
         // [Only used in Hive now!]
         // mapkey_delimiter is the separator between key and value in map.
-        // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter
+        // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter is
         // used to generate collection delimiter in Hive.
         char array_hive_mapkey_delimiter = '\003';
         // [Only used in Hive now!]
