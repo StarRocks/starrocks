@@ -270,7 +270,7 @@ select * from es_table where esquery(k4, ' {
 
 ### 前提条件
 
-在创建 JDBC 资源以及首次查询 JDBC 外部表时，FE、BE 节点需要下载 JDBC 驱动程序，因此在这两个阶段，FE、BE 节点所在机器必须能够访问 JDBC 驱动程序下载链接地址。下载链接地址由创建 JDBC 资源中的配置项 `driver_url` 指定。
+在创建 JDBC 资源以及首次查询 JDBC 外部表时，FE、BE 节点需要下载 JDBC 驱动程序，因此在这两个阶段，FE、BE 节点所在机器必须能够访问用于下载 JDBC 驱动程序 JAR 包的 URL，该 URL 由创建 JDBC 资源中的配置项 `driver_url` 指定。
 
 ### **创建和**管理**JDBC 资源**
 
@@ -304,8 +304,9 @@ properties (
 
 > 说明：目标数据库 URI 中必须指定具体数据库的名称，如上示例中的`jdbc_test`。
 
-* `driver_url`：目标数据库使用的 JDBC 驱动程序的下载链接地址。
-* `driver_class`：目标数据库使用的 JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
+* `driver_url`：用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`，`file:///home/disk1/postgresql-42.3.3.jar`。
+
+* `driver_class`：JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
 
   * MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 6.x 及以上版本）
   * SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver
@@ -347,7 +348,7 @@ CREATE DATABASE jdbc_test;
 USE jdbc_test; 
 ~~~
 
-> 说明**：**库名无需与目标数据库的名称保持一致。
+> 说明：库名无需与目标数据库的名称保持一致。
 
 ### **创建 JDBC 外部表**
 
@@ -370,12 +371,11 @@ properties (
 
 * `table`：目标数据库的表名，必填项。
 
-支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](/数据类型映射.md)。[数据类型映射](./External_table.md##数据类型映射)。
-
+支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](./External_table.md#数据类型映射)。
 > 说明：
-
-* 不支持索引。
-* 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
+ >
+ > * 不支持索引。
+ > * 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 
 ### **查询 JDBC 外部表**
 
@@ -471,7 +471,6 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 
 * 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 * 查询 JDBC 外部表时，不支持下推函数。
-* 暂不支持使用 INSERT INTO ... SELECT ... 语句将目标数据库的数据导入至 StarRocks。
 
 ## Hive 外表
 
