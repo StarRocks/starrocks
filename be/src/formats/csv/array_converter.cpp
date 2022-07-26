@@ -32,7 +32,9 @@ Status ArrayConverter::write_quoted_string(OutputStream* os, const Column& colum
 }
 
 bool ArrayConverter::read_string(Column* column, Slice s, const Options& options) const {
-    if (!_array_reader->validate(s)) {
+    auto array_reader = create_array_reader(options);
+
+    if (!array_reader->validate(s)) {
         return false;
     }
 
@@ -41,15 +43,16 @@ bool ArrayConverter::read_string(Column* column, Slice s, const Options& options
     auto* elements = array->elements_column().get();
 
     std::vector<Slice> fields;
-    if (!s.empty() && !_array_reader->split_array_elements(s, &fields)) {
+    if (!s.empty() && !array_reader->split_array_elements(s, &fields)) {
         return false;
     }
     size_t old_size = elements->size();
     Options sub_options = options;
     sub_options.invalid_field_as_null = false;
+    sub_options.array_hive_nested_level++;
     DCHECK_EQ(old_size, offsets->get_data().back());
     for (const auto& f : fields) {
-        if (!_array_reader->read_quoted_string(_element_converter, elements, f, sub_options)) {
+        if (!array_reader->read_quoted_string(_element_converter, elements, f, sub_options)) {
             elements->resize(old_size);
             return false;
         }
@@ -60,6 +63,18 @@ bool ArrayConverter::read_string(Column* column, Slice s, const Options& options
 
 bool ArrayConverter::read_quoted_string(Column* column, Slice s, const Options& options) const {
     return read_string(column, s, options);
+}
+
+std::unique_ptr<ArrayReader> create_array_reader(const Converter::Options& options) {
+    std::unique_ptr<ArrayReader> array_reader;
+    if (options.array_format_type == ArrayFormatType::HIVE) {
+        char delimiter = get_collection_delimiter(options.array_hive_collection_delimiter,
+                                                  options.array_hive_mapkey_delimiter, options.array_hive_nested_level);
+        array_reader = std::make_unique<HiveTextArrayReader>(delimiter);
+    } else {
+        array_reader = std::make_unique<DefaultArrayReader>();
+    }
+    return array_reader;
 }
 
 char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level) {

@@ -121,18 +121,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         if (slot == nullptr) {
             continue;
         }
-        ConverterPtr conv;
-        if (slot->type().type == TYPE_ARRAY) {
-            csv::Converter::Options options;
-            // Use to custom Hive array format
-            options.array_format_type = csv::ArrayFormatType::HIVE;
-            options.array_hive_collection_delimiter = _collection_delimiter.front();
-            options.array_hive_mapkey_delimiter = _mapkey_delimiter.front();
-            options.array_hive_nested_level = 1;
-            conv = csv::get_converter(slot->type(), true, options);
-        } else {
-            conv = csv::get_converter(slot->type(), true);
-        }
+        ConverterPtr conv = csv::get_converter(slot->type(), true);
         RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
             return Status::InternalError(strings::Substitute("Unsupported CSV type $0", slot->type().debug_string()));
@@ -177,6 +166,11 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     }
 
     csv::Converter::Options options;
+    // Use to custom Hive array format
+    options.array_format_type = csv::ArrayFormatType::HIVE;
+    options.array_hive_collection_delimiter = _collection_delimiter.front();
+    options.array_hive_mapkey_delimiter = _mapkey_delimiter.front();
+    options.array_hive_nested_level = 1;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);

@@ -81,6 +81,7 @@ bool HiveTextArrayReader::split_array_elements(Slice s, std::vector<Slice>* elem
 
 bool HiveTextArrayReader::read_quoted_string(const std::unique_ptr<Converter>& elem_converter, Column* column,
                                              const Slice& s, const Converter::Options& options) const {
+    // In Hive, we should use read_string() instead of read_quoted_string
     return elem_converter->read_string(column, s, options);
 }
 
