@@ -1556,7 +1556,6 @@ public class GlobalStateMgr {
             private JournalCursor cursor = null;
             // avoid numerous 'meta out of date' log
             private long lastMetaOutOfDateLogTime = 0;
-            private long metaOutOfDateLogIntervalSeconds = 5;
 
             @Override
             @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
@@ -1609,7 +1608,7 @@ public class GlobalStateMgr {
 
                 long currentTimeMs = System.currentTimeMillis();
                 if (currentTimeMs - synchronizedTimeMs > Config.meta_delay_toleration_second * 1000L) {
-                    if (currentTimeMs - lastMetaOutOfDateLogTime > metaOutOfDateLogIntervalSeconds * 1000L) {
+                    if (currentTimeMs - lastMetaOutOfDateLogTime > 5 * 1000L) {
                         // we still need this log to observe this situation
                         // but service may be continued when there is no log being replayed.
                         LOG.warn("meta out of date. current time: {}, synchronized time: {}, has log: {}, fe type: {}",
