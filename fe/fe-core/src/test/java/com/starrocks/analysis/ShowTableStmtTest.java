@@ -44,15 +44,15 @@ public class ShowTableStmtTest {
         ShowTableStmt stmt = new ShowTableStmt("", false, null);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW TABLES FROM default_cluster:testDb", stmt.toString());
-        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
+        Assert.assertEquals("SHOW TABLES FROM testDb", stmt.toString());
+        Assert.assertEquals("testDb", stmt.getDb());
         Assert.assertFalse(stmt.isVerbose());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_testDb", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowTableStmt("abc", true, null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW FULL TABLES FROM default_cluster:abc", stmt.toString());
+        Assert.assertEquals("SHOW FULL TABLES FROM abc", stmt.toString());
         Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
@@ -60,7 +60,7 @@ public class ShowTableStmtTest {
         stmt = new ShowTableStmt("abc", true, "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals("SHOW FULL TABLES FROM default_cluster:abc LIKE 'bcd'", stmt.toString());
+        Assert.assertEquals("SHOW FULL TABLES FROM abc LIKE 'bcd'", stmt.toString());
         Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());

@@ -41,7 +41,6 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -51,7 +50,6 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.lang.StringUtils;
@@ -84,7 +82,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowTableStmt(ShowTableStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
@@ -107,7 +105,7 @@ public class ShowStmtAnalyzer {
         public Void visitShowColumnStmt(ShowColumnStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.getTableName().setDb(db);
             return null;
         }
@@ -115,7 +113,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowTableStatusStmt(ShowTableStatusStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
@@ -128,8 +126,6 @@ public class ShowStmtAnalyzer {
                 if (Strings.isNullOrEmpty(dbName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
-            } else {
-                dbName = ClusterNamespace.getFullName(dbName);
             }
             node.setDbName(dbName);
 
@@ -142,7 +138,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowMaterializedViewStmt(ShowMaterializedViewStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
@@ -179,7 +175,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
             String dbName = node.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
             return null;
         }
@@ -187,7 +183,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt node, ConnectContext context) {
             String dbName = node.getDb();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);
             return null;
         }
@@ -196,30 +192,12 @@ public class ShowStmtAnalyzer {
         public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.getTableName().setDb(db);
             if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
                 node.getTableName().setCatalog(context.getCurrentCatalog());
             }
             return null;
-        }
-
-        String getFullDatabaseName(String db, ConnectContext session) {
-            String catalog = session.getCurrentCatalog();
-            if (Strings.isNullOrEmpty(db)) {
-                db = session.getDatabase();
-                if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(db);
-                }
-                if (Strings.isNullOrEmpty(db)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
-                }
-            } else {
-                if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(db);
-                }
-            }
-            return db;
         }
 
         // used for remove default_cluster from stmt
@@ -425,7 +403,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             statement.setDbName(dbName);
             final Map<String, Expr> filterMap = statement.getFilterMap();
             if (statement.getWhereClause() != null) {
