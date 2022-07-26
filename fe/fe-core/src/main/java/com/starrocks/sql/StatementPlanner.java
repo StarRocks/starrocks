@@ -130,7 +130,7 @@ public class StatementPlanner {
 
     // if query stmt has OUTFILE clause, set info into ResultSink.
     // this should be done after fragments are generated.
-    private void setOutfileSink(QueryStatement queryStmt, ExecPlan plan) {
+    private void setOutfileSink(QueryStatement queryStmt, ExecPlan plan) throws AnalysisException {
         if (!queryStmt.hasOutFileClause()) {
             return;
         }
