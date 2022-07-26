@@ -8,7 +8,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class PauseRoutineLoadStmtTest {
+public class StopRoutineLoadStmtTest {
 
     private ConnectContext ctx;
 
@@ -18,10 +18,10 @@ public class PauseRoutineLoadStmtTest {
         ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
-        PauseRoutineLoadStmt stmt = new PauseRoutineLoadStmt(new LabelName("testDb","label"));
+        StopRoutineLoadStmt stmt = new StopRoutineLoadStmt(new LabelName("testDb","label"));
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("PAUSE ROUTINE LOAD FOR testDb.label", stmt.toSql());
+        Assert.assertEquals("STOP ROUTINE LOAD FOR testDb.label", stmt.toSql());
         Assert.assertEquals("default_cluster:testDb", stmt.getDbFullName());
     }
 
