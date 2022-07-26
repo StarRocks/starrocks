@@ -40,6 +40,9 @@ public class ShowProcStmt extends ShowStmt {
     static {
         needForwardPathRoot = new HashSet<String>();
         needForwardPathRoot.add("backends");
+        needForwardPathRoot.add("cluster_balance");
+        needForwardPathRoot.add("routine_loads");
+        needForwardPathRoot.add("transactions");
     }
 
     private String path;
