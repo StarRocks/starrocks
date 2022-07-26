@@ -210,7 +210,7 @@ public class CostModel {
                 case BROADCAST:
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
-                    int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+                    int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns) *
                                     GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber(),
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
