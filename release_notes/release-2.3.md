@@ -61,7 +61,7 @@
 
 - year、month、day 函数支持 DATE 数据类型。
 
-### Bug修复
+### Bug 修复
 
 修复了如下 Bug：
 
