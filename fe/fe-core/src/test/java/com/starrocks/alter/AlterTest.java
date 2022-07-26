@@ -1422,7 +1422,7 @@ public class AlterTest {
         Auth auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();;
         String createUserSql = "CREATE USER 'testuser' IDENTIFIED BY ''";
         CreateUserStmt createUserStmt =
-                (CreateUserStmt) UtFrameUtils.parseAndAnalyzeStmt(createUserSql, starRocksAssert.getCtx());
+                (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
         String grantUser = "grant ALTER_PRIV on test to testuser";
