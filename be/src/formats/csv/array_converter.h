@@ -2,9 +2,26 @@
 
 #pragma once
 
+#include "formats/csv/array_reader.h"
 #include "formats/csv/converter.h"
 
 namespace starrocks::vectorized::csv {
+
+// Hive collection delimiter generate rule is quiet complex,
+// if you want to know the details, you can refer to:
+// https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/java/org/apache/hadoop/hive/serde2/lazy/LazySerDeParameters.java#L250
+// Next let's begin the story:
+// There is a 3D-array [[[1, 2]], [[3, 4], [5, 6]]], in Hive it will be stored as 1^D2^B3^D4^C5^D6 (without '[', ']').
+// ^B = (char)2, ^C = (char)3, ^D = (char)4 ....
+// In the first level, Hive will use collection_delimiter (user can specify it, default is ^B) as an element separator,
+// then origin array split into [[1, 2]] (1^D2) and [[3, 4], [5, 6]] (3^D4^C5^D6).
+// In the second level, Hive will use mapkey_delimiter (user can specify it, default is ^C) as a separator, then
+// array split into [1, 2], [3, 4] and [5, 6].
+// In the third level, Hive will use ^D (user can't specify it) as a separator, then we can get
+// each element in this array.
+char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level);
+
+std::unique_ptr<ArrayReader> create_array_reader(const Converter::Options& options);
 
 class ArrayConverter final : public Converter {
 public:
@@ -18,8 +35,6 @@ public:
     bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
 
 private:
-    bool _split_array_elements(Slice s, std::vector<Slice>* elements) const;
-
     std::unique_ptr<Converter> _element_converter;
 };
 

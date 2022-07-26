@@ -99,16 +99,28 @@ Status HdfsScannerCSVReader::_fill_buffer() {
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
     _field_delimiter = text_file_desc.field_delim;
-    // we should cast string to char now since csv reader only support record delimiter by char
+
+    // we should cast string to char now since csv reader only support record, collection, mapkey delimiter by char
     _record_delimiter = text_file_desc.line_delim.front();
+    _collection_delimiter = text_file_desc.collection_delim.front();
+    _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+
+    // delimiters will not be empty
+    DCHECK(!_field_delimiter.empty());
+    DCHECK(!_record_delimiter.empty());
+    DCHECK(!_collection_delimiter.empty());
+    DCHECK(!_mapkey_delimiter.empty());
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
-    for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
-        auto slot = _scanner_params.materialize_slots[i];
+    for (const auto slot : _scanner_params.materialize_slots) {
+        // TODO: Why slot may be nullptr?
+        if (slot == nullptr) {
+            continue;
+        }
         ConverterPtr conv = csv::get_converter(slot->type(), true);
         RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
@@ -154,6 +166,11 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     }
 
     csv::Converter::Options options;
+    // Use to custom Hive array format
+    options.array_format_type = csv::ArrayFormatType::HIVE;
+    options.array_hive_collection_delimiter = _collection_delimiter.front();
+    options.array_hive_mapkey_delimiter = _mapkey_delimiter.front();
+    options.array_hive_nested_level = 1;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -190,6 +207,12 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                                            _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
+            // ignore nullptr slot
+            const auto slot = _scanner_params.materialize_slots[j];
+            if (slot == nullptr) {
+                continue;
+            }
+
             int index = _scanner_params.materialize_index_in_chunk[j];
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
             Column* column = _column_raw_ptrs[index];
