@@ -69,7 +69,7 @@ inline bool is_posix_uri(std::string_view uri) {
 
 inline bool is_staros_uri(std::string_view uri) {
 #ifdef USE_STAROS
-    return starts_with(uri, kStarletPrefix);
+    return parse_starlet_uri(uri).ok();
 #endif
     return false;
 }

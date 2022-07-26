@@ -4,11 +4,15 @@
 
 #pragma once
 
-#include <fs/fs.h>
+#include "common/statusor.h"
+#include "fs/fs.h"
 
 namespace starrocks {
 
-static const char* const kStarletPrefix = "staros://";
+std::string build_starlet_uri(int64_t shard_id, std::string_view path);
+
+// The first element of pair is path, the second element of pair is shard id.
+StatusOr<std::pair<std::string_view, int64_t>> parse_starlet_uri(std::string_view uri);
 
 std::unique_ptr<FileSystem> new_fs_starlet();
 

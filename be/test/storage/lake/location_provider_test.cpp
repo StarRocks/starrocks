@@ -6,11 +6,13 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "fs/fs_starlet.h"
 #include "service/staros_worker.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
+namespace starrocks::lake {
 
 extern std::shared_ptr<StarOSWorker> g_worker;
 
@@ -32,16 +34,16 @@ public:
 
 TEST_F(StarletLocationProviderTest, test_location) {
     auto location = _provider->root_location(12345);
-    EXPECT_EQ("staros://?ShardId=12345", location);
+    EXPECT_EQ(build_starlet_uri(12345, "/"), location);
 
     location = _provider->tablet_metadata_location(12345, 1);
-    EXPECT_EQ(fmt::format("staros://tbl_{:016X}_{:016X}?ShardId=12345", 12345, 1), location);
+    EXPECT_EQ(build_starlet_uri(12345, tablet_metadata_filename(12345, 1)), location);
 
     location = _provider->txn_log_location(12345, 45678);
-    EXPECT_EQ(fmt::format("staros://txn_{:016X}_{:016X}?ShardId=12345", 12345, 45678), location);
+    EXPECT_EQ(build_starlet_uri(12345, txn_log_filename(12345, 45678)), location);
 
     location = _provider->segment_location(12345, "c805dab9-4048-4909-8239-6d5431989044.dat");
-    EXPECT_EQ("staros://c805dab9-4048-4909-8239-6d5431989044.dat?ShardId=12345", location);
+    EXPECT_EQ(build_starlet_uri(12345, "c805dab9-4048-4909-8239-6d5431989044.dat"), location);
 
     std::set<std::string> roots;
     auto st = _provider->list_root_locations(&roots);
@@ -50,5 +52,5 @@ TEST_F(StarletLocationProviderTest, test_location) {
     EXPECT_TRUE(roots.empty());
 }
 
-} // namespace starrocks
+} // namespace starrocks::lake
 #endif // USE_STAROS
