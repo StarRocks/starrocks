@@ -32,7 +32,7 @@ SHOW PROPERTY FOR 'user';
 
 如需调整查询并发度，推荐你您修改 Pipeline 执行引擎相关变量。
 
-> 注意：自 StarRocks 2.2 版本后，Pipeline 执行引擎已经默认开启。
+> 注意：自 StarRocks 2.2 版本起，正式发布 Pipeline 引擎。
 
 ```sql
 SET enable_pipeline_engine = true;
