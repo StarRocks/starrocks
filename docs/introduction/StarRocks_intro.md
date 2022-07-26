@@ -6,9 +6,9 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="About StarRocks">
 <NavBoxPartItem>
 
-- [Introduction](/docs/introduction/what_is_starrocks.md)
-- [Concepts](/docs/quick_start/Concepts.md)
-- [Architecture](/docs/quick_start/Architecture.md)
+- [Introduction](../introduction/what_is_starrocks.md)
+- [Concepts](../quick_start/Concepts.md)
+- [Architecture](../quick_start/Architecture.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -16,8 +16,8 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="Get started​">
 <NavBoxPartItem>
 
-- [Deploy StarRocks](/docs/quick_start/Deploy.md)
-- [Ingest and query data](/docs/quick_start/Import_and_query.md)
+- [Deploy StarRocks](../quick_start/Deploy.md)
+- [Ingest and query data](../quick_start/Import_and_query.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -27,10 +27,10 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="Table design ​">
 <NavBoxPartItem>
 
-- [Overview of table design](/docs/table_design/StarRocks_table_design)
-- [Data models](/docs/table_design/Data_model)
-- [Data distribution](/docs/table_design/Data_distribution)
-- [Sort key and prefix index](/docs/table_design/Sort_key)
+- [Overview of table design](../table_design/StarRocks_table_design.md)
+- [Data models](../table_design/Data_model.md)
+- [Data distribution](../table_design/Data_distribution.md)
+- [Sort key and prefix index](../table_design/Sort_key.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -38,12 +38,12 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="Ingestion​">
 <NavBoxPartItem>
 
-- [Overview of ingestion](/docs/loading/Loading_intro)
-- [Ingestion via HTTP](/docs/loading/StreamLoad)
-- [Batch ingestion from HDFS or cloud object storage](/docs/loading/BrokerLoad)
-- [Continuous ingestion from Apache Kafka®](/docs/loading/RoutineLoad)
-- [Bulk ingestion and data transformation using Apache Spark™](/docs/loading/SparkLoad)
-- [Real-time synchronization from MySQL](/docs/loading/Flink_cdc_load)
+- [Overview of ingestion](../loading/Loading_intro.md)
+- [Ingestion via HTTP](../loading/StreamLoad.md)
+- [Batch ingestion from HDFS or cloud object storage](../loading/BrokerLoad.md)
+- [Continuous ingestion from Apache Kafka®](../loading/RoutineLoad.md)
+- [Bulk ingestion and data transformation using Apache Spark™](../loading/SparkLoad.md)
+- [Real-time synchronization from MySQL](../loading/Flink_cdc_load.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -53,15 +53,15 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="Querying​">
 <NavBoxPartItem title="Query acceleration">
 
-- [Cost-based optimizer](/docs/using_starrocks/Cost_based_optimizer)
-- [Materialized view](/docs/using_starrocks/Materialized_view)
-- [Colocate Join](/docs/using_starrocks/Colocate_join)
+- [Cost-based optimizer](../using_starrocks/Cost_based_optimizer.md)
+- [Materialized view](../using_starrocks/Materialized_view.md)
+- [Colocate Join](../using_starrocks/Colocate_join.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="Query semi-structured data">
 
-- [JSON](/docs/sql-reference/sql-statements/data-types/JSON)
-- [ARRAY](/docs/using_starrocks/Array)
+- [JSON](../sql-reference/sql-statements/data-types/JSON.md)
+- [ARRAY](../using_starrocks/Array.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -69,12 +69,12 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart>
 <NavBoxPartItem title="Query external data sources​">
 
-- [Apache Hive™](/docs/using_starrocks/External_table#hive-external-table)
-- [Apache Hudi](/docs/using_starrocks/External_table#hudi-external-table)
-- [Apache Iceberg](/docs/using_starrocks/External_table#apache-iceberg-external-table)
-- [MySQL](/docs/using_starrocks/External_table#mysql-external-table)
-- [Elasticsearch](/docs/using_starrocks/External_table#elasticsearch-external-table)
-- [JDBC-compatible database](/docs/using_starrocks/External_table#external-table-for-a-jdbc-compatible-database)
+- [Apache Hive™](../using_starrocks/External_table#hive-external-table.md)
+- [Apache Hudi](../using_starrocks/External_table#hudi-external-table.md)
+- [Apache Iceberg](../using_starrocks/External_table#apache-iceberg-external-table.md)
+- [MySQL](../using_starrocks/External_table#mysql-external-table.md)
+- [Elasticsearch](../using_starrocks/External_table#elasticsearch-external-table.md)
+- [JDBC-compatible database](../using_starrocks/External_table#external-table-for-a-jdbc-compatible-database.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -84,10 +84,10 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="Administration">
 <NavBoxPartItem>
 
-- [Manage a cluster](/docs/administration/Cluster_administration)
-- [Scale in and out a cluster](/docs/administration/Scale_up_down)
-- [Tune query performance](/docs/administration/Query_planning)
-- [Manage workloads](/docs/administration//resource_group)
+- [Manage a cluster](../administration/Cluster_administration.md)
+- [Scale in and out a cluster](../administration/Scale_up_down.md)
+- [Tune query performance](../administration/Query_planning.md)
+- [Manage workloads](../administration//resource_group.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -95,8 +95,8 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="References​">
 <NavBoxPartItem>
 
-- [SQL reference](/docs/sql-reference/sql-statements/account-management/ALTER%20USER)
-- [Function reference](/docs/sql-reference/sql-functions/date-time-functions/convert_tz)
+- [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
+- [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -106,9 +106,9 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="FAQ​">
 <NavBoxPartItem>
 
-- [Ingestion and export](/docs/faq/loading/Loading_faq)
-- [Deployment](/docs/faq/Deploy_faq)
-- [SQL](/docs/faq/Sql_faq)
+- [Ingestion and export](../faq/loading/Loading_faq.md)
+- [Deployment](../faq/Deploy_faq.md)
+- [SQL](../faq/Sql_faq.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -116,8 +116,8 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 <NavBoxPart title="Benchmarks​">
 <NavBoxPartItem>
 
-- [SSB benchmark](/docs/benchmarking/SSB_Benchmarking.md)
-- [TPC-H benchmark](/docs/benchmarking/TPC-H_Benchmarking.md)
+- [SSB benchmark](../benchmarking/SSB_Benchmarking.md)
+- [TPC-H benchmark](../benchmarking/TPC-H_Benchmarking.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
