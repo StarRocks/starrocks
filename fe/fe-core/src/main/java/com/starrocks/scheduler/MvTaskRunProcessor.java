@@ -236,6 +236,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         }
         LOG.info("The process of synchronizing partitions add range {} ", adds);
 
+        Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
+                .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
+        Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
+                .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
+        context.setBaseToMvNameRef(baseToMvNameRef);
+        context.setMvToBaseNameRef(mvToBaseNameRef);
+
         if (partitionExpr instanceof SlotRef) {
             Set<String> baseChangedPartitionNames = mv.getNeedRefreshPartitionNames(base);
             needRefreshMvPartitionNames.addAll(baseChangedPartitionNames);
@@ -247,14 +254,6 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 mv.addBasePartition(baseTableId, base.getPartition(mvPartitionName));
             }
         }  else if (partitionExpr instanceof FunctionCallExpr) {
-            Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                    .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
-            Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                    .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
-
-            context.setBaseToMvNameRef(baseToMvNameRef);
-            context.setMvToBaseNameRef(mvToBaseNameRef);
-
             Set<String> deleteBasePartitionNames = Sets.newHashSet();
             for (String mvPartitionName : deletes.keySet()) {
                 deleteBasePartitionNames.addAll(mvToBaseNameRef.get(mvPartitionName));
