@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -243,30 +242,6 @@ public class TableRef implements ParseNode, Writable {
         this.name = name;
     }
 
-    /**
-     * This method should only be called after the TableRef has been analyzed.
-     */
-    public TupleDescriptor getDesc() {
-        Preconditions.checkState(isAnalyzed);
-        // after analyze(), desc should be set.
-        Preconditions.checkState(desc != null);
-        return desc;
-    }
-
-    /**
-     * This method should only be called after the TableRef has been analyzed.
-     */
-    public TupleId getId() {
-        Preconditions.checkState(isAnalyzed);
-        // after analyze(), desc should be set.
-        Preconditions.checkState(desc != null);
-        return desc.getId();
-    }
-
-    public Table getTable() {
-        return desc.getTable();
-    }
-
     public void setUsingClause(List<String> colNames) {
         this.usingColNames = colNames;
     }
@@ -290,33 +265,6 @@ public class TableRef implements ParseNode, Writable {
 
     public void setLateral(boolean lateral) {
         isLateral = lateral;
-    }
-
-    protected void analyzeSortHints() throws AnalysisException {
-    }
-
-    /**
-     * Parse PreAgg hints.
-     */
-    protected void analyzeHints() throws AnalysisException {
-        if (commonHints == null || commonHints.isEmpty()) {
-            return;
-        }
-        // Currently only 'PREAGGOPEN' is supported
-        for (String hint : commonHints) {
-            if (hint.equalsIgnoreCase("PREAGGOPEN")) {
-                isForcePreAggOpened = true;
-                break;
-            }
-        }
-    }
-
-    /**
-     * Analyze the join clause.
-     * The join clause can only be analyzed after the left table has been analyzed
-     * and the TupleDescriptor (desc) of this table has been created.
-     */
-    public void analyzeJoin(Analyzer analyzer) throws AnalysisException {
     }
 
     private String joinOpToSql() {

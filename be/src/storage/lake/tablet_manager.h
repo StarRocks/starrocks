@@ -2,31 +2,30 @@
 
 #pragma once
 
+#include <bthread/types.h>
+
 #include <variant>
 
 #include "common/statusor.h"
+#include "gutil/macros.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/tablet_schema.h"
-#include "util/lru_cache.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks {
 class Cache;
+class CacheKey;
+class Segment;
 class TCreateTabletReq;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
-class CompactionTask;
-class LocationProvider;
-class Tablet;
 template <typename T>
 class MetadataIterator;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
-using TabletSchemaPtr = std::shared_ptr<const starrocks::TabletSchema>;
-using CompactionTaskPtr = std::shared_ptr<CompactionTask>;
 
 class TabletManager {
     friend class Tablet;
@@ -37,6 +36,10 @@ public:
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
     explicit TabletManager(LocationProvider* location_provider, int64_t cache_capacity);
+
+    ~TabletManager();
+
+    DISALLOW_COPY_AND_MOVE(TabletManager);
 
     Status create_tablet(const TCreateTabletReq& req);
 
@@ -82,32 +85,44 @@ public:
         return ret;
     }
 
+    std::string tablet_root_location(int64_t tablet_id) const;
+
+    std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
+
+    std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+    std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
+
+    const LocationProvider* location_provider() const { return _location_provider; }
+
+    void start_gc();
+
 private:
-    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr>;
+    using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr>;
 
     static std::string tablet_schema_cache_key(int64_t tablet_id);
-
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
-    std::string tablet_root_location(int64_t tablet_id) const;
-    std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
-    std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
-    std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
+    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id);
 
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location);
 
-    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id);
+    /// Cache operations
+    bool fill_metacache(std::string_view key, CacheValue* ptr, int size);
+    void erase_metacache(std::string_view key);
 
-    bool fill_metacache(const std::string& key, CacheValue* ptr, int size);
-    TabletMetadataPtr lookup_tablet_metadata(const std::string& key);
-    TxnLogPtr lookup_txn_log(const std::string& key);
-    void erase_metacache(const std::string& key);
-
-    TabletSchemaPtr lookup_tablet_schema(const std::string& key);
+    TabletMetadataPtr lookup_tablet_metadata(std::string_view key);
+    TxnLogPtr lookup_txn_log(std::string_view key);
+    TabletSchemaPtr lookup_tablet_schema(std::string_view key);
+    SegmentPtr lookup_segment(std::string_view key);
+    void cache_segment(std::string_view key, SegmentPtr segment);
 
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;
+
+    bthread_t _metadata_gc_tid;
+    bthread_t _segment_gc_tid;
 };
 
 } // namespace starrocks::lake

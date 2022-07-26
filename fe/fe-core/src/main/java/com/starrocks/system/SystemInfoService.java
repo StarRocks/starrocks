@@ -75,7 +75,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -89,13 +88,6 @@ public class SystemInfoService {
 
     private volatile ImmutableMap<Long, ComputeNode> idToComputeNodeRef;
 
-    // last backend id used by round robin for sequential choosing backends for
-    // tablet creation
-    private final ConcurrentHashMap<String, Long> lastBackendIdForCreationMap;
-    // last backend id used by round robin for sequential choosing backends in
-    // other jobs
-    private final ConcurrentHashMap<String, Long> lastBackendIdForOtherMap;
-
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
 
@@ -107,8 +99,6 @@ public class SystemInfoService {
 
         idToComputeNodeRef = ImmutableMap.<Long, ComputeNode>of();
 
-        lastBackendIdForCreationMap = new ConcurrentHashMap<String, Long>();
-        lastBackendIdForOtherMap = new ConcurrentHashMap<String, Long>();
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
     }
 
@@ -155,7 +145,7 @@ public class SystemInfoService {
     }
 
     private void setComputeNodeOwner(ComputeNode computeNode) {
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
         computeNode.setOwnerClusterName(DEFAULT_CLUSTER);
@@ -180,6 +170,17 @@ public class SystemInfoService {
     }
 
     // for test
+    public void dropBackend(Backend backend) {
+        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
+        copiedBackends.remove(backend.getId());
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+
+        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVerions.remove(backend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+    }
+
+    // for test
     public void addBackend(Backend backend) {
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(backend.getId(), backend);
@@ -189,11 +190,11 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
     }
 
-    private void setBackendOwner(Backend backend, String clusterName) {
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(clusterName);
+    private void setBackendOwner(Backend backend) {
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
-        backend.setOwnerClusterName(clusterName);
+        backend.setOwnerClusterName(DEFAULT_CLUSTER);
         backend.setBackendState(BackendState.using);
     }
 
@@ -211,7 +212,7 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
         // add backend to DEFAULT_CLUSTER
-        setBackendOwner(newBackend, DEFAULT_CLUSTER);
+        setBackendOwner(newBackend);
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -288,7 +289,7 @@ public class SystemInfoService {
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
         // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(dropComputeNode.getOwnerClusterName());
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
@@ -345,8 +346,8 @@ public class SystemInfoService {
                                                 " please change the replication_num of [%s.%s] to three." +
                                                 " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
                                                 " can be used to forcibly drop the backend. ",
-                                        db.getFullName(), table.getName(), droppedBackend.getHost(),
-                                        droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
+                                        db.getOriginName(), table.getName(), droppedBackend.getHost(),
+                                        droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
 
                                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                                         .forEach(rollupIdx -> {
@@ -391,7 +392,7 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(droppedBackend.getOwnerClusterName());
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
             if (Config.integrate_starmgr) {
@@ -898,7 +899,7 @@ public class SystemInfoService {
 
         // to add compute to DEFAULT_CLUSTER
         if (newComputeNode.getBackendState() == BackendState.using) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
             if (null != cluster) {
                 // replay log
                 cluster.addComputeNode(newComputeNode.getId());
@@ -926,7 +927,7 @@ public class SystemInfoService {
 
         // to add be to DEFAULT_CLUSTER
         if (newBackend.getBackendState() == BackendState.using) {
-            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+            final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
             if (null != cluster) {
                 // replay log
                 cluster.addBackend(newBackend.getId());
@@ -945,7 +946,7 @@ public class SystemInfoService {
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
         // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(DEFAULT_CLUSTER);
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             cluster.removeComputeNode(computeNodeId);
         } else {
@@ -966,7 +967,7 @@ public class SystemInfoService {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // update cluster
-        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster(backend.getOwnerClusterName());
+        final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
             // clear map in starosAgent

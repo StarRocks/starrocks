@@ -41,7 +41,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.File;
-import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.Map;
 
@@ -141,8 +140,7 @@ public class BDBTool {
         return true;
     }
 
-    private void getValueByKey(Database db, Long key)
-            throws UnsupportedEncodingException {
+    private void getValueByKey(Database db, Long key) {
 
         DatabaseEntry queryKey = new DatabaseEntry();
         TupleBinding<Long> myBinding = TupleBinding.getPrimitiveBinding(Long.class);

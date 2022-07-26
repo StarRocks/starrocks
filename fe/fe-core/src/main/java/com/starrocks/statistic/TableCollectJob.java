@@ -5,7 +5,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
@@ -28,7 +27,7 @@ public class TableCollectJob extends StatisticsCollectJob {
     @Override
     public void collect() throws Exception {
         List<List<String>> splitColumns = Lists.partition(columns,
-                (int) (table.getRowCount() * columns.size() / Config.statistics_collect_max_row_count_per_query + 1));
+                (int) (table.getRowCount() * columns.size() / Config.statistic_collect_max_row_count_per_query + 1));
         for (List<String> splitColItem : splitColumns) {
             for (String columnName : splitColItem) {
                 String sql = buildFullInsertSQL(db, table, Lists.newArrayList(columnName));
@@ -48,7 +47,7 @@ public class TableCollectJob extends StatisticsCollectJob {
             context.put("tableId", table.getId());
             context.put("columnName", name);
             context.put("dbName", db.getFullName());
-            context.put("tableName", ClusterNamespace.getNameFromFullName(db.getFullName()) + "." + table.getName());
+            context.put("tableName", db.getOriginName() + "." + table.getName());
             context.put("dataSize", getDataSize(column, false));
 
             if (!column.getType().canStatistic()) {

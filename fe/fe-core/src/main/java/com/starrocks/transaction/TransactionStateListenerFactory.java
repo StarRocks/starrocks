@@ -4,7 +4,7 @@ package com.starrocks.transaction;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.lake.LakeTable;
+import com.starrocks.lake.LakeTable;
 
 public class TransactionStateListenerFactory {
     public TransactionStateListener create(DatabaseTransactionMgr dbTxnMgr, Table table) {

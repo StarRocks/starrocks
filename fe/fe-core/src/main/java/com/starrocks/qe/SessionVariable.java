@@ -122,7 +122,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
-    // if set to true, some of stmt will be forwarded to master FE to get result
+    // if set to true, some of stmt will be forwarded to leader FE to get result
+    public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
@@ -157,9 +158,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
+    public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
-    public static final String WORKGROUP_ID = "workgroup_id";
+    public static final String RESOURCE_GROUP_ID = "workgroup_id";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -232,12 +234,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
+    public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
+
+    public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -269,7 +274,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
      * to BE in batch and concurrently.
      * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     *   of a fragment to the same destination host are delivered in the same request.
+     * of a fragment to the same destination host are delivered in the same request.
      * - Send different fragments concurrently according to topological order of the fragment tree
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
@@ -278,6 +283,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
 
+    @VariableMgr.VarAttr(name = RUNTIME_FILTER_ON_EXCHANGE_NODE)
+    private boolean runtimeFilterOnExchangeNode = false;
+
     @VariableMgr.VarAttr(name = ENABLE_RESOURCE_GROUP)
     private boolean enableResourceGroup = false;
 
@@ -285,7 +293,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableTabletInternalParallel = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
-    private boolean enableSharedScan = true;
+    private boolean enableSharedScan = false;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
@@ -432,17 +440,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
+    @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int profileTimeout = 2;
+
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
-    @VariableMgr.VarAttr(name = WORKGROUP_ID, flag = VariableMgr.INVISIBLE)
-    private int workgroupId = 0;
+    @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, flag = VariableMgr.INVISIBLE)
+    private int resourceGroupId = 0;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
-    private boolean forwardToMaster = false;
+    @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
+    private boolean forwardToLeader = false;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -555,6 +566,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryDebugTrace = false;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -722,8 +736,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
-    public boolean getForwardToMaster() {
-        return forwardToMaster;
+    public boolean getForwardToLeader() {
+        return forwardToLeader;
     }
 
     public void setMaxScanKeyNum(int maxScanKeyNum) {
@@ -914,8 +928,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableSharedScan;
     }
 
-    public int getWorkGroupId() {
-        return workgroupId;
+    public int getResourceGroupId() {
+        return resourceGroupId;
+    }
+
+    public int getProfileTimeout() {
+        return profileTimeout;
     }
 
     public int getPipelineProfileLevel() {
@@ -1017,6 +1035,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableOptimizerTraceLog;
     }
 
+    public boolean isRuntimeFilterOnExchangeNode() {
+        return runtimeFilterOnExchangeNode;
+    }
+
+    public boolean isEnableQueryDebugTrace() {
+        return enableQueryDebugTrace;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1076,6 +1102,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+        tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
 
         return tResult;
     }

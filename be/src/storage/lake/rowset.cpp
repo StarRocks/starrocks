@@ -100,16 +100,12 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
     }
 }
 
-// TODO: load from segment cache
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments) {
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
+    segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        auto seg_path = _tablet->segment_location(seg_name);
-        ASSIGN_OR_RETURN(auto segment, Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path,
-                                                     seg_id++, _tablet_schema.get(), &footer_size_hint));
+        ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, true));
         segments->emplace_back(std::move(segment));
     }
     return Status::OK();

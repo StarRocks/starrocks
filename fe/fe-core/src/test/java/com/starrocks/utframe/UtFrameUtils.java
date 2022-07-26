@@ -41,9 +41,17 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksFEMetaVersion;
+import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalTask;
+import com.starrocks.meta.MetaContext;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.persist.EditLog;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -74,11 +82,11 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.MockedFrontend.EnvVarNotSetException;
-import com.starrocks.utframe.MockedFrontend.FeStartException;
-import com.starrocks.utframe.MockedFrontend.NotInitException;
 import org.apache.commons.codec.binary.Hex;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -94,6 +102,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -130,7 +140,6 @@ public class UtFrameUtils {
     // Help to create a mocked ConnectContext.
     public static ConnectContext createDefaultCtx() throws IOException {
         ConnectContext ctx = new ConnectContext(null);
-        ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -149,6 +158,23 @@ public class UtFrameUtils {
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, ctx);
         } catch (ParsingException | SemanticException e) {
             System.err.println("parse failed: " + e.getMessage());
+            if (e.getMessage() == null) {
+                throw e;
+            } else {
+                throw new AnalysisException(e.getMessage(), e);
+            }
+        }
+
+        return statementBase;
+    }
+
+    public static StatementBase parseStmtWithNewParserNotIncludeAnalyzer(String originStmt, ConnectContext ctx)
+            throws Exception {
+        StatementBase statementBase;
+        try {
+            statementBase =
+                    com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode()).get(0);
+        } catch (ParsingException e) {
             if (e.getMessage() == null) {
                 throw e;
             } else {
@@ -205,8 +231,7 @@ public class UtFrameUtils {
         return statementBases;
     }
 
-    private static void startFEServer(String runningDir, boolean startBDB) throws EnvVarNotSetException, IOException,
-            FeStartException, NotInitException {
+    private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
@@ -563,4 +588,113 @@ public class UtFrameUtils {
             db.readUnlock();
         }
     }
+
+    public static void setUpForPersistTest() {
+        PseudoJournalReplayer.setUp();
+        PseudoImage.setUpImageVersion();
+    }
+
+    public static void tearDownForPersisTest() {
+        PseudoJournalReplayer.tearDown();
+    }
+
+    /**
+     * pseudo image is used to test if image is wrote correctly.
+     */
+    public static class PseudoImage {
+        private static AtomicBoolean isSetup = new AtomicBoolean(false);
+        private DataOutputBuffer buffer;
+        private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
+
+        protected static void setUpImageVersion (){
+            MetaContext metaContext = new MetaContext();
+            metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
+            metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
+            metaContext.setThreadLocalInfo();
+            isSetup.set(true);
+        }
+
+        public PseudoImage() throws IOException {
+            assert (isSetup.get());
+            buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+        }
+
+        public DataOutputStream getDataOutputStream() {
+            return buffer;
+        }
+
+        /**
+         * this can be called multiple times to restore from a snapshot
+         */
+        public DataInputStream getDataInputStream() throws IOException {
+            return new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+        }
+    }
+
+    /**
+     * pseudo journal replayer is used to test if replayed correctly
+     */
+    public static class PseudoJournalReplayer {
+        // master journal queue
+        private static BlockingQueue<JournalTask> masterJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        // follower journal queue
+        private static BlockingQueue<JournalTask> followerJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        // constantly move master journal to follower and mark succeed
+        private static Thread fakeJournalWriter = null;
+
+        protected static synchronized void setUp() {
+            assert (fakeJournalWriter == null);
+            GlobalStateMgr.getCurrentState().setEditLog(new EditLog(masterJournalQueue));
+
+            // simulate the process of master journal synchronizing to the follower
+            fakeJournalWriter = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    while (true) {
+                        try {
+                            JournalTask journalTask = masterJournalQueue.take();
+                            journalTask.markSucceed();
+                            followerJournalQueue.put(journalTask);
+                        } catch (InterruptedException e) {
+                            System.err.println("fakeJournalWriter got an InterruptedException and exit!");
+                            break;
+                        }
+                    }
+                }
+            });
+            fakeJournalWriter.start();
+        }
+
+        /**
+         * if you want to replay just a few log, please call this before master operate
+         */
+        public static synchronized void resetFollowerJournalQueue() throws InterruptedException {
+            assert (followerJournalQueue != null);
+            followerJournalQueue.clear();
+        }
+
+        public static synchronized Writable replayNextJournal() throws InterruptedException, IOException {
+            assert (followerJournalQueue != null);
+            DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+            DataInputStream dis = new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+            JournalEntity je = new JournalEntity();
+            je.readFields(dis);
+            Writable ret = je.getData();
+            dis.close();
+            return ret;
+        }
+
+        protected static synchronized void tearDown() {
+            if (fakeJournalWriter != null) {
+                try {
+                    fakeJournalWriter.interrupt();
+                    fakeJournalWriter.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                fakeJournalWriter = null;
+            }
+        }
+    }
+
 }

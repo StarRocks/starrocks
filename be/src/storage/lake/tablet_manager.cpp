@@ -4,29 +4,60 @@
 
 #include <variant>
 
+#include "common/compiler_util.h"
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
+DIAGNOSTIC_POP
+
+#include "agent/agent_server.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/util.h"
+#include "runtime/exec_env.h"
+#include "storage/lake/compaction_policy.h"
+#include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/metadata_util.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "util/lru_cache.h"
 #include "util/raw_container.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
-Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
-Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size);
+static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
+static Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size);
+static void* metadata_gc_trigger(void* arg);
+static void* segment_gc_trigger(void* arg);
 
 TabletManager::TabletManager(LocationProvider* location_provider, int64_t cache_capacity)
-        : _location_provider(location_provider), _metacache(new_lru_cache(cache_capacity)) {}
+        : _location_provider(location_provider),
+          _metacache(new_lru_cache(cache_capacity)),
+          _metadata_gc_tid(INVALID_BTHREAD),
+          _segment_gc_tid(INVALID_BTHREAD) {}
+
+TabletManager::~TabletManager() {
+    if (_metadata_gc_tid != INVALID_BTHREAD) {
+        [[maybe_unused]] void* ret = nullptr;
+        // We don't care about the return value of bthread_stop or bthread_join.
+        (void)bthread_stop(_metadata_gc_tid);
+        (void)bthread_join(_metadata_gc_tid, &ret);
+    }
+    if (_segment_gc_tid != INVALID_BTHREAD) {
+        [[maybe_unused]] void* ret = nullptr;
+        (void)bthread_stop(_segment_gc_tid);
+        (void)bthread_join(_segment_gc_tid, &ret);
+    }
+}
 
 std::string TabletManager::tablet_root_location(int64_t tablet_id) const {
     return _location_provider->root_location(tablet_id);
@@ -48,7 +79,7 @@ std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
     return fmt::format("schema_{}", tablet_id);
 }
 
-bool TabletManager::fill_metacache(const std::string& key, CacheValue* ptr, int size) {
+bool TabletManager::fill_metacache(std::string_view key, CacheValue* ptr, int size) {
     Cache::Handle* handle = _metacache->insert(CacheKey(key), ptr, size, cache_value_deleter);
     if (handle == nullptr) {
         delete ptr;
@@ -59,7 +90,7 @@ bool TabletManager::fill_metacache(const std::string& key, CacheValue* ptr, int 
     }
 }
 
-TabletMetadataPtr TabletManager::lookup_tablet_metadata(const std::string& key) {
+TabletMetadataPtr TabletManager::lookup_tablet_metadata(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
         return nullptr;
@@ -70,7 +101,7 @@ TabletMetadataPtr TabletManager::lookup_tablet_metadata(const std::string& key) 
     return metadata;
 }
 
-TabletSchemaPtr TabletManager::lookup_tablet_schema(const std::string& key) {
+TabletSchemaPtr TabletManager::lookup_tablet_schema(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
         return nullptr;
@@ -81,7 +112,7 @@ TabletSchemaPtr TabletManager::lookup_tablet_schema(const std::string& key) {
     return schema;
 }
 
-TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
+TxnLogPtr TabletManager::lookup_txn_log(std::string_view key) {
     auto handle = _metacache->lookup(CacheKey(key));
     if (handle == nullptr) {
         return nullptr;
@@ -92,7 +123,24 @@ TxnLogPtr TabletManager::lookup_txn_log(const std::string& key) {
     return log;
 }
 
-void TabletManager::erase_metacache(const std::string& key) {
+SegmentPtr TabletManager::lookup_segment(std::string_view key) {
+    auto handle = _metacache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        return nullptr;
+    }
+    auto value = static_cast<CacheValue*>(_metacache->value(handle));
+    auto segment = std::get<SegmentPtr>(*value);
+    _metacache->release(handle);
+    return segment;
+}
+
+void TabletManager::cache_segment(std::string_view key, SegmentPtr segment) {
+    auto mem_cost = segment->mem_usage();
+    auto value = std::make_unique<CacheValue>(std::move(segment));
+    (void)fill_metacache(key, value.release(), (int)mem_cost);
+}
+
+void TabletManager::erase_metacache(std::string_view key) {
     _metacache->erase(CacheKey(key));
 }
 
@@ -106,6 +154,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb.set_id(req.tablet_id);
     tablet_metadata_pb.set_version(1);
     tablet_metadata_pb.set_next_rowset_id(1);
+    tablet_metadata_pb.set_cumulative_point(0);
 
     // schema
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
@@ -375,7 +424,7 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     // 1. All input rowsets must exist in |metadata->rowsets()|
     // 2. Position of the input rowsets must be adjacent.
     auto pre_input_pos = first_input_pos;
-    for (int i = 1, sz = metadata->rowsets_size(); i < sz; i++) {
+    for (int i = 1, sz = op_compaction.input_rowsets_size(); i < sz; i++) {
         input_id = op_compaction.input_rowsets(i);
         auto it = std::find_if(pre_input_pos + 1, metadata->rowsets().end(), Finder{input_id});
         if (it == metadata->rowsets().end()) {
@@ -387,9 +436,9 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
         }
     }
 
+    auto first_idx = static_cast<uint32_t>(first_input_pos - metadata->rowsets().begin());
     if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
         // Replace the first input rowset with output rowset
-        auto first_idx = static_cast<int>(first_input_pos - metadata->rowsets().begin());
         auto output_rowset = metadata->mutable_rowsets(first_idx);
         output_rowset->CopyFrom(op_compaction.output_rowset());
         output_rowset->set_id(metadata->next_rowset_id());
@@ -399,6 +448,24 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     // Erase input rowsets from metadata
     auto end_input_pos = pre_input_pos + 1;
     metadata->mutable_rowsets()->erase(first_input_pos, end_input_pos);
+
+    // Set new cumulative point
+    uint32_t new_cumulative_point = 0;
+    if (first_idx >= metadata->cumulative_point()) {
+        // cumulative compaction
+        new_cumulative_point = first_idx;
+    } else {
+        // base compaction
+        new_cumulative_point = first_idx - op_compaction.input_rowsets_size();
+    }
+    if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
+        ++new_cumulative_point;
+    }
+    if (new_cumulative_point > metadata->rowsets_size()) {
+        return Status::InternalError(fmt::format("new cumulative point: {} exceeds rowset size: {}",
+                                                 new_cumulative_point, metadata->rowsets_size()));
+    }
+    metadata->set_cumulative_point(new_cumulative_point);
     return Status::OK();
 }
 
@@ -471,18 +538,74 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
     return Status::OK();
 }
 
-// TODO: better input rowsets select policy.
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    ASSIGN_OR_RETURN(auto metadata, tablet.get_metadata(version));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
-    std::vector<RowsetPtr> input_rowsets;
-    input_rowsets.reserve(metadata->rowsets_size());
-    for (const auto& rowset : metadata->rowsets()) {
-        auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
-        input_rowsets.emplace_back(std::make_shared<Rowset>(tablet_ptr.get(), std::move(metadata_ptr)));
-    }
+    ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
+    ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
     return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
+}
+
+void TabletManager::start_gc() {
+    int r = bthread_start_background(&_metadata_gc_tid, nullptr, metadata_gc_trigger, this);
+    PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
+
+    r = bthread_start_background(&_segment_gc_tid, nullptr, segment_gc_trigger, this);
+    PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";
+}
+
+void* metadata_gc_trigger(void* arg) {
+    auto tablet_mgr = static_cast<TabletManager*>(arg);
+    auto lp = tablet_mgr->location_provider();
+    // NOTE: Share the same thread pool with local tablet's clone task.
+    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    while (!bthread_stopped(bthread_self())) {
+        // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
+        // configured value, which is ok now.
+        (void)bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000);
+
+        std::set<std::string> roots;
+        auto st = lp->list_root_locations(&roots);
+
+        LOG_IF(ERROR, !st.ok()) << st;
+
+        for (const auto& root : roots) {
+            // TODO: limit GC concurrency
+            st = thread_pool->submit_func([=]() {
+                auto r = metadata_gc(root, tablet_mgr);
+                LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
+            });
+            LOG_IF(WARNING, !st.ok()) << "Fail to submit task to threadpool: " << st;
+        }
+    }
+    return nullptr;
+}
+
+void* segment_gc_trigger(void* arg) {
+    auto tablet_mgr = static_cast<TabletManager*>(arg);
+    auto lp = tablet_mgr->location_provider();
+    // NOTE: Share the same thread pool with local tablet's clone task.
+    auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    while (!bthread_stopped(bthread_self())) {
+        // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
+        // configured value, which is ok now.
+        (void)bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000);
+
+        std::set<std::string> roots;
+        auto st = lp->list_root_locations(&roots);
+
+        LOG_IF(ERROR, !st.ok()) << st;
+
+        for (const auto& root : roots) {
+            // TODO: limit GC concurrency
+            st = thread_pool->submit_func([=]() {
+                auto r = segment_gc(root, tablet_mgr);
+                LOG_IF(WARNING, !r.ok()) << "Fail to do segment gc in " << root << ": " << r;
+            });
+            LOG_IF(WARNING, !st.ok()) << "Fail to submit task to threadpool: " << st;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace starrocks::lake

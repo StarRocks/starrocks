@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -32,8 +33,10 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class SubqueryTransformer {
     private final ConnectContext session;
@@ -82,13 +85,19 @@ public class SubqueryTransformer {
             if (!(e.getChild(1) instanceof Subquery)) {
                 continue;
             }
-            ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
-            s.remove(columnRefOperator);
+
+            if (((Subquery) e.getChild(1)).isUseSemiAnti()) {
+                ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
+                s.remove(columnRefOperator);
+            }
         }
 
         for (ExistsPredicate e : existsSubquerys) {
-            ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
-            s.remove(columnRefOperator);
+            Preconditions.checkState(e.getChild(0) instanceof Subquery);
+            if (((Subquery) e.getChild(0)).isUseSemiAnti()) {
+                ColumnRefOperator columnRefOperator = subOpt.getExpressionMapping().get(e);
+                s.remove(columnRefOperator);
+            }
         }
 
         scalarPredicate = Utils.compoundAnd(s);
@@ -100,12 +109,22 @@ public class SubqueryTransformer {
         public OptExprBuilder builder;
         public boolean useSemiAnti;
         public Map<Integer, ExpressionMapping> cteContext;
+        public List<Expr> outerExprs;
 
         public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
                                Map<Integer, ExpressionMapping> cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
+            this.outerExprs = Collections.emptyList();
+        }
+
+        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
+                               Map<Integer, ExpressionMapping> cteContext, List<Expr> outerExprs) {
+            this.builder = builder;
+            this.useSemiAnti = useSemiAnti;
+            this.cteContext = cteContext;
+            this.outerExprs = outerExprs;
         }
     }
 
@@ -138,8 +157,14 @@ public class SubqueryTransformer {
             if (builder.getExpressionMapping().hasExpression(node)) {
                 return builder;
             }
+
+            List<Expr> outerExprs = Collections.emptyList();
+            if (node.getChildren().stream().filter(Subquery.class::isInstance).count() == 1) {
+                outerExprs = node.getChildren().stream().filter(c -> !(c instanceof Subquery))
+                        .collect(Collectors.toList());
+            }
             for (Expr child : node.getChildren()) {
-                builder = visit(child, new SubqueryContext(builder, false, context.cteContext));
+                builder = visit(child, new SubqueryContext(builder, false, context.cteContext, outerExprs));
             }
 
             return builder;
@@ -184,6 +209,7 @@ public class SubqueryTransformer {
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
 
+            ((Subquery) inPredicate.getChild(1)).setUseSemiAnti(context.useSemiAnti);
             return context.builder;
         }
 
@@ -212,6 +238,7 @@ public class SubqueryTransformer {
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
 
+            ((Subquery) existsPredicate.getChild(0)).setUseSemiAnti(context.useSemiAnti);
             return context.builder;
         }
 
@@ -288,6 +315,16 @@ public class SubqueryTransformer {
                                 Function.CompareMode.IS_IDENTICAL));
             }
 
+            // un-correlation scalar query, set outer columns
+            ColumnRefSet outerUsedColumns = new ColumnRefSet();
+            if (subqueryPlan.getCorrelation().isEmpty()) {
+                for (Expr outer : context.outerExprs) {
+                    outerUsedColumns.union(SqlToScalarOperatorTranslator
+                            .translate(outer, context.builder.getExpressionMapping())
+                            .getUsedColumns());
+                }
+            }
+
             ColumnRefOperator outputPredicateRef =
                     columnRefFactory.create(subquery, subquery.getType(), subquery.isNullable());
             context.builder.getExpressionMapping().put(subquery, outputPredicateRef);
@@ -297,6 +334,7 @@ public class SubqueryTransformer {
                     .setSubqueryOperator(subqueryOutput)
                     .setCorrelationColumnRefs(subqueryPlan.getCorrelation())
                     .setUseSemiAnti(context.useSemiAnti)
+                    .setUnCorrelationSubqueryPredicateColumns(outerUsedColumns)
                     .setNeedCheckMaxRows(true).build();
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),

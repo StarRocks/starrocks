@@ -339,6 +339,27 @@ public abstract class JoinOrder {
         return new Pair<>(Utils.compoundAnd(equalOnPredicates), Utils.compoundAnd(otherPredicates));
     }
 
+    public boolean canBuildInnerJoinPredicate(GroupInfo leftGroup, GroupInfo rightGroup) {
+        BitSet left = leftGroup.atoms;
+        BitSet right = rightGroup.atoms;
+        BitSet joinBitSet = new BitSet();
+        joinBitSet.or(left);
+        joinBitSet.or(right);
+
+        for (int i = 0; i < edgeSize; ++i) {
+            Edge edge = edges.get(i);
+            if (!Utils.isEqualBinaryPredicate(edge.predicate)) {
+                continue;
+            }
+            if (contains(joinBitSet, edge.vertexes) &&
+                    left.intersects(edge.vertexes) &&
+                    right.intersects(edge.vertexes)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean contains(BitSet left, BitSet right) {
         return right.stream().allMatch(left::get);
     }

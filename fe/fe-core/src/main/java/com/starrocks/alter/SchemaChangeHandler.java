@@ -1486,7 +1486,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                     .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
                         } catch (DdlException e) {
                             // This table is not a dynamic partition table and didn't supply all dynamic partition properties
-                            throw new DdlException("Table " + db.getFullName() + "." +
+                            throw new DdlException("Table " + db.getOriginName() + "." +
                                     olapTable.getName() +
                                     " is not a dynamic partition table. Use command `HELP ALTER TABLE` " +
                                     "to see how to change a normal table to a dynamic partition table.");
@@ -1595,6 +1595,12 @@ public class SchemaChangeHandler extends AlterHandler {
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
             if (metaValue == olapTable.enablePersistentIndex()) {
                 return;
+            }
+            if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
+                if (!olapTable.checkPersistentIndex()) {
+                    throw new DdlException("PrimaryKey table using persistent index don't support " + 
+                         "varchar(char) as key so far, and key length should be no more than 64 Bytes");
+                }
             }
         } else {
             LOG.warn("meta type: {} does not support", metaType);

@@ -601,12 +601,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     }
 
-    // TODO(ywb): require any type property could consider parent required property
-    //          join1
-    //         /    \
-    //      join2
-    //    /(any) \(broadcast)
-    // Such any type property could prefer choose group expression which is could satisfy the join1 required property
     @Test
     public void testEvalPredicateCardinality() throws Exception {
         String sql = "select\n" +
@@ -627,16 +621,15 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
 
         // eval predicate cardinality in scan node
-        assertContains(plan, "4:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
-                "     partitionsRatio=1/1, tabletsRatio=1/1\n");
+                "     partitionsRatio=1/1, tabletsRatio=1/1");
         // eval predicate cardinality in join node
-        assertContains(plan, "  6:NESTLOOP JOIN\n" +
+        assertContains(plan, "3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  cardinality: 2\n" +
-                "  |  column statistics: \n");
+                "  |  cardinality: 2");
     }
 
     @Test
@@ -1252,5 +1245,20 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n");
+    }
+
+    @Test
+    public void testDisableOneStageAggWithDistinct() throws Exception {
+        String sql = "select count(distinct L_ORDERKEY) from lineitem group by L_PARTKEY";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY");
+
+        sql = "select count(distinct P_NAME) from part";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: P_NAME");
     }
 }

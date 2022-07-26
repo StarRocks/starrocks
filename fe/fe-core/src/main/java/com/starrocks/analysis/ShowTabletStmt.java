@@ -28,18 +28,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -101,6 +96,10 @@ public class ShowTabletStmt extends ShowStmt {
         return dbName;
     }
 
+    public void setDbName(String db) {
+        this.dbName = db;
+    }
+
     public String getTableName() {
         return tableName;
     }
@@ -157,135 +156,46 @@ public class ShowTabletStmt extends ShowStmt {
         return replicaState;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        // check access first
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SHOW TABLET");
-        }
-
-        super.analyze(analyzer);
-        if (!isShowSingleTablet && Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
-        }
-
-        if (partitionNames != null) {
-            partitionNames.analyze(analyzer);
-        }
-
-        if (limitElement != null) {
-            limitElement.analyze(analyzer);
-        }
-
-        // analyze where clause if not null
-        if (whereClause != null) {
-            if (whereClause instanceof CompoundPredicate) {
-                CompoundPredicate cp = (CompoundPredicate) whereClause;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
-                    throw new AnalysisException("Only allow compound predicate with operator AND");
-                }
-
-                analyzeSubPredicate(cp.getChild(0));
-                analyzeSubPredicate(cp.getChild(1));
-            } else {
-                analyzeSubPredicate(whereClause);
-            }
-        }
-
-        // TODO: support lake tablets order by
-        // order by
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            orderByPairs = new ArrayList<OrderByPair>();
-            for (OrderByElement orderByElement : orderByElements) {
-                if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                    throw new AnalysisException("Should order by column");
-                }
-                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
-                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                orderByPairs.add(orderByPair);
-            }
-        }
+    public void setVersion(long version) {
+        this.version = version;
     }
 
-    private void analyzeSubPredicate(Expr subExpr) throws AnalysisException {
-        if (subExpr == null) {
-            return;
-        }
-        if (subExpr instanceof CompoundPredicate) {
-            CompoundPredicate cp = (CompoundPredicate) subExpr;
-            if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
-                throw new AnalysisException("Only allow compound predicate with operator AND");
-            }
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
 
-            analyzeSubPredicate(cp.getChild(0));
-            analyzeSubPredicate(cp.getChild(1));
-            return;
-        }
-        boolean valid = true;
-        do {
-            if (!(subExpr instanceof BinaryPredicate)) {
-                valid = false;
-                break;
-            }
-            BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-            if (binaryPredicate.getOp() != BinaryPredicate.Operator.EQ) {
-                valid = false;
-                break;
-            }
+    public void setIndexName(String indexName) {
+        this.indexName = indexName;
+    }
 
-            if (!(subExpr.getChild(0) instanceof SlotRef)) {
-                valid = false;
-                break;
-            }
-            String leftKey = ((SlotRef) subExpr.getChild(0)).getColumnName();
-            if (leftKey.equalsIgnoreCase("version")) {
-                if (!(subExpr.getChild(1) instanceof IntLiteral) || version > -1) {
-                    valid = false;
-                    break;
-                }
-                version = ((IntLiteral) subExpr.getChild(1)).getValue();
-            } else if (leftKey.equalsIgnoreCase("backendid")) {
-                if (!(subExpr.getChild(1) instanceof IntLiteral) || backendId > -1) {
-                    valid = false;
-                    break;
-                }
-                backendId = ((IntLiteral) subExpr.getChild(1)).getValue();
-            } else if (leftKey.equalsIgnoreCase("indexname")) {
-                if (!(subExpr.getChild(1) instanceof StringLiteral) || indexName != null) {
-                    valid = false;
-                    break;
-                }
-                indexName = ((StringLiteral) subExpr.getChild(1)).getValue();
-            } else if (leftKey.equalsIgnoreCase("state")) {
-                if (!(subExpr.getChild(1) instanceof StringLiteral) || replicaState != null) {
-                    valid = false;
-                    break;
-                }
-                String state = ((StringLiteral) subExpr.getChild(1)).getValue().toUpperCase();
-                try {
-                    replicaState = Replica.ReplicaState.valueOf(state);
-                } catch (Exception e) {
-                    replicaState = null;
-                    valid = false;
-                    break;
-                }
-            } else {
-                valid = false;
-                break;
-            }
-        } while (false);
+    public void setReplicaState(Replica.ReplicaState replicaState) {
+        this.replicaState = replicaState;
+    }
 
-        if (!valid) {
-            throw new AnalysisException("Where clause should looks like: Version = \"version\","
-                    + " or state = \"NORMAL|ROLLUP|CLONE|DECOMMISSION\", or BackendId = 10000,"
-                    + " indexname=\"rollup_name\" or compound predicate with operator AND");
-        }
+    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public LimitElement getLimitElement() {
+        return limitElement;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowTabletStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override
@@ -345,7 +255,7 @@ public class ShowTabletStmt extends ShowStmt {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        if (ConnectContext.get().getSessionVariable().getForwardToMaster()) {
+        if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
             return RedirectStatus.FORWARD_NO_SYNC;
         } else {
             return RedirectStatus.NO_FORWARD;

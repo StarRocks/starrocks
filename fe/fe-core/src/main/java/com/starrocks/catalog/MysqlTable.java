@@ -37,7 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.Adler32;
@@ -191,30 +191,22 @@ public class MysqlTable extends Table {
     public int getSignature(int signatureVersion) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
-        String charsetName = "UTF-8";
-
-        try {
-            // name
-            adler32.update(name.getBytes(charsetName));
-            // type
-            adler32.update(type.name().getBytes(charsetName));
-            // host
-            adler32.update(getHost().getBytes(charsetName));
-            // port
-            adler32.update(getPort().getBytes(charsetName));
-            // username
-            adler32.update(getUserName().getBytes(charsetName));
-            // passwd
-            adler32.update(getPasswd().getBytes(charsetName));
-            // mysql db
-            adler32.update(mysqlDatabaseName.getBytes(charsetName));
-            // mysql table
-            adler32.update(mysqlTableName.getBytes(charsetName));
-
-        } catch (UnsupportedEncodingException e) {
-            LOG.error("encoding error", e);
-            return -1;
-        }
+        // name
+        adler32.update(name.getBytes(StandardCharsets.UTF_8));
+        // type
+        adler32.update(type.name().getBytes(StandardCharsets.UTF_8));
+        // host
+        adler32.update(getHost().getBytes(StandardCharsets.UTF_8));
+        // port
+        adler32.update(getPort().getBytes(StandardCharsets.UTF_8));
+        // username
+        adler32.update(getUserName().getBytes(StandardCharsets.UTF_8));
+        // passwd
+        adler32.update(getPasswd().getBytes(StandardCharsets.UTF_8));
+        // mysql db
+        adler32.update(mysqlDatabaseName.getBytes(StandardCharsets.UTF_8));
+        // mysql table
+        adler32.update(mysqlTableName.getBytes(StandardCharsets.UTF_8));
 
         return Math.abs((int) adler32.getValue());
     }

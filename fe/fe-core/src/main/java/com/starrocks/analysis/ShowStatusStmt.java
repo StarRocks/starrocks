@@ -63,13 +63,6 @@ public class ShowStatusStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) {
-        if (type == null) {
-            type = SetType.DEFAULT;
-        }
-    }
-
-    @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
     }

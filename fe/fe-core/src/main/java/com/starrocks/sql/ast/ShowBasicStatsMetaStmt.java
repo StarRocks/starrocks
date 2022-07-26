@@ -9,7 +9,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,7 +41,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
-        row.set(0, ClusterNamespace.getNameFromFullName(db.getFullName()));
+        row.set(0, db.getOriginName());
         Table table = db.getTable(tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);

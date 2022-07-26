@@ -28,24 +28,17 @@ public class RefreshTableStmtTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTbl);
+        String sql_1 = "CREATE EXTERNAL CATALOG catalog1 PROPERTIES(\"type\"=\"hive\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
+        starRocksAssert.withCatalog(sql_1);
     }
 
     @Test
-    public void testRefreshTableParserAndAnalyzer(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked MetadataMgr metadataMgr,
-                                                  @Mocked CatalogMgr catalogMgr,
+    public void testRefreshTableParserAndAnalyzer(@Mocked MetadataMgr metadataMgr,
                                                   @Mocked Table table,
                                                   @Mocked Database database) {
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                minTimes = 0;
-
-                globalStateMgr.getCatalogMgr().catalogExists(anyString);
-                result = true;
-
-                globalStateMgr.getMetadataMgr();
+                GlobalStateMgr.getCurrentState().getMetadataMgr();
                 result = metadataMgr;
 
                 metadataMgr.getTable(anyString, anyString, anyString);

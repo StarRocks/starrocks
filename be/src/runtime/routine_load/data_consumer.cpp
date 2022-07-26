@@ -21,7 +21,6 @@
 
 #include "runtime/routine_load/data_consumer.h"
 
-#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -82,13 +81,24 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
     RETURN_IF_ERROR(set_conf("metadata.broker.list", ctx->kafka_info->brokers));
     RETURN_IF_ERROR(set_conf("group.id", group_id));
-    RETURN_IF_ERROR(set_conf("enable.partition.eof", "false"));
+    // For transaction producer, producer will append one control msg to the group of msgs,
+    // but the control msg will not return to consumer,
+    // so we can't to judge whether the consumption has been completed by offset comparison.
+    // So we set enable.partition.eof=true,
+    // if we find current partition is already reach end,
+    // we will direct return instead of wait consume until timeout.
+    // Another advantage of doing this is that for topics with little data,
+    // there is no need to wait until the timeout and occupy a lot of consumer threads.
+    RETURN_IF_ERROR(set_conf("enable.partition.eof", "true"));
     RETURN_IF_ERROR(set_conf("enable.auto.offset.store", "false"));
     // TODO: set it larger than 0 after we set rd_kafka_conf_set_stats_cb()
     RETURN_IF_ERROR(set_conf("statistics.interval.ms", "0"));
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
     RETURN_IF_ERROR(set_conf("api.version.request", "true"));
     RETURN_IF_ERROR(set_conf("api.version.fallback.ms", "0"));
+    if (config::dependency_librdkafka_debug_enable) {
+        RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
+    }
 
     for (auto& item : ctx->kafka_info->properties) {
         if (boost::algorithm::starts_with(item.second, "FILE:")) {
@@ -143,6 +153,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
         topic_partitions.push_back(tp1);
         ss << "[" << entry.first << ": " << entry.second << "] ";
     }
+    _non_eof_partition_count = topic_partitions.size();
 
     LOG(INFO) << "consumer: " << _id << ", grp: " << _grp_id << " assign topic partitions: " << topic << ", "
               << ss.str();
@@ -218,6 +229,25 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             ss << msg->errstr() << ", partition " << msg->partition() << " offset " << msg->offset() << " has no data";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
             st = Status::InternalError(ss.str());
+            break;
+        }
+        case RdKafka::ERR__PARTITION_EOF: {
+            _non_eof_partition_count--;
+            // For transaction producer, producer will append one control msg to the group of msgs,
+            // but the control msg will not return to consumer,
+            // so we use the offset of eof to compute the last offset.
+            //
+            // The last offset of partition = `offset of eof` - 1
+            // The goal of put the EOF msg to queue is that:
+            // we will calculate the last offset of the partition using offset of EOF msg
+            if (!queue->blocking_put(msg.get())) {
+                done = true;
+            } else if (_non_eof_partition_count <= 0) {
+                msg.release();
+                done = true;
+            } else {
+                msg.release();
+            }
             break;
         }
         default:
@@ -341,6 +371,7 @@ Status KafkaDataConsumer::reset() {
     std::unique_lock<std::mutex> l(_lock);
     _cancelled = false;
     _k_consumer->unassign();
+    _non_eof_partition_count = 0;
     return Status::OK();
 }
 

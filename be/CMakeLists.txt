@@ -71,6 +71,8 @@ message(STATUS "make test: ${MAKE_TEST}")
 
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
+option(WITH_COMPRESS "Build binary with compresss debug section" ON)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -196,7 +198,7 @@ add_library(crypto STATIC IMPORTED)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
 
 set(AWSSDK_ROOT_DIR ${THIRDPARTY_DIR})
-set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n")
+set(AWSSDK_COMMON_RUNTIME_LIBS "aws-crt-cpp;aws-c-auth;aws-c-cal;aws-c-common;aws-c-compression;aws-c-event-stream;aws-c-http;aws-c-io;aws-c-mqtt;aws-c-s3;aws-checksums;s2n;aws-c-sdkutils")
 foreach(lib IN ITEMS ${AWSSDK_COMMON_RUNTIME_LIBS})
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/${lib}/cmake)
     list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/${lib}/cmake)
@@ -213,8 +215,8 @@ set_target_properties(openssl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(leveldb STATIC IMPORTED)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
-add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libjemalloc.a)
+add_library(jemalloc_for_arrow STATIC IMPORTED)
+set_target_properties(jemalloc_for_arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libjemalloc.a)
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
@@ -403,6 +405,16 @@ if (WITH_GCOV)
     set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
+if (WITH_COMPRESS)
+    # to compresss debug section. https://gcc.gnu.org/onlinedocs/gcc/Debugging-Options.html
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -gz=zlib")
+endif()
+
+if (ENABLE_QUERY_DEBUG_TRACE)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DENABLE_QUERY_DEBUG_TRACE")
+    message(STATUS "enable query debug trace")
+endif()
+
 # For CMAKE_BUILD_TYPE=Debug
 #   -ggdb: Enable gdb debugging
 # Debug information is stored as dwarf2 to be as compatible as possible
@@ -562,7 +574,8 @@ set(STARROCKS_DEPENDENCIES
     leveldb
     bitshuffle
     roaring
-    jemalloc
+    # arrow compiles jemalloc with a specific prefix, we should keep it
+    jemalloc_for_arrow
     brotlicommon
     brotlidec
     brotlienc
@@ -692,7 +705,7 @@ ENDFUNCTION()
 # Add a benchmark to BE
 FUNCTION(ADD_BE_BENCH TEST_NAME)
 
-    if (${WITH_BENCH} STREQUAL "OFF")
+    if (WITH_BENCH STREQUAL "OFF")
         return()
     endif()
 

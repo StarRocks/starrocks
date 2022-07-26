@@ -6,7 +6,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import org.apache.velocity.VelocityContext;
 
@@ -39,13 +38,17 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
 
-            List<List<String>> splitColumns = Lists.partition(columns,
-                    (int) (partition.getRowCount() * columns.size() / Config.statistics_collect_max_row_count_per_query + 1));
-            for (List<String> splitColItem : splitColumns) {
-                for (String columnName : splitColItem) {
-                    String sql = buildCollectFullStatisticSQL(db, table, partition, Lists.newArrayList(columnName));
-                    collectStatisticSync(sql);
-                }
+            int partitionSize;
+            if (partition.getRowCount() == 0) {
+                partitionSize = columns.size();
+            } else {
+                partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
+                        / (partition.getRowCount() * columns.size()) + 1);
+            }
+
+            for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
+                String sql = buildCollectFullStatisticSQL(db, table, partition, splitColItem);
+                collectStatisticSync(sql);
             }
         }
     }
@@ -62,7 +65,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("tableId", table.getId());
             context.put("partitionId", partition.getId());
             context.put("columnName", name);
-            context.put("dbName", ClusterNamespace.getNameFromFullName(database.getFullName()));
+            context.put("dbName", database.getOriginName());
             context.put("tableName", table.getName());
             context.put("partitionName", partition.getName());
             context.put("dataSize", getDataSize(column, false));

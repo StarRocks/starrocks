@@ -86,11 +86,11 @@ OutPut Exchange Id: 25
 |
 22:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
-|  equal join conjunct: [4: C_NATIONKEY, INT, false] = [40: S_NATIONKEY, INT, false]
 |  equal join conjunct: [22: L_SUPPKEY, INT, false] = [37: S_SUPPKEY, INT, false]
+|  equal join conjunct: [4: C_NATIONKEY, INT, false] = [40: S_NATIONKEY, INT, false]
 |  build runtime filters:
-|  - filter_id = 4, build_expr = (40: S_NATIONKEY), remote = true
-|  - filter_id = 5, build_expr = (37: S_SUPPKEY), remote = false
+|  - filter_id = 4, build_expr = (37: S_SUPPKEY), remote = false
+|  - filter_id = 5, build_expr = (40: S_NATIONKEY), remote = true
 |  output columns: 25, 26, 46
 |  cardinality: 16390852
 |  column statistics:
@@ -137,7 +137,7 @@ OutPut Exchange Id: 25
 |----8:EXCHANGE
 |       cardinality: 22765073
 |       probe runtime filters:
-|       - filter_id = 4, probe_expr = (4: C_NATIONKEY)
+|       - filter_id = 5, probe_expr = (4: C_NATIONKEY)
 |
 0:OlapScanNode
 table: lineitem, rollup: lineitem
@@ -147,7 +147,7 @@ actualRows=0, avgRowSize=28.0
 cardinality: 600000000
 probe runtime filters:
 - filter_id = 1, probe_expr = (20: L_ORDERKEY)
-- filter_id = 5, probe_expr = (22: L_SUPPKEY)
+- filter_id = 4, probe_expr = (22: L_SUPPKEY)
 column statistics:
 * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
@@ -312,7 +312,7 @@ partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
 probe runtime filters:
-- filter_id = 4, probe_expr = (4: C_NATIONKEY)
+- filter_id = 5, probe_expr = (4: C_NATIONKEY)
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
 * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE

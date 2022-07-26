@@ -2,125 +2,68 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.CreateUserStmt;
+import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.persist.ImpersonatePrivInfo;
+import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 
 public class ImpersonateUserPrivTableTest {
-    private static final Logger LOG = LogManager.getLogger(ImpersonateUserPrivTableTest.class);
 
     /**
      * test serialized & deserialized
      */
     @Test
-    public void testSerializedAndDeserialized() throws Exception {
-        ImpersonateUserPrivTable table = new ImpersonateUserPrivTable();
-        PrivPredicate ONLY_IMPERSONATE = PrivPredicate.of(PrivBitSet.of(Privilege.IMPERSONATE_PRIV), CompoundPredicate.Operator.AND);
-        // Polyjuice Potion
+    public void testPersist() throws Exception {
+        // SET UP
+        UtFrameUtils.setUpForPersistTest();
 
-        // 1. grant impersonate on Gregory to Harry
-        // 1.1 grant
+        // 1. prepare for test
+        // 1.1 create 2 users
+        Auth auth = new Auth();
         UserIdentity harry = UserIdentity.createAnalyzedUserIdentWithIp("Harry", "%");
+        auth.createUser(new CreateUserStmt(new UserDesc(harry)));
         UserIdentity gregory = UserIdentity.createAnalyzedUserIdentWithIp("Gregory", "%");
-        ImpersonateUserPrivEntry entry = ImpersonateUserPrivEntry.create(harry, gregory);
-        table.addEntry(entry, true, false);
-        Assert.assertEquals(1, table.size());
-        LOG.info("current table: {}", table);
+        auth.createUser(new CreateUserStmt(new UserDesc(gregory)));
+        // 1.2 make initialized checkpoint here for later use
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        auth.saveAuth(pseudoImage.getDataOutputStream(), -1);
+        // 1.3 ignore all irrelevant journals by resetting journal queue
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
 
-        // 1.2 dump to file
-        File tempFile = File.createTempFile("ImpersonateUserPrivTableTest", ".image");
-        LOG.info("dump to file {}", tempFile.getAbsolutePath());
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        table.write(dos);
-        dos.close();
+        // 2. master grant impersonate
+        auth.grantImpersonate(new GrantImpersonateStmt(harry, gregory));
 
-        // 1.3 load from file
-        DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        ImpersonateUserPrivTable loadTable = ImpersonateUserPrivTable.read(dis);
-        LOG.info("load table: {}", loadTable);
+        // 3. verify follower replay
+        // 3.1 follower load initialized checkpoint
+        Auth newAuth = Auth.read(pseudoImage.getDataInputStream());
+        ImpersonatePrivInfo info = (ImpersonatePrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        // 3.2 follower replay
+        newAuth.replayGrantImpersonate(info);
+        // 3.3 verify the consistency of metadata between the master & the follower
+        Assert.assertTrue(auth.canImpersonate(harry, gregory));
 
-        // 1.4 check & cleanup
-        Assert.assertEquals(1, table.size());
-        PrivBitSet privBitSet = new PrivBitSet();
-        loadTable.getPrivs(harry, gregory, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
-        Assert.assertTrue(loadTable.canImpersonate(harry, gregory));
-        tempFile.delete();
+        // 4. verify image
+        // 4.1 dump image
+        pseudoImage = new UtFrameUtils.PseudoImage();
+        long writeChecksum = -1;
+        auth.saveAuth(pseudoImage.getDataOutputStream(), writeChecksum);
+        writeChecksum = auth.writeAsGson(pseudoImage.getDataOutputStream(), writeChecksum);
+        // 4.2 load image to a new auth
+        DataInputStream dis = pseudoImage.getDataInputStream();
+        newAuth = Auth.read(dis);
+        long readChecksum = -1;
+        readChecksum = newAuth.readAsGson(dis, readChecksum);
+        // 4.3 verify the consistency of metadata between the two
+        assert(writeChecksum == readChecksum);
+        Assert.assertTrue(auth.canImpersonate(harry, gregory));
 
-        // 2. grant impersonate on Albert to Harry
-        // 2.1 grant
-        UserIdentity albert = UserIdentity.createAnalyzedUserIdentWithIp("Albert", "%");
-        entry = ImpersonateUserPrivEntry.create(harry, albert);
-        table.addEntry(entry, true, false);
-        LOG.info("current table: {}", table);
-
-        // 2.2. dump to file
-        tempFile = File.createTempFile("ImpersonateUserPrivTableTest", ".image");
-        LOG.info("dump to file {}", tempFile.getAbsolutePath());
-        dos = new DataOutputStream(new FileOutputStream(tempFile));
-        table.write(dos);
-        dos.close();
-
-        // 2.3 load from file
-        dis = new DataInputStream(new FileInputStream(tempFile));
-        loadTable = ImpersonateUserPrivTable.read(dis);
-        LOG.info("load table: {}", loadTable);
-
-        // 2.4 check & cleanup
-        Assert.assertEquals(2, table.size());
-        privBitSet = new PrivBitSet();
-        loadTable.getPrivs(harry, gregory, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
-        Assert.assertTrue(loadTable.canImpersonate(harry, gregory));
-        privBitSet = new PrivBitSet();
-        loadTable.getPrivs(harry, albert, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
-        Assert.assertTrue(loadTable.canImpersonate(harry, albert));
-        tempFile.delete();
-
-        // 3. grant impersonate on Vincent to Ron
-        // 3.1 grant
-        UserIdentity vincent = UserIdentity.createAnalyzedUserIdentWithIp("Vincent", "%");
-        UserIdentity ron = UserIdentity.createAnalyzedUserIdentWithIp("Ron", "%");
-        entry = ImpersonateUserPrivEntry.create(ron, vincent);
-        table.addEntry(entry, true, false);
-        LOG.info("current table: {}", table);
-
-        // 3.2 dump to file
-        tempFile = File.createTempFile("ImpersonateUserPrivTableTest", ".image");
-        LOG.info("dump to file {}", tempFile.getAbsolutePath());
-        dos = new DataOutputStream(new FileOutputStream(tempFile));
-        table.write(dos);
-        dos.close();
-
-        // 3.3 load from file
-        dis = new DataInputStream(new FileInputStream(tempFile));
-        loadTable = ImpersonateUserPrivTable.read(dis);
-        LOG.info("load table: {}", loadTable);
-
-        // 3.4 check & cleanup
-        Assert.assertEquals(3, table.size());
-        privBitSet = new PrivBitSet();
-        loadTable.getPrivs(harry, gregory, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
-        Assert.assertTrue(loadTable.canImpersonate(harry, gregory));
-        privBitSet = new PrivBitSet();
-        loadTable.getPrivs(harry, albert, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
-        Assert.assertTrue(loadTable.canImpersonate(harry, albert));
-        privBitSet = new PrivBitSet();
-        loadTable.getPrivs(ron, vincent, privBitSet);
-        Assert.assertTrue(privBitSet.satisfy(ONLY_IMPERSONATE));
-        Assert.assertTrue(loadTable.canImpersonate(ron, vincent));
-        tempFile.delete();
+        // TEAR DOWN
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

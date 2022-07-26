@@ -21,21 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.analysis.CompoundPredicate.Operator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 // Show create database statement
@@ -60,25 +48,6 @@ public class ShowCreateDbStmt extends ShowStmt {
 
     public void setDb(String db) {
         this.db = db;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(db)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, db);
-        }
-        db = ClusterNamespace.getFullName(db);
-
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db,
-                PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
-                                Privilege.ALTER_PRIV,
-                                Privilege.CREATE_PRIV,
-                                Privilege.DROP_PRIV),
-                        Operator.OR))) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    ConnectContext.get().getQualifiedUser(), db);
-        }
     }
 
     @Override

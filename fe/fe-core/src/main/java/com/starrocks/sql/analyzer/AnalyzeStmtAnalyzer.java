@@ -20,11 +20,14 @@ import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,18 +39,24 @@ public class AnalyzeStmtAnalyzer {
     }
 
     private static final List<String> VALID_PROPERTIES = Lists.newArrayList(
-            StatsConstants.PRO_SAMPLE_RATIO,
-            StatsConstants.PRO_AUTO_COLLECT_STATISTICS_RATIO,
-            StatsConstants.PROP_UPDATE_INTERVAL_SEC_KEY,
-            StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY,
+            StatsConstants.STATISTIC_AUTO_COLLECT_RATIO,
+            StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
+
+            StatsConstants.HISTOGRAM_BUCKET_NUM,
+            StatsConstants.HISTOGRAM_TOPN_SIZE,
+            StatsConstants.HISTOGRAM_SAMPLE_RATIO,
 
             //Deprecated , just not throw exception
+            StatsConstants.PRO_SAMPLE_RATIO,
+            StatsConstants.PROP_UPDATE_INTERVAL_SEC_KEY,
             StatsConstants.PROP_COLLECT_INTERVAL_SEC_KEY
     );
 
-    public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder()
-            .add(StatsConstants.PROP_UPDATE_INTERVAL_SEC_KEY)
-            .add(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY).build();
+    public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder().addAll(
+            Lists.newArrayList(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
+                    StatsConstants.HISTOGRAM_BUCKET_NUM,
+                    StatsConstants.HISTOGRAM_TOPN_SIZE,
+                    StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         public void analyze(StatementBase statement, ConnectContext session) {
@@ -145,7 +154,7 @@ public class AnalyzeStmtAnalyzer {
             }
 
             for (String key : NUMBER_PROP_KEY_LIST) {
-                if (properties.containsKey(key) && !StringUtils.isNumeric(properties.get(key))) {
+                if (properties.containsKey(key) && !NumberUtils.isCreatable(properties.get(key))) {
                     throw new SemanticException("Property '%s' value must be numeric", key);
                 }
             }
@@ -172,25 +181,44 @@ public class AnalyzeStmtAnalyzer {
                 if (bucket <= 0) {
                     throw new SemanticException("Bucket number can't less than 1");
                 }
-                statement.getProperties().put(StatsConstants.PRO_BUCKET_NUM, String.valueOf(bucket));
+                statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
 
-                properties.computeIfAbsent(StatsConstants.PRO_SAMPLE_RATIO, p -> String.valueOf(Config.histogram_sample_ratio));
+                properties.computeIfAbsent(StatsConstants.HISTOGRAM_TOPN_SIZE,
+                        p -> String.valueOf(Config.histogram_topn_size));
+                properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+                        p -> String.valueOf(Config.histogram_sample_ratio));
 
-                long minSampleRows;
-                if (properties.get(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY) == null) {
-                    minSampleRows = Config.statistic_sample_collect_rows;
-                    properties.put(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(minSampleRows));
-                } else {
-                    minSampleRows = Long.parseLong(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY);
+                long sampleRows = Config.statistic_sample_collect_rows;
+                if (properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS) != null) {
+                    sampleRows = Long.parseLong(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS));
                 }
 
                 long totalRows = analyzeTable.getRowCount();
-                long sampleRows = (long) (totalRows * Double.parseDouble(properties.get(StatsConstants.PRO_SAMPLE_RATIO)));
-                if (sampleRows < minSampleRows) {
-                    sampleRows = Math.min(minSampleRows, totalRows);
+                sampleRows = Math.max(sampleRows,
+                        (long) (totalRows * Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO))));
+
+                if (totalRows < sampleRows) {
+                    sampleRows = totalRows;
                 }
-                properties.put(StatsConstants.PROP_SAMPLE_COLLECT_ROWS_KEY, String.valueOf(sampleRows));
+                if (sampleRows > Config.histogram_max_sample_row_count) {
+                    sampleRows = Config.histogram_max_sample_row_count;
+                }
+
+                if (totalRows == 0) {
+                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
+                } else {
+                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
+                            BigDecimal.valueOf((double) sampleRows / (double) totalRows)
+                                    .setScale(2, RoundingMode.HALF_UP).doubleValue()));
+                }
+                properties.put(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS, String.valueOf(sampleRows));
             }
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
+            MetaUtils.normalizationTableName(session, statement.getTableName());
+            return null;
         }
 
         @Override

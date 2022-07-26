@@ -11,11 +11,11 @@ DIAGNOSTIC_POP
 
 #include "agent/agent_server.h"
 #include "common/status.h"
+#include "fs/fs_util.h"
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/tablet_metadata.h"
-#include "storage/lake/txn_log.h"
 #include "util/countdown_latch.h"
 #include "util/threadpool.h"
 
@@ -123,7 +123,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
     auto context = std::make_shared<PublishVersionContext>(_env, guard.release(), request, response);
 
-    for (const auto& tablet_id : request->tablet_ids()) {
+    for (auto tablet_id : request->tablet_ids()) {
         auto task = std::make_shared<PublishVersionTask>(tablet_id, context);
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
@@ -146,7 +146,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
 
     // TODO: move the execution to TaskWorkerPool
     // This rpc never fail.
-    for (const auto& tablet_id : request->tablet_ids()) {
+    for (auto tablet_id : request->tablet_ids()) {
         auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
         if (!tablet.ok()) {
             LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
@@ -171,12 +171,74 @@ void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
         return;
     }
 
-    for (const auto& tablet_id : request->tablet_ids()) {
+    for (auto tablet_id : request->tablet_ids()) {
         auto res = _env->lake_tablet_manager()->drop_tablet(tablet_id);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
             response->add_failed_tablets(tablet_id);
         }
+    }
+}
+
+void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
+                              const ::starrocks::lake::CompactRequest* request,
+                              ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+
+    // TODO: move the execution to TaskWorkerPool
+    for (auto tablet_id : request->tablet_ids()) {
+        // TODO: compact tablets in parallel.
+        auto res = _env->lake_tablet_manager()->compact(tablet_id, request->version(), request->txn_id());
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
+            response->add_failed_tablets(tablet_id);
+            continue;
+        }
+
+        lake::CompactionTaskPtr task = std::move(res).value();
+        auto st = task->execute();
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << request->version()
+                         << " txn_id=" << request->txn_id() << ": " << st;
+            response->add_failed_tablets(tablet_id);
+        } else {
+            LOG(INFO) << "Compacted tablet " << tablet_id << ". version=" << request->version()
+                      << " txn_id=" << request->txn_id();
+        }
+    }
+}
+
+void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::lake::DropTableRequest* request,
+                                 ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet_id");
+        return;
+    }
+
+    // TODO: move the execution to TaskWorkerPool
+    auto location = _env->lake_tablet_manager()->tablet_root_location(request->tablet_id());
+    auto st = fs::remove_all(location);
+    if (!st.ok() && !st.is_not_found()) {
+        LOG(ERROR) << "Fail to remove " << location << ": " << st;
+        cntl->SetFailed(st.get_error_msg());
     }
 }
 

@@ -33,7 +33,4 @@ public interface HiveMetaStoreTable {
     void refreshPartCache(List<String> partNames) throws DdlException;
 
     void refreshTableColumnStats() throws DdlException;
-
-    default void modifyTableSchema(String dbName, String tableName) throws DdlException {
-    }
 }

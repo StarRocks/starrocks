@@ -266,9 +266,9 @@ The required parameters in `properties` are as follows:
 
 * `password`: the password that is used to connect to the target database.
 
-* `jdbc_uri`: the URL that the JDBC driver uses to connect to the target database. The URL format must satisfy the database URL syntax. For the URL syntax of some common databases, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
+* `jdbc_uri`: the URI that the JDBC driver uses to connect to the target database. The URI format must satisfy the database URI syntax. For the URI syntax of some common databases, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16).
 
-> Note: The URL must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
+> Note: The URI must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
 
 * `driver_url`:  the download URL of the JDBC driver used by the target database.
 
@@ -336,7 +336,7 @@ The required parameters in `properties` are as follows:
 
 * `table`：the target table name in the database.
 
-For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](./External_table.md#Data type mapping).
+For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](External_table.md#Data type mapping).
 
 > Note:
 >

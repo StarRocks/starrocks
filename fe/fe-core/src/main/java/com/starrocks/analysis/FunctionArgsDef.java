@@ -42,11 +42,11 @@ public class FunctionArgsDef {
         return isVariadic;
     }
 
-    public void analyze(Analyzer analyzer) throws AnalysisException {
+    public void analyze() throws AnalysisException {
         argTypes = new Type[argTypeDefs.size()];
         int i = 0;
         for (TypeDef typeDef : argTypeDefs) {
-            typeDef.analyze(analyzer);
+            typeDef.analyze();
             argTypes[i++] = typeDef.getType();
         }
     }
@@ -75,5 +75,13 @@ public class FunctionArgsDef {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    public List<TypeDef> getArgTypeDefs() {
+        return argTypeDefs;
+    }
+
+    public void setArgTypes(Type[] argTypes) {
+        this.argTypes = argTypes;
     }
 }

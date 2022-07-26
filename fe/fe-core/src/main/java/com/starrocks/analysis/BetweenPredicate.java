@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
@@ -57,10 +56,6 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         throw new IllegalStateException(
                 "BetweenPredicate needs to be rewritten into a CompoundPredicate.");
@@ -78,11 +73,6 @@ public class BetweenPredicate extends Predicate {
         String notStr = (isNotBetween) ? "not " : "";
         return children.get(0).toDigest() + " " + notStr + "between " +
                 children.get(1).toDigest() + " and " + children.get(2).toDigest();
-    }
-
-    @Override
-    public Expr clone(ExprSubstitutionMap sMap) {
-        return new BetweenPredicate(this);
     }
 
     @Override

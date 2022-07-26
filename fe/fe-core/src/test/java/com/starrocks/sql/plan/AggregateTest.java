@@ -819,6 +819,11 @@ public class AggregateTest extends PlanTestBase {
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
+
+        sql =
+                "select L_ORDERKEY,window_funnel(1800, L_LINENUMBER, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 4: L_LINENUMBER, 3, 18: expr)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -833,7 +838,7 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         } finally {
             FeConstants.runningUnitTest = false;
-        }        
+        }
     }
 
     @Test
@@ -847,7 +852,7 @@ public class AggregateTest extends PlanTestBase {
             getFragmentPlan(sql);
         } finally {
             FeConstants.runningUnitTest = false;
-        } 
+        }
     }
 
     @Test
@@ -956,13 +961,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
 
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:9: sum\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  7:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(8: case)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -975,31 +974,27 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:ASSERT NUMBER OF ROWS\n" +
-                "  |  assert number of rows: LE 1\n" +
-                "  |  \n" +
-                "  1:EXCHANGE"));
+                "  0:OlapScanNode\n" +
+                "     TABLE: t1"));
 
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
+        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 04\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  3:OlapScanNode\n" +
-                "     TABLE: t1"));
+                "  3:ASSERT NUMBER OF ROWS\n" +
+                "  |  assert number of rows: LE 1\n" +
+                "  |  \n" +
+                "  2:EXCHANGE"));
 
-        Assert.assertTrue(plan.contains("PLAN FRAGMENT 2\n" +
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 3\n" +
                 " OUTPUT EXPRS:\n" +
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 01\n" +
+                "    EXCHANGE ID: 02\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  0:OlapScanNode\n" +
+                "  1:OlapScanNode\n" +
                 "     TABLE: t0"));
     }
 
@@ -1383,6 +1378,26 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
         connectContext.getSessionVariable().setCboCteReuse(false);
+
+
+        int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
+        try {
+            connectContext.getSessionVariable().setNewPlanerAggStage(3);
+            sql = "select count(distinct t1b) from test_all_type";
+
+            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            assertContains(execPlan.getFragments().get(1).getExplainString(TExplainLevel.NORMAL),
+                    "  4:AGGREGATE (update serialize)\n" +
+                            "  |  output: count(2: t1b)\n" +
+                            "  |  group by: \n" +
+                            "  |  \n" +
+                            "  3:AGGREGATE (merge serialize)\n" +
+                            "  |  group by: 2: t1b\n" +
+                            "  |  ");
+            Assert.assertFalse(execPlan.getFragments().get(1).isEnableSharedScan());
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(prevAggStage);
+        }
     }
 
     @Test
@@ -1417,7 +1432,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  equal join conjunct: 14: t1b <=> 17: t1b\n" +
                 "  |  equal join conjunct: 15: t1c <=> 18: t1c");
 
-        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
+        sql =
+                "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c";
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
@@ -1428,7 +1444,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1c <=> 17: t1c");
 
-        sql =  "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        sql =
+                "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
                 "  |  <slot 2> : 2: t1b\n" +
@@ -1440,7 +1457,8 @@ public class AggregateTest extends PlanTestBase {
                 "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
                 "  |  equal join conjunct: 17: expr <=> 20: expr");
 
-        sql =  "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
+        sql =
+                "select avg(distinct t1b) as cn_t1b, sum(t1b), count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "4:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -1527,9 +1545,9 @@ public class AggregateTest extends PlanTestBase {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  16:NESTLOOP JOIN\n" +
+        assertContains(plan, " 28:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0\n");
+                "  |  other predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
     }
 }

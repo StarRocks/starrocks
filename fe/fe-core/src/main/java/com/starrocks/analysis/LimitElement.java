@@ -111,12 +111,6 @@ public class LimitElement implements ParseNode {
         return sb.toString();
     }
 
-    public void analyze(Analyzer analyzer) {
-        if (limit == 0) {
-            analyzer.setHasEmptyResultSet();
-        }
-    }
-
     public void reset() {
     }
 

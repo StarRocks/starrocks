@@ -164,6 +164,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     // Load all rowsets of this tablet into memory.
     // NOTE: This may change in a near future, e.g, manage rowsets in a separate module and load
     // them on demand.
+    _rowsets.clear();
     RETURN_IF_ERROR(TabletMetaManager::rowset_iterate(
             _tablet.data_dir(), _tablet.tablet_id(), [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
                 RowsetSharedPtr rowset;
@@ -871,7 +872,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-            LOG(ERROR) << msg;
+            LOG(ERROR) << msg << " " << _debug_string(false, true);
             _set_error(msg);
             return;
         }
@@ -880,7 +881,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     st = index.commit(&index_meta);
     if (!st.ok()) {
         std::string msg = Substitute("primary index commit failed: $0", st.to_string());
-        LOG(ERROR) << msg;
+        LOG(ERROR) << msg << " " << _debug_string(false, true);
         _set_error(msg);
         return;
     }
@@ -1345,7 +1346,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
             std::string msg = Substitute("get persistent index meta failed: $0", st.to_string());
-            LOG(ERROR) << msg;
+            LOG(ERROR) << msg << " " << _debug_string(false, true);
             _set_error(msg);
             return;
         }
@@ -1353,7 +1354,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     st = index.commit(&index_meta);
     if (!st.ok()) {
         std::string msg = Substitute("primary index commit failed: $0", st.to_string());
-        LOG(ERROR) << msg;
+        LOG(ERROR) << msg << " " << _debug_string(false, true);
         _set_error(msg);
         return;
     }
@@ -3074,7 +3075,7 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.empty()) {
             string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
                                              _debug_version_info(false), missing_version_ranges.back());
-            LOG(WARNING) << msg;
+            LOG(INFO) << msg;
             return Status::NotFound(msg);
         }
         rowsetids.reserve(versions.size());

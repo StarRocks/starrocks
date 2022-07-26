@@ -12,7 +12,7 @@
 
 namespace starrocks {
 
-using JoinRuntimeFilterPtr = std::shared_ptr<vectorized::JoinRuntimeFilter>;
+using JoinRuntimeFilterPtr = std::shared_ptr<const vectorized::JoinRuntimeFilter>;
 class RfCacheValue;
 using RfCacheValueRawPtr = RfCacheValue*;
 using RfCacheValuePtr = std::shared_ptr<RfCacheValue>;

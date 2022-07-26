@@ -3,14 +3,30 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Map;
+
 public class TPCDSPlanTest extends TPCDSPlanTestBase {
+    Map<String, Long> tpcdsStats = null;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
+    }
+
+    @Before
+    public void setUp() {
+        tpcdsStats = getTPCDSTableStats();
+    }
+
+    @After
+    public void tearDown() {
+        setTPCDSTableStats(tpcdsStats);
     }
 
     @Test
@@ -618,5 +634,45 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan,
                 "PREDICATES: 14: ss_sales_price >= 50.00, 14: ss_sales_price <= 200.00, 23: ss_net_profit >= 50, 23: ss_net_profit <= 300");
+    }
+
+    @Test
+    public void testQuery20LeftDeepJoinReorderNoCrossJoin() throws Exception {
+        setTPCDSFactor(1);
+        String plan = getFragmentPlan(Q20);
+        assertNotContains(plan, "CROSS JOIN");
+    }
+
+    @Test
+    public void testQuery33LeftDeepJoinReorderAvoidInnerJoinOnSameTable() throws Exception {
+        setTPCDSFactor(1);
+        String plan = getFragmentPlan(Q33);
+        assertContains(plan, "  16:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 44: wr_returning_cdemo_sk = 82: cd_demo_sk\n" +
+                "  |  equal join conjunct: 75: cd_marital_status = 84: cd_marital_status\n" +
+                "  |  equal join conjunct: 76: cd_education_status = 85: cd_education_status\n" +
+                "  |  \n" +
+                "  |----15:EXCHANGE");
+        assertContains(plan, "  12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 40: wr_refunded_cdemo_sk = 73: cd_demo_sk\n" +
+                "  |  other join predicates: ((((75: cd_marital_status = 'D') AND (76: cd_education_status = 'Primary')) AND ((22: ws_sales_price >= 100.00) AND (22: ws_sales_price <= 150.00))) OR (((75: cd_marital_status = 'U') AND (76: cd_education_status = 'Unknown')) AND ((22: ws_sales_price >= 50.00) AND (22: ws_sales_price <= 100.00)))) OR (((75: cd_marital_status = 'M') AND (76: cd_education_status = 'Advanced Degree')) AND ((22: ws_sales_price >= 150.00) AND (22: ws_sales_price <= 200.00)))\n" +
+                "  |  \n" +
+                "  |----11:EXCHANGE");
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 15\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  14:OlapScanNode\n" +
+                "     TABLE: customer_demographics");
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  10:OlapScanNode\n" +
+                "     TABLE: customer_demographics");
     }
 }

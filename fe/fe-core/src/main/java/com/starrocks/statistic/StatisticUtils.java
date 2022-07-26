@@ -9,6 +9,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -38,9 +39,9 @@ public class StatisticUtils {
         }
         context.getSessionVariable().setParallelExecInstanceNum(parallel);
         context.getSessionVariable().setPipelineDop(1);
+        context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         // TODO(kks): remove this if pipeline support STATISTIC result sink type
         context.getSessionVariable().setEnablePipelineEngine(false);
-        context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);

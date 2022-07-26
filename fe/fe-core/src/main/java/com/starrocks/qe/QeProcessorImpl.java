@@ -115,9 +115,10 @@ public final class QeProcessorImpl implements QeProcessor {
         final TReportExecStatusResult result = new TReportExecStatusResult();
         final QueryInfo info = coordinatorMap.get(params.query_id);
         if (info == null) {
-            result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
             LOG.info("ReportExecStatus() failed, query does not exist, fragment_instance_id={}, query_id={},",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.NOT_FOUND));
+            result.status.addToError_msgs("query id " + DebugUtil.printId(params.query_id) + " not found");
             return result;
         }
         try {
@@ -125,6 +126,9 @@ public final class QeProcessorImpl implements QeProcessor {
         } catch (Exception e) {
             LOG.warn("ReportExecStatus() failed, fragment_instance_id={}, query_id={}, error: {}",
                     DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id), e.getMessage());
+            LOG.warn("stack:", e);
+            result.setStatus(new TStatus(TStatusCode.INTERNAL_ERROR));
+            result.status.addToError_msgs(e.getMessage());
             return result;
         }
         result.setStatus(new TStatus(TStatusCode.OK));

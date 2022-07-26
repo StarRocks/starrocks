@@ -23,10 +23,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.WorkGroup;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -37,12 +41,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -97,8 +105,6 @@ public class ConnectContext {
     // Db
     protected String currentDb = "";
 
-    // cluster name
-    protected String clusterName = "";
     // username@host of current login user
     protected String qualifiedUser;
     // username@host combination for the StarRocks account
@@ -110,6 +116,8 @@ public class ConnectContext {
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
+    // all the modified session variables, will forward to leader
+    protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -150,7 +158,7 @@ public class ConnectContext {
 
     protected PlannerProfile plannerProfile;
 
-    protected WorkGroup workGroup;
+    protected ResourceGroup resourceGroup;
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -264,12 +272,27 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
+    public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
+        VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
+        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+            modifiedSessionVariables.put(setVar.getVariable(), setVar);
+        }
+    }
+
+    public SetStmt getModifiedSessionVariables() {
+        if (!modifiedSessionVariables.isEmpty()) {
+            return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
+        }
+        return null;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
 
     public void resetSessionVariable() {
         this.sessionVariable = VariableMgr.newSessionVariable();
+        modifiedSessionVariables.clear();
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {
@@ -422,14 +445,6 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setCluster(String clusterName) {
-        this.clusterName = clusterName;
-    }
-
     public byte[] getAuthDataSalt() {
         return authDataSalt;
     }
@@ -474,12 +489,12 @@ public class ConnectContext {
         return plannerProfile;
     }
 
-    public WorkGroup getWorkGroup() {
-        return workGroup;
+    public ResourceGroup getResourceGroup() {
+        return resourceGroup;
     }
 
-    public void setWorkGroup(WorkGroup workGroup) {
-        this.workGroup = workGroup;
+    public void setResourceGroup(ResourceGroup resourceGroup) {
+        this.resourceGroup = resourceGroup;
     }
 
     public String getCurrentCatalog() {
@@ -552,7 +567,7 @@ public class ConnectContext {
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());
-            row.add(clusterName);
+            row.add(SystemInfoService.DEFAULT_CLUSTER);
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());

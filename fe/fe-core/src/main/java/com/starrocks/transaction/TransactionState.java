@@ -75,7 +75,8 @@ public class TransactionState implements Writable {
         INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
         ROUTINE_LOAD_TASK(4),           // routine load task use this type
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
-        DELETE(6);                      // synchronization delete job use this type
+        DELETE(6),                     // synchronization delete job use this type
+        LAKE_COMPACTION(7);            // compaction of LakeTable
 
         private final int flag;
 
@@ -101,6 +102,8 @@ public class TransactionState implements Writable {
                     return BATCH_LOAD_JOB;
                 case 6:
                     return DELETE;
+                case 7:
+                    return LAKE_COMPACTION;
                 default:
                     return null;
             }
@@ -188,7 +191,7 @@ public class TransactionState implements Writable {
     private List<Long> tableIdList;
     private long transactionId;
     private String label;
-    // requestId is used to judge whether a begin request is a internal retry request.
+    // requestId is used to judge whether a begin request is an internal retry request.
     // no need to persist it.
     private TUniqueId requestId;
     private Map<Long, TableCommitInfo> idToTableCommitInfos;
@@ -204,7 +207,7 @@ public class TransactionState implements Writable {
     private Set<Long> errorReplicas;
     private CountDownLatch latch;
 
-    // this state need not to be serialized
+    // these states need not be serialized
     private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
@@ -402,7 +405,7 @@ public class TransactionState implements Writable {
         // 1. the transactionStatus status must be VISIBLE
         // 2. this.latch.countDown(); has not been called before
         // 3. this.latch can not be null
-        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {            
+        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {
             this.latch.countDown();
         }
     }
@@ -557,7 +560,9 @@ public class TransactionState implements Writable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        return transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs;
+        return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
+                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
+                        / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
     /*
@@ -603,7 +608,15 @@ public class TransactionState implements Writable {
         sb.append(", prepare time: ").append(prepareTime);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
-        sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+        if (commitTime > prepareTime) {
+            sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
+        }
+        if (finishTime > commitTime) {
+            sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+        }
+        if (finishTime > prepareTime) {
+            sb.append(", total cost: ").append(finishTime - prepareTime).append("ms");
+        }
         sb.append(", reason: ").append(reason);
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);

@@ -27,7 +27,7 @@ public class HistogramStatisticsTest {
         bucketList.add(new Bucket(61D, 65D, 800L, 20L));
         bucketList.add(new Bucket(66D, 99D, 900L, 20L));
         bucketList.add(new Bucket(100D, 100D, 1000L, 100L));
-        Histogram histogram = new Histogram(bucketList);
+        Histogram histogram = new Histogram(bucketList, null);
 
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(1000);
