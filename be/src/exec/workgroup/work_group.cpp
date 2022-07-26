@@ -502,8 +502,8 @@ std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_driver_worker(i
     return _driver_worker_owner_manager->get_owners(worker_id);
 }
 
-bool WorkGroupManager::should_yield_driver_worker(int worker_id, WorkGroupPtr running_wg) {
-    return _driver_worker_owner_manager->should_yield(worker_id, std::move(running_wg));
+bool WorkGroupManager::should_yield_driver_worker(int worker_id, const WorkGroupPtr& running_wg) {
+    return _driver_worker_owner_manager->should_yield(worker_id, running_wg);
 }
 
 std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_scan_worker(ScanExecutorType type, int worker_id) {
@@ -511,10 +511,9 @@ std::shared_ptr<WorkGroupPtrSet> WorkGroupManager::get_owners_of_scan_worker(Sca
                                         : _connector_scan_worker_owner_manager->get_owners(worker_id);
 }
 
-bool WorkGroupManager::get_owners_of_scan_worker(ScanExecutorType type, int worker_id, WorkGroupPtr running_wg) {
-    return type == TypeOlapScanExecutor
-                   ? _scan_worker_owner_manager->should_yield(worker_id, std::move(running_wg))
-                   : _connector_scan_worker_owner_manager->should_yield(worker_id, std::move(running_wg));
+bool WorkGroupManager::should_yield_scan_worker(ScanExecutorType type, int worker_id, const WorkGroupPtr& running_wg) {
+    return type == TypeOlapScanExecutor ? _scan_worker_owner_manager->should_yield(worker_id, running_wg)
+                                        : _connector_scan_worker_owner_manager->should_yield(worker_id, running_wg);
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {

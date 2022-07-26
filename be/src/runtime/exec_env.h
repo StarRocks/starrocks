@@ -137,11 +137,15 @@ public:
 
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
-    PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
-    PriorityThreadPool* pipeline_connector_scan_io_thread_pool() { return _pipeline_connector_scan_io_thread_pool; }
+    workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
+    workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
+    workgroup::ScanExecutor* connector_scan_executor_without_workgroup() {
+        return _connector_scan_executor_without_workgroup;
+    }
+    workgroup::ScanExecutor* connector_scan_executor_with_workgroup() {
+        return _connector_scan_executor_with_workgroup;
+    }
 
-    size_t increment_num_scan_operators(size_t n) { return _num_scan_operators.fetch_add(n); }
-    size_t decrement_num_scan_operators(size_t n) { return _num_scan_operators.fetch_sub(n); }
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
@@ -156,9 +160,6 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
-
-    starrocks::workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    starrocks::workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
@@ -240,22 +241,22 @@ private:
 
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
-    PriorityThreadPool* _pipeline_connector_scan_io_thread_pool = nullptr;
-    std::atomic<size_t> _num_scan_operators{0};
+
+    workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;
+    workgroup::ScanExecutor* _scan_executor_with_workgroup = nullptr;
+    workgroup::ScanExecutor* _connector_scan_executor_without_workgroup = nullptr;
+    workgroup::ScanExecutor* _connector_scan_executor_with_workgroup = nullptr;
+
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
-    starrocks::pipeline::QueryContextManager* _query_context_mgr = nullptr;
-    starrocks::pipeline::DriverExecutor* _driver_executor = nullptr;
+    pipeline::QueryContextManager* _query_context_mgr = nullptr;
+    pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
     pipeline::DriverLimiter* _driver_limiter;
     int64_t _max_executor_threads; // Max thread number of executor
 
     LoadPathMgr* _load_path_mgr = nullptr;
-
-    starrocks::workgroup::ScanExecutor* _scan_executor = nullptr;
-    starrocks::workgroup::ScanExecutor* _connector_scan_executor = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
