@@ -33,7 +33,7 @@
 #include "runtime/memory/chunk.h"
 #include "runtime/memory/chunk_allocator.h"
 #include "types/constexpr.h"
-#include "util/phmap/phmap_fwd_decl.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -132,10 +132,13 @@ public:
     void clear();
 
 private:
-    HllDataType _type = HLL_DATA_EMPTY;
-
     using ElementSet = phmap::flat_hash_set<uint64_t>;
-    std::unique_ptr<ElementSet> _hash_set;
+
+    HllDataType _type = HLL_DATA_EMPTY;
+    // Use raw object instead of pointer to give a chance to create multiple
+    // _hash_sets of a HLL column in only one memory allocation,
+    // eg. by std::vector<ObjectColumn<HyperLogLog>>::resize/reserve.
+    ElementSet _hash_set;
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.

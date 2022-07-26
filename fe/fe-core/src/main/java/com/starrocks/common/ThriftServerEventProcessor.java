@@ -40,11 +40,10 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
 
     private ThriftServer thriftServer;
 
-    private static ThreadLocal<ThriftServerContext> connectionContext;
+    private static ThreadLocal<ThriftServerContext> connectionContext = new ThreadLocal<>();
 
     public ThriftServerEventProcessor(ThriftServer thriftServer) {
         this.thriftServer = thriftServer;
-        connectionContext = new ThreadLocal<>();
     }
 
     public static ThriftServerContext getConnectionContext() {

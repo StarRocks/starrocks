@@ -127,6 +127,7 @@ import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
+import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
@@ -188,6 +189,7 @@ import com.starrocks.sql.ast.DropAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -224,7 +226,8 @@ import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
-import com.starrocks.sql.ast.UseStmt;
+import com.starrocks.sql.ast.UseCatalogStmt;
+import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -851,7 +854,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
     }
-
+    
     @Override
     public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
         Map<String, String> properties = null;
@@ -897,7 +900,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
-
+    
+    @Override
+    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext  context) {
+        return new ShowOpenTableStmt();
+    }
     // ------------------------------------------- View Statement ------------------------------------------------------
 
     @Override
@@ -1335,6 +1342,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName tableName = qualifiedNameToTableName(qualifiedName);
+        return new DropStatsStmt(tableName);
+    }
+
+    @Override
     public ParseNode visitCreateAnalyzeStatement(StarRocksParser.CreateAnalyzeStatementContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -1641,8 +1655,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         } else {
             StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
-            List<Relation> relations = visit(fromContext.relation(), Relation.class);
-            if (!relations.isEmpty()) {
+            if (fromContext.relations() != null) {
+                List<Relation> relations = visit(fromContext.relations().relation(), Relation.class);
                 Iterator<Relation> iterator = relations.iterator();
                 Relation relation = iterator.next();
                 while (iterator.hasNext()) {
@@ -1856,11 +1870,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitRelation(StarRocksParser.RelationContext context) {
+        Relation relation = (Relation) visit(context.relationPrimary());
+        List<JoinRelation> joinRelations = visit(context.joinRelation(), JoinRelation.class);
+
+        Relation leftChildRelation = relation;
+        for (JoinRelation joinRelation : joinRelations) {
+            joinRelation.setLeft(leftChildRelation);
+            leftChildRelation = joinRelation;
+        }
+        return leftChildRelation;
+    }
+
+    @Override
     public ParseNode visitParenthesizedRelation(StarRocksParser.ParenthesizedRelationContext context) {
-        if (context.relation().size() == 1) {
-            return visit(context.relation().get(0));
+        if (context.relations().relation().size() == 1) {
+            return visit(context.relations().relation().get(0));
         } else {
-            List<Relation> relations = visit(context.relation(), Relation.class);
+            List<Relation> relations = visit(context.relations().relation(), Relation.class);
             Iterator<Relation> iterator = relations.iterator();
             Relation relation = iterator.next();
             while (iterator.hasNext()) {
@@ -1871,7 +1898,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitTableName(StarRocksParser.TableNameContext context) {
+    public ParseNode visitTableAtom(StarRocksParser.TableAtomContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
         PartitionNames partitionNames = null;
@@ -1893,24 +1920,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
         }
+
+        if (context.alias != null) {
+            Identifier identifier = (Identifier) visit(context.alias);
+            tableRelation.setAlias(new TableName(null, identifier.getValue()));
+        }
         return tableRelation;
     }
 
     @Override
-    public ParseNode visitAliasedRelation(StarRocksParser.AliasedRelationContext context) {
-        Relation child = (Relation) visit(context.relationPrimary());
-
-        if (context.identifier() == null) {
-            return child;
-        }
-        Identifier identifier = (Identifier) visit(context.identifier());
-        child.setAlias(new TableName(null, identifier.getValue()));
-        return child;
-    }
-
-    @Override
     public ParseNode visitJoinRelation(StarRocksParser.JoinRelationContext context) {
-        Relation left = (Relation) visit(context.left);
+        // Because left recursion is required to parse the leftmost atom table first.
+        // Therefore, the parsed result does not contain the information of the left table,
+        // which is temporarily assigned to Null,
+        // and the information of the left table will be filled in visitRelation
+        Relation left = null;
         Relation right = (Relation) visit(context.rightRelation);
 
         JoinOperator joinType = JoinOperator.INNER_JOIN;
@@ -1976,13 +2000,26 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             colNames.add("column_" + i);
         }
 
-        return new ValuesRelation(rows, colNames);
+        ValuesRelation valuesRelation = new ValuesRelation(rows, colNames);
+
+        if (context.alias != null) {
+            Identifier identifier = (Identifier) visit(context.alias);
+            valuesRelation.setAlias(new TableName(null, identifier.getValue()));
+        }
+        return valuesRelation;
     }
 
     @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
-        return new TableFunctionRelation(getQualifiedName(context.qualifiedName()).toString(),
+        TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(
+                getQualifiedName(context.qualifiedName()).toString(),
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
+
+        if (context.alias != null) {
+            Identifier identifier = (Identifier) visit(context.alias);
+            tableFunctionRelation.setAlias(new TableName(null, identifier.getValue()));
+        }
+        return tableFunctionRelation;
     }
 
     @Override
@@ -2011,7 +2048,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSubqueryRelation(StarRocksParser.SubqueryRelationContext context) {
-        return visit(context.subquery());
+        SubqueryRelation subqueryRelation = (SubqueryRelation) visit(context.subquery());
+        if (context.alias != null) {
+            Identifier identifier = (Identifier) visit(context.alias);
+            subqueryRelation.setAlias(new TableName(null, identifier.getValue()));
+        }
+        return subqueryRelation;
     }
 
     @Override
@@ -2151,16 +2193,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitUse(StarRocksParser.UseContext context) {
+    public ParseNode visitUseDb(StarRocksParser.UseDbContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         List<String> parts = qualifiedName.getParts();
         if (parts.size() == 1) {
-            return new UseStmt(null, parts.get(0));
+            return new UseDbStmt(null, parts.get(0));
         } else if (parts.size() == 2) {
-            return new UseStmt(parts.get(0), parts.get(1));
+            return new UseDbStmt(parts.get(0), parts.get(1));
         } else {
             throw new ParsingException("error catalog.database");
         }
+    }
+
+    public ParseNode visitUseCatalog(StarRocksParser.UseCatalogContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String catalogName = identifier.getValue();
+        return new UseCatalogStmt(catalogName);
     }
 
     @Override

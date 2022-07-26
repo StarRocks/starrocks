@@ -40,8 +40,6 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -66,8 +64,6 @@ import java.util.TreeMap;
  * its children (= are bound by tupleIds).
  */
 abstract public class PlanNode extends TreeNode<PlanNode> {
-    private static final Logger LOG = LogManager.getLogger(PlanNode.class);
-
     protected String planNodeName;
 
     protected PlanNodeId id;  // unique w/in plan tree; assigned by planner
@@ -120,7 +116,6 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected List<RuntimeFilterDescription> probeRuntimeFilters = Lists.newArrayList();
     protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
     protected ExprSubstitutionMap outputSmap;
-    protected ExprSubstitutionMap withoutTupleIsNullOutputSmap;
 
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;

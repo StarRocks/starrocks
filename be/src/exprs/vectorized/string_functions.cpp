@@ -1651,8 +1651,8 @@ ColumnPtr StringFunctions::upper(FunctionContext* context, const Columns& column
 
 static inline void ascii_reverse_per_slice(const char* src_begin, const char* src_end, char* dst_curr) {
     auto src_curr = src_begin;
-    auto const size = src_end - src_begin;
 #if defined(__SSSE3__) && defined(__SSE2__)
+    auto const size = src_end - src_begin;
     constexpr auto SSE2_SIZE = sizeof(__m128i);
     const auto ctrl_masks = _mm_set_epi64((__m64)0x00'01'02'03'04'05'06'07ull, (__m64)0x08'09'0a'0b'0c'0d'0e'0full);
     const auto sse2_end = src_begin + (size & ~(SSE2_SIZE - 1));
@@ -2539,12 +2539,17 @@ struct StringFunctionsState {
         if (driver_id == 0) {
             return regex.get();
         }
-        auto iter = driver_regex_map.lazy_emplace(driver_id, [&](auto build) {
-            auto regex = std::make_unique<re2::RE2>(pattern, *options);
-            DCHECK(regex->ok());
-            build(driver_id, std::move(regex));
-        });
-        return iter->second.get();
+        re2::RE2* res = nullptr;
+        driver_regex_map.lazy_emplace_l(
+                driver_id, [&](auto& value) { res = value.get(); },
+                [&](auto build) {
+                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
+                    DCHECK(regex->ok());
+                    res = regex.get();
+                    build(driver_id, std::move(regex));
+                });
+        DCHECK(!!res);
+        return res;
     }
 };
 

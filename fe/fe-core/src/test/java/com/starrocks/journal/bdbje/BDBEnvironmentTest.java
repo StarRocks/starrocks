@@ -7,8 +7,8 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
@@ -25,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
@@ -56,17 +57,7 @@ public class BDBEnvironmentTest {
     }
 
     private String findUnbindHostPort() throws Exception {
-        // try to find a port that is not bind
-        String selfNodeHostPort = null;
-        int seed = new Random().nextInt() % 4000;
-        for (int port = 8000 + seed; port != 8100 + seed; port ++) {
-            if(! NetUtils.isPortUsing("127.0.0.1", port)) {
-                selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
-                break;
-            }
-        }
-        Assert.assertNotNull(selfNodeHostPort);
-        return selfNodeHostPort;
+        return "127.0.0.1:" + UtFrameUtils.findValidPort();
     }
 
     private DatabaseEntry randomEntry() {
@@ -127,7 +118,23 @@ public class BDBEnvironmentTest {
     private File[] followerPaths = new File[2];
     private String[] followerNames = new String[2];
 
+
     private void initClusterMasterFollower() throws Exception {
+        for (int i = 0; i != 3; ++ i) {
+            // might fail on high load, will sleep and retry
+            try {
+                initClusterMasterFollowerNoRetry();
+                return;
+            } catch (Exception e) {
+                // sleep 5 ~ 15 seconds
+                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
+                Thread.sleep(sleepSeconds * 1000L);
+            }
+        }
+
+    }
+    private void initClusterMasterFollowerNoRetry() throws Exception {
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();

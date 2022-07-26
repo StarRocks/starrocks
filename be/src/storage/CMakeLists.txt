@@ -162,6 +162,7 @@ add_library(Storage STATIC
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/fixed_location_provider.cpp
+    lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
     lake/starlet_location_provider.cpp

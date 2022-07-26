@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -99,8 +98,6 @@ public class CreateFileStmt extends DdlStmt {
 
         if (dbName == null) {
             dbName = analyzer.getDefaultDb();
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         if (Strings.isNullOrEmpty(dbName)) {

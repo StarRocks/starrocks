@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -371,7 +372,6 @@ public class Analyzer {
 
         @Override
         public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext context) {
-            RecoverDbAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -401,6 +401,12 @@ public class Analyzer {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
         }

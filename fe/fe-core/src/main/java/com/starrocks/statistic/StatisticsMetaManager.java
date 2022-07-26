@@ -93,8 +93,10 @@ public class StatisticsMetaManager extends LeaderDaemon {
         HISTOGRAM_STATISTICS_COLUMNS = ImmutableList.of(
                 new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("histogram", new TypeDef(histogramType))
+                new ColumnDef("histogram", new TypeDef(histogramType)),
+                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
     }
 
@@ -338,6 +340,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
+
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
@@ -352,5 +355,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
     }
 }

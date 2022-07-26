@@ -33,6 +33,10 @@ public enum AggType {
         return this.equals(AggType.DISTINCT_GLOBAL);
     }
 
+    public boolean isDistinct() {
+        return this.equals(AggType.DISTINCT_LOCAL) || this.equals(AggType.DISTINCT_GLOBAL);
+    }
+
     public boolean isDistinctLocal() {
         return this.equals(AggType.DISTINCT_LOCAL);
     }

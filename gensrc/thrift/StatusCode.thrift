@@ -85,6 +85,8 @@ enum TStatusCode {
     UNKNOWN = 50,
 
     TXN_NOT_EXISTS = 51,
-    TXN_IN_PROCESSING = 52
+    TXN_IN_PROCESSING = 52,
+
+    RESOURCE_BUSY = 53
 }
 

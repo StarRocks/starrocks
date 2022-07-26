@@ -123,6 +123,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
     // if set to true, some of stmt will be forwarded to leader FE to get result
+    public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
@@ -157,6 +158,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
+    public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
@@ -259,7 +261,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
 
-
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
@@ -273,7 +274,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
      * to BE in batch and concurrently.
      * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     *   of a fragment to the same destination host are delivered in the same request.
+     * of a fragment to the same destination host are delivered in the same request.
      * - Send different fragments concurrently according to topological order of the fragment tree
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
@@ -439,6 +440,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
+    @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int profileTimeout = 2;
+
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
@@ -448,8 +452,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
-    private boolean forwardToMaster = false;
+    @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
+    private boolean forwardToLeader = false;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -732,8 +736,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
-    public boolean getForwardToMaster() {
-        return forwardToMaster;
+    public boolean getForwardToLeader() {
+        return forwardToLeader;
     }
 
     public void setMaxScanKeyNum(int maxScanKeyNum) {
@@ -926,6 +930,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getResourceGroupId() {
         return resourceGroupId;
+    }
+
+    public int getProfileTimeout() {
+        return profileTimeout;
     }
 
     public int getPipelineProfileLevel() {
