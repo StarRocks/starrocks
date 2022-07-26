@@ -144,6 +144,8 @@ struct WindowFunnelState {
                 ++curr;
             }
             array_column->append_datum(array);
+        } else {
+            array_column->append_default();
         }
     }
 
