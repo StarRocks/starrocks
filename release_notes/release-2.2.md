@@ -2,6 +2,8 @@
 
 ## 2.2.3
 
+发布日期： 2022 年 7 月 24 日
+
 ### Bug 修复
 
 - 修复资源组删除过程中的错误。[#8036](https://github.com/StarRocks/starrocks/pull/8036)
