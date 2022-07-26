@@ -40,6 +40,7 @@ class LakeTabletsChannel : public TabletsChannel {
 
 public:
     LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    ~LakeTabletsChannel() override;
 
     DISALLOW_COPY_AND_MOVE(LakeTabletsChannel);
 
@@ -56,8 +57,6 @@ public:
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
-
-    ~LakeTabletsChannel() override;
 
     struct Sender {
         bthread::Mutex lock;
@@ -144,7 +143,7 @@ private:
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
         : TabletsChannel(), _load_channel(load_channel), _key(key), _mem_tracker(mem_tracker), _has_chunk_meta(false) {}
 
-LakeTabletsChannel::~LakeTabletsChannel() {}
+LakeTabletsChannel::~LakeTabletsChannel() = default;
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     _txn_id = params.txn_id();
@@ -449,9 +448,9 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     return std::move(context);
 }
 
-scoped_refptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                       MemTracker* mem_tracker) {
-    return scoped_refptr<TabletsChannel>(new LakeTabletsChannel(load_channel, key, mem_tracker));
+std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                         MemTracker* mem_tracker) {
+    return std::make_shared<LakeTabletsChannel>(load_channel, key, mem_tracker);
 }
 
 } // namespace starrocks

@@ -8,9 +8,9 @@ namespace starrocks {
 
 class LoadChannel;
 class MemTracker;
-class TabletsChannelKey;
+struct TabletsChannelKey;
 
-scoped_refptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                       MemTracker* mem_tracker);
+std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                         MemTracker* mem_tracker);
 
 } // namespace starrocks
