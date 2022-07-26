@@ -25,7 +25,7 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
  * PROPERTIES
  * (
  * "type" = "iceberg",
- * "starrocks.catalog-type"="hive"
+ * "iceberg.catalog.type"="hive"
  * );
  * <p>
  * DROP RESOURCE "iceberg0";
@@ -33,7 +33,7 @@ import static com.starrocks.common.util.Util.validateMetastoreUris;
 public class IcebergResource extends Resource {
     private static final Logger LOG = LogManager.getLogger(IcebergResource.class);
 
-    private static final String ICEBERG_CATALOG = "starrocks.catalog-type";
+    private static final String ICEBERG_CATALOG = "iceberg.catalog.type";
     private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
