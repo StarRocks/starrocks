@@ -1,6 +1,6 @@
 # 管理副本
 
-本文介绍如何管理 StarRocks 中的数据副本。
+本文介绍如何管理 StarRocks 中的数据副本 (replica)。
 
 ## 修复副本
 

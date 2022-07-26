@@ -1,5 +1,13 @@
 # StarRocks version 2.2
 
+## 2.2.3
+
+### Bug 修复
+
+- 修复资源组删除过程中的错误。[#8036](https://github.com/StarRocks/starrocks/pull/8036)
+- 线程资源不足导致 Thrift server 退出。[#7974](https://github.com/StarRocks/starrocks/pull/7974)
+- CBO 在一些场景下 join reorder 会无法输出结果。 [#7099](https://github.com/StarRocks/starrocks/pull/7099) [#7831](https://github.com/StarRocks/starrocks/pull/7831) [#6866](https://github.com/StarRocks/starrocks/pull/6866)
+
 ## 2.2.2
 
 发布日期： 2022 年 6 月 29 日
