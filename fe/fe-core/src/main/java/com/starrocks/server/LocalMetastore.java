@@ -2808,6 +2808,9 @@ public class LocalMetastore implements ConnectorMetadata {
     public Database getDb(String name) {
         // used for remove cluster from stmt
         name = ClusterNamespace.getFullName(name);
+        if (name == null) {
+            return null;
+        }
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
