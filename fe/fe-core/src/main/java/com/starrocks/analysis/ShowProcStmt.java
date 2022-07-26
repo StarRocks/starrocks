@@ -21,6 +21,9 @@
 
 package com.starrocks.analysis;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -32,6 +35,13 @@ import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.
 public class ShowProcStmt extends ShowStmt {
+
+    public static final Set<String> needForwardPathRoot;
+    static {
+        needForwardPathRoot = new HashSet<String>();
+        needForwardPathRoot.add("backends");
+    }
+
     private String path;
     private ProcNodeInterface node;
 
@@ -80,6 +90,10 @@ public class ShowProcStmt extends ShowStmt {
         if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
             return RedirectStatus.FORWARD_NO_SYNC;
         } else {
+            String[] pathGroup = path.split("/");
+            if (needForwardPathRoot.contains(pathGroup[1])) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            }
             return RedirectStatus.NO_FORWARD;
         }
     }
