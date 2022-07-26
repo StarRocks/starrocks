@@ -32,23 +32,23 @@ public class HiveTableTest {
         Map<String, FieldSchema> col1HiveSchemaMap = new HashMap<>();
         col1HiveSchemaMap.put(col1Schema.getName(), col1Schema);
         // no fresh
-        Assert.assertFalse(hiveTable.isRefreshColumn(col1HiveSchemaMap));
+        Assert.assertFalse(hiveTable.isRefreshColumn(Lists.newArrayList(col1Schema)));
 
         FieldSchema col2Schema = new FieldSchema("col2", "BIGINT", "");
         Map<String, FieldSchema> col2HiveSchemaMap = new HashMap<>();
         col2HiveSchemaMap.put(col2Schema.getName(), col2Schema);
         // different col name
-        Assert.assertTrue(hiveTable.isRefreshColumn(col2HiveSchemaMap));
+        Assert.assertTrue(hiveTable.isRefreshColumn(Lists.newArrayList(col2Schema)));
 
         // different col type
         FieldSchema col3Schema = new FieldSchema("col2", "INT", "");
         Map<String, FieldSchema> col3HiveSchemaMap = new HashMap<>();
         col2HiveSchemaMap.put(col3Schema.getName(), col3Schema);
-        Assert.assertTrue(hiveTable.isRefreshColumn(col3HiveSchemaMap));
+        Assert.assertTrue(hiveTable.isRefreshColumn(Lists.newArrayList(col3Schema)));
 
         col1HiveSchemaMap.put(col3Schema.getName(), col3Schema);
         // different col size
         col2HiveSchemaMap.put(col1Schema.getName(), col1Schema);
-        Assert.assertTrue(hiveTable.isRefreshColumn(col1HiveSchemaMap));
+        Assert.assertTrue(hiveTable.isRefreshColumn(Lists.newArrayList(col1Schema, col3Schema)));
     }
 }

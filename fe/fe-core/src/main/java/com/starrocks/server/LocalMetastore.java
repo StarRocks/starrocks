@@ -3758,13 +3758,13 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Column> columns = info.getColumns();
         Database db = getDb(hiveExternalDb);
         HiveTable table;
-        db.readLock();
+        db.writeLock();
         try {
             Table tbl = db.getTable(hiveExternalTable);
             table = (HiveTable) tbl;
             table.setNewFullSchema(columns);
         } finally {
-            db.readUnlock();
+            db.writeUnlock();
         }
     }
 
