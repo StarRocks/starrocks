@@ -28,6 +28,21 @@
 #include "util/json.h"
 
 namespace starrocks::vectorized {
+#define THROW_RUNTIME_ERROR_WITH_TYPE(TYPE)              \
+    std::stringstream ss;                                \
+    ss << "not supported type " << type_to_string(TYPE); \
+    throw std::runtime_error(ss.str())
+
+#define THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FROMTYPE, TOTYPE, VALUE) \
+    std::stringstream ss;                                                 \
+    ss << "cast from " << type_to_string(FROMTYPE) << "(" << VALUE << ")" \
+       << " to " << type_to_string(TOTYPE) << " failed";                  \
+    throw std::runtime_error(ss.str())
+
+#define THROW_RUNTIME_ERROR_WITH_TYPE_AND_VALUE(TYPE, VALUE)           \
+    std::stringstream ss;                                              \
+    ss << VALUE << " conflict with range of " << type_to_string(TYPE); \
+    throw std::runtime_error(ss.str())
 
 template <PrimitiveType FromType, PrimitiveType ToType>
 ColumnPtr cast_fn(ColumnPtr& column);
@@ -103,16 +118,24 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 
         JsonValue value;
         bool overflow = false;
-        if constexpr (pt_is_integer<FromType>) {
+        if constexpr (FromType == TYPE_LARGEINT) {
+            THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
+        } else if constexpr (pt_is_integer<FromType>) {
             constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
             constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_int(viewer.value(row));
+            if (overflow || value.is_null()) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+            }
         } else if constexpr (pt_is_float<FromType>) {
             constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
             constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_double(viewer.value(row));
+            if (overflow || value.is_null()) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+            }
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
         } else if constexpr (pt_is_binary<FromType>) {
@@ -122,14 +145,14 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             } else {
                 overflow = true;
             }
+            if (overflow || value.is_null()) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+            }
         } else {
-            CHECK(false) << "not supported type " << FromType;
+            THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
         }
-        if (overflow || value.is_null()) {
-            builder.append_null();
-        } else {
-            builder.append(std::move(value));
-        }
+
+        builder.append(std::move(value));
     }
 
     return builder.build(column->is_constant());
@@ -165,13 +188,12 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 ok = res.ok();
                 cpp_value = ok ? res.value() : cpp_value;
             } else {
-                CHECK(false) << "unreachable type " << ToType;
-                __builtin_unreachable();
+                THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
             }
             if (ok) {
                 builder.append(cpp_value);
             } else {
-                builder.append_null();
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
             }
         } else if constexpr (pt_is_binary<ToType>) {
             // if the json already a string value, get the string directly
@@ -181,19 +203,18 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 if (res.ok()) {
                     builder.append(res.value());
                 } else {
-                    builder.append_null();
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
                 }
             } else {
                 auto res = json->to_string();
                 if (res.ok()) {
                     builder.append(res.value());
                 } else {
-                    builder.append_null();
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
                 }
             }
         } else {
-            DCHECK(false) << "not supported type " << ToType;
-            builder.append_null();
+            THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
         }
     }
 
@@ -228,6 +249,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
+                if (result != StringParser::PARSE_SUCCESS) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
+                }
                 builder.append(b, result != StringParser::PARSE_SUCCESS);
             } else {
                 builder.append(r != 0);
@@ -245,6 +269,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
+                if (result != StringParser::PARSE_SUCCESS) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
+                }
                 builder.append(b, result != StringParser::PARSE_SUCCESS);
             } else {
                 builder.append(r != 0);
@@ -267,7 +294,7 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         if (!HyperLogLog::is_valid(value)) {
-            builder.append_null();
+            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_HLL, value.to_string());
         } else {
             HyperLogLog hll;
             hll.deserialize(value);
@@ -287,8 +314,23 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
     // finite value y where y < x.
     // This is different from std::numeric_limits<T>::min() for floating-point types.
     // So we use lowest instead of min for lower bound of all types.
-    return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-           (value > (Type)std::numeric_limits<ResultType>::max());
+    auto result = (value < (Type)std::numeric_limits<ResultType>::lowest()) |
+                  (value > (Type)std::numeric_limits<ResultType>::max());
+    if (result) {
+        //THROW_RUNTIME_ERROR_WITH_TYPE_AND_VALUE(ResultType, value);
+        std::stringstream ss;
+        if constexpr (std::is_same_v<Type, __int128_t>) {
+            ss << LargeIntValue::to_string(value) << " conflict with range of "
+               << "(" << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
+               << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
+        } else {
+            ss << value << " conflict with range of "
+               << "(" << (Type)std::numeric_limits<ResultType>::lowest() << ", "
+               << (Type)std::numeric_limits<ResultType>::max() << ")";
+        }
+        throw std::runtime_error(ss.str());
+    }
+    return result;
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(DateToNumber, value) {
@@ -314,7 +356,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         auto slice = input->get_slice(0);
         RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
         if (result != StringParser::PARSE_SUCCESS) {
-            return ColumnHelper::create_const_null_column(sz);
+            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
         }
         return ColumnHelper::create_const_column<ToType>(r, sz);
     }
@@ -333,26 +375,24 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
                 res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
-                null_data[i] = (result != StringParser::PARSE_SUCCESS);
+                if (result != StringParser::PARSE_SUCCESS) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+                }
             }
         }
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
         NullColumnPtr null_column = NullColumn::create(sz);
-        auto& null_data = null_column->get_data();
         BinaryColumn* data_column = down_cast<BinaryColumn*>(column.get());
 
-        bool has_null = false;
         for (int i = 0; i < sz; ++i) {
             auto slice = data_column->get_slice(i);
             res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
-            null_data[i] = (result != StringParser::PARSE_SUCCESS);
-            has_null |= (result != StringParser::PARSE_SUCCESS);
+            if (result != StringParser::PARSE_SUCCESS) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+            }
         }
-        if (!has_null) {
-            return res_data_column;
-        }
-        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
+        return res_data_column;
     }
 }
 
@@ -373,9 +413,11 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         RunTimeCppType<ToType> r =
                 StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
 
-        bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
+        if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
+            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, value.to_string());
+        }
 
-        builder.append(r, is_null);
+        builder.append(r, false);
     }
 
     return builder.build(column->is_constant());
@@ -545,6 +587,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
             DecimalV2Value v;
 
             bool ret = v.parse_from_str(value.data, value.size);
+            if (ret) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DECIMALV2, value.to_string());
+            }
             builder.append(v, ret);
         }
     } else {
@@ -558,6 +603,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
             DecimalV2Value v;
 
             bool ret = v.parse_from_str(value.data, value.size);
+            if (ret) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DECIMALV2, value.to_string());
+            }
             builder.append(v, ret);
         }
     }
@@ -581,6 +629,9 @@ ColumnPtr cast_to_date_fn(ColumnPtr& column) {
         DateValue dv;
 
         bool ret = dv.from_date_literal_with_check((int64_t)value);
+        if (!ret) {
+            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
+        }
         builder.append(dv, !ret);
     }
 
@@ -616,6 +667,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
             DateValue v;
 
             bool right = v.from_string(value.data, value.size);
+            if (!right) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATE, value.to_string());
+            }
             builder.append(v, !right);
         }
     } else {
@@ -629,6 +683,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
             DateValue v;
 
             bool right = v.from_string(value.data, value.size);
+            if (!right) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATE, value.to_string());
+            }
             builder.append(v, !right);
         }
     }
@@ -651,6 +708,9 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
         TimestampValue tv;
 
         bool ret = tv.from_timestamp_literal_with_check((int64_t)value);
+        if (!ret) {
+            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
+        }
         builder.append(tv, !ret);
     }
 
@@ -686,6 +746,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
             TimestampValue v;
 
             bool right = v.from_string(value.data, value.size);
+            if (!right) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
+            }
             builder.append(v, !right);
         }
     } else {
@@ -699,6 +762,9 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
             TimestampValue v;
 
             bool right = v.from_string(value.data, value.size);
+            if (!right) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
+            }
             builder.append(v, !right);
         }
     }
@@ -767,8 +833,7 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
                     uint64_t int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        builder.append_null();
-                        continue;
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
                     } else {
                         hour = int_value;
                     }
@@ -776,8 +841,7 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_colon + 1), second_colon - first_colon - 1, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        builder.append_null();
-                        continue;
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
                     } else {
                         minute = int_value;
                     }
@@ -785,25 +849,23 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(second_colon + 1), end_char - second_colon - 1, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        builder.append_null();
-                        continue;
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
                     } else {
                         second = int_value;
                     }
 
                     if (minute >= 60 || second >= 60) {
-                        builder.append_null();
-                        continue;
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
                     }
 
                     int64_t seconds = hour * 3600 + minute * 60 + second;
                     builder.append(seconds);
                 }
             } else {
-                builder.append_null();
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
             }
         } else {
-            builder.append_null();
+            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
         }
     }
 
