@@ -104,9 +104,7 @@ public class ArrayType extends Type {
     }
 
     /**
-     * @return 33 (utf8_general_ci) if type is char varchar hll or bitmap
-     * 63 (binary) others
-     * <p>
+     * @return 33 (utf8_general_ci) if type is array
      * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition
      * character_set (2) -- is the column character set and is defined in Protocol::CharacterSet.
      */
