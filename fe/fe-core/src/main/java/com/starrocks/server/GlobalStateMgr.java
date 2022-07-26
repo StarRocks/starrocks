@@ -1613,6 +1613,7 @@ public class GlobalStateMgr {
                         // but service may be continued when there is no log being replayed.
                         LOG.warn("meta out of date. current time: {}, synchronized time: {}, has log: {}, fe type: {}",
                                 currentTimeMs, synchronizedTimeMs, hasLog, feType);
+                        lastMetaOutOfDateLogTime = currentTimeMs;
                     }
                     if (hasLog || feType == FrontendNodeType.UNKNOWN) {
                         // 1. if we read log from BDB, which means master is still alive.
