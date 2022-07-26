@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 public class OlapTableTxnStateListener implements TransactionStateListener {
     private static final Logger LOG = LogManager.getLogger(OlapTableTxnStateListener.class);
-    private static final Set<ClearTransactionTask> clearTransactionTasks = Sets.newHashSet();
+    private static final List<ClearTransactionTask> clearTransactionTasks = Lists.newArrayList();
 
     private final DatabaseTransactionMgr dbTxnMgr;
     private final OlapTable table;
