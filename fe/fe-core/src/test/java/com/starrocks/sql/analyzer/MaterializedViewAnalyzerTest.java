@@ -1,31 +1,32 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.analysis;
+package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class RefreshMaterializedViewTest {
-    private static ConnectContext connectContext;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
+public class MaterializedViewAnalyzerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
-        connectContext = AnalyzeTestUtil.getConnectContext();
     }
 
     @Test
-    public void testNormal() throws Exception {
+    public void testRefreshMaterializedView() throws Exception {
         Config.enable_experimental_mv = true;
         StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         starRocksAssert.useDatabase("test")
-                .withTable("CREATE TABLE test.tbl_with_mv\n" +
+                .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
                         "    k1 date,\n" +
                         "    k2 int,\n" +
@@ -38,16 +39,19 @@ public class RefreshMaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_to_refresh\n" +
+                .withNewMaterializedView("create materialized view mv\n" +
+                        "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
-                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
-        String refreshMvSql = "refresh materialized view test.mv_to_refresh";
-        RefreshMaterializedViewStatement alterMvStmt =
-                (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
-        String dbName = alterMvStmt.getMvName().getDb();
-        String mvName = alterMvStmt.getMvName().getTbl();
-        Assert.assertEquals("default_cluster:test", dbName);
-        Assert.assertEquals("mv_to_refresh", mvName);
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+
+        analyzeSuccess("refresh materialized view mv");
+        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("default_cluster:test");
+        Table table = testDb.getTable("mv");
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        mv.setActive(false);
+        analyzeFail("refresh materialized view mv");
     }
 }
