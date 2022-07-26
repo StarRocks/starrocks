@@ -892,6 +892,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return globalRuntimeFilterProbeMinSelectivity;
     }
 
+    public void setGlobalRuntimeFilterBuildMaxSize(long v) {
+        globalRuntimeFilterBuildMaxSize = v;
+    }
+
+    public void setGlobalRuntimeFilterProbeMinSize(long v) {
+        globalRuntimeFilterProbeMinSize = v;
+    }
+
+    public void setGlobalRuntimeFilterProbeMinSelectivity(float v) {
+        globalRuntimeFilterProbeMinSelectivity = v;
+    }
+
     public boolean isEnableDeliverBatchFragments() {
         return enableDeliverBatchFragments;
     }

@@ -52,7 +52,6 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;

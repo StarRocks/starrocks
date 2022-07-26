@@ -3,6 +3,8 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -674,5 +676,32 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "\n" +
                 "  10:OlapScanNode\n" +
                 "     TABLE: customer_demographics");
+    }
+
+    @Test
+    public void testReduceEqualJoinConjunctsCount() throws Exception {
+        setTPCDSFactor(1);
+
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+        long a = sv.getGlobalRuntimeFilterProbeMinSize();
+        float b = sv.getGlobalRuntimeFilterProbeMinSelectivity();
+        sv.setGlobalRuntimeFilterProbeMinSize(1);
+        sv.setGlobalRuntimeFilterProbeMinSelectivity(0.0f);
+
+        String sql =
+                "select * from store_sales p3 join [shuffle] (select p1.cc_call_center_sk as a, p2.cc_call_center_sk as b, p1.cc_closed_date_sk as c, p2.cc_closed_date_sk as d from call_center p1 join call_center p2 on p1.cc_call_center_sk = p2.cc_call_center_sk) t1 on t1.c = p3.ss_sold_date_sk and t1.d = p3.ss_sold_date_sk;";
+        String plan = getCostExplain(sql);
+        System.out.println(plan);
+
+        sv.setGlobalRuntimeFilterProbeMinSize(a);
+        sv.setGlobalRuntimeFilterProbeMinSelectivity(b);
+
+        assertContains(plan, "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [3: ss_sold_date_sk, INT, true] = [28: cc_closed_date_sk, INT, true]\n" +
+                "  |  equal join conjunct: [3: ss_sold_date_sk, INT, true] = [59: cc_closed_date_sk, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (28: cc_closed_date_sk), remote = true\n" +
+                "  |  - filter_id = 2, build_expr = (59: cc_closed_date_sk), remote = true\n" +
+                "  |  cardinality: 1");
     }
 }

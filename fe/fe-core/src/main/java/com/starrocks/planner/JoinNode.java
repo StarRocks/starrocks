@@ -209,7 +209,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
 
         int equalCount = computeEqualCount(eqJoinConjuncts);
-
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
