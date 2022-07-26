@@ -251,8 +251,8 @@ public class SystemInfoService {
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
             }
             opMessage = String.format(
-                formatSb.toString(), willBeModifiedHost,
-                updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
+                    formatSb.toString(), willBeModifiedHost,
+                    updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
         } else {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
         }
@@ -520,6 +520,14 @@ public class SystemInfoService {
 
     public List<Long> getBackendIds() {
         return getBackendIds(false);
+    }
+
+    public int getAliveBackendNumber() {
+        return getBackendIds(true).size();
+    }
+
+    public int getTotalBackendNumber() {
+        return getBackendIds(false).size();
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {

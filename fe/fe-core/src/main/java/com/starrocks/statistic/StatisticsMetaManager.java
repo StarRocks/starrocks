@@ -137,8 +137,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
+        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
         // maybe cluster just shutdown, ignore
         if (aliveSize <= total / 2) {
             lossTableCount = 0;
