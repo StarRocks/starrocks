@@ -106,7 +106,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState) {
-        Map<Long, List<Long>> tabletGroup;
+        Map<Long, List<Long>> tabletGroup = null;
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db == null) {
             return;
@@ -118,9 +118,12 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             tabletGroup = Utility.groupTabletID(table);
         } catch (NoAliveBackendException e) {
             LOG.warn(e);
-            return;
         } finally {
             db.readUnlock();
+        }
+
+        if (tabletGroup == null) {
+            return;
         }
 
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {

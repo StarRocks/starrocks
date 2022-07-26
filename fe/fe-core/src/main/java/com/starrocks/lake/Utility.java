@@ -9,17 +9,25 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class Utility {
+    private static final Logger LOG = LogManager.getLogger(Utility.class);
+
+    private Utility() {
+    }
+
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
             return tablet.getPrimaryBackendId();
-        } catch (UserException ignored) {
+        } catch (UserException ex) {
+            LOG.info("Ignored error {}", ex.getMessage());
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
         if (backendIds.isEmpty()) {
