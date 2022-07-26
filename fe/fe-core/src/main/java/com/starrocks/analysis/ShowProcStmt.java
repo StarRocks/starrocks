@@ -92,7 +92,7 @@ public class ShowProcStmt extends ShowStmt {
         if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
             return RedirectStatus.FORWARD_NO_SYNC;
         } else {
-            if (path.equals("/")) {
+            if (path.equals("/") || !path.contains("/")) {
                 return RedirectStatus.NO_FORWARD;
             }
             String[] pathGroup = path.split("/");
