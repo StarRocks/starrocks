@@ -154,13 +154,13 @@ enum TObjectStoreType {
   OBS,
 }
 
-struct TdfsProperty {
+struct THdfsProperty {
   1: required string key
   2: required string value
 }
 
 struct THdfsProperties {  
-  1: optional list<TdfsProperty> properties
+  1: optional list<THdfsProperty> properties
   2: optional TObjectStoreType object_store_type
   3: optional string object_store_path
   4: optional string access_key
