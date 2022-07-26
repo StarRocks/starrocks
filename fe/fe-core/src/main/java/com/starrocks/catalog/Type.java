@@ -101,7 +101,6 @@ public abstract class Type implements Cloneable {
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
-    public static final ScalarType ARRAY = new ScalarType(PrimitiveType.ARRAY);
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
@@ -484,9 +483,6 @@ public abstract class Type implements Cloneable {
                     continue;
                 }
                 if (t1 == PrimitiveType.JSON || t2 == PrimitiveType.JSON) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.ARRAY || t2 == PrimitiveType.ARRAY) {
                     continue;
                 }
                 Preconditions.checkNotNull(compatibilityMatrix[i][j]);
@@ -1486,10 +1482,13 @@ public abstract class Type implements Cloneable {
             case VARCHAR:
             case HLL:
             case BITMAP:
-            case ARRAY:
                 return 33;
             default:
-                return 63;
+                if (this instanceof ArrayType) {
+                    return 33;
+                } else {
+                    return 63;
+                }
         }
     }
 

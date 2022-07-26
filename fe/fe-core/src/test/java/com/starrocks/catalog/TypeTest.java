@@ -126,11 +126,11 @@ public class TypeTest {
         Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
 
         // array
-        type = Type.ARRAY;
+        ArrayType arrayType = new ArrayType(Type.INT);
         // default 20 * 3
-        Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
-        Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
-        Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
+        Assert.assertEquals(60, arrayType.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, arrayType.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, arrayType.getMysqlResultSetFieldCharsetIndex());
     }
 
     @Test
