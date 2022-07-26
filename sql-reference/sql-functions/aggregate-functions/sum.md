@@ -3,7 +3,7 @@
 
 ## 功能
 
-返回指定列所有值的总和。该函数会忽略 NULL 值，可以与 DISTINCT 运算符搭配使用。
+对指定列的值进行相加。该函数会忽略 NULL 值，可以与 DISTINCT 运算符搭配使用。
 
 ## 语法
 
@@ -26,9 +26,9 @@ SUM(expr)
 - DOUBLE -> DOUBLE
 - DECIMAL -> DECIMAL
 
-如果没有找到匹配的列，则返回报错。
-如果某行的值为NULL，该行不参与计算。
-如果列值为 STRING 类型的数字，会隐式转换为 DOUBLE 类型后再进行运算。
+如果没有匹配的列，则返回报错。
+如果某行值为NULL，该行不参与计算。
+如果列值为 STRING 类型的数值，会隐式转换为 DOUBLE 类型后再进行运算。
 
 ## 示例
 
@@ -91,7 +91,7 @@ SUM(expr)
     4 rows in set (0.01 sec)
     ```
 
-    示例2：计算各地区员工的收入总合，即以`region_num`进行分组对`income`进行求和。因为 `sum` 函数忽略 NULL 值，因此`id`为`777326`的员工收入没有参与计算。
+    示例2：计算各地区员工的收入总合，即以`region_num`进行分组对`income`进行求和。<br>因为 `sum` 函数忽略 NULL 值，因此`id`为`777326`的员工收入没有参与计算。
 
     ```Plain Text
     MySQL > select region_num, sum(income) from employees
