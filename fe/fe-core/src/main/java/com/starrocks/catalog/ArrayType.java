@@ -103,6 +103,11 @@ public class ArrayType extends Type {
         return clone;
     }
 
+    @Override
+    public PrimitiveType getPrimitiveType() {
+        return PrimitiveType.ARRAY;
+    }
+
     public boolean hasNumericItem() {
         return itemType.isNumericType();
     }
