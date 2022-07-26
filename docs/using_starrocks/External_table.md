@@ -232,11 +232,11 @@ select * from es_table where esquery(k4, ' {
 
 ## External table for a JDBC-compatible database
 
-From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks.  This topic describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
+From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This topic describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 
 ### Prerequisites
 
-When a JDBC resource is created, and a JDBC external table is queried for the first time, the FEs and BEs need to download the JDBC driver. Therefore, the machines on which the FEs and BEs are located must have access to the download URL of the JDBC driver during these two phases. The download URL is specified by the `driver_url` parameter when the JDBC resource is created.
+When a JDBC resource is created, and a JDBC external table is queried for the first time, the FEs and BEs need to download the JDBC driver. Therefore, the machines on which the FEs and BEs are located must have access to the download URL of the JDBC driver JAR package during these two phases. The download URL is specified by the `driver_url` parameter when the JDBC resource is created.
 
 ### Create and manage JDBC resources
 
@@ -270,9 +270,9 @@ The required parameters in `properties` are as follows:
 
 > Note: The URI must include the name of the target database. For example, in the preceding code example, `jdbc_test` is the name of the target database that you want to connect.
 
-* `driver_url`:  the download URL of the JDBC driver used by the target database.
+* `driver_url`:  the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported. For example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` or `file:///home/disk1/postgresql-42.3.3.jar`.
 
-* `driver_class`: the class name of the JDBC driver used by the target database. The class names of common xxx are as follows:
+* `driver_class`: the class name of the JDBC driver. The class names of common xxx are as follows:
   * MySQL: com.mysql.jdbc.Driver (MySQL 5.x and earlier), com.mysql.cj.jdbc.Driver (MySQL 6.x and later)
   * SQL Server: com.microsoft.sqlserver.jdbc.SQLServerDriver
   * Oracle: oracle.jdbc.driver.OracleDriver
@@ -438,8 +438,6 @@ The mapping between the target database and StarRocks varies based on the type o
 * When you create JDBC external tables, you cannot create indexes on the tables or use PARTITION BY and DISTRIBUTED BY to specify data distribution rules for the tables.
 
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
-
-* You cannot use the INSERT INTO ... SELECT ... statement to load the data of the target database into StarRocks.
 
 ## Hive external table
 
