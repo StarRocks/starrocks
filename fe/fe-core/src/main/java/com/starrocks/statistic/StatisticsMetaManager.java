@@ -93,8 +93,10 @@ public class StatisticsMetaManager extends LeaderDaemon {
         HISTOGRAM_STATISTICS_COLUMNS = ImmutableList.of(
                 new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("histogram", new TypeDef(histogramType))
+                new ColumnDef("histogram", new TypeDef(histogramType)),
+                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
     }
 
