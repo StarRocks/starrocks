@@ -70,6 +70,6 @@ public class StopRoutineLoadStmt extends DdlStmt {
 
     @Override
     public boolean isSupportNewPlanner() {
-        return false;
+        return true;
     }
 }
