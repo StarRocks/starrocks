@@ -16,10 +16,10 @@ std::string get_hdfs_err_msg() {
     std::string error_msg = get_str_err_msg();
     std::stringstream ss;
     ss << "error=" << error_msg;
-    char* root_cause = hdfsGetLastExceptionRootCause();
-    if (root_cause != nullptr) {
-        ss << ", root_cause=" << root_cause;
-    }
+    //char* root_cause = hdfsGetLastExceptionRootCause();
+    //if (root_cause != nullptr) {
+    //    ss << ", root_cause=" << root_cause;
+    //}
     return ss.str();
 }
 
