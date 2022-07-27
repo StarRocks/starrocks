@@ -303,8 +303,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
     workgroup::ScanTask task;
     task.workgroup = _workgroup;
-    // TODO(by satanson): set a proper priority
-    task.priority = 20;
+    // TODO: consider more factors, such as scan bytes and i/o time.
+    task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id](int worker_id) {
         if (auto sp = wp.lock()) {
             // Set driver_id here to share some driver-local contents.
