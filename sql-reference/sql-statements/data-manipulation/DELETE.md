@@ -207,7 +207,7 @@ MySQL [test]> select * from score_board;
 开始删除操作之前，先在数据库 `test` 中再创建一张名为 `users` 的表，如下所示：
 
 ```SQL
-CREATE TABLE `users` (
+MySQL [test]> CREATE TABLE `users` (
   `uid` int(11) NOT NULL COMMENT "",
   `name` varchar(65533) NOT NULL COMMENT "",
   `country` varchar(65533) NULL COMMENT ""
