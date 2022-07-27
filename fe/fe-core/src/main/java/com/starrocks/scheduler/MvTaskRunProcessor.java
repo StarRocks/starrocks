@@ -246,6 +246,9 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         if (partitionExpr instanceof SlotRef) {
             Set<String> baseChangedPartitionNames = mv.getNeedRefreshPartitionNames(base);
             needRefreshMvPartitionNames.addAll(baseChangedPartitionNames);
+            for (String mvPartitionName : adds.keySet()) {
+                mv.addBasePartition(baseTableId, base.getPartition(mvPartitionName));
+            }
         }  else if (partitionExpr instanceof FunctionCallExpr) {
             Set<String> addBasePartitionNames = Sets.newHashSet();
             for (String mvPartitionName : adds.keySet()) {
