@@ -3264,7 +3264,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
                 // for async type, run task
-                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
+                        task.getType() != Constants.TaskType.PERIODICAL) {
                     taskManager.executeTask(task.getName());
                 }
             }

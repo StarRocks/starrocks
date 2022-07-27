@@ -17,6 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -40,6 +41,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -245,10 +247,12 @@ public class CreateMaterializedViewTest {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
             }
         };
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
         String sql = "create materialized view mv1\n" +
                 "partition by date_trunc('month',k1)\n" +
                 "distributed by hash(s2)\n" +
-                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 SECOND)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
@@ -256,6 +260,7 @@ public class CreateMaterializedViewTest {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
             Table mv1 = testDb.getTable("mv1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
             // test partition
