@@ -88,8 +88,6 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                 throw new AnalysisException("please designate a database in show stmt");
             }
             dbFullName = analyzer.getDefaultDb();
-        } else {
-            dbFullName = ClusterNamespace.getFullName(dbName);
         }
     }
 

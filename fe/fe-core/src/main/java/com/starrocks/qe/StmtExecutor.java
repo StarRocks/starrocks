@@ -1099,7 +1099,7 @@ public class StmtExecutor {
                 || statement instanceof CreateAnalyzeJobStmt;
     }
 
-    public void handleInsertOverwrite(InsertStmt insertStmt) {
+    public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
         Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
         Table table = insertStmt.getTargetTable();
         if (!(table instanceof OlapTable)) {
@@ -1110,13 +1110,8 @@ public class StmtExecutor {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
         insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
-        try {
-            InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-            manager.executeJob(context, this, insertOverwriteJob);
-        } catch (Exception e) {
-            LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
-            throw new RuntimeException("insert overwrite failed", e);
-        }
+        InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+        manager.executeJob(context, this, insertOverwriteJob);
     }
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {

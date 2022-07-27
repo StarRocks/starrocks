@@ -6,12 +6,24 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,24 +33,25 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 
+import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+
 public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<Histogram>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
+    private static DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     @Override
-    public @NonNull CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
-                                                                     @NonNull Executor executor) {
+    public @NonNull
+    CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ColumnStatsCacheKey cacheKey,
+                                                     @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 List<TStatisticData> statisticData =
                         queryHistogramStatistics(cacheKey.tableId, Lists.newArrayList(cacheKey.column));
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
-
                 if (!statisticData.isEmpty()) {
-                    List<Bucket> buckets = convert(statisticData.get(0).histogram);
-                    Map<Double, Long> topn = convertTOPN(statisticData.get(0).histogram);
-                    Histogram histogram = new Histogram(buckets, topn);
-                    return Optional.of(histogram);
+                    return Optional.of(convert2Histogram(statisticData.get(0)));
                 } else {
                     return Optional.empty();
                 }
@@ -64,9 +77,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 }
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(tableId, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
-                    List<Bucket> buckets = convert(histogramStatsData.histogram);
-                    Map<Double, Long> topn = convertTOPN(histogramStatsData.histogram);
-                    Histogram histogram = new Histogram(buckets, topn);
+                    Histogram histogram = convert2Histogram(histogramStatsData);
                     result.put(new ColumnStatsCacheKey(histogramStatsData.tableId, histogramStatsData.columnName),
                             Optional.of(histogram));
                 }
@@ -91,16 +102,49 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return statisticExecutor.queryHistogram(tableId, column);
     }
 
-    private List<Bucket> convert(String histogramString) {
+    private Histogram convert2Histogram(TStatisticData statisticData) throws AnalysisException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
+        if (db == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, statisticData.dbId);
+        }
+        Table table = db.getTable(statisticData.tableId);
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
+        }
+        Column column = table.getColumn(statisticData.columnName);
+        if (column == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
+        }
+
+        List<Bucket> buckets = convertBuckets(statisticData.histogram, column.getType());
+        Map<Double, Long> topn = convertTopN(statisticData.histogram, column.getType());
+        return new Histogram(buckets, topn);
+    }
+
+    private List<Bucket> convertBuckets(String histogramString, Type type) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonArray histogramObj = jsonObject.getAsJsonArray("buckets");
 
         List<Bucket> buckets = Lists.newArrayList();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-            Bucket bucket = new Bucket(
-                    Double.parseDouble(bucketJsonArray.get(0).getAsString()),
-                    Double.parseDouble(bucketJsonArray.get(1).getAsString()),
+
+            double low;
+            double high;
+            if (type.isDate()) {
+                low = (double) getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
+                high = (double) getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(1).getAsString(), dateFormatter).atStartOfDay());
+            } else if (type.isDatetime()) {
+                low = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
+                high = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(1).getAsString(), dateTimeFormatter));
+            } else {
+                low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
+                high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
+            }
+
+            Bucket bucket = new Bucket(low, high,
                     Long.parseLong(bucketJsonArray.get(2).getAsString()),
                     Long.parseLong(bucketJsonArray.get(3).getAsString()));
             buckets.add(bucket);
@@ -108,16 +152,26 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return buckets;
     }
 
-    private Map<Double, Long> convertTOPN(String histogramString) {
+    private Map<Double, Long> convertTopN(String histogramString, Type type) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonArray histogramObj = jsonObject.getAsJsonArray("top-n");
 
-        Map<Double, Long> mcv = new HashMap<>();
+        Map<Double, Long> topN = new HashMap<>();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-            mcv.put(Double.parseDouble(bucketJsonArray.get(0).getAsString()),
-                    Long.parseLong(bucketJsonArray.get(1).getAsString()));
+
+            double key;
+            if (type.isDate()) {
+                key = (double) getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
+            } else if (type.isDatetime()) {
+                key = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
+            } else {
+                key = Double.parseDouble(bucketJsonArray.get(0).getAsString());
+            }
+
+            topN.put(key, Long.parseLong(bucketJsonArray.get(1).getAsString()));
         }
-        return mcv;
+        return topN;
     }
 }

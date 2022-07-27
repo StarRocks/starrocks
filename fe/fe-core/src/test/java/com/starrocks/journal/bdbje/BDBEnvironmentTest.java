@@ -7,7 +7,6 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -26,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
@@ -127,8 +127,8 @@ public class BDBEnvironmentTest {
                 return;
             } catch (Exception e) {
                 // sleep 5 ~ 15 seconds
-                int sleepSeconds = new Random().nextInt() % 10 + 5;
-                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
+                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
                 Thread.sleep(sleepSeconds * 1000L);
             }
         }

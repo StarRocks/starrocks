@@ -39,7 +39,7 @@ public class StatisticSQLBuilder {
                     + " GROUP BY db_id, table_id, column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
-            "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), table_id, column_name, histogram"
+            "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name, histogram"
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
