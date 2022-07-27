@@ -71,8 +71,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -300,7 +300,7 @@ public class BlobStorage implements Writable {
 
             // 3. write content
             try {
-                ByteBuffer bb = ByteBuffer.wrap(content.getBytes("UTF-8"));
+                ByteBuffer bb = ByteBuffer.wrap(content.getBytes(StandardCharsets.UTF_8));
                 TBrokerPWriteRequest req = new TBrokerPWriteRequest(TBrokerVersion.VERSION_ONE, fd, 0, bb);
                 TBrokerOperationStatus opst = client.pwrite(req);
                 if (opst.getStatusCode() != TBrokerOperationStatusCode.OK) {
@@ -311,8 +311,6 @@ public class BlobStorage implements Writable {
             } catch (TException e) {
                 status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage()
                         + ", broker: " + BrokerUtil.printBroker(brokerName, address));
-            } catch (UnsupportedEncodingException e) {
-                status = new Status(ErrCode.COMMON_ERROR, "unsupported encoding: " + e.getMessage());
             }
         } finally {
             Status closeStatus = closeWriter(client, address, fd);

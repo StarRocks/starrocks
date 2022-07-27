@@ -23,6 +23,7 @@ statement
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -46,6 +47,8 @@ statement
     | showTabletStatement                                                                   #showTablet
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
+    | showOpenTableStatement                                                                #showOpenTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -88,6 +91,7 @@ statement
 
     // Analyze Statement
     | analyzeStatement                                                                      #analyze
+    | dropStatsStatement                                                                    #dropStats
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
@@ -102,14 +106,24 @@ statement
     | alterResourceGroupStatement                                                               #alterResourceGroup
     | showResourceGroupStatement                                                                #showResourceGroup
 
+    //UDF
+    | showFunctionsStatement                                                                #showFunctions
+    | dropFunctionStatement                                                                 #dropFunctionst
+    | createFunctionStatement                                                               #createFunction
+
+
+
     // Other statement
-    | USE qualifiedName                                                                     #use
+    | USE qualifiedName                                                                     #useDb
+    | USE CATALOG identifierOrString                                                        #useCatalog
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
+    | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
     | killStatement                                                                         #kill
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
+    | showCharsetStatement                                                                  #showCharset
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -117,6 +131,8 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+    | ALTER USER user authOption                                                            #alterUser
+    | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -157,6 +173,11 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
+    ;
+
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -328,6 +349,13 @@ showPartitionsStatement
     : SHOW TEMPORARY? PARTITIONS FROM table=qualifiedName
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+    
+showOpenTableStatement
+    : SHOW OPEN TABLES
+    ;
+recoverPartitionStatement
+    : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
 
 // ------------------------------------------- View Statement ----------------------------------------------------------
@@ -515,6 +543,10 @@ analyzeStatement
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
+dropStatsStatement
+    : DROP STATS qualifiedName
+    ;
+
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
@@ -573,6 +605,24 @@ classifier
     : '(' expression (',' expression)* ')'
     ;
 
+// ------------------------------------------- Function ----------------------------------------------------
+
+showFunctionsStatement
+    : SHOW FULL? BUILTIN? FUNCTIONS ((FROM | IN) db=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+dropFunctionStatement
+    : DROP FUNCTION qualifiedName '(' typeList ')'
+    ;
+
+createFunctionStatement
+    : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+    ;
+
+typeList
+    : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -583,6 +633,11 @@ showDatabasesStatement
 showVariablesStatement
     : SHOW varType? VARIABLES ((LIKE pattern=string) | (WHERE expression))?
     ;
+
+showProcesslistStatement
+    : SHOW FULL? PROCESSLIST
+    ;
+
 
 showUserPropertyStatement
     : SHOW PROPERTY (FOR string)? (LIKE string)?
@@ -598,6 +653,10 @@ setUserPropertyStatement
 
 showStatusStatement
     : SHOW varType? STATUS ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showCharsetStatement
+    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement
@@ -673,7 +732,7 @@ querySpecification
     ;
 
 fromClause
-    : (FROM relation (',' LATERAL? relation)*)?                                         #from
+    : (FROM relations)?                                                                 #from
     | FROM DUAL                                                                         #dual
     ;
 
@@ -703,13 +762,31 @@ selectItem
     | ASTERISK_SYMBOL                                                                    #selectAll
     ;
 
+relations
+    : relation (',' LATERAL? relation)*
+    ;
+
 relation
-    : left=relation crossOrInnerJoinType bracketHint?
-            LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
-    | left=relation outerAndSemiJoinType bracketHint?
-            LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
-    | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
+    : relationPrimary joinRelation*
+    | '(' relationPrimary joinRelation* ')'
+    ;
+
+relationPrimary
+    : qualifiedName partitionNames? tabletList? (
+        AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
+    | '(' VALUES rowConstructor (',' rowConstructor)* ')'
+        (AS? alias=identifier columnAliases?)?                                          #inlineTable
+    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryRelation
+    | qualifiedName '(' expression (',' expression)* ')'
+        (AS? alias=identifier columnAliases?)?                                          #tableFunction
+    | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+joinRelation
+    : crossOrInnerJoinType bracketHint?
+            LATERAL? rightRelation=relationPrimary joinCriteria?
+    | outerAndSemiJoinType bracketHint?
+            LATERAL? rightRelation=relationPrimary joinCriteria
     ;
 
 crossOrInnerJoinType
@@ -744,13 +821,6 @@ joinCriteria
 
 columnAliases
     : '(' identifier (',' identifier)* ')'
-    ;
-
-relationPrimary
-    : qualifiedName partitionNames? tabletList? bracketHint?                              #tableName
-    | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
-    | subquery                                                                            #subqueryRelation
-    | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     ;
 
 partitionNames
@@ -1175,6 +1245,11 @@ number
     | INTEGER_VALUE  #integerValue
     ;
 
+authOption
+    : IDENTIFIED BY PASSWORD? string                            # authWithoutPlugin
+    | IDENTIFIED WITH identifierOrString ((BY | AS) string)?    # authWithPlugin
+    ;
+
 nonReserved
     : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
@@ -1204,4 +1279,5 @@ nonReserved
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WORK | WRITE
     | YEAR
+    | DOTDOTDOT
     ;

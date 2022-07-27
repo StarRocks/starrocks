@@ -19,6 +19,8 @@ import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -39,7 +41,6 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -49,7 +50,6 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.lang.StringUtils;
@@ -61,6 +61,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.common.ErrorCode.ERR_UNSUPPORTED_SQL_PATTERN;
 
 public class ShowStmtAnalyzer {
 
@@ -80,7 +82,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowTableStmt(ShowTableStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
@@ -103,7 +105,7 @@ public class ShowStmtAnalyzer {
         public Void visitShowColumnStmt(ShowColumnStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.getTableName().setDb(db);
             return null;
         }
@@ -111,15 +113,32 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowTableStatusStmt(ShowTableStatusStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.setDb(db);
+            return null;
+        }
+
+        @Override
+        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            if (Strings.isNullOrEmpty(dbName)) {
+                dbName = context.getDatabase();
+                if (Strings.isNullOrEmpty(dbName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+                }
+            }
+            node.setDbName(dbName);
+
+            if (node.getExpr() != null) {
+                ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
+            }
             return null;
         }
 
         @Override
         public Void visitShowMaterializedViewStmt(ShowMaterializedViewStmt node, ConnectContext context) {
             String db = node.getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.setDb(db);
             return null;
         }
@@ -156,8 +175,16 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
             String dbName = node.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt node, ConnectContext context) {
+            String dbName = node.getDb();
+            dbName = getDatabaseName(dbName, context);
+            node.setDb(dbName);
             return null;
         }
 
@@ -165,7 +192,7 @@ public class ShowStmtAnalyzer {
         public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
-            db = getFullDatabaseName(db, context);
+            db = getDatabaseName(db, context);
             node.getTableName().setDb(db);
             if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
                 node.getTableName().setCatalog(context.getCurrentCatalog());
@@ -173,19 +200,12 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
-        String getFullDatabaseName(String db, ConnectContext session) {
-            String catalog = session.getCurrentCatalog();
+        // used for remove default_cluster from stmt
+        String getDatabaseName(String db, ConnectContext session) {
             if (Strings.isNullOrEmpty(db)) {
                 db = session.getDatabase();
-                if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(db);
-                }
                 if (Strings.isNullOrEmpty(db)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
-                }
-            } else {
-                if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(db);
                 }
             }
             return db;
@@ -194,7 +214,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowCreateDbStatement(ShowCreateDbStmt node, ConnectContext context) {
             String dbName = node.getDb();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);
             return null;
         }
@@ -202,7 +222,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowDataStmt(ShowDataStmt node, ConnectContext context) {
             String dbName = node.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
             return null;
         }
@@ -383,7 +403,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             statement.setDbName(dbName);
             final Map<String, Expr> filterMap = statement.getFilterMap();
             if (statement.getWhereClause() != null) {
@@ -487,9 +507,8 @@ public class ShowStmtAnalyzer {
                     throw new SemanticException("expression %s cast to datetime error: %s",
                             subExpr.getChild(1).toString(), e.getMessage());
                 }
-            } else if (!leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_PARTITION_ID) &&
-                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_BUCKETS) &&
-                    !leftKey.equalsIgnoreCase(ShowPartitionsStmt.FILTER_REPLICATION_NUM)) {
+            } else if (ShowPartitionsStmt.FILTER_COLUMNS.stream()
+                    .noneMatch(column -> column.equalsIgnoreCase(leftKey))) {
                 throw new SemanticException("Only the columns of PartitionId/PartitionName/" +
                         "State/Buckets/ReplicationNum/LastConsistencyCheckTime are supported.");
             }

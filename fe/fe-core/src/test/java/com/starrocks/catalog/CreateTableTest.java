@@ -25,6 +25,7 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -42,12 +43,12 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-
+        Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
     }
 
@@ -133,7 +134,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testAbormal() throws DdlException {
+    public void testAbnormal() throws DdlException {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "FLOAT column can not be distribution column",
                 () -> createTable("create table test.atbl1\n" + "(k1 int, k2 float)\n" + "duplicate key(k1)\n"

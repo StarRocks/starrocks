@@ -7,8 +7,10 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,17 +57,7 @@ public class BDBEnvironmentTest {
     }
 
     private String findUnbindHostPort() throws Exception {
-        // try to find a port that is not bind
-        String selfNodeHostPort = null;
-        int seed = new Random().nextInt() % 4000;
-        for (int port = 8000 + seed; port != 8100 + seed; port ++) {
-            if(! NetUtils.isPortUsing("127.0.0.1", port)) {
-                selfNodeHostPort = "127.0.0.1:" + String.valueOf(port);
-                break;
-            }
-        }
-        Assert.assertNotNull(selfNodeHostPort);
-        return selfNodeHostPort;
+        return "127.0.0.1:" + UtFrameUtils.findValidPort();
     }
 
     private DatabaseEntry randomEntry() {
@@ -94,6 +86,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry newvalue = new DatabaseEntry();
         db.get(null, key, newvalue, LockMode.READ_COMMITTED);
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+        db.close();
         environment.close();
     }
 
@@ -125,7 +118,23 @@ public class BDBEnvironmentTest {
     private File[] followerPaths = new File[2];
     private String[] followerNames = new String[2];
 
+
     private void initClusterMasterFollower() throws Exception {
+        for (int i = 0; i != 3; ++ i) {
+            // might fail on high load, will sleep and retry
+            try {
+                initClusterMasterFollowerNoRetry();
+                return;
+            } catch (Exception e) {
+                // sleep 5 ~ 15 seconds
+                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
+                Thread.sleep(sleepSeconds * 1000L);
+            }
+        }
+
+    }
+    private void initClusterMasterFollowerNoRetry() throws Exception {
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();
@@ -169,6 +178,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
+        masterDb.close();
 
         Thread.sleep(1000);
 
@@ -181,6 +191,7 @@ public class BDBEnvironmentTest {
             DatabaseEntry newvalue = new DatabaseEntry();
             followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
             Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+            followerDb.close();
         }
 
         // add observer
@@ -200,6 +211,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry newvalue = new DatabaseEntry();
         observerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
         Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+        observerDb.close();
 
         // close
         masterEnvironment.close();
@@ -226,6 +238,7 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(i + 1, masterEnvironment.getDatabaseNames().size());
             Assert.assertEquals(DB_INDEX_ARR[i], masterEnvironment.getDatabaseNames().get(i));
             masterDb.put(null, key, value);
+            masterDb.close();
 
             Thread.sleep(1000);
 
@@ -238,6 +251,7 @@ public class BDBEnvironmentTest {
                 DatabaseEntry newvalue = new DatabaseEntry();
                 followerDb.get(null, key, newvalue, LockMode.READ_COMMITTED);
                 Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
+                followerDb.close();
             }
         }
 
@@ -278,6 +292,7 @@ public class BDBEnvironmentTest {
         DatabaseEntry key = randomEntry();
         DatabaseEntry value = randomEntry();
         masterDb.put(null, key, value);
+        masterDb.close();
         Assert.assertEquals(1, masterEnvironment.getDatabaseNames().size());
         Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
 
@@ -291,6 +306,7 @@ public class BDBEnvironmentTest {
             Assert.assertEquals(new String(value.getData()), new String(newvalue.getData()));
             Assert.assertEquals(1, followerEnvironment.getDatabaseNames().size());
             Assert.assertEquals(DB_INDEX_OLD, followerEnvironment.getDatabaseNames().get(0));
+            followerDb.close();
         }
 
         // manually backup follower's meta dir
@@ -307,6 +323,7 @@ public class BDBEnvironmentTest {
         for (int i = 0; i < Config.txn_rollback_limit * 2; i++) {
             masterDb.put(null, randomEntry(), randomEntry());
         }
+        masterDb.close();
         Assert.assertEquals(2, masterEnvironment.getDatabaseNames().size());
         Assert.assertEquals(DB_INDEX_OLD, masterEnvironment.getDatabaseNames().get(0));
         Assert.assertEquals(DB_INDEX_NEW, masterEnvironment.getDatabaseNames().get(1));
@@ -485,5 +502,50 @@ public class BDBEnvironmentTest {
             Thread.sleep(1000);
             LOG.warn("==============> getDatabasesNames() {}", masterEnvironment.getDatabaseNames());
         }
+    }
+
+    @Test
+    public void testGetDatabase() throws Exception {
+        String selfNodeHostPort = findUnbindHostPort();
+        BDBEnvironment environment = new BDBEnvironment(
+                createTmpDir(),
+                "standalone",
+                selfNodeHostPort,
+                selfNodeHostPort,
+                true);
+        environment.setup();
+
+        new MockUp<ReplicatedEnvironment>() {
+            @Mock
+            public List<String> getDatabaseNames() {
+                List<String> list = new ArrayList<>();
+                list.add("1001");
+                list.add("2001");
+                list.add("aaa_3001");
+                list.add("aaa_4001");
+                list.add("aaa_bbb_");
+                return list;
+            }
+        };
+
+        List<Long> l1 = environment.getDatabaseNamesWithPrefix("");
+        Assert.assertEquals(2, l1.size());
+        Assert.assertEquals((Long) 1001L, l1.get(0));
+        Assert.assertEquals((Long) 2001L, l1.get(1));
+
+        List<Long> l2 = environment.getDatabaseNamesWithPrefix("aaa_");
+        Assert.assertEquals(2, l2.size());
+        Assert.assertEquals((Long) 3001L, l2.get(0));
+        Assert.assertEquals((Long) 4001L, l2.get(1));
+
+        // prefix not fully match
+        List<Long> l3 = environment.getDatabaseNamesWithPrefix("aaa");
+        Assert.assertEquals(0, l3.size());
+
+        // prefix not match
+        List<Long> l4 = environment.getDatabaseNamesWithPrefix("bbb_");
+        Assert.assertEquals(0, l4.size());
+
+        environment.close();
     }
 }

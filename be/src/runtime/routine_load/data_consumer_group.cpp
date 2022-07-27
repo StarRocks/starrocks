@@ -152,7 +152,18 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 
             if (left_bytes == ctx->max_batch_size) {
                 // nothing to be consumed, we have to cancel it, because
-                // we do not allow finishing stream load pipe without data
+                // we do not allow finishing stream load pipe without data.
+                //
+                // But if the offset have already moved, such as the control msg,
+                // we need to commit and tell fe to move offset to the newest offset, otherwise, fe will retry consume.
+                for (auto& item : cmt_offset) {
+                    if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
+                        kafka_pipe->finish();
+                        ctx->kafka_info->cmt_offset = std::move(cmt_offset);
+                        ctx->receive_bytes = 0;
+                        return Status::OK();
+                    }
+                }
                 kafka_pipe->cancel(Status::Cancelled("Cancelled"));
                 return Status::Cancelled("Cancelled");
             } else {
@@ -170,22 +181,38 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
 
-            Status st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
-                                                         static_cast<size_t>(msg->len()), row_delimiter);
-
-            if (st.ok()) {
-                received_rows++;
-                left_bytes -= msg->len();
-                cmt_offset[msg->partition()] = msg->offset();
-                VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
+            if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
+                // For transaction producer, producer will append one control msg to the group of msgs,
+                // but the control msg will not return to consumer,
+                // so we use the offset of eof to compute the last offset.
+                // The last offset of partition = `offset of eof` - 1
+                //
+                // if msg->offset == 0, don't record into cmt_offset,
+                // because the fe will +1 and then consume the next msg.
+                //
+                // Our offset recorded in the kafka is the offset of last consumed msg,
+                // but the standard usage is to record the last offset + 1.
+                if (msg->offset() > 0) {
+                    cmt_offset[msg->partition()] = msg->offset() - 1;
+                }
             } else {
-                // failed to append this msg, we must stop
-                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.get_error_msg();
-                eos = true;
-                {
-                    std::unique_lock<std::mutex> lock(_mutex);
-                    if (result_st.ok()) {
-                        result_st = st;
+                Status st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
+                                                             static_cast<size_t>(msg->len()), row_delimiter);
+                if (st.ok()) {
+                    received_rows++;
+                    left_bytes -= msg->len();
+                    cmt_offset[msg->partition()] = msg->offset();
+                    VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
+                } else {
+                    // failed to append this msg, we must stop
+                    LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id
+                                 << ", errmsg=" << st.get_error_msg();
+                    eos = true;
+                    {
+                        std::unique_lock<std::mutex> lock(_mutex);
+                        if (result_st.ok()) {
+                            result_st = st;
+                        }
                     }
                 }
             }

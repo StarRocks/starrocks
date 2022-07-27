@@ -26,16 +26,15 @@ DECLARE_int64(socket_max_unwritten_bytes);
 } // namespace brpc
 
 void start_cn() {
-    using starrocks::Status;
+    using starrocks::ComputeService;
     auto* exec_env = starrocks::ExecEnv::GetInstance();
 
     // Begin to start services
     // 1. Start thrift server with 'thrift_port'.
-    starrocks::ThriftServer* cn_server = nullptr;
-    EXIT_IF_ERROR(starrocks::ComputeService::create_service(exec_env, starrocks::config::thrift_port, &cn_server));
-    Status status = cn_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks CN server did not start correctly, exiting";
+    auto thrift_server = ComputeService::create<ComputeService>(exec_env, starrocks::config::thrift_port);
+    if (auto status = thrift_server->start(); !status.ok()) {
+        LOG(ERROR) << "Fail to start ComputeService thrift server on port " << starrocks::config::be_port << ": "
+                   << status;
         starrocks::shutdown_logging();
         exit(1);
     }
@@ -45,7 +44,10 @@ void start_cn() {
     brpc::FLAGS_socket_max_unwritten_bytes = starrocks::config::brpc_socket_max_unwritten_bytes;
     brpc::Server brpc_server;
 
-    starrocks::ComputeNodeInternalServiceImpl<starrocks::PInternalService> compute_service(exec_env);
+    starrocks::ComputeNodeInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
+    starrocks::ComputeNodeInternalServiceImpl<doris::PBackendService> compute_service(exec_env);
+
+    brpc_server.AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server.AddService(&compute_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
@@ -61,24 +63,24 @@ void start_cn() {
     // 3. Start http service.
     std::unique_ptr<starrocks::HttpServiceCN> http_service = std::make_unique<starrocks::HttpServiceCN>(
             exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
-    status = http_service->start();
-    if (!status.ok()) {
+    if (auto status = http_service->start(); !status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks CN http service did not start correctly, exiting";
         starrocks::shutdown_logging();
         exit(1);
     }
 
-    while (!starrocks::k_starrocks_exit) {
+    while (!starrocks::k_starrocks_exit.load()) {
         sleep(10);
     }
+
+    starrocks::wait_for_fragments_finish(exec_env, starrocks::config::loop_count_wait_fragments_finish);
 
     http_service.reset();
 
     brpc_server.Stop(0);
     brpc_server.Join();
 
-    cn_server->stop();
-    cn_server->join();
-    delete cn_server;
+    thrift_server->stop();
+    thrift_server->join();
 }

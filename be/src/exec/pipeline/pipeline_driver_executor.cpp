@@ -5,8 +5,10 @@
 #include <memory>
 
 #include "exec/workgroup/work_group.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "util/debug/query_trace.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -78,6 +80,10 @@ void GlobalDriverExecutor::_worker_thread() {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
+        // Reset TLS state
+        CurrentThread::current().set_query_id({});
+        CurrentThread::current().set_fragment_instance_id({});
+        CurrentThread::current().set_pipeline_driver_id(0);
 
         auto maybe_driver = this->_driver_queue->take(worker_id);
         if (maybe_driver.status().is_cancelled()) {
@@ -88,9 +94,11 @@ void GlobalDriverExecutor::_worker_thread() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
-        tls_thread_status.set_query_id(query_ctx->query_id());
-        tls_thread_status.set_fragment_instance_id(fragment_ctx->fragment_instance_id());
-        tls_thread_status.set_pipeline_driver_id(driver->driver_id());
+        CurrentThread::current().set_query_id(query_ctx->query_id());
+        CurrentThread::current().set_fragment_instance_id(fragment_ctx->fragment_instance_id());
+        CurrentThread::current().set_pipeline_driver_id(driver->driver_id());
+
+        SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
 
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
@@ -114,7 +122,6 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             }
-
             auto maybe_state = driver->process(runtime_state, worker_id);
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);

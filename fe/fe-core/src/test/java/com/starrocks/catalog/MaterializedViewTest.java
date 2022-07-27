@@ -21,6 +21,8 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -40,6 +42,7 @@ import java.io.DataOutputStream;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class MaterializedViewTest {
 
@@ -54,24 +57,13 @@ public class MaterializedViewTest {
     }
 
     @Test
-    public void testInit(@Mocked GlobalStateMgr globalStateMgr) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                globalStateMgr.getClusterId();
-                result = 1024;
-            }
-        };
+    public void testInit() {
         MaterializedView mv = new MaterializedView();
-        Assert.assertEquals(1024, mv.getClusterId());
         Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv.getType());
         Assert.assertEquals(null, mv.getTableProperty());
 
         MaterializedView mv2 = new MaterializedView(1000, 100, "mv2", columns, KeysType.AGG_KEYS,
                 null, null, null);
-        Assert.assertEquals(1024, mv2.getClusterId());
         Assert.assertEquals(100, mv2.getDbId());
         Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW, mv2.getType());
         Assert.assertEquals(null, mv2.getTableProperty());
@@ -477,5 +469,42 @@ public class MaterializedViewTest {
         stmtExecutor.execute();
         Assert.assertNotNull(mv);
         Assert.assertFalse(mv.isActive());
+    }
+
+    @Test
+    public void testMaterializedViewWithHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.enable_experimental_mv = true;
+        UtFrameUtils.createMinStarRocksCluster();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view mv_with_hint\n" +
+                        "PARTITION BY k1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select /*+ SET_VAR(query_timeout = 500) */ k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        MaterializedView mv = ((MaterializedView) testDb.getTable("mv_with_hint"));
+        String mvTaskName = "mv-" + mv.getId();
+        Task task = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName);
+        Assert.assertNotNull(task);
+        Map<String, String> taskProperties = task.getProperties();
+        Assert.assertTrue(taskProperties.containsKey("query_timeout"));
+        Assert.assertEquals("500", taskProperties.get("query_timeout"));
+        Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
     }
 }

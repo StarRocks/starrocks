@@ -76,7 +76,7 @@ const char* unit_name(MetricUnit unit) {
     case MetricUnit::ROWSETS:
         return "rowsets";
     case MetricUnit::CONNECTIONS:
-        return "rowsets";
+        return "connections";
     default:
         return "nounit";
     }

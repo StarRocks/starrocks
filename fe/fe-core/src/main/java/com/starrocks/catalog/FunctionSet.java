@@ -979,6 +979,12 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
                 Lists.newArrayList(Type.BIGINT, Type.DATETIME, Type.INT, Type.ARRAY_BOOLEAN),
                 Type.INT, Type.ARRAY_BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
+                Lists.newArrayList(Type.BIGINT, Type.INT, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(WINDOW_FUNNEL,
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.INT, Type.ARRAY_BOOLEAN),
+                Type.INT, Type.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
         // Rank
@@ -1032,7 +1038,7 @@ public class FunctionSet {
 
         for (Type t : HISTOGRAM_TYPE) {
             addBuiltin(AggregateFunction.createBuiltin("histogram",
-                    Lists.newArrayList(t, Type.INT, Type.INT, Type.INT), Type.VARCHAR, Type.VARCHAR,
+                    Lists.newArrayList(t, Type.INT, Type.DOUBLE, Type.INT), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
     }

@@ -10,8 +10,6 @@
 
 - A global dictionary supports updates during real-time data ingestion，thus optimizing query performance and doubling query performance of string data.
 
-- [Preview] Stream Load provides a transaction interface that supports splitting the execution of "sending data" and "submitting transaction", enabling two-phase commit of transactions that stream data by using external systems such as Apache Flink® or Apache Kafka® and improve loading performance in highly concurrent scenarios. For example, when data stream into StarRocks by using Flink, the transaction interface allows for simultaneous data reception and data sending, and your transaction can be submitted at a proper time to complete a batch load. This way, the client side does not need to cache each batch of data. This reduces the memory usage on the client side and provides guarantees for the exactly-once commits of transactions. In addition, the transaction interface also supports the loading of multiple small files as a single batch. For more information, see [Load data by using Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md).
-
 - The CREATE TABLE AS SELECT statement can be executed asynchronously and write results to a new table. For more information, see [CREATE TABLE AS SELECT](sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md#create-table-as-select).
 
 - Support the following resource group-related features:
@@ -72,4 +70,6 @@ Fix the following bugs:
 
 ### Others
 
-StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](../administration/stargo.md).
+- StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](../administration/stargo.md).
+
+- The pipeline engine is enabled by default when you upgrade StarRocks to version 2.3 or deploy StarRocks. The pipeline engine can improve the performance of simple queries in high concurrency scenarios and complex queries. If you detect significant performance regressions when using StarRocks 2.3, you can disable the pipeline engine by executing the `SET GLOBAL` statement to set `enable_pipeline_engine` to `false`.

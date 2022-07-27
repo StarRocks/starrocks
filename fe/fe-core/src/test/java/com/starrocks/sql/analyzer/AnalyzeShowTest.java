@@ -69,7 +69,7 @@ public class AnalyzeShowTest {
                 AST2SQL.toString(statement.toSelectStmt()));
 
         statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");
-        Assert.assertEquals("default_cluster:test", statement.getDb());
+        Assert.assertEquals("test", statement.getDb());
     }
 
     @Test

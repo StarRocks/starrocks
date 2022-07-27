@@ -44,7 +44,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -52,7 +51,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
@@ -77,7 +76,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends MasterDaemon implements Writable {
+public class BackupHandler extends LeaderDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -371,7 +370,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
 
         // Create a backup job
         BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(),
-                ClusterNamespace.getNameFromFullName(db.getFullName()),
+                db.getOriginName(),
                 tblRefs, stmt.getTimeoutMs(),
                 globalStateMgr, repository.getId());
         // write log

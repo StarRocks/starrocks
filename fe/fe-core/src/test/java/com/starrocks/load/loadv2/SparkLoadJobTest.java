@@ -56,7 +56,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
-import com.starrocks.task.MasterTaskExecutor;
+import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PushTask;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -199,7 +199,7 @@ public class SparkLoadJobTest {
     @Test
     public void testExecute(@Mocked GlobalStateMgr globalStateMgr, @Mocked SparkLoadPendingTask pendingTask,
                             @Injectable String originStmt, @Injectable GlobalTransactionMgr transactionMgr,
-                            @Injectable MasterTaskExecutor executor) throws Exception {
+                            @Injectable LeaderTaskExecutor executor) throws Exception {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();

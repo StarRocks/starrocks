@@ -140,7 +140,7 @@ public final class MetricRepo {
                         MetricUnit.NOUNIT, "job statistics") {
                     @Override
                     public Long getValue() {
-                        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+                        if (!GlobalStateMgr.getCurrentState().isLeader()) {
                             return 0L;
                         }
                         return loadManger.getLoadJobNum(state, jobType);
@@ -164,7 +164,7 @@ public final class MetricRepo {
                     MetricUnit.NOUNIT, "job statistics") {
                 @Override
                 public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isMaster()) {
+                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
                         return 0L;
                     }
                     if (jobType == JobType.SCHEMA_CHANGE) {
@@ -221,7 +221,7 @@ public final class MetricRepo {
                 "scheduled_tablet_num", MetricUnit.NOUNIT, "number of tablets being scheduled") {
             @Override
             public Long getValue() {
-                if (!GlobalStateMgr.getCurrentState().isMaster()) {
+                if (!GlobalStateMgr.getCurrentState().isLeader()) {
                     return 0L;
                 }
                 return (long) GlobalStateMgr.getCurrentState().getTabletScheduler().getTotalNum();
@@ -458,7 +458,7 @@ public final class MetricRepo {
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
                 public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isMaster()) {
+                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
                         return 0L;
                     }
                     return invertedIndex.getTabletNumByBackendId(beId);
@@ -473,7 +473,7 @@ public final class MetricRepo {
                     "tablet max compaction score") {
                 @Override
                 public Long getValue() {
-                    if (!GlobalStateMgr.getCurrentState().isMaster()) {
+                    if (!GlobalStateMgr.getCurrentState().isLeader()) {
                         return 0L;
                     }
                     return be.getTabletMaxCompactionScore();

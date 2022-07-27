@@ -131,9 +131,7 @@ public class InsertPlanner {
             slotDescriptor.setIsNullable(column.isAllowNull());
             if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                if (dict != null && dict.isPresent()) {
-                    globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict.get()));
-                }
+                dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
             }
         }
         olapTuple.computeMemLayout();

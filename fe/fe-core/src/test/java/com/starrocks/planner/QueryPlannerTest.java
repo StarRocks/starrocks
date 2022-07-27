@@ -100,8 +100,8 @@ public class QueryPlannerTest {
         String createSchemaSql = "create schema if not exists test";
         String createDbSql = "create database if not exists test";
         CreateDbStmt createSchemaStmt =
-                (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createSchemaSql, connectContext);
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbSql, connectContext);
+                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createSchemaSql, connectContext);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbSql, connectContext);
         Assert.assertEquals(createDbStmt.toSql(), createSchemaStmt.toSql());
     }
 
@@ -109,8 +109,8 @@ public class QueryPlannerTest {
     public void testDropDbQueryPlanWithSchemaSyntax() throws Exception {
         String dropSchemaSql = "drop schema if exists test";
         String dropDbSql = "drop database if exists test";
-        DropDbStmt dropSchemaStmt = (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSchemaSql, connectContext);
-        DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt(dropDbSql, connectContext);
+        DropDbStmt dropSchemaStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(dropSchemaSql, connectContext);
+        DropDbStmt dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(dropDbSql, connectContext);
         Assert.assertEquals(dropDbStmt.toSql(), dropSchemaStmt.toSql());
     }
 
@@ -119,9 +119,9 @@ public class QueryPlannerTest {
         String showCreateSchemaSql = "show create schema test";
         String showCreateDbSql = "show create database test";
         ShowCreateDbStmt showCreateSchemaStmt =
-                (ShowCreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(showCreateSchemaSql, connectContext);
+                (ShowCreateDbStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSchemaSql, connectContext);
         ShowCreateDbStmt showCreateDbStmt =
-                (ShowCreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(showCreateDbSql, connectContext);
+                (ShowCreateDbStmt) UtFrameUtils.parseStmtWithNewParser(showCreateDbSql, connectContext);
         Assert.assertEquals(showCreateDbStmt.toSql(), showCreateSchemaStmt.toSql());
     }
 

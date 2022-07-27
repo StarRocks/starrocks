@@ -367,7 +367,9 @@ HdfsScannerContext* FileReaderTest::_create_context_for_min_max() {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    create_tuple_descriptor(&_pool, min_max_slots, &ctx->min_max_tuple_desc);
+    TupleDescriptor* min_max_tuple_desc = nullptr;
+    create_tuple_descriptor(&_pool, min_max_slots, &min_max_tuple_desc);
+    ctx->min_max_tuple_desc = min_max_tuple_desc;
 
     // create min max conjuncts
     // c1 >= 1

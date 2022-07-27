@@ -11,7 +11,6 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
@@ -53,8 +52,6 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE ";
-
     private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
             "SELECT DISTINCT table_id" + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE 1 = 1 ";
 
@@ -62,7 +59,7 @@ public class StatisticExecutor {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -87,6 +84,21 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
+        }
+    }
+
+    public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
+        String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
         }
     }
 
@@ -115,7 +127,6 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added
@@ -131,7 +142,7 @@ public class StatisticExecutor {
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
-        String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
+        String dbName = db.getOriginName();
         String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
@@ -209,8 +220,12 @@ public class StatisticExecutor {
                 db.getId(), table.getId(), columns,
                 statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(),
                 LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        //Only update running status without edit log, make restart job status is failed
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
             statsJob.collect();
@@ -237,22 +252,6 @@ public class StatisticExecutor {
                     statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
         }
         return analyzeStatus;
-    }
-
-    public void expireStatisticSync(List<String> tableIds) {
-        StringBuilder sql = new StringBuilder(DELETE_TEMPLATE);
-        sql.append(" table_id IN (").append(StringUtils.join(tableIds, ",")).append(")");
-        LOG.debug("Expire statistic SQL: {}", sql);
-
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql.toString(), context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
-        }
     }
 
     public List<String> queryExpireTableSync(List<Long> tableIds) throws Exception {

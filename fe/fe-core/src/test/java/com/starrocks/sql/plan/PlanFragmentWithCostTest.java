@@ -289,9 +289,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  2:AGGREGATE (update finalize)\n"
-                + "  |  output: multi_distinct_count(2: v2)\n"
-                + "  |  group by: 3: v3"));
+        Assert.assertTrue(planFragment.contains(" 4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2)\n" +
+                "  |  group by: 3: v3"));
     }
 
     @Test
@@ -1028,6 +1028,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
                 "    HASH_PARTITIONED: 5: v5");
+        sql = "with xx as (select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6) " +
+                "select x1.v1, x2.v2 from xx x1 join xx x2 on x1.v1 = x2.v1;";
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTERuseRatio(1.2);
+        connectContext.getSessionVariable().setCboCteReuse(false);
+
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 5: v5");
+        assertContains(plan, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 2: v2");
     }
 
     @Test
@@ -1055,7 +1069,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
                 "  |  <slot 11> : to_date(8: id_datetime)");
-
 
         sql = "select to_days(id_datetime) from test_all_type";
         plan = getFragmentPlan(sql);

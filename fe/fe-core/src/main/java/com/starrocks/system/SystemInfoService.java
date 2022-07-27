@@ -170,6 +170,17 @@ public class SystemInfoService {
     }
 
     // for test
+    public void dropBackend(Backend backend) {
+        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
+        copiedBackends.remove(backend.getId());
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+
+        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVerions.remove(backend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+    }
+
+    // for test
     public void addBackend(Backend backend) {
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(backend.getId(), backend);
@@ -240,8 +251,8 @@ public class SystemInfoService {
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
             }
             opMessage = String.format(
-                formatSb.toString(), willBeModifiedHost,
-                updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
+                    formatSb.toString(), willBeModifiedHost,
+                    updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
         } else {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
         }
@@ -335,8 +346,8 @@ public class SystemInfoService {
                                                 " please change the replication_num of [%s.%s] to three." +
                                                 " ALTER SYSTEM DROP BACKEND <backends> FORCE" +
                                                 " can be used to forcibly drop the backend. ",
-                                        db.getFullName(), table.getName(), droppedBackend.getHost(),
-                                        droppedBackend.getHeartbeatPort(), db.getFullName(), table.getName());
+                                        db.getOriginName(), table.getName(), droppedBackend.getHost(),
+                                        droppedBackend.getHeartbeatPort(), db.getOriginName(), table.getName());
 
                                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)
                                         .forEach(rollupIdx -> {
@@ -509,6 +520,14 @@ public class SystemInfoService {
 
     public List<Long> getBackendIds() {
         return getBackendIds(false);
+    }
+
+    public int getAliveBackendNumber() {
+        return getBackendIds(true).size();
+    }
+
+    public int getTotalBackendNumber() {
+        return getBackendIds(false).size();
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {

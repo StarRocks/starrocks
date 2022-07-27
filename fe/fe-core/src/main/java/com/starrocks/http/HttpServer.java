@@ -72,7 +72,7 @@ import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
-import com.starrocks.master.MetaHelper;
+import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -112,6 +112,10 @@ public class HttpServer {
 
     public void setup() throws IllegalArgException {
         registerActions();
+    }
+
+    public ActionController getController() {
+        return controller;
     }
 
     private void registerActions() throws IllegalArgException {
@@ -162,7 +166,7 @@ public class HttpServer {
         QueryDumpAction.registerAction(controller);
 
         // meta service action
-        File imageDir = MetaHelper.getMasterImageDir();
+        File imageDir = MetaHelper.getLeaderImageDir();
         ImageAction.registerAction(controller, imageDir);
         InfoAction.registerAction(controller, imageDir);
         VersionAction.registerAction(controller, imageDir);

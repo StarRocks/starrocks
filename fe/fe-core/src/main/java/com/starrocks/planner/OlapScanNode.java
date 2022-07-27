@@ -36,7 +36,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -110,6 +109,8 @@ public class OlapScanNode extends ScanNode {
     private long selectedIndexId = -1;
     private int selectedPartitionNum = 0;
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();
+    private Collection<String> selectedPartitionNames = Lists.newArrayList();
+    private Collection<Long> selectedPartitionVersions = Lists.newArrayList();
     private long actualRows = 0;
 
     // List of tablets will be scanned by current olap_scan_node
@@ -146,6 +147,14 @@ public class OlapScanNode extends ScanNode {
 
     public Collection<Long> getSelectedPartitionIds() {
         return selectedPartitionIds;
+    }
+
+    public Collection<String> getSelectedPartitionNames() {
+        return selectedPartitionNames;
+    }
+
+    public Collection<Long> getSelectedPartitionVersions() {
+        return selectedPartitionVersions;
     }
 
     // The dict id int column ids to dict string column ids
@@ -283,7 +292,8 @@ public class OlapScanNode extends ScanNode {
         String schemaHashStr = String.valueOf(schemaHash);
         long visibleVersion = partition.getVisibleVersion();
         String visibleVersionStr = String.valueOf(visibleVersion);
-
+        selectedPartitionNames.add(partition.getName());
+        selectedPartitionVersions.add(visibleVersion);
         for (Tablet tablet : tablets) {
             long tabletId = tablet.getId();
             LOG.debug("{} tabletId={}", (logNum++), tabletId);
@@ -389,21 +399,8 @@ public class OlapScanNode extends ScanNode {
                 (System.currentTimeMillis() - start), selectedPartitionIds);
     }
 
-    public void selectBestRollupByRollupSelector(Analyzer analyzer) throws UserException {
-        // Step2: select best rollup
-        long start = System.currentTimeMillis();
-        if (olapTable.getKeysType() == KeysType.DUP_KEYS) {
-            //This function is compatible with the INDEX selection logic of ROLLUP,
-            //so the Duplicate table here returns base index directly
-            //and the selection logic of materialized view is selected in "MaterializedViewSelector"
-            selectedIndexId = olapTable.getBaseIndexId();
-            LOG.debug("The best index will be selected later in mv selector");
-            return;
-        }
-        final RollupSelector rollupSelector = new RollupSelector(analyzer, desc, olapTable);
-        selectedIndexId = rollupSelector.selectBestRollup(selectedPartitionIds, conjuncts, isPreAggregation);
-        LOG.debug("select best roll up cost: {} ms, best index id: {}",
-                (System.currentTimeMillis() - start), selectedIndexId);
+    public void selectBestRollupByRollupSelector() {
+        selectedIndexId = olapTable.getBaseIndexId();
     }
 
     private void getScanRangeLocations() throws UserException {
