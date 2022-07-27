@@ -40,6 +40,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -484,29 +485,11 @@ public abstract class Type implements Cloneable {
                 PrimitiveType t1 = PrimitiveType.values()[i];
                 PrimitiveType t2 = PrimitiveType.values()[j];
                 // DECIMAL, NULL, and INVALID_TYPE  are handled separately.
-                if (t1 == PrimitiveType.INVALID_TYPE ||
-                        t2 == PrimitiveType.INVALID_TYPE) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.NULL_TYPE || t2 == PrimitiveType.NULL_TYPE) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.DECIMALV2 || t2 == PrimitiveType.DECIMALV2) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.DECIMAL32 || t2 == PrimitiveType.DECIMAL32) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.DECIMAL64 || t2 == PrimitiveType.DECIMAL64) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.DECIMAL128 || t2 == PrimitiveType.DECIMAL128) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.TIME || t2 == PrimitiveType.TIME) {
-                    continue;
-                }
-                if (t1 == PrimitiveType.JSON || t2 == PrimitiveType.JSON) {
+                List<PrimitiveType> skipCompareTypes = Arrays.asList(
+                        PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
+                        PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
+                        PrimitiveType.TIME, PrimitiveType.JSON);
+                if (skipCompareTypes.contains(t1) || skipCompareTypes.contains(t2)) {
                     continue;
                 }
                 Preconditions.checkNotNull(compatibilityMatrix[i][j]);
