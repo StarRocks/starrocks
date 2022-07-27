@@ -64,7 +64,7 @@ public:
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
                           bool expected_is_dir = true) {
         const StatusOr<bool> status_or = fs->is_directory(dir_name);
-        EXPECT_EQ(expected_success, status_or.ok()) << dir_name;
+        EXPECT_EQ(expected_success, status_or.ok()) << status_or.status() << ": " << dir_name;
         if (status_or.ok()) {
             EXPECT_EQ(expected_is_dir, status_or.value());
         }

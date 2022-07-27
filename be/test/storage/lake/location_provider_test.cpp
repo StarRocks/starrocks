@@ -12,9 +12,11 @@
 #include "storage/lake/starlet_location_provider.h"
 #include "testutil/assert.h"
 
-namespace starrocks::lake {
-
+namespace starrocks {
 extern std::shared_ptr<StarOSWorker> g_worker;
+} // namespace starrocks
+
+namespace starrocks::lake {
 
 class StarletLocationProviderTest : public testing::Test {
 public:

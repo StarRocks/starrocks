@@ -67,13 +67,6 @@ inline bool is_posix_uri(std::string_view uri) {
     return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }
 
-inline bool is_staros_uri(std::string_view uri) {
-#ifdef USE_STAROS
-    return parse_starlet_uri(uri).ok();
-#endif
-    return false;
-}
-
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri) {
     if (is_posix_uri(uri)) {
         return new_fs_posix();
@@ -85,7 +78,7 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
         return new_fs_s3();
     }
 #ifdef USE_STAROS
-    if (is_staros_uri(uri)) {
+    if (is_starlet_uri(uri)) {
         return new_fs_starlet();
     }
 #endif
@@ -103,7 +96,7 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
         return get_tls_fs_s3();
     }
 #ifdef USE_STAROS
-    if (is_staros_uri(uri)) {
+    if (is_starlet_uri(uri)) {
         return get_tls_fs_starlet();
     }
 #endif
