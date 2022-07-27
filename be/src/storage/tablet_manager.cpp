@@ -150,7 +150,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
 
         if (shard_idx == base_shard_idx) {
-            // do nothing
+            wlock.lock();
         } else {
             std::unique_lock tmp_wlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
             base_wlock = std::move(tmp_wlock);
