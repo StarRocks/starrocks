@@ -622,12 +622,12 @@ public:
 
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->is_nullable()) {
-                const auto* column = down_cast<const NullableColumn*>(columns[i]);
-                if (column->is_null(row_num)) {
+                if (columns[i]->is_null(row_num)) {
                     // If at least one column has a null value in the current row,
                     // we don't process this row.
                     return;
                 }
+                const auto* column = down_cast<const NullableColumn*>(columns[i]);
                 data_columns[i] = &column->data_column_ref();
             } else {
                 data_columns[i] = columns[i];

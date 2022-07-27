@@ -75,7 +75,7 @@ struct WindowFunnelState {
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
     using TimestampVector = std::vector<TimestampType>;
     int64_t window_size;
-    int32_t mode;
+    int32_t mode = 0;
     uint8_t events_size;
     bool sorted = true;
     char buffer[64];
