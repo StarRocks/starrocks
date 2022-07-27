@@ -186,8 +186,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, SAMPLE_STATISTICS_COLUMNS, "olap",
@@ -214,8 +213,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, FULL_STATISTICS_COLUMNS, "olap",
@@ -242,8 +240,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, HISTOGRAM_STATISTICS_COLUMNS, "olap",
