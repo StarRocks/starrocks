@@ -359,13 +359,6 @@ public class StmtExecutor {
                 LOG.debug("no need to transfer to Master. stmt: {}", context.getStmtId());
             }
 
-            // Only add the last running stmt for multi statement,
-            // because the audit log will only show the last stmt and
-            // the ConnectProcessor only add the last finished stmt
-            if (context.getIsLastStmt()) {
-                addRunningQueryDetail();
-            }
-
             if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
                 context.getState().setIsQuery(true);
 
@@ -983,6 +976,7 @@ public class StmtExecutor {
         context.getCatalog().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
+<<<<<<< HEAD
     private void addRunningQueryDetail() {
         if (!Config.enable_collect_query_detail_info) {
             return;
@@ -1010,6 +1004,8 @@ public class StmtExecutor {
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
     }
 
+=======
+>>>>>>> 288733330 ([BugFix] Fix collect query detail bug (#9187))
     public PQueryStatistics getQueryStatisticsForAuditLog() {
         if (statisticsForAuditLog == null) {
             statisticsForAuditLog = new PQueryStatistics();
