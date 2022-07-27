@@ -2,8 +2,8 @@
 
 package com.starrocks.transaction;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -14,7 +14,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.Utility;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.rpc.LakeServiceClient;
 import com.starrocks.rpc.RpcException;
@@ -115,7 +115,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         db.readLock();
         try {
             // Preconditions: has acquired the database's reader or writer lock.
-            tabletGroup = Utility.groupTabletID(table);
+            tabletGroup = Utils.groupTabletID(table);
         } catch (NoAliveBackendException e) {
             LOG.warn(e);
         } finally {

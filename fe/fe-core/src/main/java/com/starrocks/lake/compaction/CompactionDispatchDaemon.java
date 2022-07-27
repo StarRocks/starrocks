@@ -14,7 +14,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utility;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
 import com.starrocks.rpc.LakeServiceClient;
@@ -185,7 +185,7 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utility.chooseBackend((LakeTablet) tablet);
+                Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     beToTablets.clear();
                     return beToTablets;

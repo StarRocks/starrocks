@@ -38,7 +38,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utility;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.rpc.LakeServiceClient;
@@ -274,7 +274,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
         for (MaterializedIndex index : indexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utility.chooseBackend((LakeTablet) tablet);
+                Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     LOG.warn("No available backend can execute publish version task");
                     return false;

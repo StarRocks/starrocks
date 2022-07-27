@@ -2,7 +2,7 @@
 
 package com.starrocks.lake;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
@@ -16,10 +16,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class Utility {
-    private static final Logger LOG = LogManager.getLogger(Utility.class);
+public class Utils {
+    private static final Logger LOG = LogManager.getLogger(Utils.class);
 
-    private Utility() {
+    private Utils() {
     }
 
     // Returns null if no backend available.
