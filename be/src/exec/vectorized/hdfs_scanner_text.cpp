@@ -112,8 +112,9 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     // we should cast string to char now since csv reader only support record delimiter by char.
     _record_delimiter = text_file_desc.line_delim.front();
 
-    // _collection_delimiter and _mapkey_delimiter are used in Hive array format parse only,
-    // and Hive only support char as delimiter, so these two fields should be char type.
+    // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
+    // but in fact, only the first character of the delimiter will take effect.
+    // So here, we only use the first character of collection_delim and mapkey_delim.
     _collection_delimiter = text_file_desc.collection_delim.front();
     _mapkey_delimiter = text_file_desc.mapkey_delim.front();
 
