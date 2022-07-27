@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <memory_resource>
 
+#include "gutil/dynamic_annotations.h"
+
 namespace starrocks {
 // memory resource provide for PMR
 //
@@ -21,7 +23,9 @@ public:
             : _stack_addr_start(addr),
               _stack_addr_end((uint8_t*)_stack_addr_start + sz),
               _current_addr(_stack_addr_start),
-              _upstream(upstream) {}
+              _upstream(upstream) {
+        ASAN_POISON_MEMORY_REGION(_stack_addr_start, sz);
+    }
 
 private:
     void* _stack_addr_start;
@@ -35,6 +39,7 @@ private:
         if (res == nullptr) {
             return _upstream->allocate(__bytes, __alignment);
         }
+        ASAN_UNPOISON_MEMORY_REGION(res, __bytes);
         _current_addr = (uint8_t*)_current_addr + __bytes;
 
         return res;
@@ -43,6 +48,7 @@ private:
     virtual void do_deallocate(void* __p, size_t __bytes, size_t __alignment) {
         if (__p >= _stack_addr_start && __p <= _stack_addr_end) {
             // nothing todo
+            ASAN_POISON_MEMORY_REGION(__p, __bytes);
         } else {
             return _upstream->deallocate(__p, __bytes, __alignment);
         }
