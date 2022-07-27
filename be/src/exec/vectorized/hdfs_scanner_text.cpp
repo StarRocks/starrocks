@@ -115,8 +115,16 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
     // So here, we only use the first character of collection_delim and mapkey_delim.
-    _collection_delimiter = text_file_desc.collection_delim.front();
-    _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    if (text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
+        // During the StarRocks upgrade process, collection_delim and mapkey_delim may be empty,
+        // in order to prevent crash, we set _collection_delimiter
+        // and _mapkey_delimiter a default value here.
+        _collection_delimiter = '\002';
+        _mapkey_delimiter = '\003';
+    } else {
+        _collection_delimiter = text_file_desc.collection_delim.front();
+        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    }
 
     return Status::OK();
 }
