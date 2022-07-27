@@ -34,10 +34,6 @@ using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
-using staros::starlet::fslib::kS3AccessKeyId;
-using staros::starlet::fslib::kS3AccessKeySecret;
-using staros::starlet::fslib::kS3OverrideEndpoint;
-using staros::starlet::fslib::kSysRoot;
 
 bool is_starlet_uri(std::string_view uri) {
     return HasPrefixString(uri, "staros://");
