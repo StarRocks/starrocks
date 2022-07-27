@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
@@ -59,7 +60,30 @@ public class StatisticExecutor {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columnNames);
+            Table table = null;
+            if (dbId == null) {
+                List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+                for (Long id : dbIds) {
+                    Database db = GlobalStateMgr.getCurrentState().getDb(id);
+                    table = db.getTable(tableId);
+                    if (table != null) {
+                        break;
+                    }
+                }
+            } else {
+                Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+                table = database.getTable(tableId);
+            }
+            Preconditions.checkState(table != null);
+
+            List<Column> columns = Lists.newArrayList();
+            for (String colName : columnNames) {
+                Column column = table.getColumn(colName);
+                Preconditions.checkState(column != null);
+                columns.add(column);
+            }
+
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columns);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
