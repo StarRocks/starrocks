@@ -474,4 +474,11 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
+
+    @Test
+    public void testIntersectCardinality() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/intersect_cardinality"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("cardinality: 152160"));
+    }
 }
