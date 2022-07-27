@@ -106,7 +106,7 @@ public class BeLoadRebalancer extends Rebalancer {
                 b -> b.getAvailPathNum(medium)).sum();
         LOG.info("get number of low load paths: {}, with medium: {}", numOfLowPaths, medium);
 
-        int clusterAvailableBEnum = infoService.getBackendIds(true).size();
+        int clusterAvailableBEnum = infoService.getAliveBackendNumber();
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
         // choose tablets from high load backends.
         // BackendLoadStatistic is sorted by load score in ascend order,

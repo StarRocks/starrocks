@@ -246,7 +246,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
                         ConnectContext.get().getSessionVariable().getDegreeOfParallelism()));
-        int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
         if (leftChildStats == null || rightChildStats == null) {
