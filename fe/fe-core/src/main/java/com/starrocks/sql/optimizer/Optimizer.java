@@ -182,8 +182,7 @@ public class Optimizer {
         // This rule should be last
         result = new ScalarOperatorsReuseRule().rewrite(result, rootTaskContext);
         // Reorder predicates
-        result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
-                rootTaskContext);
+        result = new PredicateReorderRule().rewrite(result, rootTaskContext);
         return result;
     }
 

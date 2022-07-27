@@ -152,7 +152,7 @@ UNPARTITIONED
 3:OlapScanNode
 TABLE: customer
 PREAGGREGATION: ON
-PREDICATES: 15: C_ACCTBAL > 0.0, substring(14: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
+PREDICATES: substring(14: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37'), 15: C_ACCTBAL > 0.0
 partitions=1/1
 rollup: customer
 tabletRatio=10/10

@@ -476,7 +476,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean disableJoinReorder = false;
 
     @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER)
-    private boolean enablePredicateReorder = false;
+    private boolean enablePredicateReorder = true;
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
     private boolean enableFilterUnusedColumnsInScanStage = false;

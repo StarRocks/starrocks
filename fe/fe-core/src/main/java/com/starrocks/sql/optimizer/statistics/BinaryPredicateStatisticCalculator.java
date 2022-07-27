@@ -50,7 +50,6 @@ public class BinaryPredicateStatisticCalculator {
             predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
         }
 
-
         Statistics estimatePredicateRange =
                 estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
 

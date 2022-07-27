@@ -316,7 +316,7 @@ OutPut Exchange Id: 03
 0:OlapScanNode
 table: lineitem, rollup: lineitem
 preAggregation: on
-Predicates: [41: L_SHIPDATE, DATE, false] >= '1993-01-01', [41: L_SHIPDATE, DATE, false] < '1994-01-01'
+Predicates: [41: L_SHIPDATE, DATE, false] < '1994-01-01', [41: L_SHIPDATE, DATE, false] >= '1993-01-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 actualRows=0, avgRowSize=24.0
 cardinality: 86732673

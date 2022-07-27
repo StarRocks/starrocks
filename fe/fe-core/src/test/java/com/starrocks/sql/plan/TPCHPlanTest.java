@@ -14,6 +14,7 @@ public class TPCHPlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         connectContext.getSessionVariable().setCboCteReuse(false);
+        connectContext.getSessionVariable().disablePredicateReorder();
     }
 
     @Test

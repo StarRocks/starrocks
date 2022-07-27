@@ -61,7 +61,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=24.0
 numNodes=0
@@ -105,11 +104,10 @@ HASH_PARTITIONED: 18: P_PARTKEY
 5:OlapScanNode
 TABLE: part
 PREAGGREGATION: ON
-PREDICATES: 21: P_BRAND = 'Brand#35', 24: P_CONTAINER = 'JUMBO CASE'
+PREDICATES: 24: P_CONTAINER = 'JUMBO CASE', 21: P_BRAND = 'Brand#35'
 partitions=1/1
 rollup: part
 tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=20000
 avgRowSize=28.0
 numNodes=0
@@ -133,7 +131,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=16.0
 numNodes=0

@@ -10,6 +10,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -74,6 +75,9 @@ public class StatisticUtils {
     }
 
     public static boolean checkStatisticTableStateNormal() {
+        if (FeConstants.runningUnitTest) {
+            return true;
+        }
         Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
 
         // check database
