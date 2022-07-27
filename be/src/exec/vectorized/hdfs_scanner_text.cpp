@@ -98,18 +98,25 @@ Status HdfsScannerCSVReader::_fill_buffer() {
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
-    _field_delimiter = text_file_desc.field_delim;
 
-    // we should cast string to char now since csv reader only support record, collection, mapkey delimiter by char
+    // All delimiters will not be empty.
+    // Even if the user has not set it, there will be a default value.
+    DCHECK(!text_file_desc.field_delim.empty());
+    DCHECK(!text_file_desc.line_delim.empty());
+    DCHECK(!text_file_desc.collection_delim.empty());
+    DCHECK(!text_file_desc.mapkey_delim.empty());
+
+    // _field_delimiter and _record_delimiter should use std::string,
+    // because the CSVReader is using std::string type as delimiter.
+    _field_delimiter = text_file_desc.field_delim;
+    // we should cast string to char now since csv reader only support record delimiter by char.
     _record_delimiter = text_file_desc.line_delim.front();
+
+    // _collection_delimiter and _mapkey_delimiter are used in Hive array format parse only,
+    // and Hive only support char as delimiter, so these two fields should be char type.
     _collection_delimiter = text_file_desc.collection_delim.front();
     _mapkey_delimiter = text_file_desc.mapkey_delim.front();
 
-    // delimiters will not be empty
-    DCHECK(!_field_delimiter.empty());
-    DCHECK(!_record_delimiter.empty());
-    DCHECK(!_collection_delimiter.empty());
-    DCHECK(!_mapkey_delimiter.empty());
     return Status::OK();
 }
 
@@ -166,8 +173,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     csv::Converter::Options options;
     // Use to custom Hive array format
     options.array_format_type = csv::ArrayFormatType::kHive;
-    options.array_hive_collection_delimiter = _collection_delimiter.front();
-    options.array_hive_mapkey_delimiter = _mapkey_delimiter.front();
+    options.array_hive_collection_delimiter = _collection_delimiter;
+    options.array_hive_mapkey_delimiter = _mapkey_delimiter;
     options.array_hive_nested_level = 1;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
