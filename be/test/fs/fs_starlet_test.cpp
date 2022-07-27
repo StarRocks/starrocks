@@ -45,7 +45,7 @@ public:
         (void)g_worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
-        auto fs = new_fs_starlet();
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
         fs->delete_dir_recursive(StarletPath("/"));
     }
     void TearDown() override {
@@ -101,7 +101,7 @@ TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
 
 TEST_P(StarletFileSystemTest, test_write_and_read) {
     auto uri = StarletPath("test1");
-    auto fs = new_fs_starlet();
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
@@ -122,7 +122,7 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
 }
 
 TEST_P(StarletFileSystemTest, test_directory) {
-    auto fs = new_fs_starlet();
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
     bool created = false;
 
     //
@@ -242,7 +242,7 @@ TEST_P(StarletFileSystemTest, test_directory) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
-    auto fs = new_fs_starlet();
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {
@@ -285,7 +285,7 @@ TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {
-    auto fs = new_fs_starlet();
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
 
