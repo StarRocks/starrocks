@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -32,6 +33,17 @@ import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW PROC statement. Used to show proc information, only admin can use.
 public class ShowProcStmt extends ShowStmt {
+
+    public static final ImmutableSet<String> needForwardPathRoot;
+    static {
+        needForwardPathRoot = new ImmutableSet.Builder<String>()
+            .add("backends")
+            .add("cluster_balance")
+            .add("routine_loads")
+            .add("transactions")
+            .build();
+    }
+
     private String path;
     private ProcNodeInterface node;
 
@@ -80,6 +92,13 @@ public class ShowProcStmt extends ShowStmt {
         if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
             return RedirectStatus.FORWARD_NO_SYNC;
         } else {
+            if (path.equals("/") || !path.contains("/")) {
+                return RedirectStatus.NO_FORWARD;
+            }
+            String[] pathGroup = path.split("/");
+            if (needForwardPathRoot.contains(pathGroup[1])) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            }
             return RedirectStatus.NO_FORWARD;
         }
     }
