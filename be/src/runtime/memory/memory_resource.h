@@ -9,12 +9,12 @@ namespace starrocks {
 // memory resource provide for PMR
 //
 // usage:
-// char buffer[4096];
+// char buffer[1024];
 // stack_memory_resource mr(buffer, sizeof(buffer));
-// std::pmr::vector<int> vec;
-// vec.resize(4096); // no any heap allocate
+// std::pmr::vector<int> vec(&mr);
+// vec.resize(1024/sizeof(int)); // no any heap allocate
 // vec.resize(8192); // allocate from heap
-class stack_memory_resource : public std::pmr::memory_resource {
+class stack_memory_resource final : public std::pmr::memory_resource {
 public:
     stack_memory_resource(void* addr, size_t sz) : stack_memory_resource(addr, sz, std::pmr::get_default_resource()) {}
     stack_memory_resource(void* addr, size_t sz, std::pmr::memory_resource* upstream)
