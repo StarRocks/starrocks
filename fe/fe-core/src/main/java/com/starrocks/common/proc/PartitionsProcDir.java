@@ -52,6 +52,8 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -65,6 +67,8 @@ import java.util.stream.Collectors;
  * show [temp] partitions' detail info within a table
  */
 public class PartitionsProcDir implements ProcDirInterface {
+    private static final Logger LOG = LogManager.getLogger(PartitionsProcDir.class);
+
     private final PartitionType partitionType;
     private ImmutableList<String> titleNames;
     private Database db;
@@ -158,6 +162,8 @@ public class PartitionsProcDir implements ProcDirInterface {
 
     public ProcResult fetchResultByFilter(Map<String, Expr> filterMap, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
+        // for debug
+        LOG.info("enter fetchResultByFilter");
         List<List<Comparable>> partitionInfos = getPartitionInfos();
         List<List<Comparable>> filterPartitionInfos;
         //where
@@ -221,6 +227,8 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
+        // for debug
+        LOG.info("enter getPartitionInfos");
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(olapTable);
         Preconditions.checkState(olapTable.isNativeTable());
@@ -243,6 +251,9 @@ public class PartitionsProcDir implements ProcDirInterface {
                         isTempPartition ? olapTable.getTempPartitions() : olapTable.getPartitions();
                 partitionIds = partitions.stream().map(Partition::getId).collect(Collectors.toList());
             }
+
+            // for debug
+            LOG.info("partitionIds is {}", partitionIds);
 
             Joiner joiner = Joiner.on(", ");
             for (Long partitionId : partitionIds) {
