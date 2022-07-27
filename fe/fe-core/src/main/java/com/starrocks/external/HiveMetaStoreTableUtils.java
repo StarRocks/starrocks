@@ -145,9 +145,6 @@ public class HiveMetaStoreTableUtils {
                         primitiveType == PrimitiveType.VARCHAR;
             case "BOOLEAN":
                 return primitiveType == PrimitiveType.BOOLEAN;
-            case "BINARY":
-                // for BINARY type, we transfer it to UNKNOWN_TYPE
-                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
             case "ARRAY":
                 if (!type.isArrayType()) {
                     return false;
@@ -155,7 +152,8 @@ public class HiveMetaStoreTableUtils {
                 return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
                         ((ArrayType) type).getItemType());
             default:
-                return false;
+                // for BINARY and other types, we transfer it to UNKNOWN_TYPE
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
     }
 
@@ -202,19 +200,14 @@ public class HiveMetaStoreTableUtils {
             case "BOOLEAN":
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
-            case "BINARY":
-            case "MAP":
-            case "STRUCT":
-            case "UNIONTYPE":
-                primitiveType = PrimitiveType.UNKNOWN_TYPE;
-                break;
             case "ARRAY":
                 Type type = Utils.convertToArrayType(hiveType);
                 if (type.isArrayType()) {
                     return type;
                 }
             default:
-                throw new DdlException("hive table column type [" + typeUpperCase + "] transform failed.");
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
+                break;
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
