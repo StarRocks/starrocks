@@ -124,6 +124,7 @@ statement
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
+    | showBrokerStatement                                                                   #showBroker
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -661,6 +662,10 @@ showCharsetStatement
 
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
+    ;
+
+showBrokerStatement
+    : SHOW BROKER
     ;
 
 varType
