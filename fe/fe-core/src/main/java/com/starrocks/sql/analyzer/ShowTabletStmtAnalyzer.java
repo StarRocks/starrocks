@@ -13,12 +13,10 @@ import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Replica;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
@@ -48,11 +46,6 @@ public class ShowTabletStmtAnalyzer {
             boolean isShowSingleTablet = statement.isShowSingleTablet();
             if (!isShowSingleTablet && Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();
-            } else {
-                String catalog = context.getCurrentCatalog();
-                if (CatalogMgr.isInternalCatalog(catalog)) {
-                    dbName = ClusterNamespace.getFullName(dbName);
-                }
             }
             statement.setDbName(dbName);
 
