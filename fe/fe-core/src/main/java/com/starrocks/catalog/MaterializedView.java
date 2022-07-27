@@ -8,6 +8,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
@@ -16,6 +17,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -31,21 +33,97 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         ASYNC
     }
 
+    public static class BasePartitionInfo {
+
+        @SerializedName(value = "id")
+        private long id;
+
+        @SerializedName(value = "version")
+        private long version;
+
+        public BasePartitionInfo(long id, long version) {
+            this.id = id;
+            this.version = version;
+        }
+
+        public long getId() {
+            return id;
+        }
+
+        public void setId(long id) {
+            this.id = id;
+        }
+
+        public long getVersion() {
+            return version;
+        }
+
+        public void setVersion(long version) {
+            this.version = version;
+        }
+    }
+
     public static class AsyncRefreshContext {
-        // base table id -> (partitionid -> visible version)
-        @SerializedName(value = "baseTableVisibleVersionMap")
-        public Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
+        // base table id -> (partition name -> partition info (id, version))
+        // partition id maybe changed after insert overwrite, so use partition name as key.
+        // partition id which in BasePartitionInfo can be used to check partition is changed
+        @SerializedName("baseTableVisibleVersionMap")
+        private Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
+
+        @SerializedName(value = "defineStartTime")
+        private boolean defineStartTime;
+
+        @SerializedName(value = "starTime")
+        private long startTime;
+
+        @SerializedName(value = "step")
+        private long step;
+
+        @SerializedName(value = "timeUnit")
+        private String timeUnit;
 
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newHashMap();
+            this.defineStartTime = false;
+            this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
+            this.step = 0;
+            this.timeUnit = null;
         }
 
-        public AsyncRefreshContext(Map<Long, Map<Long, Long>> baseTableVisibleVersionMap) {
-            this.baseTableVisibleVersionMap = baseTableVisibleVersionMap;
+        public Map<Long, Map<String, BasePartitionInfo>> getBaseTableVisibleVersionMap() {
+            return baseTableVisibleVersionMap;
         }
 
-        Map<Long, Long> getPartitionVisibleVersionMapForTable(long tableId) {
-            return baseTableVisibleVersionMap.get(tableId);
+        public boolean isDefineStartTime() {
+            return defineStartTime;
+        }
+
+        public void setDefineStartTime(boolean defineStartTime) {
+            this.defineStartTime = defineStartTime;
+        }
+
+        public long getStartTime() {
+            return startTime;
+        }
+
+        public void setStartTime(long startTime) {
+            this.startTime = startTime;
+        }
+
+        public long getStep() {
+            return step;
+        }
+
+        public void setStep(long step) {
+            this.step = step;
+        }
+
+        public String getTimeUnit() {
+            return timeUnit;
+        }
+
+        public void setTimeUnit(String timeUnit) {
+            this.timeUnit = timeUnit;
         }
     }
 
