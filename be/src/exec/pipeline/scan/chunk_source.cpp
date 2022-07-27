@@ -76,16 +76,13 @@ std::pair<Status, size_t> ChunkSource::buffer_next_batch_chunks_blocking(Runtime
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
-        if (running_wg != nullptr) {
-            if (time_spent >= YIELD_MAX_TIME_SPENT) {
-                break;
-            }
+        if (time_spent >= YIELD_MAX_TIME_SPENT) {
+            break;
+        }
 
-            if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-                workgroup::WorkGroupManager::instance()->should_yield_scan_worker(_executor_type, worker_id,
-                                                                                  running_wg)) {
-                break;
-            }
+        if (running_wg != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            workgroup::WorkGroupManager::instance()->should_yield_scan_worker(_executor_type, worker_id, running_wg)) {
+            break;
         }
     }
 

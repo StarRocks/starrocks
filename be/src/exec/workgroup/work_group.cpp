@@ -91,7 +91,7 @@ void WorkGroup::init() {
     _mem_tracker = std::make_shared<starrocks::MemTracker>(_memory_limit_bytes, _name,
                                                            ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_queue = std::make_unique<pipeline::QuerySharedDriverQueueWithoutLock>();
-    _scan_task_queue = std::make_unique<FifoScanTaskQueue>();
+    _scan_task_queue = std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size);
 }
 
 std::string WorkGroup::to_string() const {
