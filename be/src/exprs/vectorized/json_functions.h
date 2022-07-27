@@ -109,6 +109,13 @@ public:
 
     /**
      * @param: [json_string, tagged_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: BinaryColumn
+     */
+    DEFINE_VECTORIZED_FN(get_json_object);
+
+    /**
+     * @param: [json_string, tagged_value]
      * @paramType: [JsonColumn, BinaryColumn]
      * @return: Int32Column
      */

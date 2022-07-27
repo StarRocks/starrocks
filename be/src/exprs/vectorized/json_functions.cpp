@@ -224,6 +224,14 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
     return _json_string_unescaped(context, Columns{jsons});
 }
 
+ColumnPtr JsonFunctions::get_json_object(FunctionContext* context, const Columns& columns) {
+    auto jsons = _string_json(context, columns);
+    auto paths = columns[1];
+
+    jsons = json_query(context, Columns{jsons, paths});
+    return _json_string_unescaped(context, Columns{jsons});
+}
+
 ColumnPtr JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
     auto jsons = json_query(context, columns);
     return _json_int(context, Columns{jsons});
