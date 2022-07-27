@@ -2,14 +2,9 @@
 
 package com.starrocks.statistic;
 
-import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -77,36 +72,14 @@ public class StatisticSQLBuilder {
         return build(context, QUERY_SAMPLE_STATISTIC_TEMPLATE);
     }
 
-    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<String> columnNames) {
-        Table table = null;
-        if (dbId == null) {
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
-            for (Long id : dbIds) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(id);
-                table = db.getTable(tableId);
-                if (table != null) {
-                    break;
-                }
-            }
-        } else {
-            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
-            table = database.getTable(tableId);
-        }
-        Preconditions.checkState(table != null);
-
-        List<Type> colTypes = Lists.newArrayList();
-        for (String colName : columnNames) {
-            Column column = table.getColumn(colName);
-            colTypes.add(column.getType());
-        }
-
+    public static String buildQueryFullStatisticsSQL(Long dbId, Long tableId, List<Column> columns) {
         List<String> querySQL = new ArrayList<>();
-        for (int i = 0; i < columnNames.size(); ++i) {
+        for (Column column : columns) {
             VelocityContext context = new VelocityContext();
             context.put("updateTime", "now()");
 
-            context.put("type", colTypes.get(i).toSql());
-            context.put("predicate", "table_id = " + tableId + " and column_name = \"" + columnNames.get(i) + "\"");
+            context.put("type", column.getType().toSql());
+            context.put("predicate", "table_id = " + tableId + " and column_name = \"" + column.getName() + "\"");
             querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
         }
 
