@@ -20,7 +20,7 @@ class ScanOperator : public SourceOperator {
 public:
     static constexpr int MAX_IO_TASKS_PER_OP = 4;
 
-    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+    ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
                  ChunkBufferLimiter* buffer_limiter);
 
     ~ScanOperator() override;
@@ -68,6 +68,8 @@ private:
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
     void _merge_chunk_source_profiles();
+    size_t _buffer_unplug_threshold() const;
+    size_t _num_buffered_chunks() const;
 
     inline void _set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
@@ -97,11 +99,14 @@ protected:
 private:
     const size_t _buffer_size = config::pipeline_io_buffer_size;
 
+    const int32_t _dop;
     int32_t _io_task_retry_cnt = 0;
     PriorityThreadPool* _io_threads = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
+    mutable bool _unpluging = false;
+
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;
     // we should hold a weak ptr because query context may be released before running io task
@@ -119,6 +124,7 @@ private:
     // The number of morsels picked up by this scan operator.
     // A tablet may be divided into multiple morsels.
     RuntimeProfile::Counter* _morsels_counter = nullptr;
+    RuntimeProfile::Counter* _submit_task_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

@@ -30,8 +30,8 @@ public:
 
 class ConnectorScanOperator final : public ScanOperator {
 public:
-    ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                          ChunkBufferLimiter* buffer_limiter);
+    ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                          ScanNode* scan_node, ChunkBufferLimiter* buffer_limiter);
 
     ~ConnectorScanOperator() override = default;
 
