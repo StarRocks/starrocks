@@ -142,7 +142,31 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     int32_t schema_hash = request.tablet_schema.schema_hash;
     LOG(INFO) << "Creating tablet " << tablet_id;
 
-    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
+    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
+    std::unique_lock<std::shared_mutex> base_wlock;
+
+    if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
+        int shard_idx = _get_tablets_shard_idx(tablet_id);
+        int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
+
+        if (shard_idx == base_shard_idx) {
+            // do nothing
+        } else {
+            std::unique_lock tmp_wlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
+            base_wlock = std::move(tmp_wlock);
+
+            if (shard_idx < base_shard_idx) {
+                wlock.lock();
+                base_wlock.lock();
+            } else {
+                base_wlock.lock();
+                wlock.lock();
+            }
+        }
+    } else {
+        wlock.lock();
+    }
+
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, true, nullptr);
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
@@ -539,7 +563,7 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
     // reach here means do not has enough tablets to pick in current shard
     _shard_visited_tablet_ids.clear();
-    DCHECK(_tablets_shards.size() > 0);
+    DCHECK(!_tablets_shards.empty());
     _cur_shard = (_cur_shard + 1) % _tablets_shards.size();
     if (_cur_shard == 0) {
         // the next shard is 0, then all tablets has been visited
