@@ -715,6 +715,9 @@ CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 
+CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
+CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
+
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
 // default: 16MB

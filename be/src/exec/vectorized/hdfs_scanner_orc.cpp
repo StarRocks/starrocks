@@ -17,7 +17,12 @@ class ORCHdfsFileStream : public orc::InputStream {
 public:
     // |file| must outlive ORCHdfsFileStream
     ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
-            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {}
+            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
+        SharedBufferedInputStream::CoalesceOptions options = {
+                .max_dist_size = config::io_coalesce_read_max_distance_size,
+                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+        _buffer_stream.set_coalesce_options(options);
+    }
 
     ~ORCHdfsFileStream() override = default;
 
