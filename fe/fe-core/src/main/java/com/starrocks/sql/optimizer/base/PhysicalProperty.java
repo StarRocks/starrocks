@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.GroupExpression;
 
 // The required physical property
 public interface PhysicalProperty extends Property {
-    boolean isSatisfy(PhysicalProperty other);
+    boolean isSatisfy(PhysicalProperty other, PropertyInfo propertyInfo);
 
     // append enforcers to the child
     GroupExpression appendEnforcers(Group child);

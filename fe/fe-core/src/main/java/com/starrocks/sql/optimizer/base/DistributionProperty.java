@@ -41,9 +41,9 @@ public class DistributionProperty implements PhysicalProperty {
     }
 
     @Override
-    public boolean isSatisfy(PhysicalProperty other) {
+    public boolean isSatisfy(PhysicalProperty other, PropertyInfo propertyInfo) {
         DistributionSpec otherSpec = ((DistributionProperty) other).getSpec();
-        return spec.isSatisfy(otherSpec);
+        return spec.isSatisfy(otherSpec, propertyInfo);
     }
 
     public GroupExpression appendEnforcers(Group child) {

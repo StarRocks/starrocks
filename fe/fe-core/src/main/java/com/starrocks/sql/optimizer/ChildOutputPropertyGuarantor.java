@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.PropertyInfo;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
@@ -62,7 +63,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
     public boolean canColocateJoin(HashDistributionSpec leftLocalDistributionSpec,
                                    HashDistributionSpec rightLocalDistributionSpec,
-                                   List<Integer> leftShuffleColumns, List<Integer> rightShuffleColumns) {
+                                   List<Integer> leftShuffleColumns, List<Integer> rightShuffleColumns,
+                                   PropertyInfo leftInfo, PropertyInfo rightInfo) {
         HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
         HashDistributionDesc rightLocalDistributionDesc = rightLocalDistributionSpec.getHashDistributionDesc();
 
@@ -70,17 +72,14 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             return false;
         }
 
-        DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
-        DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
-
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
-        long leftTableId = leftInfo.tableId;
-        long rightTableId = rightInfo.tableId;
+        long leftTableId = leftInfo.getTableId();
+        long rightTableId = rightInfo.getTableId();
 
         // join self
         if (leftTableId == rightTableId && !colocateIndex.isColocateTable(leftTableId)) {
             if (!leftInfo.isSinglePartition() || !rightInfo.isSinglePartition() ||
-                    !leftInfo.partitionIds.equals(rightInfo.partitionIds)) {
+                    !leftInfo.getPartitionIds().equals(rightInfo.getPartitionIds())) {
                 return false;
             }
         } else {
@@ -114,17 +113,6 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return true;
     }
 
-    private void enforceChildBroadcastDistribution(GroupExpression child, PhysicalPropertySet childOutputProperty,
-                                                   int childIndex) {
-        DistributionSpec enforceDistributionSpec = DistributionSpec.createReplicatedDistributionSpec();
-
-        enforceChildDistribution(enforceDistributionSpec, child, childOutputProperty);
-
-        PhysicalPropertySet newChildInputProperty = createPropertySetByDistribution(enforceDistributionSpec);
-        requiredChildrenProperties.set(childIndex, newChildInputProperty);
-        childrenOutputProperties.set(childIndex, newChildInputProperty);
-    }
-
     // enforce child SHUFFLE type distribution
     private void enforceChildShuffleDistribution(List<Integer> shuffleColumns, GroupExpression child,
                                                  PhysicalPropertySet childOutputProperty, int childIndex) {
@@ -140,7 +128,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
     }
 
     private void transToBucketShuffleJoin(HashDistributionSpec leftLocalDistributionSpec,
-                                          List<Integer> leftShuffleColumns, List<Integer> rightShuffleColumns) {
+                                          List<Integer> leftShuffleColumns, List<Integer> rightShuffleColumns,
+                                          PropertyInfo propertyInfo) {
         List<Integer> bucketShuffleColumns = Lists.newArrayList();
         HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
         for (int leftScanColumn : leftLocalDistributionDesc.getColumns()) {
@@ -160,7 +149,6 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                  *
                  * So we can get A.a's equivalent column C.c from joinEquivalentColumns
                  */
-                DistributionSpec.PropertyInfo propertyInfo = leftLocalDistributionSpec.getPropertyInfo();
                 int[] joinEquivalentColumnsColumns = propertyInfo.getEquivalentJoinOnColumns(leftScanColumn);
                 // TODO(hcf) Is the lookup strategy right?
                 for (int alternativeLeftScanColumn : joinEquivalentColumnsColumns) {
@@ -315,15 +303,17 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
             if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
-                if ("BUCKET".equalsIgnoreCase(hint) ||
-                        !canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
-                                rightShuffleColumns)) {
-                    transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+                if ("BUCKET".equalsIgnoreCase(hint) || !canColocateJoin(leftDistributionSpec, rightDistributionSpec,
+                        leftShuffleColumns, rightShuffleColumns,
+                        leftChildOutputProperty.getPropertyInfo(), rightChildOutputProperty.getPropertyInfo())) {
+                    transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
+                            leftChildOutputProperty.getPropertyInfo());
                 }
                 return visitOperator(node, context);
             } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isShuffle()) {
                 // bucket join
-                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
+                        leftChildOutputProperty.getPropertyInfo());
                 return visitOperator(node, context);
             } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
                 // coordinator can not bucket shuffle data from left to right, so we need to adjust to shuffle join

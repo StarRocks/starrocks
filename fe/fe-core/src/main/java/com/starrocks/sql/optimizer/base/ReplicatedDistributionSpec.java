@@ -9,7 +9,7 @@ public class ReplicatedDistributionSpec extends DistributionSpec {
         super(DistributionType.BROADCAST);
     }
 
-    public boolean isSatisfy(DistributionSpec spec) {
+    public boolean isSatisfy(DistributionSpec spec, PropertyInfo propertyInfo) {
         if (spec.type.equals(DistributionType.ANY)) {
             return true;
         }

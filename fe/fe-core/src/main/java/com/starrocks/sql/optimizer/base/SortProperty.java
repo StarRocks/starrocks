@@ -32,7 +32,7 @@ public class SortProperty implements PhysicalProperty {
     }
 
     @Override
-    public boolean isSatisfy(PhysicalProperty other) {
+    public boolean isSatisfy(PhysicalProperty other, PropertyInfo propertyInfo) {
         final OrderSpec rhs = ((SortProperty) other).getSpec();
         return spec.isSatisfy(rhs);
     }

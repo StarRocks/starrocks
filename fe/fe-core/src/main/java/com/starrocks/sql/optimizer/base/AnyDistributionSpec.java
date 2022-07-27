@@ -9,7 +9,7 @@ public class AnyDistributionSpec extends DistributionSpec {
         super(DistributionType.ANY);
     }
 
-    public boolean isSatisfy(DistributionSpec spec) {
+    public boolean isSatisfy(DistributionSpec spec, PropertyInfo propertyInfo) {
         return spec.type.equals(DistributionType.ANY);
     }
 

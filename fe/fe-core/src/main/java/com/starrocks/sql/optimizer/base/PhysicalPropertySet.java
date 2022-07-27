@@ -10,6 +10,7 @@ import java.util.Objects;
 public class PhysicalPropertySet {
     private SortProperty sortProperty;
     private DistributionProperty distributionProperty;
+    private PropertyInfo propertyInfo;
 
     public static final PhysicalPropertySet EMPTY = new PhysicalPropertySet();
 
@@ -30,6 +31,14 @@ public class PhysicalPropertySet {
         this.sortProperty = sortProperty;
     }
 
+    public PropertyInfo getPropertyInfo() {
+        return propertyInfo;
+    }
+
+    public void setPropertyInfo(PropertyInfo propertyInfo) {
+        this.propertyInfo = propertyInfo;
+    }
+
     public SortProperty getSortProperty() {
         return sortProperty;
     }
@@ -47,8 +56,8 @@ public class PhysicalPropertySet {
     }
 
     public boolean isSatisfy(PhysicalPropertySet other) {
-        return sortProperty.isSatisfy(other.sortProperty) &&
-                distributionProperty.isSatisfy(other.distributionProperty);
+        return sortProperty.isSatisfy(other.sortProperty, propertyInfo) &&
+                distributionProperty.isSatisfy(other.distributionProperty, propertyInfo);
     }
 
     public PhysicalPropertySet copy() {

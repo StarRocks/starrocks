@@ -17,16 +17,11 @@ public class HashDistributionSpec extends DistributionSpec {
         this.hashDistributionDesc = distributionDesc;
     }
 
-    public HashDistributionSpec(HashDistributionDesc distributionDesc, PropertyInfo propertyInfo) {
-        super(DistributionType.SHUFFLE, propertyInfo);
-        this.hashDistributionDesc = distributionDesc;
-    }
-
     public HashDistributionDesc getHashDistributionDesc() {
         return this.hashDistributionDesc;
     }
 
-    private boolean isJoinEqColumnsCompatible(HashDistributionSpec requiredSpec) {
+    private boolean isJoinEqColumnsCompatible(HashDistributionSpec requiredSpec, PropertyInfo propertyInfo) {
         // keep same logical with `isSatisfy` method of HashDistributionDesc
         List<Integer> requiredShuffleColumns = requiredSpec.getShuffleColumns();
         List<Integer> shuffleColumns = getShuffleColumns();
@@ -42,10 +37,10 @@ public class HashDistributionSpec extends DistributionSpec {
 
         if (thisShuffleType == HashDistributionDesc.SourceType.SHUFFLE_AGG &&
                 requiredShuffleType == HashDistributionDesc.SourceType.SHUFFLE_JOIN) {
-            return satisfySameColumns(requiredShuffleColumns, shuffleColumns);
+            return satisfySameColumns(requiredShuffleColumns, shuffleColumns, propertyInfo);
         } else if (thisShuffleType == HashDistributionDesc.SourceType.SHUFFLE_JOIN &&
                 requiredShuffleType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
-            return satisfyContainAll(requiredShuffleColumns, shuffleColumns);
+            return satisfyContainAll(requiredShuffleColumns, shuffleColumns, propertyInfo);
         } else if (!thisShuffleType.equals(requiredShuffleType) &&
                 thisShuffleType != HashDistributionDesc.SourceType.LOCAL) {
             return false;
@@ -54,22 +49,24 @@ public class HashDistributionSpec extends DistributionSpec {
         // different columns size is allowed if this sourceType is LOCAL or SHUFFLE_AGG
         if (HashDistributionDesc.SourceType.LOCAL.equals(thisShuffleType) ||
                 HashDistributionDesc.SourceType.SHUFFLE_AGG.equals(thisShuffleType)) {
-            return satisfyContainAll(requiredShuffleColumns, shuffleColumns);
+            return satisfyContainAll(requiredShuffleColumns, shuffleColumns, propertyInfo);
         }
 
-        return satisfySameColumns(requiredShuffleColumns, shuffleColumns);
+        return satisfySameColumns(requiredShuffleColumns, shuffleColumns, propertyInfo);
     }
 
-    private boolean satisfyContainAll(List<Integer> requiredShuffleColumns, List<Integer> shuffleColumns) {
+    private boolean satisfyContainAll(List<Integer> requiredShuffleColumns, List<Integer> shuffleColumns,
+                                      PropertyInfo propertyInfo) {
         // Minority meets majority
         List<ColumnRefSet> requiredEquivalentColumns = requiredShuffleColumns.stream()
-                .map(c -> propertyInfo.getEquivalentColumns(c)).collect(Collectors.toList());
+                .map(propertyInfo::getEquivalentColumns).collect(Collectors.toList());
         List<ColumnRefSet> shuffleEquivalentColumns = shuffleColumns.stream()
-                .map(s -> propertyInfo.getEquivalentColumns(s)).collect(Collectors.toList());
+                .map(propertyInfo::getEquivalentColumns).collect(Collectors.toList());
         return requiredEquivalentColumns.containsAll(shuffleEquivalentColumns);
     }
 
-    private boolean satisfySameColumns(List<Integer> requiredShuffleColumns, List<Integer> shuffleColumns) {
+    private boolean satisfySameColumns(List<Integer> requiredShuffleColumns, List<Integer> shuffleColumns,
+                                       PropertyInfo propertyInfo) {
         // must keep same
         if (requiredShuffleColumns.size() != shuffleColumns.size()) {
             return false;
@@ -98,7 +95,7 @@ public class HashDistributionSpec extends DistributionSpec {
         return true;
     }
 
-    public boolean isSatisfy(DistributionSpec spec) {
+    public boolean isSatisfy(DistributionSpec spec, PropertyInfo propertyInfo) {
         if (spec.type.equals(DistributionType.ANY)) {
             return true;
         }
@@ -114,11 +111,12 @@ public class HashDistributionSpec extends DistributionSpec {
         // check shuffle_local PropertyInfo
         if (thisSourceType == HashDistributionDesc.SourceType.LOCAL) {
             ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
-            long tableId = propertyInfo.tableId;
+            long tableId = propertyInfo.getTableId();
             // Disable use colocate/bucket join when table with empty partition
-            boolean satisfyColocate = propertyInfo.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
-                    !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
-                    !propertyInfo.isEmptyPartition());
+            boolean satisfyColocate =
+                    propertyInfo.isSinglePartition() || (colocateIndex.isColocateTable(tableId) &&
+                            !colocateIndex.isGroupUnstable(colocateIndex.getGroup(tableId)) &&
+                            !propertyInfo.isEmptyPartition());
             if (!satisfyColocate) {
                 return false;
             }
@@ -130,11 +128,12 @@ public class HashDistributionSpec extends DistributionSpec {
                         thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_JOIN)) {
             ColumnRefSet otherColumns = new ColumnRefSet();
             other.hashDistributionDesc.getColumns().forEach(otherColumns::union);
-            if (propertyInfo.nullableColumns.isIntersect(otherColumns)) {
+            if (propertyInfo.getNullableColumns().isIntersect(otherColumns)) {
                 return false;
             }
         }
-        return hashDistributionDesc.isSatisfy(other.hashDistributionDesc) || isJoinEqColumnsCompatible(other);
+        return hashDistributionDesc.isSatisfy(other.hashDistributionDesc) ||
+                isJoinEqColumnsCompatible(other, propertyInfo);
     }
 
     public List<Integer> getShuffleColumns() {

@@ -387,10 +387,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
     private PhysicalPropertySet enforceProperty(PhysicalPropertySet outputProperty,
                                                 PhysicalPropertySet requiredProperty) {
-        boolean satisfyOrderProperty =
-                outputProperty.getSortProperty().isSatisfy(requiredProperty.getSortProperty());
-        boolean satisfyDistributionProperty =
-                outputProperty.getDistributionProperty().isSatisfy(requiredProperty.getDistributionProperty());
+        boolean satisfyOrderProperty = outputProperty.getSortProperty()
+                .isSatisfy(requiredProperty.getSortProperty(), outputProperty.getPropertyInfo());
+        boolean satisfyDistributionProperty = outputProperty.getDistributionProperty()
+                .isSatisfy(requiredProperty.getDistributionProperty(), outputProperty.getPropertyInfo());
 
         PhysicalPropertySet enforcedProperty = null;
         if (!satisfyDistributionProperty && satisfyOrderProperty) {
