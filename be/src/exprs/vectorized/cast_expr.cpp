@@ -39,44 +39,70 @@ namespace starrocks::vectorized {
        << " to " << type_to_string(TOTYPE) << " failed";                  \
     throw std::runtime_error(ss.str())
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException = false>
 ColumnPtr cast_fn(ColumnPtr& column);
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                      \
-    template <>                                                   \
-    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE>(ColumnPtr & column) { \
-        return column->clone();                                   \
+#define SELF_CAST(FROM_TYPE)                                             \
+    template <>                                                          \
+    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE, false>(ColumnPtr & column) { \
+        return column->clone();                                          \
+    }                                                                    \
+    template <>                                                          \
+    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE, true>(ColumnPtr & column) {  \
+        return column->clone();                                          \
     }
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) {                                          \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) {                                   \
+        return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
+    }                                                                                                    \
+    template <>                                                                                          \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {                                    \
         return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
     }
 
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                           \
     template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) {                                                       \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) {                                                \
         if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
                       std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                     column);                                                                                          \
         }                                                                                                             \
         return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);              \
+    }                                                                                                                 \
+    template <>                                                                                                       \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {                                                 \
+        if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
+                      std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
+            return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheckWithThrowException>::template evaluate<   \
+                    FROM_TYPE, TO_TYPE>(column);                                                                      \
+        }                                                                                                             \
+        return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);              \
     }
 
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                \
     template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) {                                                 \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) {                                          \
+        return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
+                column);                                                                                        \
+    }                                                                                                           \
+    template <>                                                                                                 \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {                                           \
         return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                 column);                                                                                        \
     }
 
-#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)   \
-    template <>                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE>(ColumnPtr & column) { \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE>(column);      \
+#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)          \
+    template <>                                                        \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) { \
+        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, false>(column);      \
+    }                                                                  \
+    template <>                                                        \
+    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {  \
+        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, true>(column);       \
     }
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
@@ -100,7 +126,7 @@ DEFINE_UNARY_FN_WITH_IMPL(TimeToNumber, value) {
     return timestamp::time_to_literal(value);
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_JSON> builder(viewer.size());
@@ -133,14 +159,21 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                 overflow = true;
             }
         } else {
-            THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
+            }
+            CHECK(false) << "not supported type " << FromType;
         }
         if (overflow || value.is_null()) {
-            if constexpr (FromType == TYPE_LARGEINT) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, LargeIntValue::to_string(viewer.value(row)));
-            } else {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+            if constexpr (AllowThrowException) {
+                if constexpr (FromType == TYPE_LARGEINT) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
+                                                             LargeIntValue::to_string(viewer.value(row)));
+                } else {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+                }
             }
+            builder.append_null();
         } else {
             builder.append(std::move(value));
         }
@@ -149,7 +182,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_JSON> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
@@ -179,12 +212,19 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 ok = res.ok();
                 cpp_value = ok ? res.value() : cpp_value;
             } else {
-                THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+                if constexpr (AllowThrowException) {
+                    THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+                }
+                CHECK(false) << "unreachable type " << ToType;
+                __builtin_unreachable();
             }
             if (ok) {
                 builder.append(cpp_value);
             } else {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
+                if constexpr (AllowThrowException) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
+                }
+                builder.append_null();
             }
         } else if constexpr (pt_is_binary<ToType>) {
             // if the json already a string value, get the string directly
@@ -194,18 +234,28 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 if (res.ok()) {
                     builder.append(res.value());
                 } else {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
+                    if constexpr (AllowThrowException) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
+                    }
+                    builder.append_null();
                 }
             } else {
                 auto res = json->to_string();
                 if (res.ok()) {
                     builder.append(res.value());
                 } else {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
+                    if constexpr (AllowThrowException) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string().value_or(""));
+                    }
+                    builder.append_null();
                 }
             }
         } else {
-            THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+            }
+            DCHECK(false) << "not supported type " << ToType;
+            builder.append_null();
         }
     }
 
@@ -226,8 +276,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_from_json_fn);
 
-template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_BOOLEAN> builder(viewer.size());
 
@@ -240,8 +290,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
-                if (result != StringParser::PARSE_SUCCESS) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
+                if constexpr (AllowThrowException) {
+                    if (result != StringParser::PARSE_SUCCESS) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
+                    }
                 }
                 builder.append(b, result != StringParser::PARSE_SUCCESS);
             } else {
@@ -260,8 +312,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
-                if (result != StringParser::PARSE_SUCCESS) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
+                if constexpr (AllowThrowException) {
+                    if (result != StringParser::PARSE_SUCCESS) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_BOOLEAN, value.to_string());
+                    }
                 }
                 builder.append(b, result != StringParser::PARSE_SUCCESS);
             } else {
@@ -272,9 +326,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_BOOLEAN>(ColumnPtr& column) {
 
     return builder.build(column->is_constant());
 }
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_BOOLEAN, cast_from_string_to_bool_fn);
 
-template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_HLL> builder(viewer.size());
     for (int row = 0; row < viewer.size(); ++row) {
@@ -285,7 +340,11 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         if (!HyperLogLog::is_valid(value)) {
-            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_HLL, value.to_string());
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_HLL, value.to_string());
+            } else {
+                builder.append_null();
+            }
         } else {
             HyperLogLog hll;
             hll.deserialize(value);
@@ -295,12 +354,23 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_HLL>(ColumnPtr& column) {
 
     return builder.build(column->is_constant());
 }
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
+
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
     return value;
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
+    // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
+    // finite value y where y < x.
+    // This is different from std::numeric_limits<T>::min() for floating-point types.
+    // So we use lowest instead of min for lower bound of all types.
+    return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
+           (value > (Type)std::numeric_limits<ResultType>::max());
+}
+
+DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
     // finite value y where y < x.
     // This is different from std::numeric_limits<T>::min() for floating-point types.
@@ -331,62 +401,71 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToNumber, value) {
     return value.to_timestamp_literal();
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     StringParser::ParseResult result;
-
     int sz = column.get()->size();
-
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(sz);
     }
-
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
         auto slice = input->get_slice(0);
         RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
         if (result != StringParser::PARSE_SUCCESS) {
-            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+            }
+            return ColumnHelper::create_const_null_column(sz);
         }
         return ColumnHelper::create_const_column<ToType>(r, sz);
     }
-
     auto res_data_column = RunTimeColumnType<ToType>::create();
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
-
     if (column->is_nullable()) {
         NullableColumn* input_column = down_cast<NullableColumn*>(column.get());
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
         BinaryColumn* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
-
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
                 res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
-                if (result != StringParser::PARSE_SUCCESS) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+                if constexpr (AllowThrowException) {
+                    if (result != StringParser::PARSE_SUCCESS) {
+                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+                    }
                 }
+                null_data[i] = (result != StringParser::PARSE_SUCCESS);
             }
         }
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
         NullColumnPtr null_column = NullColumn::create(sz);
+        auto& null_data = null_column->get_data();
         BinaryColumn* data_column = down_cast<BinaryColumn*>(column.get());
 
+        bool has_null = false;
         for (int i = 0; i < sz; ++i) {
             auto slice = data_column->get_slice(i);
             res_data[i] = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
-            if (result != StringParser::PARSE_SUCCESS) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+            null_data[i] = (result != StringParser::PARSE_SUCCESS);
+            if constexpr (AllowThrowException) {
+                if (result != StringParser::PARSE_SUCCESS) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
+                }
             }
+            has_null |= (result != StringParser::PARSE_SUCCESS);
         }
-        return res_data_column;
+        if (!has_null) {
+            return res_data_column;
+        }
+        return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     }
 }
 
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<ToType> builder(viewer.size());
@@ -403,11 +482,14 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         RunTimeCppType<ToType> r =
                 StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
 
-        if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
-            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, value.to_string());
+        bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
+        if constexpr (AllowThrowException) {
+            if (is_null) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, value.to_string());
+            }
         }
 
-        builder.append(r, false);
+        builder.append(r, is_null);
     }
 
     return builder.build(column->is_constant());
@@ -566,8 +648,8 @@ UNARY_FN_CAST(TYPE_TIME, TYPE_DECIMALV2, TimeToDecimal);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DECIMALV2, DateToDecimal);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DECIMALV2, TimestampToDecimal);
 
-template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_decimalv2_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DECIMALV2> builder(viewer.size());
 
@@ -577,8 +659,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
             DecimalV2Value v;
 
             bool ret = v.parse_from_str(value.data, value.size);
-            if (ret) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DECIMALV2, value.to_string());
+            if constexpr (AllowThrowException) {
+                if (ret) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DECIMALV2, value.to_string());
+                }
             }
             builder.append(v, ret);
         }
@@ -593,8 +677,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
             DecimalV2Value v;
 
             bool ret = v.parse_from_str(value.data, value.size);
-            if (ret) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DECIMALV2, value.to_string());
+            if constexpr (AllowThrowException) {
+                if (ret) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DECIMALV2, value.to_string());
+                }
             }
             builder.append(v, ret);
         }
@@ -602,9 +688,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DECIMALV2>(ColumnPtr& column) {
 
     return builder.build(column->is_constant());
 }
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DECIMALV2, cast_from_string_to_decimalv2_fn);
 
 // date
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 ColumnPtr cast_to_date_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_DATE> builder(viewer.size());
@@ -619,8 +706,10 @@ ColumnPtr cast_to_date_fn(ColumnPtr& column) {
         DateValue dv;
 
         bool ret = dv.from_date_literal_with_check((int64_t)value);
-        if (!ret) {
-            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
+        if constexpr (AllowThrowException) {
+            if (!ret) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
+            }
         }
         builder.append(dv, !ret);
     }
@@ -646,8 +735,8 @@ CUSTOMIZE_FN_CAST(TYPE_DECIMALV2, TYPE_DATE, cast_to_date_fn);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_DATE, TimestampToDate);
 // Time to date need rewrite CastExpr
 
-template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_date_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DATE> builder(viewer.size());
 
@@ -657,8 +746,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
             DateValue v;
 
             bool right = v.from_string(value.data, value.size);
-            if (!right) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATE, value.to_string());
+            if constexpr (AllowThrowException) {
+                if (!right) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATE, value.to_string());
+                }
             }
             builder.append(v, !right);
         }
@@ -673,17 +764,20 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATE>(ColumnPtr& column) {
             DateValue v;
 
             bool right = v.from_string(value.data, value.size);
-            if (!right) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATE, value.to_string());
+            if constexpr (AllowThrowException) {
+                if (!right) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATE, value.to_string());
+                }
             }
             builder.append(v, !right);
         }
     }
     return builder.build(column->is_constant());
 }
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATE, cast_from_string_to_date_fn);
 
 // datetime(timestamp)
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
     ColumnViewer<FromType> viewer(column);
     ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
@@ -698,8 +792,10 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
         TimestampValue tv;
 
         bool ret = tv.from_timestamp_literal_with_check((int64_t)value);
-        if (!ret) {
-            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
+        if constexpr (AllowThrowException) {
+            if (!ret) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
+            }
         }
         builder.append(tv, !ret);
     }
@@ -725,8 +821,8 @@ CUSTOMIZE_FN_CAST(TYPE_DECIMALV2, TYPE_DATETIME, cast_to_timestamp_fn);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DATETIME, DateToTimestmap);
 // Time to datetime need rewrite CastExpr
 
-template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     ColumnBuilder<TYPE_DATETIME> builder(viewer.size());
 
@@ -736,8 +832,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
             TimestampValue v;
 
             bool right = v.from_string(value.data, value.size);
-            if (!right) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
+            if constexpr (AllowThrowException) {
+                if (!right) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
+                }
             }
             builder.append(v, !right);
         }
@@ -752,8 +850,10 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
             TimestampValue v;
 
             bool right = v.from_string(value.data, value.size);
-            if (!right) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
+            if constexpr (AllowThrowException) {
+                if (!right) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_DATETIME, value.to_string());
+                }
             }
             builder.append(v, !right);
         }
@@ -761,6 +861,7 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_DATETIME>(ColumnPtr& column) {
 
     return builder.build(column->is_constant());
 }
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DATETIME, cast_from_string_to_datetime_fn);
 
 // time
 DEFINE_UNARY_FN_WITH_IMPL(DatetimeToTime, value) {
@@ -795,8 +896,8 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_TIME, DatetimeToTime);
 
 SELF_CAST(TYPE_JSON);
 
-template <>
-ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
     auto size = column->size();
     ColumnBuilder<TYPE_TIME> builder(size);
     ColumnViewer<TYPE_VARCHAR> viewer_time(column);
@@ -823,7 +924,11 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
                     uint64_t int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        if constexpr (AllowThrowException) {
+                            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        }
+                        builder.append_null();
+                        continue;
                     } else {
                         hour = int_value;
                     }
@@ -831,7 +936,11 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_colon + 1), second_colon - first_colon - 1, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        if constexpr (AllowThrowException) {
+                            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        }
+                        builder.append_null();
+                        continue;
                     } else {
                         minute = int_value;
                     }
@@ -839,28 +948,43 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
                     int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(second_colon + 1), end_char - second_colon - 1, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
-                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        if constexpr (AllowThrowException) {
+                            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        }
+                        builder.append_null();
+                        continue;
                     } else {
                         second = int_value;
                     }
 
                     if (minute >= 60 || second >= 60) {
-                        THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        if constexpr (AllowThrowException) {
+                            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                        }
+                        builder.append_null();
+                        continue;
                     }
 
                     int64_t seconds = hour * 3600 + minute * 60 + second;
                     builder.append(seconds);
                 }
             } else {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                if constexpr (AllowThrowException) {
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+                }
+                builder.append_null();
             }
         } else {
-            THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_TIME, time.to_string());
+            }
+            builder.append_null();
         }
     }
 
     return builder.build(column->is_constant());
 }
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 
 #define DEFINE_CAST_CONSTRUCT(CLASS)             \
     CLASS(const TExprNode& node) : Expr(node) {} \
@@ -868,7 +992,7 @@ ColumnPtr cast_fn<TYPE_VARCHAR, TYPE_TIME>(ColumnPtr& column) {
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS(*this)); }
 
 // vectorized cast expr
-template <PrimitiveType FromType, PrimitiveType ToType>
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
@@ -887,9 +1011,9 @@ public:
             if constexpr (pt_is_decimal<FromType>) {
                 ColumnPtr double_column =
                         VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
-                result_column = cast_fn<TYPE_DOUBLE, TYPE_JSON>(double_column);
+                result_column = cast_fn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>(double_column);
             } else {
-                result_column = cast_fn<FromType, ToType>(column);
+                result_column = cast_fn<FromType, ToType, AllowThrowException>(column);
             }
         } else if constexpr (pt_is_decimal<FromType> && pt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalToDecimal<true>>::evaluate<FromType, ToType>(
@@ -900,7 +1024,7 @@ public:
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
-            result_column = cast_fn<FromType, ToType>(column);
+            result_column = cast_fn<FromType, ToType, AllowThrowException>(column);
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
@@ -930,9 +1054,9 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
 }
 
 // for time cast to date/datetime
-#define DEFINE_TIME_CAST_DATE_CLASS(TO_TYPE, IMPL)                                                              \
+#define DEFINE_TIME_CAST_DATE_CLASS(TO_TYPE, IMPL, ALLOWTHROWEXCEPTION)                                         \
     template <>                                                                                                 \
-    class VectorizedCastExpr<TYPE_TIME, TO_TYPE> final : public Expr {                                          \
+    class VectorizedCastExpr<TYPE_TIME, TO_TYPE, ALLOWTHROWEXCEPTION> final : public Expr {                     \
     public:                                                                                                     \
         DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);                                                              \
         Status prepare(RuntimeState* state, ExprContext* context) override {                                    \
@@ -970,8 +1094,10 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
         ColumnPtr _now;                                                                                         \
     };
 
-DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATE, timeToDate);
-DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATETIME, timeToDatetime);
+DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATE, timeToDate, true);
+DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATE, timeToDate, false);
+DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATETIME, timeToDatetime, true);
+DEFINE_TIME_CAST_DATE_CLASS(TYPE_DATETIME, timeToDatetime, false);
 
 /**
  * Cast float to string
@@ -1056,7 +1182,7 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
 /**
  * Resolve cast to string
  */
-template <PrimitiveType Type>
+template <PrimitiveType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
@@ -1090,7 +1216,7 @@ public:
         }
 
         if constexpr (Type == TYPE_JSON) {
-            return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR>(column);
+            return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR, AllowThrowException>(column);
         }
 
         return _evaluate_string(context, column);
@@ -1180,59 +1306,76 @@ private:
     }
 };
 
-#define CASE_FROM_TYPE(FROM_TYPE, TO_TYPE)                       \
-    case FROM_TYPE: {                                            \
-        return new VectorizedCastExpr<FROM_TYPE, TO_TYPE>(node); \
+#define CASE_FROM_TYPE(FROM_TYPE, TO_TYPE, ALLOWTHROWEXCEPTION)             \
+    case FROM_TYPE: {                                                       \
+        if (ALLOWTHROWEXCEPTION) {                                          \
+            return new VectorizedCastExpr<FROM_TYPE, TO_TYPE, true>(node);  \
+        } else {                                                            \
+            return new VectorizedCastExpr<FROM_TYPE, TO_TYPE, false>(node); \
+        }                                                                   \
     }
 
-#define SWITCH_ALL_FROM_TYPE(TO_TYPE)                                             \
+#define SWITCH_ALL_FROM_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION)                        \
     switch (from_type) {                                                          \
-        CASE_FROM_TYPE(TYPE_BOOLEAN, TO_TYPE);                                    \
-        CASE_FROM_TYPE(TYPE_TINYINT, TO_TYPE);                                    \
-        CASE_FROM_TYPE(TYPE_SMALLINT, TO_TYPE);                                   \
-        CASE_FROM_TYPE(TYPE_INT, TO_TYPE);                                        \
-        CASE_FROM_TYPE(TYPE_BIGINT, TO_TYPE);                                     \
-        CASE_FROM_TYPE(TYPE_LARGEINT, TO_TYPE);                                   \
-        CASE_FROM_TYPE(TYPE_FLOAT, TO_TYPE);                                      \
-        CASE_FROM_TYPE(TYPE_DOUBLE, TO_TYPE);                                     \
-        CASE_FROM_TYPE(TYPE_DECIMALV2, TO_TYPE);                                  \
-        CASE_FROM_TYPE(TYPE_TIME, TO_TYPE);                                       \
-        CASE_FROM_TYPE(TYPE_DATE, TO_TYPE);                                       \
-        CASE_FROM_TYPE(TYPE_DATETIME, TO_TYPE);                                   \
-        CASE_FROM_TYPE(TYPE_VARCHAR, TO_TYPE);                                    \
-        CASE_FROM_TYPE(TYPE_DECIMAL32, TO_TYPE);                                  \
-        CASE_FROM_TYPE(TYPE_DECIMAL64, TO_TYPE);                                  \
-        CASE_FROM_TYPE(TYPE_DECIMAL128, TO_TYPE);                                 \
+        CASE_FROM_TYPE(TYPE_BOOLEAN, TO_TYPE, ALLOWTHROWEXCEPTION);               \
+        CASE_FROM_TYPE(TYPE_TINYINT, TO_TYPE, ALLOWTHROWEXCEPTION);               \
+        CASE_FROM_TYPE(TYPE_SMALLINT, TO_TYPE, ALLOWTHROWEXCEPTION);              \
+        CASE_FROM_TYPE(TYPE_INT, TO_TYPE, ALLOWTHROWEXCEPTION);                   \
+        CASE_FROM_TYPE(TYPE_BIGINT, TO_TYPE, ALLOWTHROWEXCEPTION);                \
+        CASE_FROM_TYPE(TYPE_LARGEINT, TO_TYPE, ALLOWTHROWEXCEPTION);              \
+        CASE_FROM_TYPE(TYPE_FLOAT, TO_TYPE, ALLOWTHROWEXCEPTION);                 \
+        CASE_FROM_TYPE(TYPE_DOUBLE, TO_TYPE, ALLOWTHROWEXCEPTION);                \
+        CASE_FROM_TYPE(TYPE_DECIMALV2, TO_TYPE, ALLOWTHROWEXCEPTION);             \
+        CASE_FROM_TYPE(TYPE_TIME, TO_TYPE, ALLOWTHROWEXCEPTION);                  \
+        CASE_FROM_TYPE(TYPE_DATE, TO_TYPE, ALLOWTHROWEXCEPTION);                  \
+        CASE_FROM_TYPE(TYPE_DATETIME, TO_TYPE, ALLOWTHROWEXCEPTION);              \
+        CASE_FROM_TYPE(TYPE_VARCHAR, TO_TYPE, ALLOWTHROWEXCEPTION);               \
+        CASE_FROM_TYPE(TYPE_DECIMAL32, TO_TYPE, ALLOWTHROWEXCEPTION);             \
+        CASE_FROM_TYPE(TYPE_DECIMAL64, TO_TYPE, ALLOWTHROWEXCEPTION);             \
+        CASE_FROM_TYPE(TYPE_DECIMAL128, TO_TYPE, ALLOWTHROWEXCEPTION);            \
     default:                                                                      \
         LOG(WARNING) << "vectorized engine not support from type: " << from_type; \
         return nullptr;                                                           \
     }
 
-#define CASE_TO_TYPE(TO_TYPE)          \
-    case TO_TYPE: {                    \
-        SWITCH_ALL_FROM_TYPE(TO_TYPE); \
-        break;                         \
+#define CASE_TO_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION)          \
+    case TO_TYPE: {                                         \
+        SWITCH_ALL_FROM_TYPE(TO_TYPE, ALLOWTHROWEXCEPTION); \
+        break;                                              \
     }
 
-#define CASE_FROM_JSON_TO(TO_TYPE)                               \
-    case TO_TYPE: {                                              \
-        return new VectorizedCastExpr<TYPE_JSON, TO_TYPE>(node); \
+#define CASE_FROM_JSON_TO(TO_TYPE, ALLOWTHROWEXCEPTION)                     \
+    case TO_TYPE: {                                                         \
+        if (ALLOWTHROWEXCEPTION) {                                          \
+            return new VectorizedCastExpr<TYPE_JSON, TO_TYPE, true>(node);  \
+        } else {                                                            \
+            return new VectorizedCastExpr<TYPE_JSON, TO_TYPE, false>(node); \
+        }                                                                   \
     }
 
-#define CASE_TO_JSON(FROM_TYPE)                                    \
-    case FROM_TYPE: {                                              \
-        return new VectorizedCastExpr<FROM_TYPE, TYPE_JSON>(node); \
+#define CASE_TO_JSON(FROM_TYPE, ALLOWTHROWEXCEPTION)                          \
+    case FROM_TYPE: {                                                         \
+        if (ALLOWTHROWEXCEPTION) {                                            \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_JSON, true>(node);  \
+        } else {                                                              \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_JSON, false>(node); \
+        }                                                                     \
     }
 
-#define CASE_TO_STRING_FROM(FROM_TYPE)                          \
-    case FROM_TYPE: {                                           \
-        return new VectorizedCastToStringExpr<FROM_TYPE>(node); \
+#define CASE_TO_STRING_FROM(FROM_TYPE, ALLOWTHROWEXCEPTION)                \
+    case FROM_TYPE: {                                                      \
+        if (ALLOWTHROWEXCEPTION) {                                         \
+            return new VectorizedCastToStringExpr<FROM_TYPE, true>(node);  \
+        } else {                                                           \
+            return new VectorizedCastToStringExpr<FROM_TYPE, false>(node); \
+        }                                                                  \
     }
 
 Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
     PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
     PrimitiveType from_type = thrift_to_type(node.child_type);
 
+    bool allow_throw_exception = false;
     if (node.__isset.child_type_desc) {
         TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
         TypeDescriptor array_field_type_cast_from = TypeDescriptor::from_thrift(node.child_type_desc);
@@ -1286,28 +1429,32 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
     }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
-        return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL>(node);
+        if (allow_throw_exception) {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, true>(node);
+        } else {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_HLL, false>(node);
+        }
     }
 
     if (to_type == TYPE_VARCHAR) {
         switch (from_type) {
-            CASE_TO_STRING_FROM(TYPE_BOOLEAN);
-            CASE_TO_STRING_FROM(TYPE_TINYINT);
-            CASE_TO_STRING_FROM(TYPE_SMALLINT);
-            CASE_TO_STRING_FROM(TYPE_INT);
-            CASE_TO_STRING_FROM(TYPE_BIGINT);
-            CASE_TO_STRING_FROM(TYPE_LARGEINT);
-            CASE_TO_STRING_FROM(TYPE_FLOAT);
-            CASE_TO_STRING_FROM(TYPE_DOUBLE);
-            CASE_TO_STRING_FROM(TYPE_DECIMALV2);
-            CASE_TO_STRING_FROM(TYPE_TIME);
-            CASE_TO_STRING_FROM(TYPE_DATE);
-            CASE_TO_STRING_FROM(TYPE_DATETIME);
-            CASE_TO_STRING_FROM(TYPE_VARCHAR);
-            CASE_TO_STRING_FROM(TYPE_DECIMAL32);
-            CASE_TO_STRING_FROM(TYPE_DECIMAL64);
-            CASE_TO_STRING_FROM(TYPE_DECIMAL128);
-            CASE_TO_STRING_FROM(TYPE_JSON);
+            CASE_TO_STRING_FROM(TYPE_BOOLEAN, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_TINYINT, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_SMALLINT, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_INT, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_BIGINT, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_LARGEINT, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_FLOAT, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DOUBLE, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DECIMALV2, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_TIME, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DATE, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DATETIME, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_VARCHAR, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DECIMAL32, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DECIMAL64, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_DECIMAL128, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
         default:
             LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
             return nullptr;
@@ -1316,35 +1463,35 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
         // TODO(mofei) simplify type enumeration
         if (from_type == TYPE_JSON) {
             switch (to_type) {
-                CASE_FROM_JSON_TO(TYPE_BOOLEAN);
-                CASE_FROM_JSON_TO(TYPE_TINYINT);
-                CASE_FROM_JSON_TO(TYPE_SMALLINT);
-                CASE_FROM_JSON_TO(TYPE_INT);
-                CASE_FROM_JSON_TO(TYPE_BIGINT);
-                CASE_FROM_JSON_TO(TYPE_LARGEINT);
-                CASE_FROM_JSON_TO(TYPE_FLOAT);
-                CASE_FROM_JSON_TO(TYPE_DOUBLE);
-                CASE_FROM_JSON_TO(TYPE_JSON);
+                CASE_FROM_JSON_TO(TYPE_BOOLEAN, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_TINYINT, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_SMALLINT, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_INT, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_BIGINT, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_LARGEINT, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_FLOAT, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
             default:
                 LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
                 return nullptr;
             }
         } else {
             switch (from_type) {
-                CASE_TO_JSON(TYPE_BOOLEAN);
-                CASE_TO_JSON(TYPE_TINYINT);
-                CASE_TO_JSON(TYPE_SMALLINT);
-                CASE_TO_JSON(TYPE_INT);
-                CASE_TO_JSON(TYPE_BIGINT);
-                CASE_TO_JSON(TYPE_LARGEINT);
-                CASE_TO_JSON(TYPE_FLOAT);
-                CASE_TO_JSON(TYPE_DOUBLE);
-                CASE_TO_JSON(TYPE_JSON);
-                CASE_TO_JSON(TYPE_CHAR);
-                CASE_TO_JSON(TYPE_VARCHAR);
-                CASE_TO_JSON(TYPE_DECIMAL32);
-                CASE_TO_JSON(TYPE_DECIMAL64);
-                CASE_TO_JSON(TYPE_DECIMAL128);
+                CASE_TO_JSON(TYPE_BOOLEAN, allow_throw_exception);
+                CASE_TO_JSON(TYPE_TINYINT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_SMALLINT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_INT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_BIGINT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_LARGEINT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_FLOAT, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DOUBLE, allow_throw_exception);
+                CASE_TO_JSON(TYPE_JSON, allow_throw_exception);
+                CASE_TO_JSON(TYPE_CHAR, allow_throw_exception);
+                CASE_TO_JSON(TYPE_VARCHAR, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DECIMAL32, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DECIMAL64, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
             default:
                 LOG(WARNING) << "vectorized engine not support from type: " << from_type << ", to type: " << to_type;
                 return nullptr;
@@ -1352,21 +1499,21 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
         }
     } else {
         switch (to_type) {
-            CASE_TO_TYPE(TYPE_BOOLEAN);
-            CASE_TO_TYPE(TYPE_TINYINT);
-            CASE_TO_TYPE(TYPE_SMALLINT);
-            CASE_TO_TYPE(TYPE_INT);
-            CASE_TO_TYPE(TYPE_BIGINT);
-            CASE_TO_TYPE(TYPE_LARGEINT);
-            CASE_TO_TYPE(TYPE_FLOAT);
-            CASE_TO_TYPE(TYPE_DOUBLE);
-            CASE_TO_TYPE(TYPE_DECIMALV2);
-            CASE_TO_TYPE(TYPE_TIME);
-            CASE_TO_TYPE(TYPE_DATE);
-            CASE_TO_TYPE(TYPE_DATETIME);
-            CASE_TO_TYPE(TYPE_DECIMAL32);
-            CASE_TO_TYPE(TYPE_DECIMAL64);
-            CASE_TO_TYPE(TYPE_DECIMAL128);
+            CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_TINYINT, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_SMALLINT, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_INT, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_BIGINT, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_LARGEINT, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_FLOAT, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DOUBLE, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DECIMALV2, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_TIME, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DATE, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DATETIME, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DECIMAL32, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DECIMAL64, allow_throw_exception);
+            CASE_TO_TYPE(TYPE_DECIMAL128, allow_throw_exception);
         default:
             LOG(WARNING) << "vectorized engine not support to type: " << to_type;
             return nullptr;
