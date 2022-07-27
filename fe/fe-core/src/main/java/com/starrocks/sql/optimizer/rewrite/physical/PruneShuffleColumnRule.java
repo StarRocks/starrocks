@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -112,6 +113,16 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
                 return;
             }
 
+            // check if any one of them are duplicated columns like [1,1] = [17,29]
+            // if duplicated columns, we can choose any one of them.
+            boolean duplicatedColumns = false;
+            for (HashDistributionDesc desc : descs) {
+                if (new HashSet<>(desc.getColumns()).size() == 1) {
+                    duplicatedColumns = true;
+                    break;
+                }
+            }
+
             // choose high cardinality column
             int columnSize = descs.get(0).getColumns().size();
             int maxColumnIndex = -1;
@@ -139,6 +150,10 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
                         maxColumnIndex = i;
                     }
                 }
+            }
+
+            if (duplicatedColumns && maxColumnIndex == -1) {
+                maxColumnIndex = 0;
             }
 
             if (maxColumnIndex > -1) {
