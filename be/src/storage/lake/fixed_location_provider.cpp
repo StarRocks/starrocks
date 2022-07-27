@@ -26,10 +26,6 @@ std::string FixedLocationProvider::segment_location(int64_t /*tablet_id*/, std::
     return fmt::format("{}/{}", _root, segment_name);
 }
 
-std::string FixedLocationProvider::join_path(std::string_view parent, std::string_view child) const {
-    return fmt::format("{}/{}", parent, child);
-}
-
 Status FixedLocationProvider::list_root_locations(std::set<std::string>* roots) const {
     roots->insert(_root);
     return Status::OK();
