@@ -242,15 +242,15 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         String resourceName = copiedProps.remove(HUDI_RESOURCE);
-        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         // trick like hive table, only external table has resourceName
-        if (resource == null && isInternalCatalog(resourceName)) {
-            throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
-        }
-        HudiResource hudiResource = (HudiResource) resource;
-        if ((resourceName == null || isInternalCatalog(resourceName)) &&
-                hudiResource.getType() != Resource.ResourceType.HUDI) {
-            throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
+        if (isInternalCatalog(resourceName)) {
+            Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+            if (resource == null) {
+                throw new DdlException("hive resource [" + resourceName + "] not exists");
+            }
+            if (resource.getType() != Resource.ResourceType.HUDI) {
+                throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
+            }
         }
 
         this.resourceName = resourceName;
