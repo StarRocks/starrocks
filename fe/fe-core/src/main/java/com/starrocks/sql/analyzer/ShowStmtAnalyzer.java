@@ -353,7 +353,6 @@ public class ShowStmtAnalyzer {
 
         private void descExternalTbl(DescribeStmt node, String catalogName, String dbName, String tbl) {
             // show external table schema only
-            node.setExternalTable(true);
             String procString = "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
             try {
                 node.setNode(ProcService.getInstance().open(procString));

@@ -3,9 +3,9 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.ProcResultUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -53,7 +53,7 @@ public class ExternalDbsProcDir implements ProcDirInterface {
             dbInfos.add(dbInfo);
         }
 
-        CatalogUtils.convertToMetaResult(result, dbInfos);
+        ProcResultUtils.convertToMetaResult(result, dbInfos);
         return result;
     }
 
