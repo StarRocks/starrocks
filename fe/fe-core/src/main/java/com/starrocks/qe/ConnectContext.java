@@ -173,16 +173,7 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        state = new QueryState();
-        returnRows = 0;
-        serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
-        isKilled = false;
-        serializer = MysqlSerializer.newInstance();
-        sessionVariable = VariableMgr.newSessionVariable();
-        command = MysqlCommand.COM_SLEEP;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
-        plannerProfile = new PlannerProfile();
-        plannerProfile.init(this);
+        this(null);
     }
 
     public ConnectContext(SocketChannel channel) {
@@ -190,17 +181,18 @@ public class ConnectContext {
         returnRows = 0;
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
-        mysqlChannel = new MysqlChannel(channel);
         serializer = MysqlSerializer.newInstance();
         sessionVariable = VariableMgr.newSessionVariable();
         command = MysqlCommand.COM_SLEEP;
-        if (channel != null) {
-            remoteIP = mysqlChannel.getRemoteIp();
-        }
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
         plannerProfile.init(this);
+
+        mysqlChannel = new MysqlChannel(channel);
+        if (channel != null) {
+            remoteIP = mysqlChannel.getRemoteIp();
+        }
     }
 
     public long getStmtId() {
@@ -559,6 +551,18 @@ public class ConnectContext {
             threadInfo = new ThreadInfo();
         }
         return threadInfo;
+    }
+
+    public int getAliveBackendNumber() {
+        int v = sessionVariable.getCboDebugAliveBackendNumber();
+        if (v > 0) {
+            return v;
+        }
+        return globalStateMgr.getClusterInfo().getAliveBackendNumber();
+    }
+
+    public int getTotalBackendNumber() {
+        return globalStateMgr.getClusterInfo().getTotalBackendNumber();
     }
 
     public class ThreadInfo {

@@ -53,7 +53,7 @@ public class TransactionLoadAction extends RestBaseAction {
 
     private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > GlobalStateMgr.getCurrentSystemInfo().backendSize() * 512;
+            return size() > GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() * 512;
         }
     };
 
