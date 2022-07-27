@@ -29,6 +29,7 @@ public class PhysicalPropertySet {
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty) {
         this.distributionProperty = distributionProperty;
         this.sortProperty = sortProperty;
+        this.propertyInfo = new PropertyInfo();
     }
 
     public PropertyInfo getPropertyInfo() {
