@@ -1589,6 +1589,15 @@ public class GlobalStateMgr {
 
                 setCanRead(hasLog, err);
             }
+
+            // close current db after replayer finished
+            @Override
+            public void run() {
+                super.run();
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
         };
 
         replayer.setMetaContext(metaContext);
@@ -1648,6 +1657,7 @@ public class GlobalStateMgr {
         try {
             cursor = journal.read(replayedJournalId.get() + 1, toJournalId);
             hasLog = replayJournalInner(cursor, false);
+            cursor.close();
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
             // TODO exit gracefully
