@@ -145,6 +145,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
     std::unique_lock<std::shared_mutex> base_wlock;
 
+    // If do schema change, both the shard where the source tablet is located and
+    // the shard where the target tablet is located need to be locked.
+    // In order to prevent deadlock, the order of locking needs to be fixed.
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
         int shard_idx = _get_tablets_shard_idx(tablet_id);
         int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
