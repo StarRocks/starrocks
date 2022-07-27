@@ -36,6 +36,8 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "    GROUP BY t0.`$columnName` "
                     + ") as t1";
 
+    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
+
     public SampleStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                       Map<String, String> properties) {

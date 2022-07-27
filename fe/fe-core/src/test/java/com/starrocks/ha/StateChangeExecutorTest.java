@@ -29,19 +29,22 @@ public class StateChangeExecutorTest {
         }
     }
 
-    private StateChangeExecutor executor = null;
+    private void runOne(FrontendNodeType oldType, FrontendNodeType newType) {
+        StateChangeExecutionTest execution = new StateChangeExecutionTest();
+        execution.setType(oldType);
+        Assert.assertEquals(oldType, execution.getType());
 
-    @Before
-    public void init() {
-        executor = new StateChangeExecutor();
-    }
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public FrontendNodeType getFeType() {
+                return execution.getType();
+            }
+        };
 
-    @After
-    public void cleanup() {
-        executor.exit();
-    }
+        StateChangeExecutor executor = new StateChangeExecutor();
+        executor.registerStateChangeExecution(execution);
+        executor.start();
 
-    private void notifyAndCheck(FrontendNodeType newType, StateChangeExecutionTest execution) {
         executor.notifyNewFETypeTransfer(newType);
         int i = 0;
         for (; i < 4; ++i) {
@@ -56,48 +59,31 @@ public class StateChangeExecutorTest {
         if (i != 4) { // it's possible that consumer thread is too slow
             Assert.assertEquals(newType, execution.getType());
         }
+
+        executor.exit();
     }
 
     @Test
     public void testStateChangeExecutor() {
-        StateChangeExecutionTest execution = new StateChangeExecutionTest();
-        executor.registerStateChangeExecution(execution);
-
-        executor.start();
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public FrontendNodeType getFeType() {
-                return execution.getType();
-            }
-        };
         // INIT -> LEADER
-        execution.setType(FrontendNodeType.INIT);
-        Assert.assertEquals(FrontendNodeType.INIT, execution.getType());
-        notifyAndCheck(FrontendNodeType.LEADER, execution);
+        runOne(FrontendNodeType.INIT, FrontendNodeType.LEADER);
 
         // INIT -> FOLLOWER
-        execution.setType(FrontendNodeType.INIT);
-        notifyAndCheck(FrontendNodeType.FOLLOWER, execution);
+        runOne(FrontendNodeType.INIT, FrontendNodeType.FOLLOWER);
 
         // UNKNOWN -> LEADER
-        execution.setType(FrontendNodeType.UNKNOWN);
-        notifyAndCheck(FrontendNodeType.LEADER, execution);
+        runOne(FrontendNodeType.UNKNOWN, FrontendNodeType.LEADER);
 
         // UNKNOWN -> FOLLOWER
-        execution.setType(FrontendNodeType.UNKNOWN);
-        notifyAndCheck(FrontendNodeType.FOLLOWER, execution);
+        runOne(FrontendNodeType.UNKNOWN, FrontendNodeType.FOLLOWER);
 
         // FOLLOWER -> LEADER
-        execution.setType(FrontendNodeType.FOLLOWER);
-        notifyAndCheck(FrontendNodeType.LEADER, execution);
+        runOne(FrontendNodeType.FOLLOWER, FrontendNodeType.LEADER);
 
         // FOLLOWER -> UNKNOWN
-        execution.setType(FrontendNodeType.FOLLOWER);
-        notifyAndCheck(FrontendNodeType.UNKNOWN, execution);
+        runOne(FrontendNodeType.FOLLOWER, FrontendNodeType.UNKNOWN);
 
         // OBSERVER -> UNKNOWN
-        execution.setType(FrontendNodeType.OBSERVER);
-        notifyAndCheck(FrontendNodeType.UNKNOWN, execution);
+        runOne(FrontendNodeType.OBSERVER, FrontendNodeType.UNKNOWN);
     }
 }

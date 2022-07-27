@@ -113,6 +113,12 @@ public class KafkaRoutineLoadJobTest {
                 systemInfoService.getBackendIds(true);
                 result = beIds2;
                 minTimes = 0;
+                systemInfoService.getAliveBackendNumber();
+                result = beIds2.size();
+                minTimes = 0;
+                systemInfoService.getTotalBackendNumber();
+                result = beIds2.size();
+                minTimes = 0;
             }
         };
 
@@ -268,9 +274,9 @@ public class KafkaRoutineLoadJobTest {
                 table.getId();
                 minTimes = 0;
                 result = tableId;
-                table.getType();
+                table.isOlapOrLakeTable();
                 minTimes = 0;
-                result = Table.TableType.OLAP;
+                result = true;
             }
         };
 

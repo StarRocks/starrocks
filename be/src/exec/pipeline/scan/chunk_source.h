@@ -24,7 +24,7 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 class ChunkSource {
 public:
     ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                BalancedChunkBuffer& chunk_buffer);
+                BalancedChunkBuffer& chunk_buffer, workgroup::ScanExecutorType executor_type);
 
     virtual ~ChunkSource() = default;
 
@@ -39,10 +39,9 @@ public:
     bool has_shared_output() const;
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer();
-    Status buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state);
-    Status buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
-                                                           size_t* num_read_chunks, int worker_id,
-                                                           workgroup::WorkGroupPtr running_wg);
+    std::pair<Status, size_t> buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
+                                                                const workgroup::WorkGroupPtr& running_wg,
+                                                                int worker_id);
 
     // Counters of scan
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
@@ -75,6 +74,8 @@ protected:
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();
     ChunkBufferTokenPtr _chunk_token;
+
+    const workgroup::ScanExecutorType _executor_type;
 };
 
 using ChunkSourcePtr = std::shared_ptr<ChunkSource>;
