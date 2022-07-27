@@ -342,9 +342,8 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
         if (!HyperLogLog::is_valid(value)) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_HLL, value.to_string());
-            } else {
-                builder.append_null();
             }
+            builder.append_null();
         } else {
             HyperLogLog hll;
             hll.deserialize(value);
