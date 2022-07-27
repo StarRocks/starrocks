@@ -113,11 +113,17 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(0, op.get());
                 return predicate;
+            } else if (rightChild.getType().isDateType()) {
+                addCastChild(rightChild.getType(), predicate, 0);
+                return predicate;
             }
         } else if (leftChild.isVariable() && rightChild.isConstantRef()) {
             Optional<ScalarOperator> op = Utils.tryCastConstant(rightChild, type1);
             if (op.isPresent()) {
                 predicate.getChildren().set(1, op.get());
+                return predicate;
+            } else if (leftChild.getType().isDateType()) {
+                addCastChild(leftChild.getType(), predicate, 1);
                 return predicate;
             }
         }
