@@ -70,7 +70,6 @@ public class Table extends MetaObject implements Writable {
         HIVE,
         ICEBERG,
         HUDI,
-        ODBC,
         JDBC,
         MATERIALIZED_VIEW,
         LAKE
@@ -243,8 +242,6 @@ public class Table extends MetaObject implements Writable {
             table = new HiveTable();
         } else if (type == TableType.HUDI) {
             table = new HudiTable();
-        } else if (type == TableType.ODBC) {
-            table = new OdbcTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
             table = new ExternalOlapTable();
         } else if (type == TableType.ICEBERG) {
