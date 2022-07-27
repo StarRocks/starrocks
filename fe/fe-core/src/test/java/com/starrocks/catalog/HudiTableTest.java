@@ -168,9 +168,9 @@ public class HudiTableTest {
 
     @Test
     public void testInputFormat() {
-        Assert.assertTrue(HudiTable.fromInputFormat("org.apache.hudi.hadoop.HoodieParquetInputFormat").equals(
-                HudiTable.HoodieTableType.COW));
-        Assert.assertTrue(HudiTable.fromInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat").
-                equals(HudiTable.HoodieTableType.MOR));
+        Assert.assertEquals(HudiTable.fromInputFormat("org.apache.hudi.hadoop.HoodieParquetInputFormat"),
+                HudiTable.HoodieTableType.COW);
+        Assert.assertEquals(HudiTable.fromInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat"),
+                HudiTable.HoodieTableType.MOR);
     }
 }
