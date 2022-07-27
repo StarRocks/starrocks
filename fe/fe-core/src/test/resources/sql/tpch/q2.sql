@@ -54,7 +54,7 @@ TOP-N (order by [[16: S_ACCTBAL DESC NULLS LAST, 26: N_NAME ASC NULLS FIRST, 12:
                         INNER JOIN (join-predicate [11: S_SUPPKEY = 20: PS_SUPPKEY] post-join-predicate [null])
                             SCAN (columns[17: S_COMMENT, 11: S_SUPPKEY, 12: S_NAME, 13: S_ADDRESS, 14: S_NATIONKEY, 15: S_PHONE, 16: S_ACCTBAL] predicate[null])
                             EXCHANGE BROADCAST
-                                INNER JOIN (join-predicate [19: PS_PARTKEY = 1: P_PARTKEY AND 22: PS_SUPPLYCOST = 57: min] post-join-predicate [null])
+                                INNER JOIN (join-predicate [22: PS_SUPPLYCOST = 57: min AND 19: PS_PARTKEY = 1: P_PARTKEY] post-join-predicate [null])
                                     SCAN (columns[19: PS_PARTKEY, 20: PS_SUPPKEY, 22: PS_SUPPLYCOST] predicate[null])
                                     EXCHANGE SHUFFLE[1]
                                         INNER JOIN (join-predicate [1: P_PARTKEY = 34: PS_PARTKEY] post-join-predicate [null])

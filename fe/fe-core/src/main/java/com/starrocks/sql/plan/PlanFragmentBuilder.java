@@ -1294,7 +1294,7 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
-            if (node.isOnePhaseAgg()) {
+            if (node.isOnePhaseAgg() && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 estimateDopOfOnePhaseAgg(inputFragment);
             }
 

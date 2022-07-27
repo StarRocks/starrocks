@@ -33,7 +33,7 @@ private:
 
 class OlapScanOperator final : public ScanOperator {
 public:
-    OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
+    OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
                      ChunkBufferLimiter* buffer_limiter, OlapScanContextPtr ctx);
 
     ~OlapScanOperator() override;

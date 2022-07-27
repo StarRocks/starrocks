@@ -5,11 +5,15 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -822,6 +826,11 @@ public class AggregateTest extends PlanTestBase {
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(1800, 11: L_SHIPDATE, 3, 18: expr)");
+
+        sql =
+                "select L_ORDERKEY,window_funnel(1800, L_LINENUMBER, 3, [L_PARTKEY = 1]) from lineitem_partition_colocate group by L_ORDERKEY;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "window_funnel(1800, 4: L_LINENUMBER, 3, 18: expr)");
         FeConstants.runningUnitTest = false;
     }
 
@@ -1553,5 +1562,57 @@ public class AggregateTest extends PlanTestBase {
                 "  |  cross join:\n" +
                 "  |  predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
         connectContext.getSessionVariable().setCboCteReuse(false);
+    }
+
+    @Test
+    public void testParallelism() throws Exception {
+        int numCores = 8;
+        int expectedParallelism = numCores / 2;
+        new MockUp<BackendCoreStat>() {
+            @Mock
+            public int getAvgNumOfHardwareCoresOfBe() {
+                return numCores;
+            }
+        };
+
+        new MockUp<DistributionSpec.PropertyInfo>() {
+            @Mock
+            public boolean isSinglePartition() {
+                return true;
+            }
+        };
+
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        int prevNewPlannerAggStage = sessionVariable.getNewPlannerAggStage();
+        try {
+            sessionVariable.setNewPlanerAggStage(1);
+
+            // Local one-phase aggregation prefers instance parallel.
+            String sql = "SELECT v1, count(1) from t0 group by v1";
+            ExecPlan plan = getExecPlan(sql);
+            PlanFragment fragment = plan.getFragments().get(0);
+            assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "1:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+            Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+            Assert.assertEquals(1, fragment.getPipelineDop());
+
+            // None-local one-phase aggregation prefers pipeline parallel.
+            sql = "SELECT v2, count(1) from t0 group by v2";
+            plan = getExecPlan(sql);
+            fragment = plan.getFragments().get(0);
+            assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+            Assert.assertEquals(1, fragment.getParallelExecNum());
+            Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
+        } finally {
+            sessionVariable.setNewPlanerAggStage(prevNewPlannerAggStage);
+        }
+
     }
 }

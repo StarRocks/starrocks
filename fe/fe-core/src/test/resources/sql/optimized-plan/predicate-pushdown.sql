@@ -19,7 +19,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 > 4: v4])
 [sql]
 select v1 from t0 inner join t1 on v1>v4 and v2 = v5
 [result]
-INNER JOIN (join-predicate [2: v2 = 5: v5 AND 1: v1 > 4: v4] post-join-predicate [null])
+INNER JOIN (join-predicate [1: v1 > 4: v4 AND 2: v2 = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4, 5: v5] predicate[null])
