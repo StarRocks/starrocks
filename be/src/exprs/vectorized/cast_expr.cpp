@@ -113,24 +113,16 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
 
         JsonValue value;
         bool overflow = false;
-        if constexpr (FromType == TYPE_LARGEINT) {
-            THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
-        } else if constexpr (pt_is_integer<FromType>) {
+        if constexpr (pt_is_integer<FromType>) {
             constexpr int64_t min = RunTimeTypeLimits<TYPE_BIGINT>::min_value();
             constexpr int64_t max = RunTimeTypeLimits<TYPE_BIGINT>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_int(viewer.value(row));
-            if (overflow || value.is_null()) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
-            }
         } else if constexpr (pt_is_float<FromType>) {
             constexpr double min = RunTimeTypeLimits<TYPE_DOUBLE>::min_value();
             constexpr double max = RunTimeTypeLimits<TYPE_DOUBLE>::max_value();
             overflow = viewer.value(row) < min || viewer.value(row) > max;
             value = JsonValue::from_double(viewer.value(row));
-            if (overflow || value.is_null()) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
-            }
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
         } else if constexpr (pt_is_binary<FromType>) {
@@ -140,14 +132,18 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             } else {
                 overflow = true;
             }
-            if (overflow || value.is_null()) {
-                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
-            }
         } else {
             THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
         }
-
-        builder.append(std::move(value));
+        if (overflow || value.is_null()) {
+            if constexpr (FromType == TYPE_LARGEINT) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, LargeIntValue::to_string(viewer.value(row)));
+            } else {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
+            }
+        } else {
+            builder.append(std::move(value));
+        }
     }
 
     return builder.build(column->is_constant());
