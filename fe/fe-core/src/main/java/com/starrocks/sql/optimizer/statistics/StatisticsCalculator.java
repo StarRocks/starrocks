@@ -972,11 +972,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     get(columnRefOperator));
         }
         // compute the children maximum output row count with distinct value
-        double childMaxDistinctOutput = 1.0;
-        for (ColumnStatistic columnStatistic : builder.build().getColumnStatistics().values()) {
-            childMaxDistinctOutput *= columnStatistic.getDistinctValuesCount();
+        double childMaxDistinctOutput = Double.MAX_VALUE;
+        for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
+            double childDistinctOutput = 1.0;
+            for (ColumnRefOperator columnRefOperator : childOutputColumns.get(childIndex)) {
+                childDistinctOutput *= context.getChildStatistics(childIndex).getColumnStatistics().
+                        get(columnRefOperator).getDistinctValuesCount();
+            }
+            if (childDistinctOutput < childMaxDistinctOutput) {
+                childMaxDistinctOutput = childDistinctOutput;
+            }
         }
-
         double outputRowCount = Math.min(minOutputChildStats.getOutputRowCount(), childMaxDistinctOutput);
         builder.setOutputRowCount(outputRowCount);
 
