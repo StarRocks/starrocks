@@ -141,10 +141,16 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
     }
 
     public StorageInfo getStorageInfo(long partitionId) {
+        // for debug
+        LOG.info("get storage info of {}", partitionId);
+        LOG.info("hash for getStorageInfo is {}", this.hashCode());
         return idToStorageInfo.get(partitionId);
     }
 
     public void setStorageInfo(long partitionId, StorageInfo storageInfo) {
+        // for debug
+        LOG.info("set storage info {} for {}", storageInfo, partitionId);
+        LOG.info("hash for setStorageInfo is {}", this.hashCode());
         idToStorageInfo.put(partitionId, storageInfo);
     }
 

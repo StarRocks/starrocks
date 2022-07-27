@@ -993,7 +993,6 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo()
                     .setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
-
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
 
@@ -1182,6 +1181,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void addPartitions(Database db, String tableName, List<PartitionDesc> partitionDescs,
                                AddPartitionClause addPartitionClause) throws DdlException {
+        // for debug
+        LOG.info("enter addPartitions");
         DistributionInfo distributionInfo;
         OlapTable olapTable;
         OlapTable copiedTable;
@@ -2549,17 +2550,21 @@ public class LocalMetastore implements ConnectorMetadata {
             throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
 
+        // for debug
+        LOG.info("enter createLakeTablets, partitionId is {}", partitionId);
+
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        StorageInfo partitionStorageInfo = partitionInfo.getStorageInfo(partitionId);
+        StorageInfo partitionStorageInfo = table.getTableProperty().getStorageInfo();
         CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(partitionStorageInfo.isEnableStorageCache())
                 .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS()).build();
         ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo())
                 .setCacheInfo(cacheInfo).build();
+        partitionInfo.setStorageInfo(partitionId, partitionStorageInfo);
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum, shardStorageInfo);
         for (long shardId : shardIds) {
