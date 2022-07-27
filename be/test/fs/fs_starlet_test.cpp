@@ -278,7 +278,10 @@ TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
     ASSERT_EQ(1, entries.size());
     ASSERT_EQ("dirname0x/", entries[0]);
     ASSERT_OK(fs->delete_dir(StarletPath("/dirname0x")));
-    ASSERT_ERROR(fs->delete_dir_recursive(StarletPath("/")));
+    ASSERT_OK(fs->delete_dir_recursive(StarletPath("/")));
+    entries.clear();
+    // NOTE: this is incompatible with other file systems.
+    EXPECT_TRUE(fs->iterate_dir(StarletPath("/"), cb).is_not_found());
 }
 
 TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {

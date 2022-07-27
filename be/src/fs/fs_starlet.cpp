@@ -228,17 +228,12 @@ public:
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-        if (!pair.first.empty() && pair.first.back() == '/') {
-            return Status::NotSupported(fmt::format("Starlet: cannot create file with name ended with '/': {}", path));
-        }
-
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
         // TODO: translate WritableFileOptions to fslib::WriteOptions
         auto file_st = (*fs_st)->create(pair.first, WriteOptions());
-
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
@@ -259,9 +254,6 @@ public:
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
-        if (!pair.first.empty() && pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
@@ -276,9 +268,6 @@ public:
             return Status::AlreadyExist(dirname);
         }
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dirname));
-        if (pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
@@ -303,14 +292,11 @@ public:
 
     Status delete_dir(const std::string& dirname) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dirname));
-        if (!pair.first.empty() && pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-
+        // TODO: leave this check to starlet.
         bool dir_empty = true;
         auto cb = [&dir_empty](std::string_view file) {
             dir_empty = false;
@@ -334,9 +320,6 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        if (pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
         auto st = (*fs_st)->delete_dir(pair.first, true);
         return to_status(st);
     }
@@ -358,18 +341,7 @@ public:
         if (!fst.ok()) {
             return to_status(fst.status());
         }
-        if (!pair.first.empty() && pair.first.back() != '/') {
-            // force a directory naming convention
-            pair.first.push_back('/');
-            auto st2 = (*fs_st)->exists(pair.first);
-            if (!st2.ok()) {
-                return to_status(st2.status());
-            }
-            if (*st2) {
-                return true;
-            }
-        }
-        return S_ISDIR((*fst).mode);
+        return S_ISDIR(fst->mode);
     }
 
     Status sync_dir(const std::string& dirname) override {
