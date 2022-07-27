@@ -408,18 +408,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext session) {
-            StopRoutineLoadAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
-        public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext session) {
-            ResumeRoutineLoadAnalyzer.analyze(statement, session);
-            return null;
-        }
-
-        @Override
         public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
             PauseRoutineLoadAnalyzer.analyze(statement, session);
             return null;
