@@ -94,7 +94,7 @@ You cannot use the DELETE statement to concurrently run delete operations or to 
 Execute the following statement to create a table named `score_board` in the `test` database:
 
 ```Plain
-CREATE TABLE `score_board` (
+MySQL [test]> CREATE TABLE `score_board` (
   `id` int(11) NOT NULL COMMENT "",
   `name` varchar(65533) NULL DEFAULT "" COMMENT "",
   `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
@@ -205,7 +205,7 @@ You can nest one or more subqueries in the `DELETE` statement and use the subque
 Before you start to delete data, execute the following statement to create another table named `users` in the `test` database:
 
 ```SQL
-CREATE TABLE `users` (
+MySQL [test]> CREATE TABLE `users` (
   `uid` int(11) NOT NULL COMMENT "",
   `name` varchar(65533) NOT NULL COMMENT "",
   `country` varchar(65533) NULL COMMENT ""
