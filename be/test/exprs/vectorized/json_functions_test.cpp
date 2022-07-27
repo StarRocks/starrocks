@@ -170,6 +170,45 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
                         .ok());
 }
 
+TEST_F(JsonFunctionsTest, get_json_stringTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto strings = BinaryColumn::create();
+    auto strings2 = BinaryColumn::create();
+
+    std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}",
+                            "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
+                            "{\"k1.key\":{\"k2\":[\"v1\", \"v2\"]}}",
+                            "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]",
+                            R"({"key":  "qu\"ote"})",
+                            R"({"key":  "esca\\ped"})"};
+
+    std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1", "$.key", "$.key"};
+    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\", \"v3\", \"v4\"]", "qu\"ote", "esca\\ped"};
+
+    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        strings->append(values[j]);
+        strings2->append(strs[j]);
+    }
+
+    columns.emplace_back(strings);
+    columns.emplace_back(strings2);
+
+    ctx.get()->impl()->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    ColumnPtr result = JsonFunctions::get_json_object(ctx.get(), columns);
+    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+        ASSERT_EQ(length_strings[j], v->get_data()[j].to_string());
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
 TEST_F(JsonFunctionsTest, get_json_string_casting) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
