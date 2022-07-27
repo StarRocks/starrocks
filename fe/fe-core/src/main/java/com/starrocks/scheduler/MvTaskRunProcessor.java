@@ -246,6 +246,10 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         if (partitionExpr instanceof SlotRef) {
             Set<String> baseChangedPartitionNames = mv.getNeedRefreshPartitionNames(base);
             needRefreshMvPartitionNames.addAll(baseChangedPartitionNames);
+            // The partition of base and mv is 1 to 1 relationship
+            for (String mvPartitionName : deletes.keySet()) {
+                mv.removeBasePartition(baseTableId, mvPartitionName);
+            }
             for (String mvPartitionName : adds.keySet()) {
                 mv.addBasePartition(baseTableId, base.getPartition(mvPartitionName));
             }
@@ -264,9 +268,9 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             }
             SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
                     baseToMvNameRef, mvToBaseNameRef);
-        }
-        if (!deletes.isEmpty()) {
-            mv.cleanBasePartition(base);
+            if (!deletes.isEmpty()) {
+                mv.cleanBasePartition(base);
+            }
         }
 
         LOG.info("Calculate the partitions that need to be refreshed:[{}]", needRefreshMvPartitionNames);
