@@ -104,7 +104,7 @@ public abstract class Type implements Cloneable {
     public static final ScalarType BITMAP = new ScalarType(PrimitiveType.BITMAP);
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
-    public static final ScalarType UNKNOWN_TYPE = new ScalarType(PrimitiveType.UNKNOWN_TYPE);
+    public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
