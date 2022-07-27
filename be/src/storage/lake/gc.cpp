@@ -9,6 +9,7 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -108,7 +109,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     };
 
     for (const auto& filename : tablet_metadatas) {
-        auto location = tablet_mgr->location_provider()->join_path(root_location, filename);
+        auto location = join_path(root_location, filename);
         auto res = tablet_mgr->get_tablet_metadata(location, false);
         if (res.status().is_not_found()) {
             continue;
@@ -123,7 +124,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     for (const auto& filename : txn_logs) {
-        auto location = tablet_mgr->location_provider()->join_path(root_location, filename);
+        auto location = join_path(root_location, filename);
         auto res = tablet_mgr->get_txn_log(location, false);
         if (res.status().is_not_found()) {
             continue;
@@ -147,7 +148,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     for (auto& seg : segments) {
-        auto location = tablet_mgr->location_provider()->join_path(root_location, seg);
+        auto location = join_path(root_location, seg);
         auto res = fs->get_file_modified_time(location);
         if (!res.ok() && !res.status().is_not_found()) {
             LOG(WARNING) << "Fail to get modified time of " << location << ": " << res.status();

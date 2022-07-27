@@ -17,28 +17,19 @@
 namespace starrocks::lake {
 
 std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
-    return fmt::format("{}?ShardId={}", kStarletPrefix, tablet_id);
+    return build_starlet_uri(tablet_id, "");
 }
 
 std::string StarletLocationProvider::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
-    return fmt::format("{}{}?ShardId={}", kStarletPrefix, tablet_metadata_filename(tablet_id, version), tablet_id);
+    return build_starlet_uri(tablet_id, tablet_metadata_filename(tablet_id, version));
 }
 
 std::string StarletLocationProvider::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
-    return fmt::format("{}{}?ShardId={}", kStarletPrefix, txn_log_filename(tablet_id, txn_id), tablet_id);
+    return build_starlet_uri(tablet_id, txn_log_filename(tablet_id, txn_id));
 }
 
 std::string StarletLocationProvider::segment_location(int64_t tablet_id, std::string_view segment_name) const {
-    return fmt::format("{}{}?ShardId={}", kStarletPrefix, segment_name, tablet_id);
-}
-
-std::string StarletLocationProvider::join_path(std::string_view parent, std::string_view child) const {
-    auto pos = parent.find("?ShardId=");
-    CHECK(pos != std::string::npos);
-    auto prefix = parent.substr(0, pos);
-    auto suffix = parent.substr(pos);
-    return prefix.back() == '/' ? fmt::format("{}{}{}", prefix, child, suffix)
-                                : fmt::format("{}/{}{}", prefix, child, suffix);
+    return build_starlet_uri(tablet_id, segment_name);
 }
 
 Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots) const {
