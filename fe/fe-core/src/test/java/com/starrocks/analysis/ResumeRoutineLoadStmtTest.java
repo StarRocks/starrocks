@@ -8,19 +8,13 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-
 public class ResumeRoutineLoadStmtTest {
 
     private ConnectContext ctx;
 
-    @Before
-    public void setUp() throws Exception {
-    }
-
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
         ResumeRoutineLoadStmt stmt = new ResumeRoutineLoadStmt(new LabelName("testDb","label"));

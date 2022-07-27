@@ -15,7 +15,6 @@ public class StopRoutineLoadStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
         StopRoutineLoadStmt stmt = new StopRoutineLoadStmt(new LabelName("testDb","label"));
