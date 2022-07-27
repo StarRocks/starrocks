@@ -1218,6 +1218,12 @@ public class LocalMetastore implements ConnectorMetadata {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             Partition partition = info.getPartition();
 
+            if (olapTable == null) {
+                // This usually caused by materialized view table downgrade
+                LOG.warn("ignore add partition log for tableId={}, partitionId={}, partitionName={}",
+                        info.getTableId(), partition.getId(), partition.getName());
+                return;
+            }
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (info.isTempPartition()) {
                 olapTable.addTempPartition(partition);

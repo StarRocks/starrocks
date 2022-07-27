@@ -32,8 +32,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public static class AsyncRefreshContext {
-        // base table id -> (partitionid -> visible version)
-        @SerializedName(value = "baseTableVisibleVersionMap")
+        // for rollback compatibility use _ prefix to ignore json load
+        @SerializedName(value = "_baseTableVisibleVersionMap")
         public Map<Long, Map<Long, Long>> baseTableVisibleVersionMap;
 
         public AsyncRefreshContext() {
@@ -50,13 +50,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public static class MvRefreshScheme {
-        @SerializedName(value = "type")
+        @SerializedName(value = "_type")
         private RefreshType type;
         // when type is ASYNC
         // asyncRefreshContext is used to store refresh context
-        @SerializedName(value = "asyncRefreshContext")
+        @SerializedName(value = "_asyncRefreshContext")
         private AsyncRefreshContext asyncRefreshContext;
-        @SerializedName(value = "lastRefreshTime")
+        @SerializedName(value = "_lastRefreshTime")
         private long lastRefreshTime;
 
         public MvRefreshScheme() {
@@ -99,7 +99,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "dbId")
     private long dbId;
 
-    @SerializedName(value = "refreshScheme")
+    @SerializedName(value = "_refreshScheme")
     private MvRefreshScheme refreshScheme;
 
     @SerializedName(value = "baseTableIds")
