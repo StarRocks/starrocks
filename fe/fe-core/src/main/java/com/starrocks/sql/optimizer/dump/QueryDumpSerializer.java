@@ -78,7 +78,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
         // 7. BE number
-        long beNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
+        long beNum = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
         dumpJson.addProperty("be_number", beNum);
         // 8. exception
         JsonArray exceptions = new JsonArray();

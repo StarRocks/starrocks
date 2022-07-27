@@ -137,8 +137,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
+        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
         // maybe cluster just shutdown, ignore
         if (aliveSize <= total / 2) {
             lossTableCount = 0;
@@ -187,7 +187,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+                GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, SAMPLE_STATISTICS_COLUMNS, "olap",
@@ -215,7 +215,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+                GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, FULL_STATISTICS_COLUMNS, "olap",
@@ -243,7 +243,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+                GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, HISTOGRAM_STATISTICS_COLUMNS, "olap",
