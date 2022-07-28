@@ -8,7 +8,7 @@ StarRocks 能很好地支持实时数据分析，并能实现对实时更新数�
 
 使用 StarRocks，用户可以灵活构建包括大宽表、星型模型、雪花模型在内的各类模型。
 
-StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，全系统无外部依赖，高可用，易于运维管理。
+StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，全系统无外部依赖，高可用，易于运维管理。StarRocks 还兼容多种主流 BI 产品，包括 Tableau、Power BI、FineBI 和 Smartbi。
 
 ## 适用场景
 
