@@ -18,6 +18,7 @@ import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -191,6 +192,13 @@ public class SelectAnalyzer {
                 List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
                         : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
                         .stream().filter(Field::isVisible).collect(Collectors.toList());
+                List<String> unknownTypeFields = fields.stream()
+                        .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
+                        .map(Field::getName).collect(Collectors.toList());
+                if (!unknownTypeFields.isEmpty()) {
+                    throw new SemanticException("External Table Column " + unknownTypeFields
+                            + " convert failed, and column type is known!");
+                }
                 if (fields.isEmpty()) {
                     if (item.getTblName() != null) {
                         throw new SemanticException("Table %s not found", item.getTblName());
