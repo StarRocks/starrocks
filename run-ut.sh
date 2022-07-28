@@ -79,7 +79,7 @@ HELP=0
 WITH_AWS=OFF
 WITH_BENCH=OFF
 USE_STAROS=OFF
-USE_JEMALLOC=ON
+USE_JEMALLOC=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
