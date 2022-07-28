@@ -182,8 +182,8 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = scoped_refptr<LoadChannel>(new LoadChannel(_load_channel_mgr.get(), UniqueId::gen_uid(),
-                                                                   string(), 1000, std::move(load_mem_tracker)));
+        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), UniqueId::gen_uid(), string(), 1000,
+                                                      std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
         _tablets_channel = new_lake_tablets_channel(_load_channel.get(), key, _load_channel->mem_tracker());
     }
@@ -248,8 +248,8 @@ protected:
     std::shared_ptr<VSchema> _schema;
     PTabletWriterOpenRequest _open_request;
 
-    scoped_refptr<LoadChannel> _load_channel;
-    scoped_refptr<TabletsChannel> _tablets_channel;
+    std::shared_ptr<LoadChannel> _load_channel;
+    std::shared_ptr<TabletsChannel> _tablets_channel;
 };
 
 TEST_F(LakeTabletsChannelTest, test_simple_write) {
