@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.analysis;
 
-import avro.shaded.com.google.common.collect.Maps;
+import com.google.common.collect.Maps;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.PrimitiveType;

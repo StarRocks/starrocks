@@ -4,12 +4,12 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.hive.HiveMetaStoreThriftClient;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -36,7 +36,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testListDbNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException, DdlException {
+    public void testListDbNames(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException, DdlException {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllDatabases();
@@ -54,7 +54,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testListTblNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException, DdlException {
+    public void testListTblNames(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException, DdlException {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllTables("db2");
@@ -81,7 +81,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testGetDb(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testGetDb(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
         new Expectations() {
             {
                 metaStoreThriftClient.getDatabase("db2");
@@ -106,7 +106,7 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testGetTable(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws TException {
+    public void testGetTable(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
         List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
         List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hive";
