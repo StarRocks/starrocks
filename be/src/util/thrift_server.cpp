@@ -372,7 +372,7 @@ Status ThriftServer::start() {
 
     RETURN_IF_ERROR(event_processor->start_and_wait_for_server());
 
-    LOG(INFO) << "ThriftServer '" << _name << "' started on port: " << _port;
+    LOG(INFO) << _name << " has started listening port on " << _port;
 
     DCHECK(_started);
     return Status::OK();

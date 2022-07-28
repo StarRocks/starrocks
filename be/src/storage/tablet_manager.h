@@ -191,8 +191,6 @@ private:
 
     static Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
-    Status _drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag);
-
     Status _drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id);
