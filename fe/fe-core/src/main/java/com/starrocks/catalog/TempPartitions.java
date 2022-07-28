@@ -84,8 +84,6 @@ public class TempPartitions implements Writable, GsonPostProcessable {
                         long tabletId = tablet.getId();
                         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                         if (tabletMeta.isLakeTablet()) {
-                            // for debug
-                            LOG.info("tablet {} is lake tablet", tabletId);
                             tabletIdSet.add(tabletId);
                         }
                         invertedIndex.deleteTablet(tablet.getId());
