@@ -995,7 +995,6 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
-
             partitionList.add(partition);
             tabletIdSetForAll.addAll(tabletIdSet);
             partitionNameToTabletSet.put(partitionName, tabletIdSet);
@@ -2551,7 +2550,6 @@ public class LocalMetastore implements ConnectorMetadata {
                                    Set<Long> tabletIdSet)
             throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
-
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH) {
