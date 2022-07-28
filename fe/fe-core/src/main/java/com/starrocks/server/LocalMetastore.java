@@ -996,7 +996,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
-                   
+
             partitionList.add(partition);
             tabletIdSetForAll.addAll(tabletIdSet);
             partitionNameToTabletSet.put(partitionName, tabletIdSet);
