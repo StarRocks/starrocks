@@ -636,7 +636,7 @@ showVariablesStatement
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST
+    : SHOW FULL? PROCESSLIST  (WHERE expression)?
     ;
 
 

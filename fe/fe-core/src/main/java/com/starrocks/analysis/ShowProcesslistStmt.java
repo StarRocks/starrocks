@@ -44,9 +44,27 @@ public class ShowProcesslistStmt extends ShowStmt {
                     .addColumn(new Column("Info", ScalarType.createVarchar(32 * 1024)))
                     .build();
     private boolean isShowFull = false;
+    private Expr where;
+
+    public ShowProcesslistStmt() {
+
+    }
 
     public ShowProcesslistStmt(boolean isShowFull) {
         this.isShowFull = isShowFull;
+    }
+
+    public ShowProcesslistStmt(Expr where) {
+        this.where = where;
+    }
+
+    public Expr getWhere() {
+        return where;
+    }
+
+    @Override
+    public void analyze(Analyzer analyzer) {
+
     }
 
     @Override
@@ -61,8 +79,13 @@ public class ShowProcesslistStmt extends ShowStmt {
 
     @Override
     public String toSql() {
-        String full = isShowFull ? "FULL " : "";
-        return String.format("SHOW %sPROCESSLIST", full);
+        String full = isShowFull ? " FULL" : "";
+        StringBuilder sb = new StringBuilder("SHOW");
+        sb.append(full).append(" PROCESSLIST");
+        if (where != null) {
+            sb.append(" WHERE ").append(where.toSql());
+        }
+        return sb.toString();
     }
 
     @Override

@@ -4,10 +4,14 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.utframe.UtFrameUtils;
+
 import java.util.Locale;
+
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.analyzer.Analyzer;
 
 public class ShowProcesslistStmtTest {
     private static ConnectContext connectContext;
@@ -19,25 +23,33 @@ public class ShowProcesslistStmtTest {
 
     @Test
     public void testNormal() throws Exception {
-        testSuccess("SHOW PROCESSLIST");
-        testSuccess("SHOW FULL PROCESSLIST");
+        {
+            ShowProcesslistStmt stmt = new ShowProcesslistStmt();
+            Analyzer.analyze(stmt, connectContext);
+            Assert.assertEquals("SHOW PROCESSLIST", stmt.toString());
+            Assert.assertNull(stmt.getWhere());
+        }
+        {
+            ShowProcesslistStmt stmt =
+                    (ShowProcesslistStmt) SqlParser.parse("SHOW PROCESSLIST WHERE DB = 'test'", 32).get(0);
+            Analyzer.analyze(stmt, connectContext);
+            Assert.assertEquals("SHOW PROCESSLIST WHERE DB = 'test'", stmt.toString());
+            Assert.assertEquals("DB = 'test'", stmt.getWhere().toSql());
+        }
+
+        {
+            ShowProcesslistStmt stmt = new ShowProcesslistStmt(true);
+            Analyzer.analyze(stmt, connectContext);
+            Assert.assertEquals("SHOW FULL PROCESSLIST", stmt.toString());
+            Assert.assertNull(stmt.getWhere());
+        }
+        {
+            ShowProcesslistStmt stmt = new ShowProcesslistStmt(false);
+            Analyzer.analyze(stmt, connectContext);
+            Assert.assertEquals("SHOW PROCESSLIST", stmt.toString());
+            Assert.assertNull(stmt.getWhere());
+        }
+
     }
 
-    private void testSuccess(String originStmt) throws Exception {
-        ShowProcesslistStmt stmt = (ShowProcesslistStmt)UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        Assert.assertEquals(originStmt.toUpperCase(Locale.ROOT), stmt.toString());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(10, metaData.getColumnCount());
-        Assert.assertEquals("Id", metaData.getColumn(0).getName());
-        Assert.assertEquals("User", metaData.getColumn(1).getName());
-        Assert.assertEquals("Host", metaData.getColumn(2).getName());
-        Assert.assertEquals("Cluster", metaData.getColumn(3).getName());
-        Assert.assertEquals("Db", metaData.getColumn(4).getName());
-        Assert.assertEquals("Command", metaData.getColumn(5).getName());
-        Assert.assertEquals("ConnectionStartTime", metaData.getColumn(6).getName());
-        Assert.assertEquals("Time", metaData.getColumn(7).getName());
-        Assert.assertEquals("State", metaData.getColumn(8).getName());
-        Assert.assertEquals("Info", metaData.getColumn(9).getName());
-    }
 }

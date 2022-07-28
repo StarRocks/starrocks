@@ -2409,8 +2409,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
         boolean isShowFull = context.FULL() != null;
-        return new ShowProcesslistStmt(isShowFull);
+        if (isShowFull) {
+            return new ShowProcesslistStmt(isShowFull);
+        }
+        return new ShowProcesslistStmt(where);
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
