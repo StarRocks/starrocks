@@ -44,6 +44,7 @@ public class HiveMetaStoreTableUtils {
     public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
     public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
     private static final String COLUMN_CONVERTED_FAILED_MSG = "hudi table column type [%s] transform failed.";
+    private static final ScalarType STRING_TYPE = ScalarType.STRING;
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -308,7 +309,7 @@ public class HiveMetaStoreTableUtils {
         }
 
         if (isString) {
-            return ScalarType.STRING;
+            return STRING_TYPE;
         } else {
             return ScalarType.createType(primitiveType);
         }
