@@ -114,7 +114,7 @@ public class BDBJournalCursor implements JournalCursor {
      * 2. otherwise, we're already open a db for previous key, we're looking for the next db of the previous key
      **/
     protected void calculateNextDbIndex() throws JournalException {
-        if (localDBNames.size() > 0 && currentKey < localDBNames.get(0)) {
+        if (!localDBNames.isEmpty() && currentKey < localDBNames.get(0)) {
             throw new JournalException(String.format(
                     "Can not find the key[%d] in %s: key too small", currentKey, localDBNames));
         }
