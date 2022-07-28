@@ -170,8 +170,10 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
         }
         return left.length() - right.length();
     } else if (left.isArray() && right.isArray()) {
-        size_t min_len = std::min(left.length(), right.length());
-        for (size_t i = 0; i < min_len; i++) {
+        if (left.length() != right.length()) {
+            return left.length() - right.length();
+        }
+        for (size_t i = 0; i < left.length(); i++) {
             auto left_item = left.at(i);
             auto right_item = right.at(i);
             int x = sliceCompare(left_item, right_item);
@@ -179,7 +181,7 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return x;
             }
         }
-        return left.length() - right.length();
+        return 0;
     } else if (vpack::valueTypeGroup(left.type()) == vpack::valueTypeGroup(right.type())) {
         // 1. type are exactly same
         // 2. type are both number, but could smallInt/Int/Double
