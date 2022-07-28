@@ -1436,8 +1436,6 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logDropPartition(info);
 
         if (!tabletIdSet.isEmpty()) {
-            // for debug
-            LOG.info("delete lake tablet : {}", tabletIdSet);
             stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
             editLog.logAddUnusedShard(tabletIdSet);
         }
@@ -4514,8 +4512,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 long tabletId = tablet.getId();
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 if (tabletMeta != null && tabletMeta.isLakeTablet()) {
-                    // for debug
-                    LOG.info("tablet {} is lake tablet", tabletId);
                     tabletIdSet.add(tabletId);
                 }
                 invertedIndex.deleteTablet(tabletId);
