@@ -125,6 +125,7 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | showCollationStatement                                                                #showCollation
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -666,6 +667,10 @@ showNodesStatement
 
 showBrokerStatement
     : SHOW BROKER
+    ;
+
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 varType
