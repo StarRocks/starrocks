@@ -6,7 +6,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -199,7 +198,8 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
 
             CostEstimate result;
-            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            ConnectContext ctx = ConnectContext.get();
+            SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             // set network start cost 1 at least
             // avoid choose network plan when the cost is same as colocate plans
@@ -210,9 +210,9 @@ public class CostModel {
                 case BROADCAST:
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
-                    int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber());
-                    result = CostEstimate.of(statistics.getOutputSize(outputColumns) *
-                                    GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber(),
+                    int aliveBackendNumber = ctx.getAliveBackendNumber();
+                    int beNum = Math.max(1, aliveBackendNumber);
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns) * aliveBackendNumber,
                             statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
                             Math.max(statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum, 1));
                     if (statistics.getOutputSize(outputColumns) > sessionVariable.getMaxExecMemByte()) {
