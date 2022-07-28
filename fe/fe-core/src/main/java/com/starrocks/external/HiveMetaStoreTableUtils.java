@@ -311,7 +311,7 @@ public class HiveMetaStoreTableUtils {
         return ScalarType.createType(primitiveType);
     }
 
-    public static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
+    private static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
         return new ArrayType(convertHudiTableColumnType(typeSchema.getElementType()));
     }
 
