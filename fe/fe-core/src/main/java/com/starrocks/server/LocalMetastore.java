@@ -1177,8 +1177,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void addPartitions(Database db, String tableName, List<PartitionDesc> partitionDescs,
                                AddPartitionClause addPartitionClause) throws DdlException {
-        // for debug
-        LOG.info("enter addPartitions");
         DistributionInfo distributionInfo;
         OlapTable olapTable;
         OlapTable copiedTable;
@@ -2533,8 +2531,6 @@ public class LocalMetastore implements ConnectorMetadata {
             throws DdlException {
         Preconditions.checkArgument(replicationNum > 0);
 
-        // for debug
-        LOG.info("enter createLakeTablets, partitionId is {}", partitionId);
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
         if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH) {
@@ -4545,8 +4541,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public Set<Long> onErasePartition(Partition partition) {
-        // for debug
-        LOG.info("enter onErasePartition");
         // remove tablet in inverted index
         Set<Long> tabletIdSet = new HashSet<Long>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
