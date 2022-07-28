@@ -58,6 +58,12 @@ public abstract class Type implements Cloneable {
     // performance tests.
     public static int MAX_NESTING_DEPTH = 15;
 
+    // DECIMAL, NULL, and INVALID_TYPE  are handled separately.
+    public static List<PrimitiveType> skipCompareTypes = Arrays.asList(
+            PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
+            PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
+            PrimitiveType.TIME, PrimitiveType.JSON);
+
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
     public static final ScalarType NULL = new ScalarType(PrimitiveType.NULL_TYPE);
@@ -484,11 +490,6 @@ public abstract class Type implements Cloneable {
             for (int j = i; j < PrimitiveType.values().length - 2; ++j) {
                 PrimitiveType t1 = PrimitiveType.values()[i];
                 PrimitiveType t2 = PrimitiveType.values()[j];
-                // DECIMAL, NULL, and INVALID_TYPE  are handled separately.
-                List<PrimitiveType> skipCompareTypes = Arrays.asList(
-                        PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
-                        PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
-                        PrimitiveType.TIME, PrimitiveType.JSON);
                 if (skipCompareTypes.contains(t1) || skipCompareTypes.contains(t2)) {
                     continue;
                 }
