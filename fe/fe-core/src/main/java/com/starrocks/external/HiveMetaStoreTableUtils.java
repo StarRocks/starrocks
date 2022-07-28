@@ -266,6 +266,9 @@ public class HiveMetaStoreTableUtils {
                 Type type = Utils.convertToArrayType(avroSchema);
                 if (type.isArrayType()) {
                     return type;
+                } else {
+                    isConvertedFailed = false;
+                    break;
                 }
             case FIXED:
             case BYTES:
