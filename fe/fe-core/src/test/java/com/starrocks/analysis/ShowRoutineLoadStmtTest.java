@@ -16,7 +16,6 @@ public class ShowRoutineLoadStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb","label"), false);
