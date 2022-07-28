@@ -44,7 +44,6 @@ public class HiveMetaStoreTableUtils {
     public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
     public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
     private static final String COLUMN_CONVERTED_FAILED_MSG = "hudi table column type [%s] transform failed.";
-    private static final ScalarType STRING_TYPE = ScalarType.STRING;
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -230,7 +229,6 @@ public class HiveMetaStoreTableUtils {
         Schema.Type columnType = avroSchema.getType();
         LogicalType logicalType = avroSchema.getLogicalType();
         PrimitiveType primitiveType = null;
-        boolean isString = false;
         boolean isConvertedFailed = false;
 
         switch (columnType) {
@@ -263,8 +261,7 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case STRING:
-                isString = true;
-                break;
+                return ScalarType.createDefaultString();
             case ARRAY:
                 Type type = Utils.convertToArrayType(avroSchema);
                 if (type.isArrayType()) {
@@ -308,11 +305,7 @@ public class HiveMetaStoreTableUtils {
             throw new DdlException(String.format(COLUMN_CONVERTED_FAILED_MSG, avroSchema.getType()));
         }
 
-        if (isString) {
-            return STRING_TYPE;
-        } else {
-            return ScalarType.createType(primitiveType);
-        }
+        return ScalarType.createType(primitiveType);
     }
 
     // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
