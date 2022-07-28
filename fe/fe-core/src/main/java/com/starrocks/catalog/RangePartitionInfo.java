@@ -227,7 +227,6 @@ public class RangePartitionInfo extends PartitionInfo {
                 idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
                 idToReplicationNum.put(partitionId, desc.getReplicationNum());
                 idToInMemory.put(partitionId, desc.isInMemory());
-                idToStorageInfo.put(partitionId, desc.getStorageInfo());
             }
         }
     }
