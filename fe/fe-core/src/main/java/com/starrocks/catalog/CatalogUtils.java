@@ -33,9 +33,8 @@ public class CatalogUtils {
 
     // check table type is OLAP
     public static void checkTableTypeOLAP(Database db, Table table) throws DdlException {
-        if (!table.isOlapOrLakeTable() && table.getType() != Table.TableType.MATERIALIZED_VIEW) {
-            throw new DdlException("Table[" + table.getName() +
-                    "] is not OLAP table or LAKE table");
+        if (table.getType() != Table.TableType.OLAP && table.getType() != Table.TableType.MATERIALIZED_VIEW) {
+            throw new DdlException("Table[" + table.getName() + "] is not OLAP table");
         }
     }
 
