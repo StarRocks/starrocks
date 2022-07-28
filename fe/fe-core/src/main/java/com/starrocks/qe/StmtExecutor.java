@@ -499,6 +499,14 @@ public class StmtExecutor {
             }
 
             if (parsedStmt instanceof InsertStmt) {
+                // sql's blacklist is enabled through enable_sql_blacklist.
+                if (Config.enable_sql_blacklist) {
+                    String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
+
+                    // If this sql is in blacklist, show message.
+                    SqlBlackList.verifying(originSql);
+                }
+
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 // The transaction of an insert operation begin at analyze phase.
                 // So we should abort the transaction at this finally block if it encounters exception.
