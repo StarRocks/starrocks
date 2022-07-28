@@ -53,13 +53,12 @@ import java.util.Set;
 // EXPORT statement, export data to dirs by broker.
 //
 // syntax:
-//      EXPORT TABLE tablename [PARTITION (name1[, ...])]
-//          [(col1, col2[, ...])]
-//          TO 'export_target_path'
-//          [PROPERTIES("key"="value")]
-//          WITH BROKER 'broker_name' [( $broker_attrs)]
-public class ExportStmt extends StatementBase {
-
+//EXPORT TABLE table_name
+//        [PARTITION (p1[,p2])]
+//        TO export_path
+//        [opt_properties]
+//        broker;
+public class ExportStmt extends DmlStmt {
     private static final String INCLUDE_QUERY_ID_PROP = "include_query_id";
 
     private static final String DEFAULT_COLUMN_SEPARATOR = "\t";
@@ -68,90 +67,51 @@ public class ExportStmt extends StatementBase {
 
     private static final Set<String> VALID_SCHEMES = Sets.newHashSet(
             "afs", "bos", "hdfs", "oss", "s3a", "cosn", "viewfs");
-
+    private Table table;
+    private TableRef tableRef;
+    private long exportStartTime;
     private TableName tblName;
     private List<String> partitions;
     private List<String> columnNames;
     // path should include "/"
     private String path;
     private String fileNamePrefix;
-    private final BrokerDesc brokerDesc;
+    private BrokerDesc brokerDesc;
     private Map<String, String> properties = Maps.newHashMap();
     private String columnSeparator;
     private String rowDelimiter;
     private boolean includeQueryId = true;
 
-    private TableRef tableRef;
-    private long exportStartTime;
+    @Override
+    public TableName getTableName() {
+        return null;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
+    public void setTable(Table table) {
+        this.table = table;
+    }
+
+    public Table getTable() {
+        return table;
+    }
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
         this.tableRef = tableRef;
-        this.columnNames = columnNames;
         this.path = path.trim();
         if (properties != null) {
             this.properties = properties;
         }
+        this.columnNames = columnNames;
         this.brokerDesc = brokerDesc;
         this.columnSeparator = DEFAULT_COLUMN_SEPARATOR;
         this.rowDelimiter = DEFAULT_LINE_DELIMITER;
         this.includeQueryId = true;
-    }
-
-    public long getExportStartTime() {
-        return exportStartTime;
-    }
-
-    public void setExportStartTime(long exportStartTime) {
-        this.exportStartTime = exportStartTime;
-    }
-
-    public TableName getTblName() {
-        return tblName;
-    }
-
-    public List<String> getPartitions() {
-        return partitions;
-    }
-
-    public List<String> getColumnNames() {
-        return columnNames;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public String getFileNamePrefix() {
-        return fileNamePrefix;
-    }
-
-    public BrokerDesc getBrokerDesc() {
-        return brokerDesc;
-    }
-
-    public Map<String, String> getProperties() {
-        return properties;
-    }
-
-    public String getColumnSeparator() {
-        return this.columnSeparator;
-    }
-
-    public String getRowDelimiter() {
-        return this.rowDelimiter;
-    }
-
-    public boolean isIncludeQueryId() {
-        return includeQueryId;
-    }
-
-    @Override
-    public boolean needAuditEncryption() {
-        if (brokerDesc != null) {
-            return true;
-        }
-        return false;
     }
 
     @Override
@@ -369,6 +329,62 @@ public class ExportStmt extends StatementBase {
         }
 
         return sb.toString();
+    }
+
+    public long getExportStartTime() {
+        return exportStartTime;
+    }
+
+    public void setExportStartTime(long exportStartTime) {
+        this.exportStartTime = exportStartTime;
+    }
+
+    public TableName getTblName() {
+        return tblName;
+    }
+
+    public List<String> getPartitions() {
+        return partitions;
+    }
+
+    public List<String> getColumnNames() {
+        return columnNames;
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getFileNamePrefix() {
+        return fileNamePrefix;
+    }
+
+    public BrokerDesc getBrokerDesc() {
+        return brokerDesc;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getColumnSeparator() {
+        return this.columnSeparator;
+    }
+
+    public String getRowDelimiter() {
+        return this.rowDelimiter;
+    }
+
+    public boolean isIncludeQueryId() {
+        return includeQueryId;
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        if (brokerDesc != null) {
+            return true;
+        }
+        return false;
     }
 
     @Override

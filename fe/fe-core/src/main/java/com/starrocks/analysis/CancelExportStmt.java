@@ -82,6 +82,11 @@ public class CancelExportStmt extends DdlStmt {
     }
 
     @Override
+    public String toString() {
+        return toSql();
+    }
+
+    @Override
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("CANCEL EXPORT");
@@ -93,6 +98,11 @@ public class CancelExportStmt extends DdlStmt {
             stringBuilder.append(" WHERE " + whereClause.toSql());
         }
         return stringBuilder.toString();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
 }

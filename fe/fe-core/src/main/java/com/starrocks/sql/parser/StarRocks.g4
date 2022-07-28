@@ -125,7 +125,9 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
-
+    | exportStatement                                                                       #export
+    | cancelExportStatement                                                                 #cancelExport
+    | showExportStatement                                                                   #showExport
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
     | GRANT IMPERSONATE ON user TO user                                                     #grantImpersonate
@@ -142,6 +144,30 @@ statement
     | showProcStatement                                                                      #showProc
     ;
 
+// ---------------------------------------- export related-statement ---------------------------------------------------------
+exportStatement:
+    | EXPORT TABLE qualifiedName ((partitionNames)? (columnAliases)?)? TO exportPath (PROPERTIES properties)? WITH BROKER brokerDesc
+    ;
+
+
+cancelExportStatement:
+    | CANCEL EXPORT ((FROM | IN) db=qualifiedName)? (WHERE expression)
+    ;
+
+showExportStatement:
+    | SHOW EXPORT ((FROM | IN) db=qualifiedName)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
+
+exportPath:
+    | string
+    ;
+
+brokerDesc:
+    | string properties?
+    ;
+
+
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
 alterDbQuotaStmt
     : ALTER DATABASE identifier SET DATA QUOTA identifier
@@ -151,6 +177,8 @@ alterDbQuotaStmt
 createDbStatement
     : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
     ;
+
+
 
 dropDbStatement
     : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
@@ -1243,6 +1271,8 @@ assignment
 assignmentList
     : assignment (',' assignment)*
     ;
+
+
 
 number
     : DECIMAL_VALUE  #decimalValue
