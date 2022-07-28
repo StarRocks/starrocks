@@ -527,7 +527,7 @@ public class SystemInfoService {
     }
 
     public int getTotalBackendNumber() {
-        return getBackendIds(false).size();
+        return idToBackendRef.size();
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
@@ -572,10 +572,6 @@ public class SystemInfoService {
             }
             return backendIds;
         }
-    }
-
-    public int backendSize() {
-        return idToBackendRef.size();
     }
 
     public List<Long> getDecommissionedBackendIds() {
