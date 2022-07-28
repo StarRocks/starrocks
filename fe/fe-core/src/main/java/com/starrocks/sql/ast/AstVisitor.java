@@ -11,7 +11,6 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -74,6 +73,7 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -313,6 +313,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowBrokerStmt(ShowBrokerStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitShowColumnStmt(ShowColumnStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -394,7 +398,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAlterUserStatement(AlterUserStmt statement, C context) {
+    public R visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

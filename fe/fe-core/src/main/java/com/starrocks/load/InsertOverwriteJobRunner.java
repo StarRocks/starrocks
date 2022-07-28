@@ -91,11 +91,10 @@ public class InsertOverwriteJobRunner {
         try {
             handle();
         } catch (Exception e) {
-            LOG.warn("insert overwrite job:{} handle exception", job.getJobId(), e);
             if (job.getJobState() != InsertOverwriteJobState.OVERWRITE_FAILED) {
                 transferTo(InsertOverwriteJobState.OVERWRITE_FAILED);
             }
-            throw new RuntimeException("insert overwrite failed.", e);
+            throw e;
         }
     }
 
@@ -121,17 +120,13 @@ public class InsertOverwriteJobRunner {
         }
     }
 
-    private void doLoad() {
+    private void doLoad() throws Exception {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
-        try {
-            createTempPartitions();
-            prepareInsert();
-            executeInsert();
-            doCommit();
-            transferTo(InsertOverwriteJobState.OVERWRITE_SUCCESS);
-        } catch (Exception e) {
-            throw new RuntimeException("doLoad failed.", e);
-        }
+        createTempPartitions();
+        prepareInsert();
+        executeInsert();
+        doCommit();
+        transferTo(InsertOverwriteJobState.OVERWRITE_SUCCESS);
     }
 
     public void replayStateChange(InsertOverwriteStateChangeInfo info) {

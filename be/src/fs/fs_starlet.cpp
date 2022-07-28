@@ -22,6 +22,7 @@
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
 #include "service/staros_worker.h"
+#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -33,28 +34,37 @@ using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
-using staros::starlet::fslib::kS3AccessKeyId;
-using staros::starlet::fslib::kS3AccessKeySecret;
-using staros::starlet::fslib::kS3OverrideEndpoint;
-using staros::starlet::fslib::kSysRoot;
 
-StatusOr<std::pair<std::string, int64_t>> parse_starlet_path(const std::string& path) {
-    static size_t prefix_len = std::strlen(kStarletPrefix);
-    const static std::string shard_qs("?ShardId=");
+bool is_starlet_uri(std::string_view uri) {
+    return HasPrefixString(uri, "staros://");
+}
 
-    // check starlet filesystem prefix
-    if (!HasPrefixString(path, kStarletPrefix)) {
-        return Status::InvalidArgument(fmt::format("Starlet Fs need {} prefix, {}", kStarletPrefix, path));
+std::string build_starlet_uri(int64_t shard_id, std::string_view path) {
+    while (!path.empty() && path.front() == '/') {
+        path.remove_prefix(1);
+    }
+    return path.empty() ? fmt::format("staros://{}", shard_id) : fmt::format("staros://{}/{}", shard_id, path);
+}
+
+// Expected format of uri: staros://ShardID/path/to/file
+StatusOr<std::pair<std::string, int64_t>> parse_starlet_uri(std::string_view uri) {
+    std::string_view path = uri;
+    if (!HasPrefixString(path, "staros://")) {
+        return Status::InvalidArgument(fmt::format("Invalid starlet URI: {}", uri));
+    }
+    path.remove_prefix(sizeof("staros://") - 1);
+    auto end_shard_id = path.find('/');
+    if (end_shard_id == std::string::npos) {
+        end_shard_id = path.size();
     }
 
-    // check ?ShardId= info
-    auto pos = path.find(shard_qs);
-    if (pos == std::string::npos) {
-        return Status::InvalidArgument(fmt::format("Starlet Fs need a ShardId, {}", path));
+    StringParser::ParseResult result;
+    auto shard_id = StringParser::string_to_int<int64_t>(path.data(), end_shard_id, &result);
+    if (result != StringParser::PARSE_SUCCESS) {
+        return Status::InvalidArgument(fmt::format("Invalid starlet URI: {}", uri));
     }
-
-    int64_t shardid = std::stol(path.substr(pos + shard_qs.size()));
-    return std::make_pair(path.substr(prefix_len, pos - prefix_len), shardid);
+    path.remove_prefix(std::min<size_t>(path.size(), end_shard_id + 1));
+    return std::make_pair(std::string(path), shard_id);
 };
 
 class StarletInputStream : public starrocks::io::SeekableInputStream {
@@ -176,7 +186,7 @@ public:
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
@@ -192,7 +202,7 @@ public:
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
 
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
@@ -213,18 +223,13 @@ public:
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
-        if (!pair.first.empty() && pair.first.back() == '/') {
-            return Status::NotSupported(fmt::format("Starlet: cannot create file with name ended with '/': {}", path));
-        }
-
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
         // TODO: translate WritableFileOptions to fslib::WriteOptions
         auto file_st = (*fs_st)->create(pair.first, WriteOptions());
-
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
@@ -234,7 +239,7 @@ public:
     }
 
     Status delete_file(const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
@@ -244,10 +249,7 @@ public:
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dir));
-        if (!pair.first.empty() && pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dir));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
@@ -261,11 +263,7 @@ public:
         if (st.ok() && st.value()) {
             return Status::AlreadyExist(dirname);
         }
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dirname));
-        if (pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
-
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dirname));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
@@ -289,15 +287,12 @@ public:
     Status create_dir_recursive(const std::string& dirname) override { return create_dir_if_missing(dirname, nullptr); }
 
     Status delete_dir(const std::string& dirname) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dirname));
-        if (!pair.first.empty() && pair.first.back() != '/') {
-            pair.first.push_back('/');
-        }
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dirname));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-
+        // TODO: leave this check to starlet.
         bool dir_empty = true;
         auto cb = [&dir_empty](std::string_view file) {
             dir_empty = false;
@@ -316,14 +311,10 @@ public:
     }
 
     Status delete_dir_recursive(const std::string& dirname) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(dirname));
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(dirname));
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
-        }
-
-        if (pair.first.back() != '/') {
-            pair.first.push_back('/');
         }
         auto st = (*fs_st)->delete_dir(pair.first, true);
         return to_status(st);
@@ -335,37 +326,18 @@ public:
     //  * false - exists but is not a directory
     //  * error status: not exist or other errors
     StatusOr<bool> is_directory(const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
 
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
 
-        auto st = (*fs_st)->exists(pair.first);
-        if (!st.ok()) {
-            return to_status(st.status());
+        auto fst = (*fs_st)->stat(pair.first);
+        if (!fst.ok()) {
+            return to_status(fst.status());
         }
-
-        if (*st) { // exists, determine is a directory or a file
-            auto fst = (*fs_st)->stat(pair.first);
-            if (!fst.ok()) {
-                return to_status(fst.status());
-            }
-            return S_ISDIR((*fst).mode);
-        }
-        if (!pair.first.empty() && pair.first.back() != '/') {
-            // force a directory naming convention
-            pair.first.push_back('/');
-            auto st2 = (*fs_st)->exists(pair.first);
-            if (!st2.ok()) {
-                return to_status(st2.status());
-            }
-            if (*st2) {
-                return true;
-            }
-        }
-        return Status::NotFound(path);
+        return S_ISDIR(fst->mode);
     }
 
     Status sync_dir(const std::string& dirname) override {
@@ -401,7 +373,7 @@ public:
     }
 
     StatusOr<uint64_t> get_file_modified_time(const std::string& path) override {
-        ASSIGN_OR_RETURN(auto pair, parse_starlet_path(path));
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
         auto fs_st = get_shard_filesystem(pair.second);
 
         if (!fs_st.ok()) {

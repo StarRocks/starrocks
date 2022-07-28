@@ -158,8 +158,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
             if (Strings.isNullOrEmpty(dbFullName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
-        } else {
-            dbFullName = ClusterNamespace.getFullName(dbName);
         }
         name = labelName == null ? null : labelName.getLabelName();
     }

@@ -1518,7 +1518,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = systemInfoService.getBackendIds(true).size();
+        int numAliveBackends = systemInfoService.getAliveBackendNumber();
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
@@ -2808,6 +2808,9 @@ public class LocalMetastore implements ConnectorMetadata {
     public Database getDb(String name) {
         // used for remove cluster from stmt
         name = ClusterNamespace.getFullName(name);
+        if (name == null) {
+            return null;
+        }
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
@@ -3261,7 +3264,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
                 taskManager.createTask(task, false);
                 // for async type, run task
-                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC) {
+                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
+                        task.getType() != Constants.TaskType.PERIODICAL) {
                     taskManager.executeTask(task.getName());
                 }
             }

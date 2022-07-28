@@ -128,6 +128,7 @@ statement
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
+    | showBrokerStatement                                                                   #showBroker
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -136,6 +137,7 @@ statement
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
+    | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -675,6 +677,10 @@ showCharsetStatement
 
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
+    ;
+
+showBrokerStatement
+    : SHOW BROKER
     ;
 
 varType

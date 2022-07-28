@@ -10,7 +10,6 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CompoundPredicate;
@@ -32,6 +31,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.ShowDataStmt;
@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
@@ -463,7 +464,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterUserStatement(AlterUserStmt statement, ConnectContext context) {
+        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
             // check if current user has GRANT priv on GLOBAL or DATABASE level.
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkHasPriv(context, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth.PrivLevel.DATABASE)) {
@@ -936,12 +937,39 @@ public class PrivilegeChecker {
             }
             return null;
         }
-        
+
+        @Override
+        public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext session) {
+            String db = statement.getDbFullName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
+            String db = statement.getDbFullName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
         @Override
         public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext session) {
             String db = statement.getDbFullName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        public Void visitShowBrokerStmt(ShowBrokerStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
             }
             return null;
         }

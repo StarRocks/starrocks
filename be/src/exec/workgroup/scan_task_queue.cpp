@@ -7,6 +7,7 @@
 
 namespace starrocks::workgroup {
 
+/// FifoScanTaskQueue.
 StatusOr<ScanTask> FifoScanTaskQueue::take(int worker_id) {
     auto task = std::move(_queue.front());
     _queue.pop();
@@ -18,6 +19,23 @@ bool FifoScanTaskQueue::try_offer(ScanTask task) {
     return true;
 }
 
+/// PriorityScanTaskQueue.
+PriorityScanTaskQueue::PriorityScanTaskQueue(size_t max_elements) : _queue(max_elements) {}
+
+StatusOr<ScanTask> PriorityScanTaskQueue::take(int worker_id) {
+    ScanTask task;
+    if (_queue.blocking_get(&task)) {
+        return task;
+    }
+
+    return Status::Cancelled("Shutdown");
+}
+
+bool PriorityScanTaskQueue::try_offer(ScanTask task) {
+    return _queue.blocking_put(std::move(task));
+}
+
+/// ScanTaskQueueWithWorkGroup.
 void ScanTaskQueueWithWorkGroup::close() {
     std::lock_guard<std::mutex> lock(_global_mutex);
 

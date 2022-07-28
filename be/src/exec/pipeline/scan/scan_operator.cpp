@@ -45,6 +45,8 @@ ScanOperator::~ScanOperator() {
 }
 
 Status ScanOperator::prepare(RuntimeState* state) {
+    DCHECK(_scan_executor != nullptr);
+
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     _unique_metrics->add_info_string("MorselQueueType", _morsel_queue->name());
@@ -54,27 +56,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
 
-    if (_workgroup == nullptr) {
-        DCHECK(_io_threads != nullptr);
-        auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
-        if (num_scan_operators > _io_threads->get_queue_capacity()) {
-            state->exec_env()->decrement_num_scan_operators(1);
-            return Status::TooManyTasks(
-                    strings::Substitute("num_scan_operators exceeds queue capacity($0) of pipeline_pool_thread",
-                                        _io_threads->get_queue_capacity()));
-        }
-    }
-
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    if (_workgroup == nullptr) {
-        state->exec_env()->decrement_num_scan_operators(1);
-    }
-
     set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
@@ -306,7 +293,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
-    bool offer_task_success = false;
     // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
@@ -314,82 +300,50 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
     query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
     int32_t driver_id = CurrentThread::current().get_driver_id();
-    if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index,
-                                                                    query_trace_ctx, driver_id](int worker_id) {
-            if (auto sp = wp.lock()) {
-                // Set driver_id here to share some driver-local contents.
-                // Current it's used by ExprContext's driver-local state
-                CurrentThread::current().set_pipeline_driver_id(driver_id);
-                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
-                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
-                auto& chunk_source = _chunk_sources[chunk_source_index];
-                size_t num_read_chunks = 0;
-                int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
-                int64_t prev_scan_rows = chunk_source->get_scan_rows();
-                int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
-                // Read chunk
-                Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
-                        kIOTaskBatchSize, state, &num_read_chunks, worker_id, _workgroup);
-                if (!status.ok() && !status.is_end_of_file()) {
-                    _set_scan_status(status);
-                }
+    workgroup::ScanTask task;
+    task.workgroup = _workgroup;
+    // TODO: consider more factors, such as scan bytes and i/o time.
+    task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
+    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id](int worker_id) {
+        if (auto sp = wp.lock()) {
+            // Set driver_id here to share some driver-local contents.
+            // Current it's used by ExprContext's driver-local state
+            CurrentThread::current().set_pipeline_driver_id(driver_id);
+            DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
 
-                int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+
+            [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
+            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
+
+            auto& chunk_source = _chunk_sources[chunk_source_index];
+            int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
+            int64_t prev_scan_rows = chunk_source->get_scan_rows();
+            int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
+
+            // Read chunk
+            auto [status, num_read_chunks] =
+                    chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup, worker_id);
+            if (!status.ok() && !status.is_end_of_file()) {
+                _set_scan_status(status);
+            }
+
+            int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
+            if (_workgroup != nullptr) {
                 _workgroup->increment_real_runtime_ns(delta_cpu_time);
                 _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-
-                _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
-                                          chunk_source->get_scan_rows() - prev_scan_rows,
-                                          chunk_source->get_scan_bytes() - prev_scan_bytes);
-                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
             }
-        });
-        if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
-            offer_task_success = ExecEnv::GetInstance()->connector_scan_executor()->submit(std::move(task));
-        } else {
-            offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
+
+            _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
+                                      chunk_source->get_scan_rows() - prev_scan_rows,
+                                      chunk_source->get_scan_bytes() - prev_scan_bytes);
+
+            QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
         }
-    } else {
-        PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id]() {
-            if (auto sp = wp.lock()) {
-                // Set driver_id here to share some driver-local contents.
-                // Current it's used by ExprContext's driver-local state
-                CurrentThread::current().set_pipeline_driver_id(driver_id);
-                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+    };
 
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
-                QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
-                auto& chunk_source = _chunk_sources[chunk_source_index];
-                int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
-                int64_t prev_scan_rows = chunk_source->get_scan_rows();
-                int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
-
-                Status status =
-                        _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(kIOTaskBatchSize, state);
-                if (!status.ok() && !status.is_end_of_file()) {
-                    _set_scan_status(status);
-                }
-                int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
-
-                _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
-                                          chunk_source->get_scan_rows() - prev_scan_rows,
-                                          chunk_source->get_scan_bytes() - prev_scan_bytes);
-                QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
-            }
-        };
-        // TODO(by satanson): set a proper priority
-        task.priority = 20;
-
-        offer_task_success = _io_threads->try_offer(task);
-    }
-
-    if (offer_task_success) {
+    if (_scan_executor->submit(std::move(task))) {
         _io_task_retry_cnt = 0;
     } else {
         _chunk_sources[chunk_source_index]->unpin_chunk_token();

@@ -57,8 +57,6 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
-
     public abstract void collect() throws Exception;
 
     public Database getDb() {

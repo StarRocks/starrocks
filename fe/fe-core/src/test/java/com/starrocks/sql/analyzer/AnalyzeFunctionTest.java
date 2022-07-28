@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -20,6 +21,14 @@ public class AnalyzeFunctionTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+    }
+
+    @Test
+    public void testFunctionWithoutDb() {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withoutUseDatabase();
+        analyzeFail("select query_id()", "No matching function with signature: query_id()");
+        starRocksAssert.useDatabase(AnalyzeTestUtil.getDbName());
     }
 
     @Test

@@ -175,6 +175,10 @@ public class AnalyzeTestUtil {
         starRocksAssert.withView("create view test.view_to_drop as select * from test.table_to_drop;");
     }
 
+    public static String getDbName() {
+        return DB_NAME;
+    }
+
     public static ConnectContext getConnectContext() {
         return connectContext;
     }

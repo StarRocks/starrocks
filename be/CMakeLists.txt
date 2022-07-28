@@ -83,7 +83,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER "10.3.0")
         message(STATUS "GCC version ${CMAKE_CXX_COMPILER_VERSION} is greater than 10.3.0, disable -Werror. Be careful with compile warnings.")
-    elseif(${MAKE_TEST} STREQUAL "OFF")
+    else()
         #   -Werror: compile warnings should be errors when using the toolchain compiler.
         set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -Werror")
     endif()
@@ -324,6 +324,12 @@ if ("${USE_STAROS}" STREQUAL "ON")
      add_library(starlet STATIC IMPORTED)
      set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
+     find_package (prometheus-cpp CONFIG REQUIRED)
+     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
+     message(STATUS "Using prometheus-cpp")
+     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
+     include_directories(${prometheus-cpp_INCLUDE_DIR})
+
      add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
      set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
@@ -333,6 +339,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
         gRPC::grpc++_reflection
         gRPC::grpc++
         starlet_fslib_all
+        prometheus-cpp::core
         )
 endif()
 

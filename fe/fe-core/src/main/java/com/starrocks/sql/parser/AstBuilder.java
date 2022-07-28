@@ -46,6 +46,7 @@ import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -118,6 +119,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCharsetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -2188,6 +2190,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Privilege Statement -------------------------------------------------
 
     @Override
+    public ParseNode visitCreateUser(StarRocksParser.CreateUserContext context) {
+        UserDesc userDesc;
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        UserAuthOption authOption = context.authOption() == null ? null : (UserAuthOption) visit(context.authOption());
+        if (authOption == null) {
+            userDesc = new UserDesc(user.getUserIdentity());
+        } else if (authOption.getAuthPlugin() == null) {
+            userDesc = new UserDesc(user.getUserIdentity(), authOption.getPassword(), authOption.isPasswordPlain());
+        } else {
+            userDesc = new UserDesc(user.getUserIdentity(), authOption.getAuthPlugin(), authOption.getAuthString(),
+                    authOption.isPasswordPlain());
+        }
+        boolean ifNotExists = context.IF() != null;
+        String userRole = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
+        return new CreateUserStmt(ifNotExists, userDesc, userRole);
+    }
+
+    @Override
     public ParseNode visitAlterUser(StarRocksParser.AlterUserContext context) {
         UserDesc userDesc;
         UserIdentifier user = (UserIdentifier) visit(context.user());
@@ -2434,6 +2454,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowProcesslistStatement(StarRocksParser.ShowProcesslistStatementContext context) {
         boolean isShowFull = context.FULL() != null;
         return new ShowProcesslistStmt(isShowFull);
+    }
+
+    @Override
+    public ParseNode visitShowBrokerStatement(StarRocksParser.ShowBrokerStatementContext context) {
+        return new ShowBrokerStmt();
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

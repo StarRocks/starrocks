@@ -42,7 +42,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
+    void set_scan_executor(workgroup::ScanExecutor* scan_executor) { _scan_executor = scan_executor; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
 
@@ -113,7 +113,7 @@ protected:
 
 private:
     int32_t _io_task_retry_cnt = 0;
-    PriorityThreadPool* _io_threads = nullptr;
+    workgroup::ScanExecutor* _scan_executor = nullptr;
     std::atomic<int> _num_running_io_tasks = 0;
 
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read

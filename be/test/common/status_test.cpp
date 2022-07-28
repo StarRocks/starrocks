@@ -131,4 +131,21 @@ TEST_F(StatusTest, LongContext) {
     ASSERT_EQ(fmt::format("{}\na.cpp:10 {}", message, context), st1.detailed_message());
     ASSERT_EQ(fmt::format("Internal error: {}\na.cpp:10 {}", message, context), st1.to_string());
 }
+
+TEST_F(StatusTest, update) {
+    Status st;
+    st.update(Status::NotFound(""));
+    ASSERT_TRUE(st.is_not_found());
+
+    st.update(Status::InternalError(""));
+    ASSERT_TRUE(st.is_not_found());
+
+    Status st1 = Status::InvalidArgument("");
+    st.update(st1);
+    ASSERT_TRUE(st.is_not_found());
+
+    st.update(std::move(st1));
+    ASSERT_TRUE(st.is_not_found());
+}
+
 } // namespace starrocks

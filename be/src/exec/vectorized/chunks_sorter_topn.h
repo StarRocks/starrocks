@@ -65,6 +65,8 @@ public:
 
     int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
 
+    void setup_runtime(RuntimeProfile* profile) override;
+
 private:
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
@@ -87,13 +89,13 @@ private:
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
     Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                 DataSegments& segments, size_t chunk_size);
+                                 DataSegments& segments);
 
     Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                               DataSegments& segments);
 
     Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
-                                  DataSegments& segments, const size_t chunk_size);
+                                  DataSegments& segments);
 
     // For rank type topn, it may keep more data than we need during processing,
     // therefor, pruning should be performed when processing is finished
@@ -125,9 +127,11 @@ private:
     DataSegment _merged_segment;
 
     const size_t _limit;
+    const size_t _offset;
     const TTopNType::type _topn_type;
 
-    const size_t _offset;
+    RuntimeProfile::Counter* _sort_filter_rows = nullptr;
+    RuntimeProfile::Counter* _sort_filter_timer = nullptr;
 };
 
 } // namespace starrocks::vectorized

@@ -10,6 +10,8 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
 DIAGNOSTIC_POP
 
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -33,8 +35,8 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, std::function<Sta
 PromiseStatusPtr call_hdfs_scan_function_in_pthread(std::function<Status()> func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
-        ExecEnv::GetInstance()->pipeline_connector_scan_io_thread_pool()->offer(
-                [promise = ms.get(), func]() { promise->set_value(func()); });
+        ExecEnv::GetInstance()->connector_scan_executor_without_workgroup()->submit(
+                workgroup::ScanTask([promise = ms.get(), func](int) { promise->set_value(func()); }));
     } else {
         ms->set_value(func());
     }
