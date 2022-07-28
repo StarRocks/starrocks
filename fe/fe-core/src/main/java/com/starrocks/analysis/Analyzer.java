@@ -31,24 +31,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -65,8 +59,6 @@ import java.util.Set;
  */
 @Deprecated
 public class Analyzer {
-    private static final Logger LOG = LogManager.getLogger(Analyzer.class);
-
     // NOTE: Alias of table is case sensitive
     // UniqueAlias used to check wheather the table ref or the alias is unique
     // table/view used db.table, inline use alias
@@ -79,37 +71,13 @@ public class Analyzer {
     // map from lowercase qualified column name ("alias.col") to descriptor
     private final Map<String, SlotDescriptor> slotRefMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
-    // map from tuple id to list of conjuncts referencing tuple
-    private final Map<TupleId, List<ExprId>> tuplePredicates = Maps.newHashMap();
-    // map from slot id to list of conjuncts referencing slot
-    private final Map<SlotId, List<ExprId>> slotPredicates = Maps.newHashMap();
-    // eqJoinPredicates[tid] contains all conjuncts of the form
-    // "<lhs> = <rhs>" in which either lhs or rhs is fully bound by tid
-    // and the other side is not bound by tid (ie, predicates that express equi-join
-    // conditions between two tablerefs).
-    // A predicate such as "t1.a = t2.b" has two entries, one for 't1' and
-    // another one for 't2'.
-
-    // map from tuple id to the current output column index
-    private final Map<TupleId, Integer> currentOutputColumn = Maps.newHashMap();
-
     // Current depth of nested analyze() calls. Used for enforcing a
     // maximum expr-tree depth. Needs to be manually maintained by the user
     // of this Analyzer with incrementCallDepth() and decrementCallDepth().
     private int callDepth = 0;
 
-    // Flag indicating if this analyzer instance belongs to a subquery.
-    private boolean isSubquery = false;
-
-    // Flag indicating whether this analyzer belongs to a WITH clause view.
-    private boolean isWithClause_ = false;
-
     // timezone specified for some operation, such as broker load
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
-
-    public boolean isWithClause() {
-        return isWithClause_;
-    }
 
     public void setTimezone(String timezone) {
         this.timezone = timezone;
@@ -126,7 +94,6 @@ public class Analyzer {
     private static class GlobalState {
         private final DescriptorTable descTbl = new DescriptorTable();
         private final GlobalStateMgr globalStateMgr;
-        private final IdGenerator<ExprId> conjunctIdGenerator = ExprId.createGenerator();
         private final ConnectContext context;
 
         // True if we are analyzing an explain request. Should be set before starting
@@ -136,14 +103,6 @@ public class Analyzer {
         // all registered conjuncts (map from id to Predicate)
         private final Map<ExprId, Expr> conjuncts = Maps.newHashMap();
 
-        // eqJoinConjuncts[tid] contains all conjuncts of the form
-        // "<lhs> = <rhs>" in which either lhs or rhs is fully bound by tid
-        // and the other side is not bound by tid (ie, predicates that express equi-join
-        // conditions between two tablerefs).
-        // A predicate such as "t1.a = t2.b" has two entries, one for 't1' and
-        // another one for 't2'.
-        private final Map<TupleId, List<ExprId>> eqJoinConjuncts = Maps.newHashMap();
-
         // set of conjuncts that have been assigned to some PlanNode
         private final Set<ExprId> assignedConjuncts =
                 Collections.newSetFromMap(new IdentityHashMap<ExprId, Boolean>());
@@ -152,35 +111,15 @@ public class Analyzer {
         // to the last Join clause (represented by its rhs table ref) that outer-joined it
         private final Map<TupleId, TableRef> outerJoinedTupleIds = Maps.newHashMap();
 
-        // Map of registered conjunct to the last full outer join (represented by its
-        // rhs table ref) that outer joined it.
-        public final Map<ExprId, TableRef> fullOuterJoinedConjuncts = Maps.newHashMap();
-
-        // Map of full-outer-joined tuple id to the last full outer join that outer-joined it
-        public final Map<TupleId, TableRef> fullOuterJoinedTupleIds = Maps.newHashMap();
-
         // Map from semi-joined tuple id, i.e., one that is invisible outside the join's
         // On-clause, to its Join clause (represented by its rhs table ref). An anti-join is
         // a kind of semi-join, so anti-joined tuples are also registered here.
         public final Map<TupleId, TableRef> semiJoinedTupleIds = Maps.newHashMap();
 
-        // Map from right-hand side table-ref id of an outer join to the list of
-        // conjuncts in its On clause. There is always an entry for an outer join, but the
-        // corresponding value could be an empty list. There is no entry for non-outer joins.
-        public final Map<TupleId, List<ExprId>> conjunctsByOjClause = Maps.newHashMap();
-
         // map from registered conjunct to its containing outer join On clause (represented
         // by its right-hand side table ref); only conjuncts that can only be correctly
         // evaluated by the originating outer join are registered here
         private final Map<ExprId, TableRef> ojClauseByConjunct = Maps.newHashMap();
-
-        // map from registered conjunct to its containing semi join On clause (represented
-        // by its right-hand side table ref)
-        public final Map<ExprId, TableRef> sjClauseByConjunct = Maps.newHashMap();
-
-        // map from registered conjunct to its containing inner join On clause (represented
-        // by its right-hand side table ref)
-        public final Map<ExprId, TableRef> ijClauseByConjunct = Maps.newHashMap();
 
         // TODO chenhao16, to save conjuncts, which children are constant
         public final Map<TupleId, Set<ExprId>> constantConjunct = Maps.newHashMap();
@@ -221,28 +160,6 @@ public class Analyzer {
     public Analyzer(GlobalStateMgr globalStateMgr, ConnectContext context) {
         ancestors = Lists.newArrayList();
         globalState = new GlobalState(globalStateMgr, context);
-    }
-
-    /**
-     * Analyzer constructor for nested select block. GlobalStateMgr and DescriptorTable
-     * is inherited from the parentAnalyzer.
-     *
-     * @param parentAnalyzer the analyzer of the enclosing select block
-     */
-    public Analyzer(Analyzer parentAnalyzer) {
-        this(parentAnalyzer, parentAnalyzer.globalState);
-        if (parentAnalyzer.isSubquery) {
-            this.isSubquery = true;
-        }
-    }
-
-    /**
-     * Analyzer constructor for nested select block with the specified global state.
-     */
-    private Analyzer(Analyzer parentAnalyzer, GlobalState globalState) {
-        ancestors = Lists.newArrayList(parentAnalyzer);
-        ancestors.addAll(parentAnalyzer.ancestors);
-        this.globalState = globalState;
     }
 
     public void setIsExplain() {
@@ -352,8 +269,6 @@ public class Analyzer {
         String dbName = tableName.getDb();
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = getDefaultDb();
-        } else {
-            dbName = ClusterNamespace.getFullName(tableName.getDb());
         }
         if (Strings.isNullOrEmpty(dbName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
@@ -389,16 +304,6 @@ public class Analyzer {
             return null;
         }
         return db.getTable(tblName.getTbl());
-    }
-
-    /**
-     * Return descriptor of registered table/alias.
-     *
-     * @param name
-     * @return null if not registered.
-     */
-    public Collection<TupleDescriptor> getDescriptor(TableName name) {
-        return tupleByAlias.get(name.toString());
     }
 
     public TupleDescriptor getTupleDesc(TupleId id) {
@@ -503,10 +408,6 @@ public class Analyzer {
         return globalState.outerJoinedTupleIds.get(id);
     }
 
-    public boolean isSemiJoined(TupleId tid) {
-        return globalState.semiJoinedTupleIds.containsKey(tid);
-    }
-
     public DescriptorTable getDescTbl() {
         return globalState.descTbl;
     }
@@ -529,71 +430,6 @@ public class Analyzer {
         for (Expr p : conjuncts) {
             globalState.assignedConjuncts.add(p.getId());
         }
-    }
-
-    /**
-     * Returns assignment-compatible type of expr.getType() and lastCompatibleType.
-     * If lastCompatibleType is null, returns expr.getType() (if valid).
-     * If types are not compatible throws an exception reporting
-     * the incompatible types and their expr.toSql().
-     * <p>
-     * lastCompatibleExpr is passed for error reporting purposes,
-     * but note that lastCompatibleExpr may not yet have lastCompatibleType,
-     * because it was not cast yet.
-     */
-    public Type getCompatibleType(Type lastCompatibleType, Expr lastCompatibleExpr, Expr expr)
-            throws AnalysisException {
-        Type newCompatibleType;
-        if (lastCompatibleType == null) {
-            newCompatibleType = expr.getType();
-        } else {
-            newCompatibleType = Type.getAssignmentCompatibleType(lastCompatibleType, expr.getType(), false);
-        }
-        if (!newCompatibleType.isValid()) {
-            throw new AnalysisException(String.format(
-                    "Incompatible return types '%s' and '%s' of exprs '%s' and '%s'.",
-                    lastCompatibleType.toSql(), expr.getType().toSql(),
-                    lastCompatibleExpr.toSql(), expr.toSql()));
-        }
-        return newCompatibleType;
-    }
-
-    /**
-     * Determines compatible type for given exprs, and casts them to compatible
-     * type. Calls analyze() on each of the exprs. Throw an AnalysisException if
-     * the types are incompatible, returns compatible type otherwise.
-     */
-    public Type castAllToCompatibleType(List<Expr> exprs) throws AnalysisException {
-        // Determine compatible type of exprs.
-        exprs.get(0).analyze(this);
-        Type compatibleType = exprs.get(0).getType();
-        for (int i = 1; i < exprs.size(); ++i) {
-            exprs.get(i).analyze(this);
-            // TODO(zc)
-            compatibleType = Type.getCmpType(compatibleType, exprs.get(i).getType());
-        }
-        if (compatibleType.isVarchar()) {
-            if (exprs.get(0).getType().isDateType()) {
-                compatibleType = exprs.get(0).getType();
-            }
-        }
-
-        // In general, decimal32 is casted into decimal64 before processed, but
-        // decimal32-typed predicates keep decimal32-typed SlotRef unchanged so that
-        // BE can push these predicates down to ColumnReader for speedup.
-        if (compatibleType.getPrimitiveType() == PrimitiveType.DECIMAL64) {
-            if (exprs.get(0).getType().getPrimitiveType() == PrimitiveType.DECIMAL32) {
-                compatibleType = exprs.get(0).getType();
-            }
-        }
-        // Add implicit casts if necessary.
-        for (int i = 0; i < exprs.size(); ++i) {
-            if (!exprs.get(i).getType().equals(compatibleType)) {
-                Expr castExpr = exprs.get(i).castTo(compatibleType);
-                exprs.set(i, castExpr);
-            }
-        }
-        return compatibleType;
     }
 
     public String getDefaultDb() {

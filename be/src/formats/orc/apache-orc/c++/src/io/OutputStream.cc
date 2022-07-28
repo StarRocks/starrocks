@@ -93,6 +93,10 @@ uint64_t BufferedOutputStream::flush() {
     return dataSize;
 }
 
+void BufferedOutputStream::suppress() {
+    dataBuffer->resize(0);
+}
+
 void AppendOnlyBufferedStream::write(const char* data, size_t size) {
     size_t dataOffset = 0;
     while (size > 0) {

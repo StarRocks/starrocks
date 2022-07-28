@@ -23,10 +23,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -43,7 +47,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -109,6 +116,8 @@ public class ConnectContext {
     protected MysqlSerializer serializer;
     // Variables belong to this session.
     protected SessionVariable sessionVariable;
+    // all the modified session variables, will forward to leader
+    protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -164,16 +173,7 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        state = new QueryState();
-        returnRows = 0;
-        serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
-        isKilled = false;
-        serializer = MysqlSerializer.newInstance();
-        sessionVariable = VariableMgr.newSessionVariable();
-        command = MysqlCommand.COM_SLEEP;
-        dumpInfo = new QueryDumpInfo(sessionVariable);
-        plannerProfile = new PlannerProfile();
-        plannerProfile.init(this);
+        this(null);
     }
 
     public ConnectContext(SocketChannel channel) {
@@ -181,17 +181,18 @@ public class ConnectContext {
         returnRows = 0;
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
-        mysqlChannel = new MysqlChannel(channel);
         serializer = MysqlSerializer.newInstance();
         sessionVariable = VariableMgr.newSessionVariable();
         command = MysqlCommand.COM_SLEEP;
-        if (channel != null) {
-            remoteIP = mysqlChannel.getRemoteIp();
-        }
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
         plannerProfile = new PlannerProfile();
         plannerProfile.init(this);
+
+        mysqlChannel = new MysqlChannel(channel);
+        if (channel != null) {
+            remoteIP = mysqlChannel.getRemoteIp();
+        }
     }
 
     public long getStmtId() {
@@ -263,12 +264,27 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
+    public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
+        VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
+        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+            modifiedSessionVariables.put(setVar.getVariable(), setVar);
+        }
+    }
+
+    public SetStmt getModifiedSessionVariables() {
+        if (!modifiedSessionVariables.isEmpty()) {
+            return new SetStmt(new ArrayList<>(modifiedSessionVariables.values()));
+        }
+        return null;
+    }
+
     public SessionVariable getSessionVariable() {
         return sessionVariable;
     }
 
     public void resetSessionVariable() {
         this.sessionVariable = VariableMgr.newSessionVariable();
+        modifiedSessionVariables.clear();
     }
 
     public void setSessionVariable(SessionVariable sessionVariable) {
@@ -535,6 +551,18 @@ public class ConnectContext {
             threadInfo = new ThreadInfo();
         }
         return threadInfo;
+    }
+
+    public int getAliveBackendNumber() {
+        int v = sessionVariable.getCboDebugAliveBackendNumber();
+        if (v > 0) {
+            return v;
+        }
+        return globalStateMgr.getClusterInfo().getAliveBackendNumber();
+    }
+
+    public int getTotalBackendNumber() {
+        return globalStateMgr.getClusterInfo().getTotalBackendNumber();
     }
 
     public class ThreadInfo {

@@ -169,46 +169,14 @@ public class MvTaskRunProcessorTest {
         }
     }
 
-
-    @Test
-    public void testCollectNeedRefreshPartitionNames() {
-
-        MaterializedView materializedView1 = new MaterializedView();
-        materializedView1.addPartitionNameRef("p1","m1");
-        materializedView1.addPartitionNameRef("p1","m2");
-        materializedView1.addPartitionNameRef("p2","m2");
-        materializedView1.addPartitionNameRef("p3","m2");
-        materializedView1.addPartitionNameRef("p3","m3");
-        materializedView1.addPartitionNameRef("p3","m4");
-        Set<String> needRefreshMvPartitionNames1 = Sets.newHashSet();
-        Set<String> needRefreshTablePartitionNames1 = Sets.newHashSet();
-        Deencapsulation.invoke(new MvTaskRunProcessor(), "collectNeedRefreshPartitionNames", materializedView1,
-                "m2", needRefreshMvPartitionNames1, needRefreshTablePartitionNames1);
-        Assert.assertEquals(4, needRefreshMvPartitionNames1.size());
-        Assert.assertEquals(3, needRefreshTablePartitionNames1.size());
-
-
-        MaterializedView materializedView2 = new MaterializedView();
-        materializedView2.addPartitionNameRef("p1","m1");
-        materializedView2.addPartitionNameRef("p2","m2");
-        materializedView2.addPartitionNameRef("p3","m3");
-        Set<String> needRefreshMvPartitionNames2 = Sets.newHashSet();
-        Set<String> needRefreshTablePartitionNames2 = Sets.newHashSet();
-        Deencapsulation.invoke(new MvTaskRunProcessor(), "collectNeedRefreshPartitionNames", materializedView2,
-                "m2", needRefreshMvPartitionNames2, needRefreshTablePartitionNames2);
-        Assert.assertEquals(1, needRefreshMvPartitionNames2.size());
-        Assert.assertEquals(1, needRefreshTablePartitionNames2.size());
-
-    }
-
     private void testBaseTablePartitionInsertData(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p0, p0 insert data after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        Map<Long, OlapTable> olapTables = Maps.newHashMap();
         new MockUp<MvTaskRunProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
-                Map<Long, OlapTable> olapTables = Maps.newHashMap();
                 Set<Long> baseTableIds = materializedView.getBaseTableIds();
                 database.readLock();
                 try {
@@ -226,12 +194,12 @@ public class MvTaskRunProcessorTest {
                 } finally {
                     database.readUnlock();
                 }
-                setPartitionVersion(tbl1.getPartition("p0"), 3);
+                setPartitionVersion(olapTables.get(tbl1.getId()).getPartition("p0"), 2);
                 return olapTables;
             }
         };
         // change partition and replica versions
-        setPartitionVersion(tbl1.getPartition("p0"), 2);
+        setPartitionVersion(tbl1.getPartition("p0"), 3);
         taskRun.executeTaskRun();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();

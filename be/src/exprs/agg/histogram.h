@@ -63,9 +63,9 @@ public:
         this->data(state).data.emplace_back(v);
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         //Histogram aggregation function only support one stage Agg
         DCHECK(false);
     }

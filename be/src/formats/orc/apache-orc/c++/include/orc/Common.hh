@@ -34,6 +34,7 @@ private:
 public:
     static const FileVersion& v_0_11();
     static const FileVersion& v_0_12();
+    static const FileVersion& UNSTABLE_PRE_2_0();
 
     FileVersion(uint32_t major, uint32_t minor) : majorVersion(major), minorVersion(minor) {}
 

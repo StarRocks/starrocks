@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.QueryStmt;
@@ -28,10 +29,10 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -49,6 +50,7 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -65,6 +67,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -85,8 +88,15 @@ public class ConnectProcessor {
     private void handleInitDb() {
         String identifier = new String(packetBuf.array(), 1, packetBuf.limit() - 1);
         try {
-            ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
-        } catch (DdlException e) {
+            String[] parts = identifier.trim().split("\\s+");
+            if (parts.length == 2) {
+                Preconditions.checkState(parts[0].equalsIgnoreCase("catalog"),
+                        "You might want to use \"USE 'CATALOG <catalog_name>'\"");
+                ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+            } else {
+                ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
+            }
+        } catch (Exception e) {
             ctx.getState().setError(e.getMessage());
             return;
         }
@@ -225,6 +235,34 @@ public class ConnectProcessor {
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
+    private void addRunningQueryDetail(StatementBase parsedStmt) {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        String sql;
+        if (parsedStmt.needAuditEncryption()) {
+            sql = parsedStmt.toSql();
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
+        QueryDetail queryDetail = new QueryDetail(
+                DebugUtil.printId(ctx.getQueryId()),
+                isQuery,
+                ctx.connectionId,
+                ctx.getMysqlChannel() != null ?
+                        ctx.getMysqlChannel().getRemoteIp() : "System",
+                ctx.getStartTime(), -1, -1,
+                QueryDetail.QueryMemState.RUNNING,
+                ctx.getDatabase(),
+                sql,
+                ctx.getQualifiedUser(),
+                Optional.ofNullable(ctx.getResourceGroup()).map(ResourceGroup::getName).orElse(""));
+        ctx.setQueryDetail(queryDetail);
+        //copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+    }
+
     // process COM_QUERY statement,
     private void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
@@ -263,6 +301,12 @@ public class ConnectProcessor {
                 }
                 parsedStmt = stmts.get(i);
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
+
+                // Only add the last running stmt for multi statement,
+                // because the audit log will only show the last stmt.
+                if (i == stmts.size() - 1) {
+                    addRunningQueryDetail(parsedStmt);
+                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);
@@ -561,6 +605,11 @@ public class ConnectProcessor {
 
         StmtExecutor executor = null;
         try {
+            // set session variables first
+            if (request.isSetModified_variables_sql()) {
+                LOG.info("Set session variables first: {}", request.modified_variables_sql);
+                new StmtExecutor(ctx, new OriginStatement(request.modified_variables_sql, 0), true).execute();
+            }
             // 0 for compatibility.
             int idx = request.isSetStmtIdx() ? request.getStmtIdx() : 0;
             executor = new StmtExecutor(ctx, new OriginStatement(request.getSql(), idx), true);

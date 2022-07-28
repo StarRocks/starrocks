@@ -51,7 +51,7 @@ public class ShowPartitionsStmtTest {
     public void testNormal() {
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable`", stmt.toString());
+        Assert.assertEquals("SHOW PARTITIONS FROM `testDb`.`testTable`", stmt.toString());
     }
 
     @Test
@@ -63,7 +63,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), binaryPredicate, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(
-                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'",
+                "SHOW PARTITIONS FROM `testDb`.`testTable` WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'",
                 stmt.toString());
     }
 
@@ -76,7 +76,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), likePredicate, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(
-                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` LIKE '%p2019%'",
+                "SHOW PARTITIONS FROM `testDb`.`testTable` WHERE `PartitionName` LIKE '%p2019%'",
                 stmt.toString());
     }
 
@@ -89,7 +89,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), equalPredicate, null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(
-                "SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` WHERE `PartitionName` = 'p1'",
+                "SHOW PARTITIONS FROM `testDb`.`testTable` WHERE `PartitionName` = 'p1'",
                 stmt.toString());
     }
 
@@ -102,7 +102,7 @@ public class ShowPartitionsStmtTest {
                 new ShowPartitionsStmt(new TableName("testDb", "testTable"), null, Arrays.asList(orderByElement),
                         limitElement, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW PARTITIONS FROM `default_cluster:testDb`.`testTable` ORDER BY `PartitionId` ASC LIMIT 10",
+        Assert.assertEquals("SHOW PARTITIONS FROM `testDb`.`testTable` ORDER BY `PartitionId` ASC LIMIT 10",
                 stmt.toString());
     }
 

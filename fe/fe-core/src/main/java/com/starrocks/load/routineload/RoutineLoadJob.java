@@ -1035,8 +1035,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     tblName, tblName));
         }
 
-        if (table.getType() != Table.TableType.OLAP) {
-            throw new AnalysisException("Only olap table support routine load");
+        if (!table.isOlapOrLakeTable()) {
+            throw new AnalysisException("Only olap/lake table support routine load");
         }
 
         if (routineLoadDesc == null) {

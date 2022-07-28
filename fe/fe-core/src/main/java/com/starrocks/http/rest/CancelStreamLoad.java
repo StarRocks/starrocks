@@ -23,7 +23,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.http.ActionController;
@@ -56,8 +55,6 @@ public class CancelStreamLoad extends RestBaseAction {
             throw new DdlException("No database selected.");
         }
 
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-
         String label = request.getSingleParameter(LABEL_KEY);
         if (Strings.isNullOrEmpty(label)) {
             throw new DdlException("No label selected.");
@@ -66,7 +63,7 @@ public class CancelStreamLoad extends RestBaseAction {
         // FIXME(cmy)
         // checkWritePriv(authInfo.fullUserName, fullDbName);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }

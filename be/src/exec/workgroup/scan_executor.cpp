@@ -7,8 +7,8 @@
 
 namespace starrocks::workgroup {
 
-ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, ScanExecutorType type)
-        : _task_queue(std::make_unique<ScanTaskQueueWithWorkGroup>(type)), _thread_pool(std::move(thread_pool)) {}
+ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue)
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {}
 
 ScanExecutor::~ScanExecutor() {
     _task_queue->close();

@@ -88,7 +88,7 @@ public class RangeUtils {
         Range<PartitionKey> range2 = list2.get(idx2);
         while (true) {
             if (range1.lowerEndpoint().compareTo(range2.lowerEndpoint()) != 0) {
-                throw new DdlException("2 range lists are not stricly matched. "
+                throw new DdlException("2 range lists are not strictly matched. "
                         + range1.lowerEndpoint() + " vs. " + range2.lowerEndpoint());
             }
 
@@ -118,7 +118,7 @@ public class RangeUtils {
         }
 
         if (idx1 < list1.size() || idx2 < list2.size()) {
-            throw new DdlException("2 range lists are not stricly matched. "
+            throw new DdlException("2 range lists are not strictly matched. "
                     + list1 + " vs. " + list2);
         }
     }

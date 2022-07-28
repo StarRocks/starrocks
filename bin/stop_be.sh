@@ -76,20 +76,14 @@ if [ -f $pidfile ]; then
         exit 1
     fi
 
-    if kill -0 $pid; then
-        if kill -${sig} $pid > /dev/null 2>&1; then
-            echo "stop $pidcomm using signal $sig, and remove pid file. "
-            rm $pidfile
-            exit 0
-        else
+    if kill -0 $pid >/dev/null 2>&1; then
+        kill -${sig} $pid > /dev/null 2>&1
+        if [ $? -ne 0 ]; then
             exit 1
         fi
-    else
-        echo "Backend already exit, remove pid file. "
-        rm $pidfile
+        while kill -0 $pid >/dev/null 2>&1; do
+            sleep 1
+        done
     fi
-else
-    echo "$pidfile does not exist"
-    exit 1
+    rm $pidfile
 fi
-

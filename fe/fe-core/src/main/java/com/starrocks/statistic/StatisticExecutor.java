@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
@@ -34,7 +35,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TStatisticData;
-import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -42,8 +42,6 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -52,16 +50,34 @@ import java.util.Map;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-    private static final String DELETE_TEMPLATE = "DELETE FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE ";
-
-    private static final String SELECT_EXPIRE_TABLE_TEMPLATE =
-            "SELECT DISTINCT table_id" + " FROM " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME + " WHERE 1 = 1 ";
-
     public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
-            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNames);
+            Table table = null;
+            if (dbId == null) {
+                List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+                for (Long id : dbIds) {
+                    Database db = GlobalStateMgr.getCurrentState().getDb(id);
+                    table = db.getTable(tableId);
+                    if (table != null) {
+                        break;
+                    }
+                }
+            } else {
+                Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+                table = database.getTable(tableId);
+            }
+            Preconditions.checkState(table != null);
+
+            List<Column> columns = Lists.newArrayList();
+            for (String colName : columnNames) {
+                Column column = table.getColumn(colName);
+                Preconditions.checkState(column != null);
+                columns.add(column);
+            }
+
+            sql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(dbId, tableId, columns);
         } else {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
@@ -86,6 +102,21 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
+        }
+    }
+
+    public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
+        String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
         }
     }
 
@@ -114,7 +145,6 @@ public class StatisticExecutor {
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
         }
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(tableId, columnNames);
     }
 
     // If you call this function, you must ensure that the db lock is added
@@ -240,64 +270,6 @@ public class StatisticExecutor {
                     statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
         }
         return analyzeStatus;
-    }
-
-    public void expireStatisticSync(List<String> tableIds) {
-        StringBuilder sql = new StringBuilder(DELETE_TEMPLATE);
-        sql.append(" table_id IN (").append(StringUtils.join(tableIds, ",")).append(")");
-        LOG.debug("Expire statistic SQL: {}", sql);
-
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql.toString(), context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
-        }
-    }
-
-    public List<String> queryExpireTableSync(List<Long> tableIds) throws Exception {
-        if (null == tableIds || tableIds.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        StringBuilder sql = new StringBuilder(SELECT_EXPIRE_TABLE_TEMPLATE);
-        sql.append(" AND table_id NOT IN (").append(StringUtils.join(tableIds, ",")).append(")");
-        LOG.debug("Query expire statistic SQL: {}", sql);
-
-        Map<String, Database> dbs = Maps.newHashMap();
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql.toString(), context.getSessionVariable().getSqlMode());
-            if (parsedStmt instanceof QueryStatement) {
-                dbs = AnalyzerUtils.collectAllDatabase(context, parsedStmt);
-            }
-        } catch (Exception e) {
-            LOG.warn("Parse statistic table query fail. SQL: " + sql, e);
-            throw e;
-        }
-
-        try {
-            ExecPlan execPlan = getExecutePlan(dbs, context, parsedStmt, false, true);
-            List<TResultBatch> sqlResult = executeStmt(context, execPlan).first;
-
-            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
-
-            List<String> result = Lists.newArrayList();
-            for (TResultBatch batch : sqlResult) {
-                for (ByteBuffer byteBuffer : batch.getRows()) {
-                    result.add(decoder.decode(byteBuffer).toString().substring(1));
-                }
-            }
-
-            return result;
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table query fail.", e);
-            throw e;
-        }
     }
 
     private static ExecPlan getExecutePlan(Map<String, Database> dbs, ConnectContext context,

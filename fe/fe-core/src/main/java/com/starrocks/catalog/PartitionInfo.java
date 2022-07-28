@@ -162,6 +162,16 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         idToInMemory.put(partitionId, isInMemory);
     }
 
+    public void addPartition(long partitionId, DataProperty dataProperty,
+                             short replicationNum,
+                             boolean isInMemory,
+                             StorageInfo storageInfo) {
+        this.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+        if (storageInfo != null) {
+            idToStorageInfo.put(partitionId, storageInfo);
+        }
+    }
+
     public static PartitionInfo read(DataInput in) throws IOException {
         PartitionInfo partitionInfo = new PartitionInfo();
         partitionInfo.readFields(in);

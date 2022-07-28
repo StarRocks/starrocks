@@ -10,7 +10,6 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
@@ -45,6 +44,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -236,7 +237,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterUserStatement(AlterUserStmt stmt, ConnectContext session) {
+        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
@@ -371,7 +372,6 @@ public class Analyzer {
 
         @Override
         public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext context) {
-            RecoverDbAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -401,6 +401,12 @@ public class Analyzer {
 
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
+            AnalyzeStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
         }

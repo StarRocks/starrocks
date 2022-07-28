@@ -21,6 +21,14 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include <ctime>
 #include <memory>
 #include <mutex>
@@ -63,25 +71,25 @@ public:
     void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);
 
-    scoped_refptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
+    std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
 private:
-    Status _start_bg_worker();
+    static void* load_channel_clean_bg_worker(void* arg);
 
-    scoped_refptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
+    Status _start_bg_worker();
+    std::shared_ptr<LoadChannel> _find_load_channel(const UniqueId& load_id);
+    void _start_load_channels_clean();
 
     // lock protect the load channel map
-    std::mutex _lock;
+    bthread::Mutex _lock;
     // load id -> load channel
-    std::unordered_map<UniqueId, scoped_refptr<LoadChannel>> _load_channels;
+    std::unordered_map<UniqueId, std::shared_ptr<LoadChannel>> _load_channels;
 
     // check the total load mem consumption of this Backend
-    MemTracker* _mem_tracker = nullptr;
+    MemTracker* _mem_tracker;
 
     // thread to clean timeout load channels
-    std::thread _load_channels_clean_thread;
-    Status _start_load_channels_clean();
-    std::atomic<bool> _is_stopped;
+    bthread_t _load_channels_clean_thread;
 };
 
 } // namespace starrocks

@@ -15,7 +15,8 @@ public interface StatisticStorage {
 
     Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns);
 
-    void expireHistogramStatistics(Long tableId, List<String> columns);
+    default void expireHistogramStatistics(Long tableId, List<String> columns) {
+    }
 
     default void expireColumnStatistics(Table table, List<String> columns) {
     }

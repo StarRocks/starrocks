@@ -10,19 +10,12 @@ You can use the CREATE TABLE AS SELECT (CTAS) statement to synchronously or asyn
 
   ```SQL
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-
   [(column_name [, column_name2, ...]]
-
   [COMMENT "table comment"]
-
   [partition_desc]
-
   [distribution_desc]
-
   [PROPERTIES ("key"="value", ...)]
-
   AS SELECT query
-
   [ ... ]
   ```
 
@@ -30,19 +23,12 @@ You can use the CREATE TABLE AS SELECT (CTAS) statement to synchronously or asyn
 
   ```SQL
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
-
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-
   [(column_name [, column_name2, ...]]
-
   [COMMENT "table comment"]
-
   [partition_desc]
-
   [distribution_desc]
-
   [PROPERTIES ("key"="value", ...)]AS SELECT query
-
   [ ... ]
   ```
 
@@ -118,7 +104,6 @@ Example 1: Synchronously query a table `order` and create a new table `order_new
 
 ```SQL
 CREATE TABLE order_new
-
 AS SELECT * FROM order;
 ```
 
@@ -126,7 +111,6 @@ Example 2: Synchronously query the `k1`, `k2`, and `k3` columns in the table `or
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
-
 AS SELECT k1, k2, k3 FROM order;
 ```
 
@@ -134,7 +118,6 @@ or
 
 ```SQL
 CREATE TABLE order_new
-
 AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
 ```
 
@@ -142,7 +125,6 @@ Example 3: Synchronously query the largest value of the `salary` column in the t
 
 ```SQL
 CREATE TABLE employee_new
-
 AS SELECT MAX(salary) AS salary_max FROM employee;
 ```
 
@@ -152,13 +134,9 @@ After data is inserted, query the new table.
 SELECT * FROM employee_new;
 
 +------------+
-
 | salary_max |
-
 +------------+
-
 |   10000    |
-
 +------------+
 ```
 
@@ -166,95 +144,51 @@ Example 4: Synchronously query four tables, including `lineorder`, `customer`, `
 
 ```SQL
 CREATE TABLE lineorder_flat
-
-PARTITION BY RANGE(`LO_ORDERDATE`)(
-
+PARTITION BY RANGE(`LO_ORDERDATE`)
+(
     START ("1993-01-01") END ("1999-01-01") EVERY (INTERVAL 1 YEAR)
-
 )
-
 DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 120 AS SELECT
-
     l.LO_ORDERKEY AS LO_ORDERKEY,
-
     l.LO_LINENUMBER AS LO_LINENUMBER,
-
     l.LO_CUSTKEY AS LO_CUSTKEY,
-
     l.LO_PARTKEY AS LO_PARTKEY,
-
     l.LO_SUPPKEY AS LO_SUPPKEY,
-
     l.LO_ORDERDATE AS LO_ORDERDATE,
-
     l.LO_ORDERPRIORITY AS LO_ORDERPRIORITY,
-
     l.LO_SHIPPRIORITY AS LO_SHIPPRIORITY,
-
     l.LO_QUANTITY AS LO_QUANTITY,
-
     l.LO_EXTENDEDPRICE AS LO_EXTENDEDPRICE,
-
     l.LO_ORDTOTALPRICE AS LO_ORDTOTALPRICE,
-
     l.LO_DISCOUNT AS LO_DISCOUNT,
-
     l.LO_REVENUE AS LO_REVENUE,
-
     l.LO_SUPPLYCOST AS LO_SUPPLYCOST,
-
     l.LO_TAX AS LO_TAX,
-
     l.LO_COMMITDATE AS LO_COMMITDATE,
-
     l.LO_SHIPMODE AS LO_SHIPMODE,
-
     c.C_NAME AS C_NAME,
-
     c.C_ADDRESS AS C_ADDRESS,
-
     c.C_CITY AS C_CITY,
-
     c.C_NATION AS C_NATION,
-
     c.C_REGION AS C_REGION,
-
     c.C_PHONE AS C_PHONE,
-
     c.C_MKTSEGMENT AS C_MKTSEGMENT,
-
     s.S_NAME AS S_NAME,
-
     s.S_ADDRESS AS S_ADDRESS,
-
     s.S_CITY AS S_CITY,
-
     s.S_NATION AS S_NATION,
-
     s.S_REGION AS S_REGION,
-
     s.S_PHONE AS S_PHONE,
-
     p.P_NAME AS P_NAME,
-
     p.P_MFGR AS P_MFGR,
-
     p.P_CATEGORY AS P_CATEGORY,
-
     p.P_BRAND AS P_BRAND,
-
     p.P_COLOR AS P_COLOR,
-
     p.P_TYPE AS P_TYPE,
-
     p.P_SIZE AS P_SIZE,
-
-    p.P_CONTAINER AS P_CONTAINER 
-
-    FROM lineorder AS lINNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
-
+    p.P_CONTAINER AS P_CONTAINER FROM lineorder AS l
+INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
-
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
@@ -264,13 +198,9 @@ Example 5: Asynchronously query the table `order_detail` and create a new table 
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
 
 +-------------------------------------------+-----------+
-
 | TaskName                                  | Status    |
-
 +-------------------------------------------+-----------+
-
 | ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2 | SUBMITTED |
-
 +-------------------------------------------+-----------+
 ```
 
@@ -279,20 +209,13 @@ Check information of the Task.
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
 
-
-
 -- Information of the Task
 
 TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
-
 CREATE_TIME: 2022-06-14 14:07:06
-
 SCHEDULE: MANUAL
-
 DATABASE: default_cluster:test
-
 DEFINITION: CREATE TABLE order_statistics AS SELECT COUNT(*) as cnt FROM order_detail
-
 EXPIRE_TIME: 2022-06-17 14:07:06
 ```
 
@@ -301,28 +224,17 @@ Check the state of the TaskRun.
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;
 
-
-
 -- State of the TaskRun
 
 QUERY_ID: 37bd2b63-eba8-11ec-8d41-bab8ee315bf2
-
 TASK_NAME: ctas-df6f7930-e7c9-11ec-abac-bab8ee315bf2
-
 CREATE_TIME: 2022-06-14 14:07:06
-
 FINISH_TIME: 2022-06-14 14:07:07
-
 STATE: SUCCESS
-
 DATABASE: 
-
 DEFINITION: CREATE TABLE order_statistics AS SELECT COUNT(*) as cnt FROM order_detail
-
 EXPIRE_TIME: 2022-06-17 14:07:06
-
 ERROR_CODE: 0
-
 ERROR_MESSAGE: NULL
 ```
 

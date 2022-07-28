@@ -657,8 +657,6 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
-// The buffer size of io task.
-CONF_Int64(pipeline_io_buffer_size, "64");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -717,6 +715,9 @@ CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 
+CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
+CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
+
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
 // default: 16MB
@@ -762,6 +763,11 @@ CONF_String(starlet_cache_dir, "");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+CONF_Int64(lake_gc_metadata_max_versions, "10");
+CONF_Int64(lake_gc_metadata_check_interval, /*10 minutes=*/"600");
+CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
+// This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
+CONF_Int64(lake_gc_segment_expire_seconds, /*1 day=*/"86400");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

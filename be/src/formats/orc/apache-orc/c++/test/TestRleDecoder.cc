@@ -31,7 +31,7 @@ std::vector<int64_t> decodeRLEv2(const unsigned char* bytes, unsigned long l, si
                                  const char* notNull = nullptr) {
     std::unique_ptr<RleDecoder> rle =
             createRleDecoder(std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(bytes, l)), true,
-                             RleVersion_2, *getDefaultPool());
+                             RleVersion_2, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> results;
     for (size_t i = 0; i < count; i += n) {
         size_t remaining = count - i;
@@ -141,11 +141,32 @@ TEST(RLEv2, basicDelta4) {
     checkResults(values, decodeRLEv2(bytes, l, values.size(), values.size()), values.size());
 };
 
+TEST(RLEv2, basicDelta5) {
+    std::vector<int64_t> values(65);
+    for (size_t i = 0; i < 65; ++i) {
+        values[i] = static_cast<int64_t>(i - 32);
+    }
+
+    // Original values: [-32, -31, -30, ..., -1, 0, 1, 2, ..., 32]
+    // 2 bytes header: 0xc0, 0x40
+    //    2 bits for encoding type(3). 5 bits for bitSize which is 0 for fixed delta.
+    //    9 bits for length of 65(64).
+    // Base value: -32 which is 65(0x3f) after zigzag
+    // Delta base: 1 which is 2(0x02) after zigzag
+    const unsigned char bytes[] = {0xc0, 0x40, 0x3f, 0x02};
+    unsigned long l = sizeof(bytes) / sizeof(char);
+    // Read 1 at a time, then 3 at a time, etc.
+    checkResults(values, decodeRLEv2(bytes, l, 1, values.size()), 1);
+    checkResults(values, decodeRLEv2(bytes, l, 3, values.size()), 3);
+    checkResults(values, decodeRLEv2(bytes, l, 7, values.size()), 7);
+    checkResults(values, decodeRLEv2(bytes, l, values.size(), values.size()), values.size());
+}
+
 TEST(RLEv2, delta0Width) {
     const unsigned char buffer[] = {0x4e, 0x2, 0x0, 0x1, 0x2, 0xc0, 0x2, 0x42, 0x0};
     std::unique_ptr<RleDecoder> decoder = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))), false,
-            RleVersion_2, *getDefaultPool());
+            RleVersion_2, *getDefaultPool(), nullptr, nullptr);
     int64_t values[6];
     decoder->next(values, 6, 0);
     EXPECT_EQ(0, values[0]);
@@ -226,7 +247,7 @@ TEST(RLEv2, 0to2Repeat1Direct) {
     const unsigned char buffer[] = {0x46, 0x02, 0x02, 0x40};
     std::unique_ptr<RleDecoder> rle = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))), true,
-            RleVersion_2, *getDefaultPool());
+            RleVersion_2, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(3);
     rle->next(data.data(), 3, nullptr);
 
@@ -298,7 +319,7 @@ TEST(RLEv2, largeNegativesDirect) {
                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x99, 0xa5, 0xcc, 0x28, 0x03, 0xf7, 0xe0, 0xff};
     std::unique_ptr<RleDecoder> rle = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))), true,
-            RleVersion_2, *getDefaultPool());
+            RleVersion_2, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(5);
     rle->next(data.data(), 5, nullptr);
 
@@ -423,7 +444,7 @@ TEST(RLEv2, basicDirectSeek) {
 
     std::unique_ptr<RleDecoder> rle =
             createRleDecoder(std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(bytes, l)), true,
-                             RleVersion_2, *getDefaultPool());
+                             RleVersion_2, *getDefaultPool(), nullptr, nullptr);
     std::list<uint64_t> position;
     position.push_back(7);  // byte position; skip first 20 [0 to 19]
     position.push_back(13); // value position; skip 13 more [20 to 32]
@@ -480,7 +501,7 @@ TEST(RLEv2, bitsLeftByPreviousStream) {
 
     std::unique_ptr<RleDecoder> rle =
             createRleDecoder(std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(bytes, l)), true,
-                             RleVersion_2, *getDefaultPool());
+                             RleVersion_2, *getDefaultPool(), nullptr, nullptr);
 
     std::vector<int64_t> data(N);
     rle->next(data.data(), N, nullptr);
@@ -494,7 +515,7 @@ TEST(RLEv1, simpleTest) {
     const unsigned char buffer[] = {0x61, 0xff, 0x64, 0xfb, 0x02, 0x03, 0x5, 0x7, 0xb};
     std::unique_ptr<RleDecoder> rle = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))), false,
-            RleVersion_1, *getDefaultPool());
+            RleVersion_1, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(105);
     rle->next(data.data(), 105, nullptr);
 
@@ -512,7 +533,7 @@ TEST(RLEv1, signedNullLiteralTest) {
     const unsigned char buffer[] = {0xf8, 0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7};
     std::unique_ptr<RleDecoder> rle = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))), true,
-            RleVersion_1, *getDefaultPool());
+            RleVersion_1, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(8);
     std::vector<char> notNull(8, 1);
     rle->next(data.data(), 8, notNull.data());
@@ -526,7 +547,7 @@ TEST(RLEv1, splitHeader) {
     const unsigned char buffer[] = {0x0, 0x00, 0xdc, 0xba, 0x98, 0x76};
     std::unique_ptr<RleDecoder> rle = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer), 4)), false,
-            RleVersion_1, *getDefaultPool());
+            RleVersion_1, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(200);
     rle->next(data.data(), 3, nullptr);
 
@@ -538,8 +559,8 @@ TEST(RLEv1, splitHeader) {
 TEST(RLEv1, splitRuns) {
     const unsigned char buffer[] = {0x7d, 0x01, 0xff, 0x01, 0xfb, 0x01, 0x02, 0x03, 0x04, 0x05};
     SeekableInputStream* const stream = new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer));
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), false, RleVersion_1, *getDefaultPool());
+    std::unique_ptr<RleDecoder> rle = createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), false,
+                                                       RleVersion_1, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(200);
     for (size_t i = 0; i < 42; ++i) {
         rle->next(data.data(), 3, nullptr);
@@ -562,8 +583,8 @@ TEST(RLEv1, splitRuns) {
 TEST(RLEv1, testSigned) {
     const unsigned char buffer[] = {0x7f, 0xff, 0x20};
     SeekableInputStream* const stream = new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer));
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1, *getDefaultPool());
+    std::unique_ptr<RleDecoder> rle = createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1,
+                                                       *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(100);
     rle->next(data.data(), data.size(), nullptr);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -578,8 +599,8 @@ TEST(RLEv1, testSigned) {
 TEST(RLEv1, testNull) {
     const unsigned char buffer[] = {0x75, 0x02, 0x00};
     SeekableInputStream* const stream = new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer));
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1, *getDefaultPool());
+    std::unique_ptr<RleDecoder> rle = createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1,
+                                                       *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(24);
     std::vector<char> notNull(24);
     for (size_t i = 0; i < notNull.size(); ++i) {
@@ -604,8 +625,8 @@ TEST(RLEv1, testAllNulls) {
     const unsigned char buffer[] = {0xf0, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                                     0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x3d, 0x00, 0x12};
     SeekableInputStream* const stream = new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer));
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), false, RleVersion_1, *getDefaultPool());
+    std::unique_ptr<RleDecoder> rle = createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), false,
+                                                       RleVersion_1, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(16, -1);
     std::vector<char> allNull(16, 0);
     std::vector<char> noNull(16, 1);
@@ -790,8 +811,8 @@ TEST(RLEv1, skipTest) {
             128, 224, 63,  128, 228, 63,  128, 232, 63,  128, 236, 63,  128, 240, 63,  128, 244, 63,  128, 248, 63,
             128, 252, 63};
     SeekableInputStream* const stream = new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer));
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1, *getDefaultPool());
+    std::unique_ptr<RleDecoder> rle = createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1,
+                                                       *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(1);
     for (size_t i = 0; i < 2048; i += 10) {
         rle->next(data.data(), 1, nullptr);
@@ -2084,8 +2105,8 @@ TEST(RLEv1, seekTest) {
         positions[i].push_back(fileLoc[i]);
         positions[i].push_back(rleLoc[i]);
     }
-    std::unique_ptr<RleDecoder> rle =
-            createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1, *getDefaultPool());
+    std::unique_ptr<RleDecoder> rle = createRleDecoder(std::unique_ptr<SeekableInputStream>(stream), true, RleVersion_1,
+                                                       *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(2048);
     rle->next(data.data(), data.size(), nullptr);
     for (size_t i = 0; i < data.size(); ++i) {
@@ -2119,7 +2140,7 @@ TEST(RLEv1, testLeadingNulls) {
     const unsigned char buffer[] = {0xfb, 0x01, 0x02, 0x03, 0x04, 0x05};
     std::unique_ptr<RleDecoder> rle = createRleDecoder(
             std::unique_ptr<SeekableInputStream>(new SeekableArrayInputStream(buffer, ARRAY_SIZE(buffer))), false,
-            RleVersion_1, *getDefaultPool());
+            RleVersion_1, *getDefaultPool(), nullptr, nullptr);
     std::vector<int64_t> data(10);
     const char isNull[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01};
     rle->next(data.data(), 10, isNull);

@@ -36,6 +36,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -191,6 +192,16 @@ public class EditLog {
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
                     globalStateMgr.replayAddPartition(info);
+                    break;
+                }
+                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
+                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
+                    globalStateMgr.replayAddMvPartitionVersionInfo(info);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
+                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
+                    globalStateMgr.replayRemoveMvPartitionVersionInfo(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -842,14 +853,29 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddAnalyzeStatus(analyzeStatus);
                     break;
                 }
+                case OperationType.OP_REMOVE_ANALYZE_STATUS: {
+                    AnalyzeStatus analyzeStatus = (AnalyzeStatus) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayRemoveAnalyzeStatus(analyzeStatus);
+                    break;
+                }
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
                     break;
                 }
+                case OperationType.OP_REMOVE_BASIC_STATS_META: {
+                    BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayRemoveBasicStatsMeta(basicStatsMeta);
+                    break;
+                }
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
+                case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
+                    HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
+                    globalStateMgr.getAnalyzeManager().replayRemoveHistogramStatsMeta(histogramStatsMeta);
                     break;
                 }
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
@@ -1475,12 +1501,24 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_ANALYZE_STATUS, status);
     }
 
+    public void logRemoveAnalyzeStatus(AnalyzeStatus status) {
+        logEdit(OperationType.OP_REMOVE_ANALYZE_STATUS, status);
+    }
+
     public void logAddBasicStatsMeta(BasicStatsMeta meta) {
         logEdit(OperationType.OP_ADD_BASIC_STATS_META, meta);
     }
 
-    public void logAddHistogramMeta(HistogramStatsMeta meta) {
+    public void logRemoveBasicStatsMeta(BasicStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_BASIC_STATS_META, meta);
+    }
+
+    public void logAddHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_ADD_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
     }
 
     public void logModifyTableColumn(ModifyTableColumnOperationLog log) {
@@ -1519,4 +1557,11 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
+    public void logAddMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
+        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
+
+    public void logRemoveMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
+        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
 }

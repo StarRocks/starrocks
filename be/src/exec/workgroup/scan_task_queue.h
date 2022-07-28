@@ -10,6 +10,7 @@
 
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "util/blocking_priority_queue.hpp"
 
 namespace starrocks::workgroup {
 
@@ -18,19 +19,26 @@ public:
     using WorkFunction = std::function<void(int)>;
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
+    explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
     ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
             : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
     ~ScanTask() = default;
 
-    // Disable copy constructor and assignment.
-    ScanTask(const ScanTask&) = delete;
-    ScanTask& operator=(const ScanTask&) = delete;
+    DISALLOW_COPY(ScanTask);
     // Enable move constructor and assignment.
     ScanTask(ScanTask&&) = default;
     ScanTask& operator=(ScanTask&&) = default;
 
+    bool operator<(const ScanTask& rhs) const { return priority < rhs.priority; }
+    ScanTask& operator++() {
+        priority += 2;
+        return *this;
+    }
+
+public:
     WorkGroupPtr workgroup;
     WorkFunction work_function;
+    int priority = 0;
 };
 
 class ScanTaskQueue {
@@ -46,12 +54,28 @@ public:
     virtual size_t size() const = 0;
 };
 
+class PriorityScanTaskQueue final : public ScanTaskQueue {
+public:
+    explicit PriorityScanTaskQueue(size_t max_elements);
+    ~PriorityScanTaskQueue() override = default;
+
+    void close() override { _queue.shutdown(); }
+
+    StatusOr<ScanTask> take(int worker_id) override;
+    bool try_offer(ScanTask task) override;
+
+    size_t size() const override { return _queue.get_size(); }
+
+private:
+    BlockingPriorityQueue<ScanTask> _queue;
+};
+
 class FifoScanTaskQueue final : public ScanTaskQueue {
 public:
     FifoScanTaskQueue() = default;
     ~FifoScanTaskQueue() override = default;
 
-    // This method do nothing.
+    // This method does nothing.
     void close() override {}
 
     StatusOr<ScanTask> take(int worker_id) override;
@@ -65,7 +89,7 @@ private:
 
 class ScanTaskQueueWithWorkGroup final : public ScanTaskQueue {
 public:
-    ScanTaskQueueWithWorkGroup(ScanExecutorType type) : _type(type) {}
+    explicit ScanTaskQueueWithWorkGroup(ScanExecutorType type) : _type(type) {}
     ~ScanTaskQueueWithWorkGroup() override = default;
 
     void close() override;

@@ -50,10 +50,6 @@ public class ShowProcesslistStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) {
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowProcesslistStmt(this, context);
     }

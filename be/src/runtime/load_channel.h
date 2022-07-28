@@ -27,6 +27,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/mutex.h>
 DIAGNOSTIC_POP
 
+#include <memory>
 #include <ostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -36,7 +37,7 @@ DIAGNOSTIC_POP
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "gutil/ref_counted.h"
+#include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
 #include "util/uid_util.h"
 
@@ -53,15 +54,14 @@ class LoadChannelMgr;
 
 // A LoadChannel manages tablets channels for all indexes
 // corresponding to a certain load job
-class LoadChannel : public RefCountedThreadSafe<LoadChannel> {
+class LoadChannel {
 public:
     LoadChannel(LoadChannelMgr* mgr, const UniqueId& load_id, const std::string& txn_trace_parent, int64_t timeout_s,
                 std::unique_ptr<MemTracker> mem_tracker);
 
-    LoadChannel(const LoadChannel&) = delete;
-    void operator=(const LoadChannel&) = delete;
-    LoadChannel(LoadChannel&&) = delete;
-    void operator=(LoadChannel&&) = delete;
+    ~LoadChannel();
+
+    DISALLOW_COPY_AND_MOVE(LoadChannel);
 
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
@@ -79,7 +79,7 @@ public:
 
     int64_t timeout() const { return _timeout_s; }
 
-    scoped_refptr<TabletsChannel> get_tablets_channel(int64_t index_id);
+    std::shared_ptr<TabletsChannel> get_tablets_channel(int64_t index_id);
 
     void remove_tablets_channel(int64_t index_id);
 
@@ -88,9 +88,6 @@ public:
     Span get_span() { return _span; }
 
 private:
-    friend class RefCountedThreadSafe<LoadChannel>;
-    ~LoadChannel();
-
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;
     int64_t _timeout_s;
@@ -100,7 +97,7 @@ private:
     // lock protect the tablets channel map
     bthread::Mutex _lock;
     // index id -> tablets channel
-    std::unordered_map<int64_t, scoped_refptr<TabletsChannel>> _tablets_channels;
+    std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
 
     Span _span;
     size_t _num_chunk{0};

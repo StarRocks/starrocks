@@ -23,6 +23,8 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -208,16 +210,15 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         org.apache.hadoop.hive.metastore.api.Table table;
         try {
             table = hiveRepository.getTable(resourceName, this.hiveDbName, this.hiveTableName);
-            Map<String, FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
+            List<FieldSchema> updatedTableSchemas = HiveMetaStoreTableUtils.getAllHiveColumns(table);
             boolean needRefreshColumn = isRefreshColumn(updatedTableSchemas);
 
             if (!needRefreshColumn) {
                 refreshTableCache(nameToColumn);
             } else {
                 if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
-                    refreshSchemaCache(table.getSd().getCols(), HiveMetaStoreTableUtils.getAllColumns(table));
+                    modifyTableSchema(dbName, tableName, table.getSd().getCols(), updatedTableSchemas);
                     refreshTableCache(nameToColumn);
-                    modifyTableSchema(dbName, tableName);
                 } else {
                     hiveRepository.refreshConnectorTable(resourceName, hiveDbName, hiveTableName);
                 }
@@ -238,7 +239,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         hiveRepository.refreshTableCache(hmsTableInfo);
     }
 
-    public boolean isRefreshColumn(Map<String, FieldSchema> updatedTableSchemas) throws DdlException {
+    public boolean isRefreshColumn(List<FieldSchema> tableSchemas) throws DdlException {
+        Map<String, FieldSchema> updatedTableSchemas = tableSchemas.stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
         boolean needRefreshColumn = updatedTableSchemas.size() != nameToColumn.size();
         if (!needRefreshColumn) {
             for (Column column : nameToColumn.values()) {
@@ -257,42 +260,43 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return needRefreshColumn;
     }
 
-    private void refreshSchemaCache(List<FieldSchema> unpartHiveCols, List<FieldSchema> allHiveColumns)
+    private void modifyTableSchema(String dbName, String tableName,
+                                    List<FieldSchema> unpartHiveCols, List<FieldSchema> allHiveColumns)
             throws DdlException {
-        fullSchema.clear();
-        nameToColumn.clear();
+        ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
+        ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
+        ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
+
+        // TODO: Column type conversion should not throw an exception, use invalidate type instead.
         for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
-            fullSchema.add(column);
-            nameToColumn.put(column.getName(), column);
+            fullSchemaTemp.add(column);
+            nameToColumnTemp.put(column.getName(), column);
         }
 
-        dataColumnNames.clear();
-        for (FieldSchema s : unpartHiveCols) {
-            this.dataColumnNames.add(s.getName());
-        }
-    }
-
-    @Override
-    public void modifyTableSchema(String dbName, String tableName) throws DdlException {
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            return;
-        }
+        unpartHiveCols.forEach(fieldSchema -> dataColumnNamesTemp.add(fieldSchema.getName()));
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("Not found database " + dbName);
         }
-        db.readLock();
+
+        db.writeLock();
         try {
-            Table hiveTable = db.getTable(tableName);
-            if (hiveTable == null) {
-                throw new DdlException("Not found table " + dbName + "." + tableName);
+            fullSchema.clear();
+            nameToColumn.clear();
+            dataColumnNames.clear();
+
+            fullSchema.addAll(fullSchemaTemp.build());
+            nameToColumn.putAll(nameToColumnTemp.build());
+            dataColumnNames.addAll(dataColumnNamesTemp.build());
+
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
+                ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
-            ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
         } finally {
-            db.readUnlock();
+            db.writeUnlock();
         }
     }
 
@@ -379,13 +383,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
         List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
-        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable);
+        Map<String, FieldSchema> allHiveColumns = HiveMetaStoreTableUtils.getAllHiveColumns(hiveTable).stream()
+                .collect(Collectors.toMap(FieldSchema::getName, fieldSchema -> fieldSchema));
         for (Column column : this.fullSchema) {
             FieldSchema hiveColumn = allHiveColumns.get(column.getName());
             if (hiveColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
-            if (!HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
+            // Only internal catalog like hive external table need to validate column type
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
+                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }

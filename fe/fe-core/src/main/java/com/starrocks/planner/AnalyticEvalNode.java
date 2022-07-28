@@ -29,7 +29,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
@@ -68,7 +67,7 @@ public class AnalyticEvalNode extends PlanNode {
             PlanNodeId id, PlanNode input, List<Expr> analyticFnCalls,
             List<Expr> partitionExprs, List<OrderByElement> orderByElements,
             AnalyticWindow analyticWindow, TupleDescriptor intermediateTupleDesc,
-            TupleDescriptor outputTupleDesc, ExprSubstitutionMap logicalToPhysicalSmap,
+            TupleDescriptor outputTupleDesc,
             Expr partitionByEq, Expr orderByEq, TupleDescriptor bufferedTupleDesc) {
         super(id, input.getTupleIds(), "ANALYTIC");
         Preconditions.checkState(!tupleIds.contains(outputTupleDesc.getId()));

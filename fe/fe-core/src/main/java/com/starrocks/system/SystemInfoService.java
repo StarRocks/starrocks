@@ -170,6 +170,17 @@ public class SystemInfoService {
     }
 
     // for test
+    public void dropBackend(Backend backend) {
+        Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
+        copiedBackends.remove(backend.getId());
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
+
+        Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
+        copiedReportVerions.remove(backend.getId());
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
+    }
+
+    // for test
     public void addBackend(Backend backend) {
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(backend.getId(), backend);
@@ -240,8 +251,8 @@ public class SystemInfoService {
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
             }
             opMessage = String.format(
-                formatSb.toString(), willBeModifiedHost,
-                updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
+                    formatSb.toString(), willBeModifiedHost,
+                    updateBackend.getHeartbeatPort(), fqdn, candidateBackends.size() - 1);
         } else {
             opMessage = String.format(formatSb.toString(), willBeModifiedHost, updateBackend.getHeartbeatPort(), fqdn);
         }
@@ -511,6 +522,14 @@ public class SystemInfoService {
         return getBackendIds(false);
     }
 
+    public int getAliveBackendNumber() {
+        return getBackendIds(true).size();
+    }
+
+    public int getTotalBackendNumber() {
+        return idToBackendRef.size();
+    }
+
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
         for (ComputeNode computeNode : idToComputeNode.values()) {
@@ -553,10 +572,6 @@ public class SystemInfoService {
             }
             return backendIds;
         }
-    }
-
-    public int backendSize() {
-        return idToBackendRef.size();
     }
 
     public List<Long> getDecommissionedBackendIds() {

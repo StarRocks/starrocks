@@ -66,6 +66,11 @@ public:
     virtual MemoryPool& getMemoryPool() const = 0;
 
     /**
+     * Get the reader metrics for this reader.
+     */
+    virtual ReaderMetrics* getReaderMetrics() const = 0;
+
+    /**
      * Get the writer's timezone, so that we can convert their dates correctly.
      */
     virtual const Timezone& getWriterTimezone() const = 0;
@@ -94,6 +99,12 @@ public:
      */
     virtual int32_t getForcedScaleOnHive11Decimal() const = 0;
 
+    /**
+     * Whether decimals that have precision <=18 are encoded as fixed scale and values
+     * encoded in RLE.
+     */
+    virtual bool isDecimalAsLong() const = 0;
+
     virtual bool getUseWriterTimezone() const { return false; }
 
     virtual DataBuffer<char>* getSharedBuffer() const { return nullptr; }
@@ -107,6 +118,7 @@ protected:
     std::unique_ptr<ByteRleDecoder> notNullDecoder;
     uint64_t columnId;
     MemoryPool& memoryPool;
+    ReaderMetrics* metrics;
 
 public:
     ColumnReader(const Type& type, StripeStreams& stipe);

@@ -64,6 +64,11 @@ struct FileContents {
     CompressionKind compression;
     MemoryPool* pool;
     std::ostream* errorStream;
+    /// Decimal64 in ORCv2 uses RLE to store values. This flag indicates whether
+    /// this new encoding is used.
+    bool isDecimalAsLong;
+    std::unique_ptr<proto::Metadata> metadata;
+    ReaderMetrics* readerMetrics;
 };
 
 proto::StripeFooter getStripeFooter(const proto::StripeInformation& info, const FileContents& contents);
@@ -135,6 +140,8 @@ private:
     uint64_t lazyLoadLastUsedRowInStripe; // which row in stripe loazy load files are used in last time.
 
     uint64_t rowsInCurrentStripe;
+    // number of row groups between first stripe and last stripe
+    uint64_t numRowGroupsInStripeRange;
     proto::StripeInformation currentStripeInfo;
     proto::StripeFooter currentStripeFooter;
     std::unique_ptr<ColumnReader> reader;
@@ -142,6 +149,7 @@ private:
     bool enableEncodedBlock;
     // internal methods
     void startNextStripe();
+    inline void markEndOfFile();
 
     // row index of current stripe with column id as the key
     std::unordered_map<uint64_t, proto::RowIndex> rowIndexes;
@@ -168,11 +176,11 @@ private:
     // If only a subset of row groups are selected then the next read should
     // stop at the end of selected range.
     static uint64_t computeBatchSize(uint64_t requestedSize, uint64_t currentRowInStripe, uint64_t rowsInCurrentStripe,
-                                     uint64_t rowIndexStride, const std::vector<bool>& includedRowGroups);
+                                     uint64_t rowIndexStride, const std::vector<uint64_t>& nextSkippedRows);
 
     // Skip non-selected rows
     static uint64_t advanceToNextRowGroup(uint64_t currentRowInStripe, uint64_t rowsInCurrentStripe,
-                                          uint64_t rowIndexStride, const std::vector<bool>& includedRowGroups);
+                                          uint64_t rowIndexStride, const std::vector<uint64_t>& nextSkippedRows);
 
     friend class TestRowReader_advanceToNextRowGroup_Test;
     friend class TestRowReader_computeBatchSize_Test;
@@ -223,6 +231,7 @@ public:
 
     const FileContents& getFileContents() const;
     bool getThrowOnHive11DecimalOverflow() const;
+    bool getIsDecimalAsLong() const;
     int32_t getForcedScaleOnHive11Decimal() const;
     bool getUseWriterTimezone() const;
     DataBuffer<char>* getSharedBuffer() const;
@@ -251,7 +260,6 @@ private:
                                std::vector<std::vector<proto::ColumnStatistics> >* indexStats) const;
 
     // metadata
-    mutable std::unique_ptr<proto::Metadata> metadata;
     mutable bool isMetadataLoaded;
 
 public:
@@ -320,6 +328,8 @@ public:
     const Type& getType() const override;
 
     bool hasCorrectStatistics() const override;
+
+    const ReaderMetrics* getReaderMetrics() const override { return contents->readerMetrics; }
 
     const proto::PostScript* getPostscript() const { return contents->postscript.get(); }
 

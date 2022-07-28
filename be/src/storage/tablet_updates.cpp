@@ -164,6 +164,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     // Load all rowsets of this tablet into memory.
     // NOTE: This may change in a near future, e.g, manage rowsets in a separate module and load
     // them on demand.
+    _rowsets.clear();
     RETURN_IF_ERROR(TabletMetaManager::rowset_iterate(
             _tablet.data_dir(), _tablet.tablet_id(), [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
                 RowsetSharedPtr rowset;
@@ -3074,7 +3075,7 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.empty()) {
             string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
                                              _debug_version_info(false), missing_version_ranges.back());
-            LOG(WARNING) << msg;
+            LOG(INFO) << msg;
             return Status::NotFound(msg);
         }
         rowsetids.reserve(versions.size());
