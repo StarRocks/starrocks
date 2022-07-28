@@ -208,6 +208,11 @@ public class ExportJob implements Writable {
         }
 
         this.sql = stmt.toSql();
+
+        // TODO Support snapshot of lake table
+        if (exportTable.isLakeTable()) {
+            this.state = JobState.EXPORTING;
+        }
     }
 
     private void genExecFragment(ExportStmt stmt) throws UserException {
@@ -306,6 +311,7 @@ public class ExportJob implements Writable {
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
+            case LAKE:
                 scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
@@ -336,6 +342,7 @@ public class ExportJob implements Writable {
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
+            case LAKE:
                 fragment = new PlanFragment(
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;

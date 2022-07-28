@@ -224,6 +224,7 @@ public class ExportStmt extends StatementBase {
             switch (tblType) {
                 case MYSQL:
                 case OLAP:
+                case LAKE:
                     break;
                 case BROKER:
                 case SCHEMA:
