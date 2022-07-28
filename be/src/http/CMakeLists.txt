@@ -25,7 +25,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
-set(SOURCES
+add_library(Webserver STATIC
   download_action.cpp
   http_headers.cpp
   http_method.cpp
@@ -44,8 +44,8 @@ set(SOURCES
   action/snapshot_action.cpp
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
-  action/metrics_action.cpp
   action/pprof_actions.cpp
+  action/metrics_action.cpp
   action/stream_load.cpp
   action/transaction_stream_load.cpp
   action/meta_action.cpp
@@ -53,8 +53,6 @@ set(SOURCES
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
 )
-
-add_library(Webserver STATIC ${SOURCES})
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)
