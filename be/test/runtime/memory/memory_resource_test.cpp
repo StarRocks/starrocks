@@ -12,11 +12,11 @@ TEST(StackMemoryResource, Normal) {
     char buffer[1024];
     stack_memory_resource mr(buffer, sizeof(buffer));
     std::pmr::vector<char> res(&mr);
-    // allocate 16 bytes from stack
+    // allocate 4 bytes from stack
     res.resize(4);
     ASSERT_EQ((char*)res.data(), buffer);
 
-    // allocate
+    // allocate 128 bytes
     res.resize(128 / sizeof(char));
     ASSERT_EQ((char*)res.data(), buffer + 4 * sizeof(char));
 
