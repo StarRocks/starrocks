@@ -283,9 +283,10 @@ public class Replica implements Writable {
     }
 
     // only update data size and row num
-    public synchronized void updateStat(long dataSize, long rowNum) {
+    public synchronized void updateStat(long dataSize, long rowNum, long versionCount) {
         this.dataSize = dataSize;
         this.rowCount = rowNum;
+        this.versionCount = versionCount;
     }
 
     public synchronized void updateRowCount(long newVersion, long newDataSize,
