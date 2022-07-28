@@ -230,6 +230,7 @@ set(EXEC_FILES
         ./runtime/large_int_value_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
+        ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/raw_value_test.cpp
         ./runtime/result_queue_mgr_test.cpp

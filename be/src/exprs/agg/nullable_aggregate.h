@@ -618,24 +618,23 @@ public:
                 size_t row_num) const override {
         auto column_size = ctx->get_num_args();
         // This container stores the columns we really pass to the nested function.
-        std::vector<const Column*> data_columns;
-        data_columns.resize(column_size);
+        const Column* data_columns[column_size];
 
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->is_nullable()) {
-                const auto* column = down_cast<const NullableColumn*>(columns[i]);
-                if (column->is_null(row_num)) {
+                if (columns[i]->is_null(row_num)) {
                     // If at least one column has a null value in the current row,
                     // we don't process this row.
                     return;
                 }
+                const auto* column = down_cast<const NullableColumn*>(columns[i]);
                 data_columns[i] = &column->data_column_ref();
             } else {
                 data_columns[i] = columns[i];
             }
         }
         this->data(state).is_null = false;
-        this->nested_function->update(ctx, data_columns.data(), this->data(state).mutable_nest_state(), row_num);
+        this->nested_function->update(ctx, data_columns, this->data(state).mutable_nest_state(), row_num);
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
@@ -649,8 +648,7 @@ public:
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
         auto column_size = ctx->get_num_args();
         // This container stores the columns we really pass to the nested function.
-        std::vector<const Column*> data_columns;
-        data_columns.resize(column_size);
+        const Column* data_columns[column_size];
 
         std::vector<uint8_t> null_data_result;
         null_data_result.resize(chunk_size);
@@ -682,7 +680,7 @@ public:
                 for (size_t i = 0; i < chunk_size; ++i) {
                     if (!null_data_result[i] & !selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
-                        this->nested_function->update(ctx, data_columns.data(),
+                        this->nested_function->update(ctx, data_columns,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);
                     }
                 }
@@ -690,7 +688,7 @@ public:
                 for (size_t i = 0; i < chunk_size; ++i) {
                     if (!selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
-                        this->nested_function->update(ctx, data_columns.data(),
+                        this->nested_function->update(ctx, data_columns,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);
                     }
                 }
