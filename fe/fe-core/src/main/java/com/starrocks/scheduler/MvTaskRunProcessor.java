@@ -224,7 +224,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             String mvPartitionName = deleteEntry.getKey();
             dropPartition(db, mv, mvPartitionName);
         }
-        LOG.info("The process of synchronizing partitions delete range {}", deletes);
+        LOG.info("The process of synchronizing materialized view [{}] partitions delete range [{}]", mv.getName(), deletes);
 
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
@@ -234,7 +234,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             // The newly added partition must be the partition that needs to be refreshed
             needRefreshMvPartitionNames.add(mvPartitionName);
         }
-        LOG.info("The process of synchronizing partitions add range {} ", adds);
+        LOG.info("The process of synchronizing materialized view [{}] partitions add range [{}]", mv.getName(), adds);
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
@@ -270,7 +270,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             mv.cleanBasePartition(base);
         }
 
-        LOG.info("Calculate the partitions that need to be refreshed:[{}]", needRefreshMvPartitionNames);
+        LOG.info("Calculate the materialized view [{}] partitions that need to be refreshed [{}]", mv.getName(), needRefreshMvPartitionNames);
 
         return needRefreshMvPartitionNames;
     }
