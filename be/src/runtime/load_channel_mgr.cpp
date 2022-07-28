@@ -76,7 +76,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
-    scoped_refptr<LoadChannel> channel;
+    std::shared_ptr<LoadChannel> channel;
     {
         std::lock_guard l(_lock);
         auto it = _load_channels.find(load_id);
@@ -153,7 +153,7 @@ Status LoadChannelMgr::_start_bg_worker() {
 }
 
 void LoadChannelMgr::_start_load_channels_clean() {
-    std::vector<scoped_refptr<LoadChannel>> timeout_channels;
+    std::vector<std::shared_ptr<LoadChannel>> timeout_channels;
 
     time_t now = time(nullptr);
     {
@@ -182,13 +182,13 @@ void LoadChannelMgr::_start_load_channels_clean() {
               << " current=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption();
 }
 
-scoped_refptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {
+std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {
     std::lock_guard l(_lock);
     auto it = _load_channels.find(load_id);
     return (it != _load_channels.end()) ? it->second : nullptr;
 }
 
-scoped_refptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id) {
+std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id) {
     std::lock_guard l(_lock);
     if (auto it = _load_channels.find(load_id); it != _load_channels.end()) {
         auto ret = it->second;
