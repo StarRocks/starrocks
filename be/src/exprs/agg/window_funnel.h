@@ -64,6 +64,8 @@ struct TypeTraits<TYPE_DATETIME> {
 };
 } // namespace InteralTypeOfFunnel
 
+inline const constexpr int reserve_list_size = 4;
+
 template <PrimitiveType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
@@ -78,10 +80,10 @@ struct WindowFunnelState {
     int32_t mode = 0;
     uint8_t events_size;
     bool sorted = true;
-    char buffer[64];
+    char buffer[reserve_list_size * sizeof(TimestampEvent)];
     stack_memory_resource mr;
     mutable std::pmr::vector<TimestampEvent> events_list;
-    WindowFunnelState() : mr(buffer, sizeof(buffer)), events_list(&mr) {}
+    WindowFunnelState() : mr(buffer, sizeof(buffer)), events_list(&mr) { events_list.reserve(reserve_list_size); }
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
@@ -148,7 +150,7 @@ struct WindowFunnelState {
             size_t size = events_list.size();
             size_t serialize_size = size * 2 + 2;
             // TODO:
-            std::unique_ptr<int64_t[]> buffer(new int64_t[serialize_size]);
+            std::unique_ptr<int64_t[]> buffer = std::make_unique<int64_t[]>(serialize_size);
 
             buffer[0] = (int64_t)events_size;
             buffer[1] = (int64_t)sorted;

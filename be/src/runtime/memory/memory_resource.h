@@ -37,7 +37,7 @@ private:
     void* _current_addr;
     std::pmr::memory_resource* const _upstream;
 
-    virtual void* do_allocate(size_t __bytes, size_t __alignment) {
+    void* do_allocate(size_t __bytes, size_t __alignment) override {
         size_t left = (uint8_t*)_stack_addr_end - (uint8_t*)_current_addr;
         void* res = std::align(__alignment, __bytes, _current_addr, left);
         if (res == nullptr) {
@@ -49,7 +49,7 @@ private:
         return res;
     }
 
-    virtual void do_deallocate(void* __p, size_t __bytes, size_t __alignment) {
+    void do_deallocate(void* __p, size_t __bytes, size_t __alignment) override {
         if (__p >= _stack_addr_start && __p <= _stack_addr_end) {
             // nothing todo
             ASAN_POISON_MEMORY_REGION(__p, __bytes);
@@ -58,7 +58,7 @@ private:
         }
     }
 
-    virtual bool do_is_equal(const memory_resource& __other) const noexcept { return this == &__other; }
+    bool do_is_equal(const memory_resource& __other) const noexcept override { return this == &__other; }
 };
 
 } // namespace starrocks
