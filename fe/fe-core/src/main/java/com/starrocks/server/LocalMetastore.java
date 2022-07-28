@@ -1406,6 +1406,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // drop
+        Set<Long> tabletIdSet = new HashSet<Long>(); 
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
@@ -1422,19 +1423,20 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
-            Set<Long> tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-            if (!tabletIdSet.isEmpty()) {
-                // for debug
-                LOG.info("delete lake tablet : {}", tabletIdSet);
-                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                editLog.logAddUnusedShard(tabletIdSet);
-            }
+            tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
         }
 
         // log
         DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), partitionName, isTempPartition,
                 clause.isForceDrop());
         editLog.logDropPartition(info);
+
+        if (!tabletIdSet.isEmpty()) {
+            // for debug
+            LOG.info("delete lake tablet : {}", tabletIdSet);
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
+        }
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
                 clause.isForceDrop());
