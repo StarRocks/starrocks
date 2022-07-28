@@ -497,9 +497,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 }
 
 Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
-    uint64_t segment_size;
-    uint64_t index_size;
-    uint64_t footer_position;
+    uint64_t segment_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
     RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
         uint64_t footer_size = segment_size - footer_position;
