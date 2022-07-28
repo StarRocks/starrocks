@@ -65,7 +65,6 @@ import java.util.stream.Collectors;
  * show [temp] partitions' detail info within a table
  */
 public class PartitionsProcDir implements ProcDirInterface {
-
     private final PartitionType partitionType;
     private ImmutableList<String> titleNames;
     private Database db;
