@@ -1627,13 +1627,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     // drop temp partition. if needDropTablet is true, tablets of this temp partition
     // will be dropped from tablet inverted index.
-    public Set<Long> dropTempPartition(String partitionName, boolean needDropTablet) {
+    public void dropTempPartition(String partitionName, boolean needDropTablet) {
         Partition partition = getPartition(partitionName, true);
         if (partition != null) {
             partitionInfo.dropPartition(partition.getId());
-            return tempPartitions.dropPartition(partitionName, needDropTablet);
+            tempPartitions.dropPartition(partitionName, needDropTablet);
         }
-        return null;
     }
 
     /*
