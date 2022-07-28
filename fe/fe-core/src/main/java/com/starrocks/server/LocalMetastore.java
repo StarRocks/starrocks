@@ -1428,6 +1428,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 <<<<<<< HEAD
+<<<<<<< HEAD
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
 =======
             Set<Long> tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
@@ -1438,6 +1439,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 editLog.logAddUnusedShard(tabletIdSet);
             }
 >>>>>>> update codes
+=======
+            tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+>>>>>>> update codes
         }
 
         // log
@@ -1446,7 +1450,14 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logDropPartition(info);
 
         if (!tabletIdSet.isEmpty()) {
+<<<<<<< HEAD
             stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+=======
+            // for debug
+            LOG.info("delete lake tablet : {}", tabletIdSet);
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+            editLog.logAddUnusedShard(tabletIdSet);
+>>>>>>> update codes
         }
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
