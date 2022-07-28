@@ -64,6 +64,12 @@ struct TTextFileDesc {
 
     // property 'line.delim'
     2: optional string line_delim
+
+    // property 'collection.delim' 
+    3: optional string collection_delim
+
+    // property 'mapkey.delim'
+    4: optional string mapkey_delim
 }
 
 enum TSchemaTableType {
