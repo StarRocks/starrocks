@@ -107,15 +107,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
                 for (String syncedPartitionName : syncedPartitionNames) {
                     Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
-                    if (baseTablePartition == null) {
+                    if (baseTablePartition != null && materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
                         needRefresh = true;
-                        materializedView.removeBasePartition(baseTableId, syncedPartitionName);
-                    } else {
-                        if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
-                            needRefresh = true;
-                            materializedView.updateBasePartition(baseTableId, baseTablePartition);
-                        }
+                        materializedView.updateBasePartition(baseTableId, baseTablePartition);
                     }
+                }
+                if (materializedView.cleanBasePartition(olapTable) > 0) {
+                    needRefresh = true;
                 }
             }
             if (needRefresh) {
@@ -291,12 +289,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
         for (String syncedPartitionName : syncedPartitionNames) {
             Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
-            if (baseTablePartition == null) {
-                refreshAllPartitions = true;
-                materializedView.removeBasePartition(baseTableId, syncedPartitionName);
-            } else if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
+            if (baseTablePartition != null && materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
                 refreshAllPartitions = true;
             }
+        }
+        if (materializedView.cleanBasePartition(olapTable) > 0) {
+            refreshAllPartitions = true;
         }
         return refreshAllPartitions;
     }
