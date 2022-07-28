@@ -310,21 +310,6 @@ const RowsetSharedPtr Tablet::rowset_with_max_version() const {
     return iter->second;
 }
 
-RowsetSharedPtr Tablet::_rowset_with_largest_size() {
-    RowsetSharedPtr largest_rowset = nullptr;
-    for (auto& it : _rs_version_map) {
-        if (it.second->empty() || it.second->zero_num_rows()) {
-            continue;
-        }
-        if (largest_rowset == nullptr ||
-            it.second->rowset_meta()->index_disk_size() > largest_rowset->rowset_meta()->index_disk_size()) {
-            largest_rowset = it.second;
-        }
-    }
-
-    return largest_rowset;
-}
-
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
