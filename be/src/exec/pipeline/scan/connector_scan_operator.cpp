@@ -31,14 +31,14 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, _scan_node, _buffer_limiter.get());
+    return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, dop, _scan_node, _buffer_limiter.get());
 }
 
 // ==================== ConnectorScanOperator ====================
 
-ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
+ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                                              ScanNode* scan_node, ChunkBufferLimiter* buffer_limiter)
-        : ScanOperator(factory, id, driver_sequence, scan_node, buffer_limiter) {}
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node, buffer_limiter) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
