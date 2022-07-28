@@ -244,7 +244,7 @@ public class UtilsTest {
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
-                new ArrayType(ScalarType.STRING));
+                new ArrayType(ScalarType.createDefaultString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);

@@ -28,6 +28,8 @@ import com.starrocks.thrift.THdfsPartitionLocation;
 import com.starrocks.thrift.THudiTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.avro.LogicalType;
+import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -372,67 +374,68 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return hudiTable;
     }
 
-    // check whether avroSchema after conversion is same as srType
-    // rules of validate types
-    // If one of convertType or srType is ArrayType, the another one must be ArrayType too.
-    // Considering ArrayType have recursions, so ArrayType levels should be same between [convertType, srType]
-    public static boolean validColumnType(Schema avroSchema, Type srType) throws DdlException {
+    private static boolean validColumnType(Schema avroSchema, Type srType) {
         Schema.Type columnType = avroSchema.getType();
         if (columnType == null) {
             return false;
         }
 
-        boolean valid = true;
-        Type convertType = HiveMetaStoreTableUtils.convertHudiTableColumnType(avroSchema);
-        // if convertType is ArrayType, so srType must be srType too
-        if (convertType.isArrayType()) {
-            if (!srType.isArrayType()) {
-                valid = false;
-            }
+        PrimitiveType primitiveType = srType.getPrimitiveType();
+        LogicalType logicalType = avroSchema.getLogicalType();
 
-            Type convertSubType = null;
-            Type srSubType = null;
-            // considering ArrayLevel has recursions, we can get recursion levels here
-            // It is obvious that, if an avroSchema is ArrayType, so the srType must be srType too.
-            // So, we can calculate the level of arrays in srType.
-            // eg: level num of Array<Array<Array>> is 3, and the primitive type of srType is int.
-            int convertArrayLevel = 0;
-            int srArrayLevel = 0;
-            while (convertType instanceof ArrayType) {
-                convertSubType = ((ArrayType) convertType).getItemType();
-                convertType = convertSubType;
-                convertArrayLevel++;
-            }
-            while (srType instanceof ArrayType) {
-                srSubType = ((ArrayType) srType).getItemType();
-                srType = srSubType;
-                srArrayLevel++;
-            }
-            // the recursion levels should be same between convertType and srType
-            if (convertArrayLevel != srArrayLevel) {
-                valid = false;
-            }
+        switch (columnType) {
+            case BOOLEAN:
+                return primitiveType == PrimitiveType.BOOLEAN;
+            case INT:
+                if (logicalType instanceof LogicalTypes.Date) {
+                    return primitiveType == PrimitiveType.DATE;
+                } else if (logicalType instanceof LogicalTypes.TimeMillis) {
+                    return primitiveType == PrimitiveType.TIME;
+                } else {
+                    return primitiveType == PrimitiveType.INT;
+                }
+            case LONG:
+                if (logicalType instanceof LogicalTypes.TimeMicros) {
+                    return primitiveType == PrimitiveType.TIME;
+                } else if (logicalType instanceof LogicalTypes.TimestampMillis
+                        || logicalType instanceof LogicalTypes.TimestampMicros) {
+                    return primitiveType == PrimitiveType.DATETIME;
+                } else {
+                    return primitiveType == PrimitiveType.BIGINT;
+                }
+            case FLOAT:
+                return primitiveType == PrimitiveType.FLOAT;
+            case DOUBLE:
+                return primitiveType == PrimitiveType.DOUBLE;
+            case STRING:
+                return primitiveType == PrimitiveType.VARCHAR ||
+                        primitiveType == PrimitiveType.CHAR;
+            case ARRAY:
+                return validColumnType(avroSchema.getElementType(), ((ArrayType) srType).getItemType());
+            case FIXED:
+            case BYTES:
+                if (logicalType instanceof LogicalTypes.Decimal) {
+                    return primitiveType == PrimitiveType.DECIMALV2 || primitiveType == PrimitiveType.DECIMAL32 ||
+                            primitiveType == PrimitiveType.DECIMAL64 || primitiveType == PrimitiveType.DECIMAL128;
+                } else {
+                    return primitiveType == PrimitiveType.VARCHAR;
+                }
+            case UNION:
+                List<Schema> nonNullMembers = avroSchema.getTypes().stream()
+                        .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
+                        .collect(Collectors.toList());
+
+                if (nonNullMembers.size() == 1) {
+                    return validColumnType(nonNullMembers.get(0), srType);
+                } else {
+                    // UNION type is not supported in Starrocks
+                    return false;
+                }
+            case ENUM:
+            case MAP:
+            default:
+                return false;
         }
-
-        // considering varchar info in hudi has no length, so we don't need to check length
-        // just check type here
-        if (convertType.isVarchar()) {
-            if (!srType.isVarchar()) {
-                valid = false;
-            }
-        } else if (srType.isDecimalOfAnyVersion()) {
-            // for decimal type, we check convertType whether is decimal, skip precision
-            if (!convertType.isDecimalOfAnyVersion()) {
-                valid = false;
-            }
-        } else {
-            // now, the complex types have been reduced to the simple primitive type
-            // we can compare two types by two types' toSql() here
-            valid = srType.toSql().equals(convertType.toSql());
-        }
-
-
-        return valid;
     }
 
     @Override
