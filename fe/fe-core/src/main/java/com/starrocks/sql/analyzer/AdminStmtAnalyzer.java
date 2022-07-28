@@ -15,7 +15,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Replica;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -87,10 +86,8 @@ public class AdminStmtAnalyzer {
                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 } else {
-                    dbName = ClusterNamespace.getFullName(session.getDatabase());
+                    dbName = session.getDatabase();
                 }
-            } else {
-                dbName = ClusterNamespace.getFullName(dbName);
             }
             adminShowReplicaDistributionStmt.setDbName(dbName);
 
@@ -111,10 +108,8 @@ public class AdminStmtAnalyzer {
                 if (Strings.isNullOrEmpty(session.getDatabase())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 } else {
-                    dbName = ClusterNamespace.getFullName(session.getDatabase());
+                    dbName = session.getDatabase();
                 }
-            } else {
-                dbName = ClusterNamespace.getFullName(dbName);
             }
             adminShowReplicaStatusStmt.setDbName(dbName);
 

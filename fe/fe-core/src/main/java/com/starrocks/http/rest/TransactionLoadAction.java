@@ -23,7 +23,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
@@ -98,8 +97,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 if (Strings.isNullOrEmpty(dbName)) {
                     throw new DdlException("No database selected.");
                 }
-                String fullDbName = ClusterNamespace.getFullName(dbName);
-                Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
                 if (db == null) {
                     throw new DdlException("database " + dbName + " not exists");
                 }

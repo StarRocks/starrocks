@@ -29,7 +29,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.http.ActionController;
@@ -74,10 +73,9 @@ public class TableSchemaAction extends RestBaseAction {
                     || Strings.isNullOrEmpty(tableName)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "No database or table selected.");
             }
-            String fullDbName = ClusterNamespace.getFullName(dbName);
             // check privilege for select, otherwise return 401 HTTP status
-            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
-            Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.SELECT);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
