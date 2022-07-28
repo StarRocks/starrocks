@@ -179,8 +179,15 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
         bool has_fields = obj.HasMember(FIELD_FIELDS);
 
         if (!has_source && !has_fields) {
-            for (auto column : (*chunk)->columns()) {
-                column->append_default();
+            for (size_t col_idx = 0; col_idx < slots.size(); ++col_idx) {
+                SlotDescriptor* slot_desc = slot_descs[col_idx];
+                ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+                if (slot_desc->is_nullable()) {
+                    column->append_default();
+                } else {
+                    return Status::DataQualityError(
+                            fmt::format("col `{}` is not null, but value from ES is null", slot_desc->col_name()));
+                }
             }
             continue;
         }
