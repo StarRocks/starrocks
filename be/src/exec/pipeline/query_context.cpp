@@ -100,6 +100,14 @@ void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace>
     std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
 }
 
+void QueryContext::add_cur_scan_stats_item(const QueryStatisticsItemPB& stats_item) {
+    _cur_scan_rows_num += stats_item.scan_rows();
+    _cur_scan_bytes += stats_item.scan_bytes();
+    if (stats_item.table_id() > 0 && (stats_item.scan_rows() > 0 || stats_item.scan_bytes() > 0)) {
+        _cur_scan_stats_items.emplace_back(stats_item);
+    }
+}
+
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
         : _num_slots(1 << log2_num_slots),
           _slot_mask(_num_slots - 1),
