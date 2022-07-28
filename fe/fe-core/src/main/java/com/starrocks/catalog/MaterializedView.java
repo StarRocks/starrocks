@@ -377,10 +377,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(base.getId(), k -> Maps.newHashMap());
+        Set<String> deletedBasePartitionNames = Sets.newHashSet();
         for (String basePartitionName : basePartitionInfoMap.keySet()) {
             if (base.getPartition(basePartitionName) == null) {
-                removeBasePartition(base.getId(), basePartitionName, false);
+                deletedBasePartitionNames.add(basePartitionName);
             }
+        }
+        for (String deletedBasePartitionName : deletedBasePartitionNames) {
+            removeBasePartition(base.getId(), deletedBasePartitionName, false);
         }
     }
 
