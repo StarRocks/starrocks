@@ -177,7 +177,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
 
 class S3FileSystem : public FileSystem {
 public:
-    S3FileSystem(FSOptions& options) : _options(options) {}
+    S3FileSystem(const FSOptions& options) : _options(options) {}
     ~S3FileSystem() override = default;
 
     S3FileSystem(const S3FileSystem&) = delete;
@@ -567,7 +567,7 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     return directory_exist ? Status::OK() : Status::NotFound(dirname);
 }
 
-std::unique_ptr<FileSystem> new_fs_s3(FSOptions& options) {
+std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
 }
 

@@ -6,6 +6,6 @@
 
 namespace starrocks {
 
-std::unique_ptr<FileSystem> new_fs_hdfs(FSOptions& options);
+std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options);
 
 } // namespace starrocks

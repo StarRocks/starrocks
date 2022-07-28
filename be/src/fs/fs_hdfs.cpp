@@ -12,6 +12,8 @@
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 
+using namespace fmt::literals;
+
 namespace starrocks {
 
 // ==================================  HdfsInputStream  ==========================================
@@ -110,7 +112,7 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem(FSOptions& options) : _options(options) {}
+    HdfsFileSystem(const FSOptions& options) : _options(options) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;
@@ -205,7 +207,7 @@ Status HdfsFileSystem::path_exists(const std::string& path) {
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
     if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path");
+        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
     }
     return _path_exists(handle.hdfs_fs, path);
 }
@@ -221,7 +223,7 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
     if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path");
+        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
     }
     // pass zero to hdfsOpenFile will use trhe default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
@@ -230,7 +232,7 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     }
     hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
     }
     auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
     return std::make_unique<SequentialFile>(std::move(stream), path);
@@ -247,7 +249,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     HdfsFsHandle handle;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
     if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path");
+        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
     }
     // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
@@ -256,13 +258,13 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     }
     hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
     }
     auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
-std::unique_ptr<FileSystem> new_fs_hdfs(FSOptions& options) {
+std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options) {
     return std::make_unique<HdfsFileSystem>(options);
 }
 
