@@ -338,7 +338,7 @@ public:
             _offset += _type_length;
         }
 
-        dst->append_strings(slices);
+        dst->append_continuous_strings(slices);
         return Status::OK();
     }
 

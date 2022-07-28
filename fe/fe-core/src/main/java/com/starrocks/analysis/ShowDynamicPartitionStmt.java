@@ -20,10 +20,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 
@@ -57,21 +53,6 @@ public class ShowDynamicPartitionStmt extends ShowStmt {
 
     public void setDb(String db) {
         this.db = db;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(db)) {
-            db = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            db = ClusterNamespace.getFullName(db);
-        }
-
-        // we do not check db privs here. because user may not have any db privs,
-        // but if it has privs of tbls inside this db,it should be allowed to see this db.
     }
 
     @Override

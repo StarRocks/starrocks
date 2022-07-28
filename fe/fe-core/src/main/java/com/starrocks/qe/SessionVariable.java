@@ -123,6 +123,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
     // if set to true, some of stmt will be forwarded to leader FE to get result
+    public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
     public static final String PARALLEL_EXCHANGE_INSTANCE_NUM = "parallel_exchange_instance_num";
@@ -157,6 +158,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHARED_SCAN = "enable_shared_scan";
     public static final String PIPELINE_DOP = "pipeline_dop";
 
+    public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
@@ -190,6 +192,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
+    public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
+            "broadcast_right_table_scale_factor";
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
@@ -207,6 +211,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
+    public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -259,7 +265,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
 
-
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
 
@@ -273,7 +278,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
      * to BE in batch and concurrently.
      * - Uses `exec_batch_plan_fragments` instead of `exec_plan_fragment` RPC API, which all the instances
-     *   of a fragment to the same destination host are delivered in the same request.
+     * of a fragment to the same destination host are delivered in the same request.
      * - Send different fragments concurrently according to topological order of the fragment tree
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
@@ -292,7 +297,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableTabletInternalParallel = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
-    private boolean enableSharedScan = true;
+    private boolean enableSharedScan = false;
 
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
@@ -439,6 +444,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
+    @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int profileTimeout = 2;
+
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
@@ -448,8 +456,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = FORWARD_TO_MASTER)
-    private boolean forwardToMaster = false;
+    @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
+    private boolean forwardToLeader = false;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -492,6 +500,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean cboEnableGreedyJoinReorder = true;
 
+    @VariableMgr.VarAttr(name = CBO_DEBUG_ALIVE_BACKEND_NUMBER, flag = VariableMgr.INVISIBLE)
+    private int cboDebugAliveBackendNumber = 0;
+
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
     private long transactionVisibleWaitTimeout = 10;
 
@@ -500,6 +511,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
+
+    @VariableMgr.VarAttr(name = BROADCAST_RIGHT_TABLE_SCALE_FACTOR, flag = VariableMgr.INVISIBLE)
+    private double broadcastRightTableScaleFactor = 10.0;
 
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
     private long optimizerExecuteTimeout = 3000;
@@ -732,8 +746,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableInsertStrict = enableInsertStrict;
     }
 
-    public boolean getForwardToMaster() {
-        return forwardToMaster;
+    public boolean getForwardToLeader() {
+        return forwardToLeader;
     }
 
     public void setMaxScanKeyNum(int maxScanKeyNum) {
@@ -820,6 +834,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboMaxReorderNode;
     }
 
+    public int getCboDebugAliveBackendNumber() {
+        return cboDebugAliveBackendNumber;
+    }
+
     public long getTransactionVisibleWaitTimeout() {
         return transactionVisibleWaitTimeout;
     }
@@ -846,6 +864,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getBroadcastRowCountLimit() {
         return broadcastRowCountLimit;
+    }
+
+    public double getBroadcastRightTableScaleFactor() {
+        return broadcastRightTableScaleFactor;
     }
 
     public long getOptimizerExecuteTimeout() {
@@ -926,6 +948,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getResourceGroupId() {
         return resourceGroupId;
+    }
+
+    public int getProfileTimeout() {
+        return profileTimeout;
     }
 
     public int getPipelineProfileLevel() {

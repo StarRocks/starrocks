@@ -52,10 +52,10 @@ inline RleVersion convertRleVersion(proto::ColumnEncoding_Kind kind) {
 }
 
 ColumnReader::ColumnReader(const Type& type, StripeStreams& stripe)
-        : columnId(type.getColumnId()), memoryPool(stripe.getMemoryPool()) {
+        : columnId(type.getColumnId()), memoryPool(stripe.getMemoryPool()), metrics(stripe.getReaderMetrics()) {
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_PRESENT, true);
     if (stream) {
-        notNullDecoder = createBooleanRleDecoder(std::move(stream));
+        notNullDecoder = createBooleanRleDecoder(std::move(stream), metrics);
     }
 }
 
@@ -160,7 +160,7 @@ public:
 BooleanColumnReader::BooleanColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("DATA stream not found in Boolean column");
-    rle = createBooleanRleDecoder(std::move(stream));
+    rle = createBooleanRleDecoder(std::move(stream), metrics);
 }
 
 BooleanColumnReader::~BooleanColumnReader() {
@@ -205,7 +205,7 @@ public:
 ByteColumnReader::ByteColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("DATA stream not found in Byte column");
-    rle = createByteRleDecoder(std::move(stream));
+    rle = createByteRleDecoder(std::move(stream), nullptr);
 }
 
 ByteColumnReader::~ByteColumnReader() {
@@ -251,7 +251,7 @@ IntegerColumnReader::IntegerColumnReader(const Type& type, StripeStreams& stripe
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("DATA stream not found in Integer column");
-    rle = createRleDecoder(std::move(stream), true, vers, memoryPool, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), true, vers, memoryPool, metrics, stripe.getSharedBuffer());
 }
 
 IntegerColumnReader::~IntegerColumnReader() {
@@ -304,10 +304,10 @@ TimestampColumnReader::TimestampColumnReader(const Type& type, StripeStreams& st
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("DATA stream not found in Timestamp column");
-    secondsRle = createRleDecoder(std::move(stream), true, vers, memoryPool, stripe.getSharedBuffer());
+    secondsRle = createRleDecoder(std::move(stream), true, vers, memoryPool, metrics, stripe.getSharedBuffer());
     stream = stripe.getStream(columnId, proto::Stream_Kind_SECONDARY, true);
     if (stream == nullptr) throw ParseError("SECONDARY stream not found in Timestamp column");
-    nanoRle = createRleDecoder(std::move(stream), false, vers, memoryPool, stripe.getSharedBuffer());
+    nanoRle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
 }
 
 TimestampColumnReader::~TimestampColumnReader() {
@@ -432,6 +432,9 @@ private:
         return buf;
     }
 
+    // It's same effect to following PR, so I don't merge it.
+    // ORC-1137: [C++] Unroll loops and copy data directly in DoubleColumnReader::next() by stiga-huang ·
+    // Pull Request #1071 · apache/orc https://github.com/apache/orc/pull/1071
     void readDoubleToLocalBuffer(int n) {
         const uint8_t* data = reinterpret_cast<const uint8_t*>(readFullyToBuffer(n * 8));
         localDoubleBuffer.reserve(n);
@@ -712,13 +715,14 @@ StringDictionaryColumnReader::StringDictionaryColumnReader(const Type& type, Str
     if (stream == nullptr) {
         throw ParseError("DATA stream not found in StringDictionaryColumn");
     }
-    rle = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics, stripe.getSharedBuffer());
 
     stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, false);
     if (dictSize > 0 && stream == nullptr) {
         throw ParseError("LENGTH stream not found in StringDictionaryColumn");
     }
-    lengthDecoder = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, stripe.getSharedBuffer());
+    lengthDecoder =
+            createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics, stripe.getSharedBuffer());
     blobStream = stripe.getStream(columnId, proto::Stream_Kind_DICTIONARY_DATA, false);
     dictionaryLoaded = false;
 }
@@ -853,7 +857,7 @@ StringDirectColumnReader::StringDirectColumnReader(const Type& type, StripeStrea
     RleVersion rleVersion = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in StringDirectColumn");
-    lengthRle = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, stripe.getSharedBuffer());
+    lengthRle = createRleDecoder(std::move(stream), false, rleVersion, memoryPool, metrics, stripe.getSharedBuffer());
     blobStream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (blobStream == nullptr) throw ParseError("DATA stream not found in StringDirectColumn");
     lastBuffer = nullptr;
@@ -1137,7 +1141,7 @@ ListColumnReader::ListColumnReader(const Type& type, StripeStreams& stripe) : Co
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in List column");
-    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
     const Type& childType = *type.getSubtype(0);
     if (selectedColumns[static_cast<uint64_t>(childType.getColumnId())]) {
         child = buildReader(childType, stripe);
@@ -1252,7 +1256,7 @@ MapColumnReader::MapColumnReader(const Type& type, StripeStreams& stripe) : Colu
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in Map column");
-    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
     const Type& keyType = *type.getSubtype(0);
     if (selectedColumns[static_cast<uint64_t>(keyType.getColumnId())]) {
         keyReader = buildReader(keyType, stripe);
@@ -1389,7 +1393,7 @@ UnionColumnReader::UnionColumnReader(const Type& type, StripeStreams& stripe) : 
 
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in Union column");
-    rle = createByteRleDecoder(std::move(stream));
+    rle = createByteRleDecoder(std::move(stream), metrics);
     // figure out which types are selected
     const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
     for (unsigned int i = 0; i < numChildren; ++i) {
@@ -1580,7 +1584,7 @@ Decimal64ColumnReader::Decimal64ColumnReader(const Type& type, StripeStreams& st
     RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_SECONDARY, true);
     if (stream == nullptr) throw ParseError("SECONDARY stream not found in Decimal64Column");
-    scaleDecoder = createRleDecoder(std::move(stream), true, vers, memoryPool, stripe.getSharedBuffer());
+    scaleDecoder = createRleDecoder(std::move(stream), true, vers, memoryPool, metrics, stripe.getSharedBuffer());
 }
 
 Decimal64ColumnReader::~Decimal64ColumnReader() {
@@ -1707,6 +1711,53 @@ void Decimal128ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValue
             readInt128(values[i], static_cast<int32_t>(scaleBuffer[i]));
         }
     }
+}
+
+class Decimal64ColumnReaderV2 : public ColumnReader {
+protected:
+    std::unique_ptr<RleDecoder> valueDecoder;
+    int32_t precision;
+    int32_t scale;
+
+public:
+    Decimal64ColumnReaderV2(const Type& type, StripeStreams& stripe);
+    ~Decimal64ColumnReaderV2() override;
+
+    uint64_t skip(uint64_t numValues) override;
+
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override;
+};
+
+Decimal64ColumnReaderV2::Decimal64ColumnReaderV2(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+    scale = static_cast<int32_t>(type.getScale());
+    precision = static_cast<int32_t>(type.getPrecision());
+    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
+    if (stream == nullptr) {
+        std::stringstream ss;
+        ss << "DATA stream not found in Decimal64V2 column. ColumnId=" << columnId;
+        throw ParseError(ss.str());
+    }
+    valueDecoder =
+            createRleDecoder(std::move(stream), true, RleVersion_2, memoryPool, metrics, stripe.getSharedBuffer());
+}
+
+Decimal64ColumnReaderV2::~Decimal64ColumnReaderV2() {
+    // PASS
+}
+
+uint64_t Decimal64ColumnReaderV2::skip(uint64_t numValues) {
+    numValues = ColumnReader::skip(numValues);
+    valueDecoder->skip(numValues);
+    return numValues;
+}
+
+void Decimal64ColumnReaderV2::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
+    ColumnReader::next(rowBatch, numValues, notNull);
+    notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
+    Decimal64VectorBatch& batch = dynamic_cast<Decimal64VectorBatch&>(rowBatch);
+    valueDecoder->next(batch.values.data(), numValues, notNull);
+    batch.precision = precision;
+    batch.scale = scale;
 }
 
 class DecimalHive11ColumnReader : public Decimal64ColumnReader {
@@ -1870,15 +1921,16 @@ std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& strip
         // is this a Hive 0.11 or 0.12 file?
         if (type.getPrecision() == 0) {
             return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, stripe));
-
-            // can we represent the values using int64_t?
-        } else if (type.getPrecision() <= Decimal64ColumnReader::MAX_PRECISION_64) {
-            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, stripe));
-
-            // otherwise we use the Int128 implementation
-        } else {
-            return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, stripe));
         }
+        // can we represent the values using int64_t?
+        if (type.getPrecision() <= Decimal64ColumnReader::MAX_PRECISION_64) {
+            if (stripe.isDecimalAsLong()) {
+                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, stripe));
+            }
+            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, stripe));
+        }
+        // otherwise we use the Int128 implementation
+        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, stripe));
 
     default:
         throw NotImplementedYet("buildReader unhandled type");

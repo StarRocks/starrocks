@@ -26,9 +26,9 @@ public:
 
     std::string get_name() const override { return "java_window"; }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         int num_rows = columns[0]->size();
         int num_args = ctx->get_num_args();
         if (UNLIKELY(frame_start > std::numeric_limits<int32_t>::max() ||

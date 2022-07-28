@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -14,17 +15,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
-import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.statistic.AnalyzeJob;
-import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.AnalyzeStatus;
-import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatisticSQLBuilder;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -63,16 +65,16 @@ public class AnalyzeStmtTest {
     }
 
     @Test
-    public void testShowUserProperty(){
+    public void testShowUserProperty() {
         String sql = "SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'";
-        ShowUserPropertyStmt showUserPropertyStmt = (ShowUserPropertyStmt)analyzeSuccess(sql);
+        ShowUserPropertyStmt showUserPropertyStmt = (ShowUserPropertyStmt) analyzeSuccess(sql);
         Assert.assertEquals("default_cluster:jack", showUserPropertyStmt.getUser());
     }
 
     @Test
-    public void testSetUserProperty(){
+    public void testSetUserProperty() {
         String sql = "SET PROPERTY FOR 'tom' 'max_user_connections' = 'value', 'test' = 'true'";
-        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt)analyzeSuccess(sql);
+        SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) analyzeSuccess(sql);
         Assert.assertEquals("default_cluster:tom", setUserPropertyStmt.getUser());
     }
 
@@ -138,10 +140,17 @@ public class AnalyzeStmtTest {
         OlapTable table = (OlapTable) database.getTable(10004L);
         Partition partition = table.getPartition(10003L);
 
+        Column v1 = table.getColumn("v1");
+        Column v2 = table.getColumn("v2");
+
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  max(max), min(min) " +
-                        "FROM column_statistics WHERE table_id = 10004 and column_name in ('v1', 'v2') GROUP BY db_id, table_id, column_name",
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10004L, Lists.newArrayList("v1", "v2")));
+                        "cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), " +
+                        "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
+                        "WHERE table_id = 10004 and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
+                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), cast(avg(data_size) as bigint), " +
+                        "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), cast(min(cast(min as bigint(20))) as string) " +
+                        "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" GROUP BY db_id, table_id, column_name",
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList(v1, v2)));
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
@@ -171,5 +180,15 @@ public class AnalyzeStmtTest {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
         Assert.assertEquals(dropHistogramStmt.getTableName().toSql(), "`test`.`t0`");
         Assert.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
+    }
+
+    @Test
+    public void testDropStats() {
+        String sql = "drop stats t0";
+        DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
+        Assert.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
+
+        Assert.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID = 10004", StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
+        Assert.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID = 10004", StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.FULL));
     }
 }

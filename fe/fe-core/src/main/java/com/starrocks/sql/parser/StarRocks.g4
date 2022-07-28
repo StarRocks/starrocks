@@ -48,6 +48,7 @@ statement
     | cancelAlterTableStatement                                                             #cancelAlterTable
     | showPartitionsStatement                                                               #showPartitions
     | recoverPartitionStatement                                                             #recoverPartition
+    | showOpenTableStatement                                                                #showOpenTable
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -90,6 +91,7 @@ statement
 
     // Analyze Statement
     | analyzeStatement                                                                      #analyze
+    | dropStatsStatement                                                                    #dropStats
     | createAnalyzeStatement                                                                #createAnalyze
     | dropAnalyzeJobStatement                                                               #dropAnalyzeJob
     | analyzeHistogramStatement                                                             #analyzeHistogram
@@ -112,7 +114,8 @@ statement
 
 
     // Other statement
-    | USE qualifiedName                                                                     #use
+    | USE qualifiedName                                                                     #useDb
+    | USE CATALOG identifierOrString                                                        #useCatalog
     | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
@@ -121,6 +124,7 @@ statement
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
+    | showBrokerStatement                                                                   #showBroker
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -129,6 +133,7 @@ statement
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
+    | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -346,7 +351,10 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-
+    
+showOpenTableStatement
+    : SHOW OPEN TABLES
+    ;
 recoverPartitionStatement
     : RECOVER PARTITION identifier FROM table=qualifiedName
     ;
@@ -536,6 +544,10 @@ analyzeStatement
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' identifier (',' identifier)* ')')? properties?
     ;
 
+dropStatsStatement
+    : DROP STATS qualifiedName
+    ;
+
 analyzeHistogramStatement
     : ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON identifier (',' identifier)*
         (WITH bucket=INTEGER_VALUE BUCKETS)? properties?
@@ -652,6 +664,10 @@ showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
 
+showBrokerStatement
+    : SHOW BROKER
+    ;
+
 varType
     : GLOBAL
     | LOCAL
@@ -721,7 +737,7 @@ querySpecification
     ;
 
 fromClause
-    : (FROM relation (',' LATERAL? relation)*)?                                         #from
+    : (FROM relations)?                                                                 #from
     | FROM DUAL                                                                         #dual
     ;
 
@@ -751,13 +767,31 @@ selectItem
     | ASTERISK_SYMBOL                                                                    #selectAll
     ;
 
+relations
+    : relation (',' LATERAL? relation)*
+    ;
+
 relation
-    : left=relation crossOrInnerJoinType bracketHint?
-            LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
-    | left=relation outerAndSemiJoinType bracketHint?
-            LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | relationPrimary (AS? identifier columnAliases?)?                                   #aliasedRelation
-    | '(' relation (','relation)* ')'                                                    #parenthesizedRelation
+    : relationPrimary joinRelation*
+    | '(' relationPrimary joinRelation* ')'
+    ;
+
+relationPrimary
+    : qualifiedName partitionNames? tabletList? (
+        AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
+    | '(' VALUES rowConstructor (',' rowConstructor)* ')'
+        (AS? alias=identifier columnAliases?)?                                          #inlineTable
+    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryRelation
+    | qualifiedName '(' expression (',' expression)* ')'
+        (AS? alias=identifier columnAliases?)?                                          #tableFunction
+    | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+joinRelation
+    : crossOrInnerJoinType bracketHint?
+            LATERAL? rightRelation=relationPrimary joinCriteria?
+    | outerAndSemiJoinType bracketHint?
+            LATERAL? rightRelation=relationPrimary joinCriteria
     ;
 
 crossOrInnerJoinType
@@ -792,13 +826,6 @@ joinCriteria
 
 columnAliases
     : '(' identifier (',' identifier)* ')'
-    ;
-
-relationPrimary
-    : qualifiedName partitionNames? tabletList? bracketHint?                              #tableName
-    | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
-    | subquery                                                                            #subqueryRelation
-    | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     ;
 
 partitionNames

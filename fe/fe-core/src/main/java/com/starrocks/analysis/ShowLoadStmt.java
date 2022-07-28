@@ -120,8 +120,6 @@ public class ShowLoadStmt extends ShowStmt {
             if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         // analyze where clause if not null

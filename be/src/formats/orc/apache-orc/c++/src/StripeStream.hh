@@ -64,6 +64,8 @@ public:
 
     MemoryPool& getMemoryPool() const override;
 
+    ReaderMetrics* getReaderMetrics() const override;
+
     const Timezone& getWriterTimezone() const override;
 
     const Timezone& getReaderTimezone() const override;
@@ -71,6 +73,8 @@ public:
     std::ostream* getErrorStream() const override;
 
     bool getThrowOnHive11DecimalOverflow() const override;
+
+    bool isDecimalAsLong() const override;
 
     int32_t getForcedScaleOnHive11Decimal() const override;
 
@@ -125,12 +129,13 @@ class StripeInformationImpl : public StripeInformation {
     CompressionKind compression;
     uint64_t blockSize;
     mutable std::unique_ptr<proto::StripeFooter> stripeFooter;
+    ReaderMetrics* metrics;
     void ensureStripeFooterLoaded() const;
 
 public:
     StripeInformationImpl(uint64_t _offset, uint64_t _indexLength, uint64_t _dataLength, uint64_t _footerLength,
                           uint64_t _numRows, InputStream* _stream, MemoryPool& _memory, CompressionKind _compression,
-                          uint64_t _blockSize)
+                          uint64_t _blockSize, ReaderMetrics* _metrics)
             : offset(_offset),
               indexLength(_indexLength),
               dataLength(_dataLength),
@@ -139,7 +144,8 @@ public:
               stream(_stream),
               memory(_memory),
               compression(_compression),
-              blockSize(_blockSize) {
+              blockSize(_blockSize),
+              metrics(_metrics) {
         // PASS
     }
 

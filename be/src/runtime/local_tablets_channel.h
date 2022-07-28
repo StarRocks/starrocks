@@ -12,7 +12,7 @@ namespace starrocks {
 
 class MemTracker;
 
-scoped_refptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                        MemTracker* mem_tracker);
+std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                          MemTracker* mem_tracker);
 
 } // namespace starrocks

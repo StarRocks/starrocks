@@ -36,6 +36,8 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "    GROUP BY t0.`$columnName` "
                     + ") as t1";
 
+    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
+
     public SampleStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                       Map<String, String> properties) {
@@ -46,14 +48,13 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     public void collect() throws Exception {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
-        List<List<String>> splitColumns = Lists.partition(columns,
-                (int) (sampleRowCount * columns.size() / Config.statistic_collect_max_row_count_per_query + 1));
 
-        for (List<String> splitColItem : splitColumns) {
-            for (String columnName : splitColItem) {
-                String sql = buildSampleInsertSQL(db.getId(), table.getId(), Lists.newArrayList(columnName), sampleRowCount);
-                collectStatisticSync(sql);
-            }
+        int partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
+                / (sampleRowCount * columns.size()) + 1);
+
+        for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
+            String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
+            collectStatisticSync(sql);
         }
     }
 

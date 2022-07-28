@@ -20,11 +20,14 @@ import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -151,7 +154,7 @@ public class AnalyzeStmtAnalyzer {
             }
 
             for (String key : NUMBER_PROP_KEY_LIST) {
-                if (properties.containsKey(key) && !StringUtils.isNumeric(properties.get(key))) {
+                if (properties.containsKey(key) && !NumberUtils.isCreatable(properties.get(key))) {
                     throw new SemanticException("Property '%s' value must be numeric", key);
                 }
             }
@@ -201,10 +204,21 @@ public class AnalyzeStmtAnalyzer {
                     sampleRows = Config.histogram_max_sample_row_count;
                 }
 
-                properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
-                        String.valueOf((double) sampleRows / (double) totalRows));
+                if (totalRows == 0) {
+                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
+                } else {
+                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
+                            BigDecimal.valueOf((double) sampleRows / (double) totalRows)
+                                    .setScale(2, RoundingMode.HALF_UP).doubleValue()));
+                }
                 properties.put(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS, String.valueOf(sampleRows));
             }
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
+            MetaUtils.normalizationTableName(session, statement.getTableName());
+            return null;
         }
 
         @Override

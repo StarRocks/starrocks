@@ -146,23 +146,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("table_scan_io", // olap/external table scan thread pool
                                    config::scanner_thread_pool_thread_num, config::scanner_thread_pool_queue_size);
 
-    int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
-    CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
-
-    _pipeline_connector_scan_io_thread_pool = new PriorityThreadPool("pip_connector_scan_io", connector_num_io_threads,
-                                                                     config::pipeline_scan_thread_pool_queue_size);
-
-    std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("connector_scan_executor")
-                            .set_min_threads(0)
-                            .set_max_threads(connector_num_io_threads)
-                            .set_max_queue_size(1000)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                            .build(&connector_scan_worker_thread_pool));
-    _connector_scan_executor = new workgroup::ScanExecutor(std::move(connector_scan_worker_thread_pool),
-                                                           workgroup::TypeConnectorScanExecutor);
-    _connector_scan_executor->initialize(connector_num_io_threads);
-
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
     _fragment_mgr = new FragmentMgr(this);
 
@@ -229,19 +212,56 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                      ? std::thread::hardware_concurrency()
                                      : config::pipeline_scan_thread_pool_thread_num;
 
-        _pipeline_scan_io_thread_pool =
-                new PriorityThreadPool("pip_scan_io", // pipeline scan io
-                                       num_io_threads, config::pipeline_scan_thread_pool_queue_size);
-        std::unique_ptr<ThreadPool> scan_worker_thread_pool;
-        RETURN_IF_ERROR(ThreadPoolBuilder("scan_executor") // scan io task executor
+        std::unique_ptr<ThreadPool> scan_worker_thread_pool_without_workgroup;
+        RETURN_IF_ERROR(ThreadPoolBuilder("pip_scan_io")
                                 .set_min_threads(0)
                                 .set_max_threads(num_io_threads)
                                 .set_max_queue_size(1000)
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
-                                .build(&scan_worker_thread_pool));
-        _scan_executor =
-                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool), workgroup::TypeOlapScanExecutor);
-        _scan_executor->initialize(num_io_threads);
+                                .build(&scan_worker_thread_pool_without_workgroup));
+        _scan_executor_without_workgroup = new workgroup::ScanExecutor(
+                std::move(scan_worker_thread_pool_without_workgroup),
+                std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+        _scan_executor_without_workgroup->initialize(num_io_threads);
+
+        std::unique_ptr<ThreadPool> scan_worker_thread_pool_with_workgroup;
+        RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_scan_io")
+                                .set_min_threads(0)
+                                .set_max_threads(num_io_threads)
+                                .set_max_queue_size(1000)
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                                .build(&scan_worker_thread_pool_with_workgroup));
+        _scan_executor_with_workgroup = new workgroup::ScanExecutor(
+                std::move(scan_worker_thread_pool_with_workgroup),
+                std::make_unique<workgroup::ScanTaskQueueWithWorkGroup>(workgroup::TypeOlapScanExecutor));
+        _scan_executor_with_workgroup->initialize(num_io_threads);
+
+        int connector_num_io_threads = config::pipeline_hdfs_scan_thread_pool_thread_num;
+        CHECK_GT(connector_num_io_threads, 0) << "pipeline_hdfs_scan_thread_pool_thread_num should greater than 0";
+
+        std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_without_workgroup;
+        RETURN_IF_ERROR(ThreadPoolBuilder("con_scan_io")
+                                .set_min_threads(0)
+                                .set_max_threads(connector_num_io_threads)
+                                .set_max_queue_size(1000)
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                                .build(&connector_scan_worker_thread_pool_without_workgroup));
+        _connector_scan_executor_without_workgroup = new workgroup::ScanExecutor(
+                std::move(connector_scan_worker_thread_pool_without_workgroup),
+                std::make_unique<workgroup::PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
+        _connector_scan_executor_without_workgroup->initialize(connector_num_io_threads);
+
+        std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
+        RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
+                                .set_min_threads(0)
+                                .set_max_threads(connector_num_io_threads)
+                                .set_max_queue_size(1000)
+                                .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                                .build(&connector_scan_worker_thread_pool_with_workgroup));
+        _connector_scan_executor_with_workgroup = new workgroup::ScanExecutor(
+                std::move(connector_scan_worker_thread_pool_with_workgroup),
+                std::make_unique<workgroup::ScanTaskQueueWithWorkGroup>(workgroup::TypeConnectorScanExecutor));
+        _connector_scan_executor_with_workgroup->initialize(connector_num_io_threads);
 
         Status status = _load_path_mgr->init();
         if (!status.ok()) {
@@ -254,16 +274,20 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         _lake_location_provider = new lake::StarletLocationProvider();
 #endif
         _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+
+        // agent_server is not needed for cn
+        _agent_server = new AgentServer(this);
+        _agent_server->init_or_die();
+
+#ifndef BE_TEST
+        _lake_tablet_manager->start_gc();
+#endif
     }
     _broker_mgr->init();
     _small_file_mgr->init();
 
     RETURN_IF_ERROR(_load_channel_mgr->init(_load_mem_tracker));
     _heartbeat_flags = new HeartbeatFlags();
-
-    _agent_server = new AgentServer(this);
-    _agent_server->init_or_die();
-
     return Status::OK();
 }
 
@@ -437,21 +461,21 @@ void ExecEnv::_destroy() {
         delete _pipeline_prepare_pool;
         _pipeline_prepare_pool = nullptr;
     }
-    if (_pipeline_scan_io_thread_pool) {
-        delete _pipeline_scan_io_thread_pool;
-        _pipeline_scan_io_thread_pool = nullptr;
+    if (_scan_executor_without_workgroup) {
+        delete _scan_executor_without_workgroup;
+        _scan_executor_without_workgroup = nullptr;
     }
-    if (_pipeline_connector_scan_io_thread_pool) {
-        delete _pipeline_connector_scan_io_thread_pool;
-        _pipeline_connector_scan_io_thread_pool = nullptr;
+    if (_scan_executor_with_workgroup) {
+        delete _scan_executor_with_workgroup;
+        _scan_executor_with_workgroup = nullptr;
     }
-    if (_scan_executor) {
-        delete _scan_executor;
-        _scan_executor = nullptr;
+    if (_connector_scan_executor_without_workgroup) {
+        delete _connector_scan_executor_without_workgroup;
+        _connector_scan_executor_without_workgroup = nullptr;
     }
-    if (_connector_scan_executor) {
-        delete _connector_scan_executor;
-        _connector_scan_executor = nullptr;
+    if (_connector_scan_executor_with_workgroup) {
+        delete _connector_scan_executor_with_workgroup;
+        _connector_scan_executor_with_workgroup = nullptr;
     }
     if (_runtime_filter_cache) {
         delete _runtime_filter_cache;

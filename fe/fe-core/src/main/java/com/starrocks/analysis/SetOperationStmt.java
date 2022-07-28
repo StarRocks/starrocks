@@ -25,13 +25,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,8 +46,6 @@ import java.util.Map;
  * and we need to mark the slots of resolved exprs as materialized.
  */
 public class SetOperationStmt extends QueryStmt {
-    private static final Logger LOG = LogManager.getLogger(SetOperationStmt.class);
-
     public enum Operation {
         UNION,
         INTERSECT,
@@ -168,91 +162,12 @@ public class SetOperationStmt extends QueryStmt {
         return operands;
     }
 
-    public List<SetOperand> getDistinctOperands() {
-        return distinctOperands_;
-    }
-
-    public boolean hasDistinctOps() {
-        return !distinctOperands_.isEmpty();
-    }
-
-    public List<SetOperand> getAllOperands() {
-        return allOperands_;
-    }
-
-    public boolean hasAnalyticExprs() {
-        return hasAnalyticExprs_;
-    }
-
-    public void removeAllOperands() {
-        operands.removeAll(allOperands_);
-        allOperands_.clear();
-    }
-
     @Override
     public void getDbs(ConnectContext context, Map<String, Database> dbs) throws AnalysisException {
         getWithClauseDbs(context, dbs);
         for (SetOperand op : operands) {
             op.getQueryStmt().getDbs(context, dbs);
         }
-    }
-
-    /**
-     * Propagates DISTINCT from left to right, and checks that all
-     * set operands are set compatible, adding implicit casts if necessary.
-     */
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-    }
-
-    /**
-     * Add a single operand to the target list; if the operand itself is a SetOperationStmt, apply
-     * unnesting to the extent possible (possibly modifying 'operand' in the process).
-     */
-    private void unnestOperand(
-            List<SetOperand> target, Qualifier targetQualifier, SetOperand operand) {
-        Preconditions.checkState(operand.isAnalyzed());
-        QueryStmt queryStmt = operand.getQueryStmt();
-        if (queryStmt instanceof SelectStmt) {
-            target.add(operand);
-            return;
-        }
-
-        Preconditions.checkState(queryStmt instanceof SetOperationStmt);
-        SetOperationStmt setOperationStmt = (SetOperationStmt) queryStmt;
-        boolean mixed = false;
-        if (operand.getOperation() != null) {
-            for (int i = 1; i < setOperationStmt.operands.size(); ++i) {
-                if (operand.getOperation() != setOperationStmt.operands.get(i).getOperation()) {
-                    mixed = true;
-                    break;
-                }
-            }
-        }
-        if (setOperationStmt.hasLimit() || setOperationStmt.hasOffset() || mixed) {
-            // we must preserve the nested SetOps
-            target.add(operand);
-        } else if (targetQualifier == Qualifier.DISTINCT || !setOperationStmt.hasDistinctOps()) {
-            // there is no limit in the nested SetOps and we can absorb all of its
-            // operands as-is
-            target.addAll(setOperationStmt.getDistinctOperands());
-            target.addAll(setOperationStmt.getAllOperands());
-        } else {
-            // the nested SetOps contains some Distinct ops and we're accumulating
-            // into our All ops; unnest only the All ops and leave the rest in place
-            target.addAll(setOperationStmt.getAllOperands());
-            setOperationStmt.removeAllOperands();
-            target.add(operand);
-        }
-    }
-
-
-    /**
-     * String representation of queryStmt used in reporting errors.
-     * Allow subclasses to override this.
-     */
-    protected String queryStmtToSql(QueryStmt queryStmt) {
-        return queryStmt.toSql();
     }
 
     @Override
@@ -417,44 +332,6 @@ public class SetOperationStmt extends QueryStmt {
             smap_ = new ExprSubstitutionMap();
         }
 
-        public void analyze(Analyzer parent) throws AnalysisException, UserException {
-            if (isAnalyzed()) {
-                return;
-            }
-            // union statement support const expr, so not need to equal
-            if (operation != Operation.UNION && queryStmt instanceof SelectStmt
-                    && ((SelectStmt) queryStmt).fromClause_.isEmpty()) {
-                // equal select 1 to select * from (select 1) __STARROCKS_DUAL__ , because when using select 1 it will be
-                // transformed to a union node, select 1 is a literal, it doesn't have a tuple but will produce a slot,
-                // this will cause be core dump
-                QueryStmt inlineQuery = queryStmt.clone();
-                Map<String, Integer> map = new HashMap<>();
-                // rename select 2,2 to select 2 as 2_1, 2 as 2_2 to avoid duplicated column in inline view
-                for (int i = 0; i < ((SelectStmt) inlineQuery).selectList.getItems().size(); ++i) {
-                    SelectListItem item = ((SelectStmt) inlineQuery).selectList.getItems().get(i);
-                    String col = item.toColumnLabel();
-                    Integer count = map.get(col);
-                    count = (count == null) ? 1 : count + 1;
-                    map.put(col, count);
-                    if (count > 1) {
-                        ((SelectStmt) inlineQuery).selectList.getItems()
-                                .set(i, new SelectListItem(item.getExpr(), col + "_" + count.toString()));
-                    }
-                }
-                ((SelectStmt) queryStmt).fromClause_.add(new InlineViewRef("__STARROCKS_DUAL__", inlineQuery));
-                List<SelectListItem> slist = ((SelectStmt) queryStmt).selectList.getItems();
-                slist.clear();
-                slist.add(SelectListItem.createStarItem(null));
-            }
-            // Oracle and ms-SQLServer do not support INTERSECT ALL and EXCEPT ALL, postgres support it,
-            // but it is very ambiguous
-            if (qualifier_ == Qualifier.ALL && (operation == Operation.EXCEPT || operation == Operation.INTERSECT)) {
-                throw new AnalysisException("INTERSECT and EXCEPT does not support ALL qualifier.");
-            }
-            analyzer = new Analyzer(parent);
-            queryStmt.analyze(analyzer);
-        }
-
         public boolean isAnalyzed() {
             return analyzer != null;
         }
@@ -490,15 +367,6 @@ public class SetOperationStmt extends QueryStmt {
 
         public ExprSubstitutionMap getSmap() {
             return smap_;
-        }
-
-        public boolean hasAnalyticExprs() {
-            if (queryStmt instanceof SelectStmt) {
-                return ((SelectStmt) queryStmt).hasAnalyticInfo();
-            } else {
-                Preconditions.checkState(queryStmt instanceof SetOperationStmt);
-                return ((SetOperationStmt) queryStmt).hasAnalyticExprs();
-            }
         }
 
         /**

@@ -93,8 +93,10 @@ public class StatisticsMetaManager extends LeaderDaemon {
         HISTOGRAM_STATISTICS_COLUMNS = ImmutableList.of(
                 new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("histogram", new TypeDef(histogramType))
+                new ColumnDef("histogram", new TypeDef(histogramType)),
+                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
     }
 
@@ -135,8 +137,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
+        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
         // maybe cluster just shutdown, ignore
         if (aliveSize <= total / 2) {
             lossTableCount = 0;
@@ -184,8 +186,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, SAMPLE_STATISTICS_COLUMNS, "olap",
@@ -212,8 +213,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, FULL_STATISTICS_COLUMNS, "olap",
@@ -240,8 +240,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, HISTOGRAM_STATISTICS_COLUMNS, "olap",
@@ -338,6 +337,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
+
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
@@ -352,5 +352,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
     }
 }

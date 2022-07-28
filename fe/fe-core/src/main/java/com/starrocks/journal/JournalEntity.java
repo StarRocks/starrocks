@@ -34,6 +34,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -81,6 +82,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
+import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -195,6 +197,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO:
+            case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO:
+                data = MaterializedViewPartitionVersionInfo.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_DROP_TABLE:
             case OperationType.OP_DROP_ROLLUP: {
                 data = new DropInfo();
@@ -204,6 +211,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ADD_PARTITION_V2: {
+                data = PartitionPersistInfoV2.read(in);
                 isRead = true;
                 break;
             }
@@ -616,12 +628,27 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_REMOVE_ANALYZE_STATUS: {
+                data = AnalyzeStatus.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ADD_BASIC_STATS_META: {
                 data = BasicStatsMeta.read(in);
                 isRead = true;
                 break;
             }
+            case OperationType.OP_REMOVE_BASIC_STATS_META: {
+                data = BasicStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
+                data = HistogramStatsMeta.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                 data = HistogramStatsMeta.read(in);
                 isRead = true;
                 break;

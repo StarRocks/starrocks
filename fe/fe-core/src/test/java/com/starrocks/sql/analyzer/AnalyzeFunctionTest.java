@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -19,6 +21,14 @@ public class AnalyzeFunctionTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+    }
+
+    @Test
+    public void testFunctionWithoutDb() {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withoutUseDatabase();
+        analyzeFail("select query_id()", "No matching function with signature: query_id()");
+        starRocksAssert.useDatabase(AnalyzeTestUtil.getDbName());
     }
 
     @Test
@@ -187,6 +197,11 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select like(ta, ta) from tall");
         analyzeSuccess("select regexp(ta, ta) from tall");
         analyzeSuccess("select rlike(ta, ta) from tall");
+
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select password('3wS_r7UHc')");
+        Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof StringLiteral);
+        StringLiteral stringLiteral = (StringLiteral) queryStatement.getQueryRelation().getOutputExpression().get(0);
+        Assert.assertEquals("*0B5CED987A45262765BB7DEE0EB00483E4AD82D0", stringLiteral.getValue());
     }
 
     @Test

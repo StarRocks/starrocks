@@ -100,9 +100,10 @@ public:
     // For window functions
     // A peer group is all of the rows that are peers within the specified ordering.
     // Rows are peers if they compare equal to each other using the specified ordering expression.
-    virtual void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                           int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                           int64_t frame_end) const {}
+    virtual void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state,
+                                                      const Column** columns, int64_t peer_group_start,
+                                                      int64_t peer_group_end, int64_t frame_start,
+                                                      int64_t frame_end) const {}
 
     // For window functions
     // A peer group is all of the rows that are peers within the specified ordering.
@@ -157,6 +158,7 @@ public:
 
 template <typename State, typename Derived>
 class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> {
+public:
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         for (size_t i = 0; i < chunk_size; ++i) {

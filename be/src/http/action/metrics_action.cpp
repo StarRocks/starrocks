@@ -32,6 +32,10 @@
 #include "runtime/exec_env.h"
 #include "util/metrics.h"
 
+#ifdef USE_STAROS
+#include "metrics/metrics.h"
+#endif
+
 namespace starrocks {
 
 class PrometheusMetricsVisitor : public MetricsVisitor {
@@ -39,6 +43,8 @@ public:
     ~PrometheusMetricsVisitor() override = default;
     void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override;
     std::string to_string() const { return _ss.str(); }
+
+    std::ostream& output_stream() { return _ss; }
 
 private:
     void _visit_simple_metric(const std::string& name, const MetricLabels& labels, Metric* metric);
@@ -205,6 +211,9 @@ void MetricsAction::handle(HttpRequest* req) {
     } else {
         PrometheusMetricsVisitor visitor;
         _metrics->collect(&visitor);
+#ifdef USE_STAROS
+        staros::starlet::metrics::MetricsSystem::instance()->text_serializer(visitor.output_stream());
+#endif
         str.assign(visitor.to_string());
     }
 

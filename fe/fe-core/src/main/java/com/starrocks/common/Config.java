@@ -648,6 +648,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_timeout_second = 259200; // 3days
 
     /**
+     * Default prepared transaction timeout
+     */
+    @ConfField(mutable = true)
+    public static int prepared_transaction_default_timeout_second = 86400; // 1day
+
+    /**
      * Max load timeout applicable to all type of load except for stream load
      */
     @ConfField(mutable = true)
@@ -758,11 +764,13 @@ public class Config extends ConfigBase {
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
      *
-     * The default value is true because if user has a deployment with only SSD or HDD medium storage paths,
+     * The default value should better set to true because if user
+     * has a deployment with only SSD or HDD medium storage paths,
      * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
+     * But currently for compatible reason, we keep it to false.
      */
     @ConfField(mutable = true)
-    public static boolean enable_strict_storage_medium_check = true;
+    public static boolean enable_strict_storage_medium_check = false;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
@@ -1287,10 +1295,14 @@ public class Config extends ConfigBase {
      * a period of create statistics table automatically by the StatisticsMetaManager
      */
     @ConfField(mutable = true)
-    public static long statistic_manager_sleep_time_sec = 60 * 10;
+    public static long statistic_manager_sleep_time_sec = 60; // 60s
 
+
+    /**
+     * Analyze status keep time in catalog
+     */
     @ConfField(mutable = true)
-    public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3 days
+    public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     // The statistic
     @ConfField
@@ -1303,7 +1315,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 120 * 60;
+    public static long statistic_collect_interval_sec = 5 * 60; // 5m
 
     /**
      * The column statistic update interval
@@ -1340,6 +1352,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+
+    @ConfField(mutable = true)
+    public static long statistic_collect_query_timeout = 3600; // 1h
 
     /**
      * Max row count in statistics collect per query
@@ -1636,7 +1651,7 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * Fqdn function switch, 
+     * Fqdn function switch,
      * this switch will be deleted after release the fqdn func
      */
     @ConfField(mutable = true)
