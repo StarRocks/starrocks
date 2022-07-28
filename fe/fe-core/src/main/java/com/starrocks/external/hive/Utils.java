@@ -14,7 +14,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
-import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 
 import java.util.ArrayList;
@@ -24,7 +23,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertHudiTableColumnType;
 
 public class Utils {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
@@ -196,7 +194,4 @@ public class Utils {
         throw new DdlException("Failed to get varchar length at " + typeStr);
     }
 
-    public static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
-        return new ArrayType(convertHudiTableColumnType(typeSchema.getElementType()));
-    }
 }

@@ -263,7 +263,7 @@ public class HiveMetaStoreTableUtils {
             case STRING:
                 return ScalarType.createDefaultString();
             case ARRAY:
-                Type type = Utils.convertToArrayType(avroSchema);
+                Type type = convertToArrayType(avroSchema);
                 if (type.isArrayType()) {
                     return type;
                 } else {
@@ -309,6 +309,10 @@ public class HiveMetaStoreTableUtils {
         }
 
         return ScalarType.createType(primitiveType);
+    }
+
+    public static ArrayType convertToArrayType(Schema typeSchema) throws DdlException {
+        return new ArrayType(convertHudiTableColumnType(typeSchema.getElementType()));
     }
 
     // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
