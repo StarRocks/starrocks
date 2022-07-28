@@ -50,7 +50,11 @@ public:
                                                                  _aggregator_factory->get_or_create(driver_sequence));
     }
 
+    bool need_local_shuffle() const override { return _need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
+    bool _need_local_shuffle = true;
 };
 } // namespace starrocks::pipeline
