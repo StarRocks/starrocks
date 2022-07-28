@@ -1648,7 +1648,6 @@ public class GlobalStateMgr {
     public void replayJournal(long toJournalId) throws JournalException {
         long replayStartTime = System.currentTimeMillis();
         LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
-        boolean hasLog = false;
         JournalCursor cursor = null;
         try {
             cursor = journal.read(replayedJournalId.get() + 1, toJournalId);
