@@ -279,8 +279,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createUnknownType() {
-        ScalarType type = new ScalarType(PrimitiveType.UNKNOWN_TYPE);
-        return type;
+        return new ScalarType(PrimitiveType.UNKNOWN_TYPE);
     }
 
     // A common type for two decimal v3 types means that if t2 = getCommonTypeForDecimalV3(t0, t1),

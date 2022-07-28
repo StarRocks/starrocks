@@ -59,7 +59,7 @@ public abstract class Type implements Cloneable {
     public static int MAX_NESTING_DEPTH = 15;
 
     // DECIMAL, NULL, and INVALID_TYPE  are handled separately.
-    public static List<PrimitiveType> skipCompareTypes = Arrays.asList(
+    private static final List<PrimitiveType> skipCompareTypes = Arrays.asList(
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
             PrimitiveType.TIME, PrimitiveType.JSON);
