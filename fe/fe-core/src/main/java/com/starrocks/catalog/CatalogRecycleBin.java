@@ -429,8 +429,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                         partition.getId(), partitionName);
 
                 if (!tabletIdSet.isEmpty()) {
-                    // for debug
-                    LOG.info("delete lake tablet : {}", tabletIdSet);
                     GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
                     GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIdSet);
                 }
