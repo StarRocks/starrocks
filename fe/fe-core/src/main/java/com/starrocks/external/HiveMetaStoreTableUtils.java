@@ -43,6 +43,7 @@ public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
     public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
     public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
+    private static final String COLUMN_CONVERTED_FAILED_MSG = "hudi table column type [%s] transform failed.";
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -229,6 +230,7 @@ public class HiveMetaStoreTableUtils {
         LogicalType logicalType = avroSchema.getLogicalType();
         PrimitiveType primitiveType = null;
         boolean isString = false;
+        boolean isConvertedFailed = false;
 
         switch (columnType) {
             case BOOLEAN:
@@ -291,13 +293,18 @@ public class HiveMetaStoreTableUtils {
                 if (nonNullMembers.size() == 1) {
                     return convertHudiTableColumnType(nonNullMembers.get(0));
                 } else {
-                    // UNION type is not supported in Starrocks
-                    throw new DdlException("hudi table column type [" + avroSchema.getType() + "] transform failed.");
+                    isConvertedFailed = true;
+                    break;
                 }
             case ENUM:
             case MAP:
             default:
-                throw new DdlException("hudi table column type [" + avroSchema.getType() + "] transform failed.");
+                isConvertedFailed = true;
+                break;
+        }
+
+        if (isConvertedFailed) {
+            throw new DdlException(String.format(COLUMN_CONVERTED_FAILED_MSG, avroSchema.getType()));
         }
 
         if (isString) {
