@@ -36,6 +36,9 @@ struct GroupReaderParam {
         // column type in chunk
         TypeDescriptor col_type_in_chunk;
 
+        // column content type
+        ColumnContentType content_type;
+
         SlotId slot_id;
     };
 
@@ -61,7 +64,7 @@ struct GroupReaderParam {
 
 class GroupReader {
 public:
-    GroupReader(const GroupReaderParam& param, int row_group_number);
+    GroupReader(GroupReaderParam& param, int row_group_number);
     ~GroupReader() = default;
 
     Status init();
@@ -75,6 +78,7 @@ private:
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
+    vectorized::ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
     bool _can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
@@ -84,8 +88,9 @@ private:
     Status _rewrite_dict_column_predicates();
     void _init_read_chunk();
 
-    Status _read(size_t* row_count);
-    void _dict_filter();
+    Status _read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk);
+    Status _lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk, size_t chunk_size);
+    void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
     Status _dict_decode(vectorized::ChunkPtr* chunk);
 
     // row group meta
@@ -105,14 +110,18 @@ private:
     // direct read conlumns
     std::vector<GroupReaderParam::Column> _direct_read_columns;
 
+    // active columns that hold read_col index
+    std::vector<int> _active_column_indices;
+    // lazy conlumns that hold read_col index
+    std::vector<int> _lazy_column_indices;
+
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
 
     vectorized::ChunkPtr _read_chunk;
-    vectorized::Buffer<uint8_t> _selection;
 
     // param for read row group
-    const GroupReaderParam& _param;
+    GroupReaderParam& _param;
 
     ObjectPool _obj_pool;
 
