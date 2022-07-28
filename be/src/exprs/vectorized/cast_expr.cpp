@@ -40,70 +40,60 @@ namespace starrocks::vectorized {
     throw std::runtime_error(ss.str())
 
 template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException = false>
-ColumnPtr cast_fn(ColumnPtr& column);
+struct CastFn {
+    static ColumnPtr cast_fn(ColumnPtr& column);
+};
 
 // All cast implements
-#define SELF_CAST(FROM_TYPE)                                             \
-    template <>                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE, false>(ColumnPtr & column) { \
-        return column->clone();                                          \
-    }                                                                    \
-    template <>                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, FROM_TYPE, true>(ColumnPtr & column) {  \
-        return column->clone();                                          \
-    }
+#define SELF_CAST(FROM_TYPE)                                                    \
+    template <bool AllowThrowException>                                         \
+    struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
+        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+    };
 
-#define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
-    template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) {                                   \
-        return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
-    }                                                                                                    \
-    template <>                                                                                          \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {                                    \
-        return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
-    }
+#define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
+    template <bool AllowThrowException>                                                                      \
+    struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                 \
+        static ColumnPtr cast_fn(ColumnPtr& column) {                                                        \
+            return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
+        }                                                                                                    \
+    };
 
-#define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                           \
-    template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) {                                                \
-        if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
-                      std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
-            return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
-                    column);                                                                                          \
-        }                                                                                                             \
-        return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);              \
-    }                                                                                                                 \
-    template <>                                                                                                       \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {                                                 \
-        if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                           \
-                      std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                        \
-            return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheckWithThrowException>::template evaluate<   \
-                    FROM_TYPE, TO_TYPE>(column);                                                                      \
-        }                                                                                                             \
-        return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);              \
-    }
+#define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                            \
+    template <bool AllowThrowException>                                                                                \
+    struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                           \
+        static ColumnPtr cast_fn(ColumnPtr& column) {                                                                  \
+            if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                        \
+                          std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                     \
+                if constexpr (!AllowThrowException) {                                                                  \
+                    return VectorizedInputCheckUnaryFunction<UNARY_IMPL, NumberCheck>::template evaluate<FROM_TYPE,    \
+                                                                                                         TO_TYPE>(     \
+                            column);                                                                                   \
+                } else {                                                                                               \
+                    return VectorizedInputCheckUnaryFunction<                                                          \
+                            UNARY_IMPL, NumberCheckWithThrowException>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
+                }                                                                                                      \
+            }                                                                                                          \
+            return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column);           \
+        }                                                                                                              \
+    };
 
-#define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                \
-    template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) {                                          \
-        return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
-                column);                                                                                        \
-    }                                                                                                           \
-    template <>                                                                                                 \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {                                           \
-        return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
-                column);                                                                                        \
-    }
+#define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
+    template <bool AllowThrowException>                                                                             \
+    struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                        \
+        static ColumnPtr cast_fn(ColumnPtr& column) {                                                               \
+            return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
+                    column);                                                                                        \
+        }                                                                                                           \
+    };
 
-#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)          \
-    template <>                                                        \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, false>(ColumnPtr & column) { \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, false>(column);      \
-    }                                                                  \
-    template <>                                                        \
-    ColumnPtr cast_fn<FROM_TYPE, TO_TYPE, true>(ColumnPtr & column) {  \
-        return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, true>(column);       \
-    }
+#define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                       \
+    template <bool AllowThrowException>                                             \
+    struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                        \
+        static ColumnPtr cast_fn(ColumnPtr& column) {                               \
+            return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, AllowThrowException>(column); \
+        }                                                                           \
+    };
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
     return ((uint64_t)value % 100 > 59 || (uint64_t)value % 10000 > 5959);
@@ -1010,9 +1000,9 @@ public:
             if constexpr (pt_is_decimal<FromType>) {
                 ColumnPtr double_column =
                         VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
-                result_column = cast_fn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>(double_column);
+                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(double_column);
             } else {
-                result_column = cast_fn<FromType, ToType, AllowThrowException>(column);
+                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
             }
         } else if constexpr (pt_is_decimal<FromType> && pt_is_decimal<ToType>) {
             return VectorizedUnaryFunction<DecimalToDecimal<true>>::evaluate<FromType, ToType>(
@@ -1023,7 +1013,7 @@ public:
             return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
                                                                                           to_type.scale);
         } else {
-            result_column = cast_fn<FromType, ToType, AllowThrowException>(column);
+            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
