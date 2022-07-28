@@ -385,7 +385,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             if (hiveColumn == null) {
                 throw new DdlException("column [" + column.getName() + "] not exists in hive");
             }
-            if (!HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
+            // Only internal catalog like hive external table need to validate column type
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
+                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }
