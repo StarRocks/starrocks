@@ -200,14 +200,7 @@ public class Checkpoint extends LeaderDaemon {
         try {
             globalStateMgr.loadImage(imageDir);
             globalStateMgr.replayJournal(checkPointVersion);
-            if (globalStateMgr.getReplayedJournalId() != checkPointVersion) {
-                LOG.error("checkpoint version should be {}, actual replayed journal id is {}",
-                        checkPointVersion, globalStateMgr.getReplayedJournalId());
-                return false;
-            }
-
             globalStateMgr.clearExpiredJobs();
-
             globalStateMgr.saveImage();
             replayedJournalId = globalStateMgr.getReplayedJournalId();
             if (MetricRepo.isInit) {
