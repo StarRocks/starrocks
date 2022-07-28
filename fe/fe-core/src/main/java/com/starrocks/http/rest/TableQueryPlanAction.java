@@ -26,7 +26,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.http.ActionController;
@@ -126,10 +125,9 @@ public class TableQueryPlanAction extends RestBaseAction {
             LOG.info("receive SQL statement [{}] from external service [ user [{}]] for database [{}] table [{}]",
                     sql, ConnectContext.get().getCurrentUserIdentity(), dbName, tableName);
 
-            String fullDbName = ClusterNamespace.getFullName(dbName);
             // check privilege for select, otherwise return HTTP 401
-            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
-            Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+            checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.SELECT);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
@@ -150,7 +148,7 @@ public class TableQueryPlanAction extends RestBaseAction {
                                     + "is not a OlapTable");
                 }
                 // parse/analysis/plan the sql and acquire tablet distributions
-                handleQuery(ConnectContext.get(), fullDbName, tableName, sql, resultMap);
+                handleQuery(ConnectContext.get(), db.getFullName(), tableName, sql, resultMap);
             } finally {
                 db.readUnlock();
             }

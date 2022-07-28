@@ -13,7 +13,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -84,8 +83,6 @@ public class ShowAlterStmtAnalyzer {
                 if (Strings.isNullOrEmpty(dbName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR, dbName);
                 }
-            } else {
-                dbName = ClusterNamespace.getFullName(dbName);
             }
             statement.setDbName(dbName);
             // Check db.
