@@ -179,6 +179,16 @@ public class BDBJournalCursorTest {
         // [1, 2, 3, 5] -> [5, 8]
         journal.deleteJournals(5);
 
+        // refresh will fail if try to read old value
+        boolean expected = false;
+        try {
+            BDBJournalCursor.getJournalCursor(environment, 4, -1);
+        } catch (JournalException e) {
+            LOG.info("got an expected exception, ", e);
+            expected = true;
+        }
+        Assert.assertTrue(expected);
+
         //
         // <<< read 8
         //
