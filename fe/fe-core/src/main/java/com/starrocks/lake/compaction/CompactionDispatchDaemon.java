@@ -14,6 +14,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
 import com.starrocks.rpc.LakeServiceClient;
@@ -184,7 +185,7 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = chooseBackendForDoingCompaction((LakeTablet) tablet);
+                Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     beToTablets.clear();
                     return beToTablets;
@@ -193,19 +194,5 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
             }
         }
         return beToTablets;
-    }
-
-    // Returns null if no backend available.
-    private Long chooseBackendForDoingCompaction(LakeTablet tablet) {
-        try {
-            return tablet.getPrimaryBackendId();
-        } catch (UserException e) {
-            LOG.info("Fail to get primary backend for tablet {}, choose a random alive backend", tablet.getId());
-        }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds.isEmpty()) {
-            return null;
-        }
-        return backendIds.get(0);
     }
 }
