@@ -373,6 +373,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
     }
 
+    public void cleanBasePartition(OlapTable base) {
+        Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
+                .getBaseTableVisibleVersionMap()
+                .computeIfAbsent(base.getId(), k -> Maps.newHashMap());
+        for (String basePartitionName : basePartitionInfoMap.keySet()) {
+            if (base.getPartition(basePartitionName) == null) {
+                removeBasePartition(base.getId(), basePartitionName, false);
+            }
+        }
+    }
+
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,

@@ -20,7 +20,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -85,8 +84,6 @@ public class AnalyzerUtils {
         String dbName = fnName.getDb();
         if (StringUtils.isEmpty(dbName)) {
             dbName = session.getDatabase();
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
         }
 
         if (!session.getGlobalStateMgr().getAuth().checkDbPriv(session, dbName, PrivPredicate.SELECT)) {
@@ -201,16 +198,14 @@ public class AnalyzerUtils {
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = session.getDatabase();
             } else {
-                if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                    dbName = ClusterNamespace.getFullName(dbName);
-                } else {
+                if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
                     return;
                 }
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
 
-            dbs.put(dbName, db);
+            dbs.put(db.getFullName(), db);
         }
     }
 

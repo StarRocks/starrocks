@@ -198,7 +198,7 @@ abstract public class StarRocksHttpTestCase {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "default_cluster:testDb");
+            Database db = new Database(testDbId, "testDb");
             OlapTable table = newTable(TABLE_NAME);
             db.createTable(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
@@ -215,7 +215,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getDb("default_cluster:" + DB_NAME);
+                    globalStateMgr.getDb(DB_NAME);
                     minTimes = 0;
                     result = db;
 
@@ -223,7 +223,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = true;
 
-                    globalStateMgr.getDb("default_cluster:emptyDb");
+                    globalStateMgr.getDb("emptyDb");
                     minTimes = 0;
                     result = null;
 
@@ -265,7 +265,7 @@ abstract public class StarRocksHttpTestCase {
             GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
             Auth auth = new Auth();
             //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "default_cluster:testDb");
+            Database db = new Database(testDbId, "testDb");
             OlapTable table = newTable(TABLE_NAME);
             db.createTable(table);
             OlapTable table1 = newTable(TABLE_NAME + 1);
@@ -282,7 +282,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getDb("default_cluster:" + DB_NAME);
+                    globalStateMgr.getDb(DB_NAME);
                     minTimes = 0;
                     result = db;
 
@@ -290,7 +290,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = true;
 
-                    globalStateMgr.getDb("default_cluster:emptyDb");
+                    globalStateMgr.getDb("emptyDb");
                     minTimes = 0;
                     result = null;
 
@@ -319,7 +319,7 @@ abstract public class StarRocksHttpTestCase {
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
 
-                    globalStateMgr.getMetadataMgr().getDb("default_catalog", "default_cluster:testDb");
+                    globalStateMgr.getMetadataMgr().getDb("default_catalog", "testDb");
                     minTimes = 0;
                     result = db;
 

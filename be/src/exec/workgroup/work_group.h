@@ -262,10 +262,10 @@ public:
     std::vector<TWorkGroup> list_all_workgroups();
 
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_worker(int worker_id);
-    bool should_yield_driver_worker(int worker_id, WorkGroupPtr running_wg);
+    bool should_yield_driver_worker(int worker_id, const WorkGroupPtr& running_wg);
 
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_scan_worker(ScanExecutorType type, int worker_id);
-    bool get_owners_of_scan_worker(ScanExecutorType type, int worker_id, WorkGroupPtr running_wg);
+    bool should_yield_scan_worker(ScanExecutorType type, int worker_id, const WorkGroupPtr& running_wg);
 
     int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 

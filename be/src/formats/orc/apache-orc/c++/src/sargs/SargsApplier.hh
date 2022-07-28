@@ -26,6 +26,7 @@
 #include <unordered_map>
 
 #include "orc/BloomFilter.hh"
+#include "orc/Reader.hh"
 #include "orc/Type.hh"
 #include "sargs/SearchArgument.hh"
 #include "wrap/orc-proto-wrapper.hh"
@@ -34,10 +35,27 @@ namespace orc {
 class SargsApplier {
 public:
     SargsApplier(const Type& type, const SearchArgument* searchArgument, uint64_t rowIndexStride,
-                 WriterVersion writerVersion);
+                 WriterVersion writerVersion, ReaderMetrics* metrics, RowReaderFilter* RowReaderFilter);
 
-    SargsApplier(const Type& type, const SearchArgument* searchArgument, RowReaderFilter* RowReaderFilter,
-                 uint64_t rowIndexStride, WriterVersion writerVersion);
+    /**
+     * Evaluate search argument on file statistics
+     * If file statistics don't satisfy the sargs,
+     * the EvaluatedRowGroupCount of Reader Metrics will be updated.
+     * Otherwise, Reader Metrics will not be updated and
+     * will require further evaluation.
+     * @return true if file statistics satisfy the sargs
+     */
+    bool evaluateFileStatistics(const proto::Footer& footer, uint64_t numRowGroupsInStripeRange);
+
+    /**
+     * Evaluate search argument on stripe statistics
+     * If stripe statistics don't satisfy the sargs,
+     * the EvaluatedRowGroupCount of Reader Metrics will be updated.
+     * Otherwise, Reader Metrics will not be updated and
+     * will require further evaluation.
+     * @return true if stripe statistics satisfy the sargs
+     */
+    bool evaluateStripeStatistics(const proto::StripeStatistics& stripeStats, uint64_t stripeRowGroupCount);
 
     /**
      * TODO: use proto::RowIndex and proto::BloomFilter to do the evaluation
@@ -48,10 +66,11 @@ public:
                        const std::map<uint32_t, BloomFilterIndex>& bloomFilters);
 
     /**
-     * Return a vector of bool for each row group for their selection
-     * in the last evaluation
+     * Return a vector of the next skipped row for each RowGroup. Each value is the row id
+     * in stripe. 0 means the current RowGroup is entirely skipped.
+     * Only valid after invoking pickRowGroups().
      */
-    const std::vector<bool>& getRowGroups() const { return mRowGroups; }
+    const std::vector<uint64_t>& getNextSkippedRows() const { return mNextSkippedRows; }
 
     /**
      * Indicate whether any row group is selected in the last evaluation
@@ -68,20 +87,32 @@ public:
      */
     bool hasSelectedFrom(uint64_t currentRowInStripe) const {
         uint64_t rg = currentRowInStripe / mRowIndexStride;
-        for (; rg < mRowGroups.size(); ++rg) {
-            if (mRowGroups[rg]) {
+        for (; rg < mNextSkippedRows.size(); ++rg) {
+            if (mNextSkippedRows[rg]) {
                 return true;
             }
         }
         return false;
     }
 
-    std::pair<uint64_t, uint64_t> getStats() const { return mStats; }
+    std::pair<uint64_t, uint64_t> getStats() const {
+        if (mMetrics != nullptr) {
+            return std::make_pair(mMetrics->SelectedRowGroupCount.load(), mMetrics->EvaluatedRowGroupCount.load());
+        } else {
+            return {0, 0};
+        }
+    }
 
     RowReaderFilter* getRowReaderFilter() const { return mRowReaderFilter; }
 
 private:
+    // evaluate column statistics in the form of protobuf::RepeatedPtrField
+    typedef ::google::protobuf::RepeatedPtrField<proto::ColumnStatistics> PbColumnStatistics;
+    bool evaluateColumnStatistics(const PbColumnStatistics& colStats) const;
+
     friend class TestSargsApplier_findColumnTest_Test;
+    friend class TestSargsApplier_findArrayColumnTest_Test;
+    friend class TestSargsApplier_findMapColumnTest_Test;
     static uint64_t findColumn(const Type& type, const std::string& colName);
 
 private:
@@ -93,13 +124,20 @@ private:
     // column ids for each predicate leaf in the search argument
     std::vector<uint64_t> mFilterColumns;
 
-    // store results of last call of pickRowGroups
-    std::vector<bool> mRowGroups;
+    // Map from RowGroup index to the next skipped row of the selected range it
+    // locates. If the RowGroup is not selected, set the value to 0.
+    // Calculated in pickRowGroups().
+    std::vector<uint64_t> mNextSkippedRows;
+
     uint64_t mTotalRowsInStripe;
     bool mHasSelected;
     bool mHasSkipped;
+    // store result of file stats evaluation
+    bool mHasEvaluatedFileStats;
+    bool mFileStatsEvalResult;
+    // use the SelectedRowGroupCount and EvaluatedRowGroupCount to
     // keep stats of selected RGs and evaluated RGs
-    std::pair<uint64_t, uint64_t> mStats;
+    ReaderMetrics* mMetrics;
 };
 
 } // namespace orc

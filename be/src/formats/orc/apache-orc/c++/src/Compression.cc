@@ -29,6 +29,7 @@
 
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"
+#include "Utils.hh"
 #include "lz4.h"
 #include "orc/Exceptions.hh"
 #include "wrap/snappy-wrapper.h"
@@ -293,7 +294,8 @@ std::string decompressStateToString(DecompressState state) {
 
 class DecompressionStream : public SeekableInputStream {
 public:
-    DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize, MemoryPool& pool);
+    DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize, MemoryPool& pool,
+                        ReaderMetrics* metrics);
     ~DecompressionStream() override = default;
     bool Next(const void** data, int* size) override;
     void BackUp(int count) override;
@@ -345,10 +347,12 @@ protected:
 
     // roughly the number of bytes returned
     off_t bytesReturned;
+
+    ReaderMetrics* metrics;
 };
 
 DecompressionStream::DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize,
-                                         MemoryPool& _pool)
+                                         MemoryPool& _pool, ReaderMetrics* _metrics)
         : pool(_pool),
           input(std::move(inStream)),
           outputDataBuffer(pool, bufferSize),
@@ -363,13 +367,15 @@ DecompressionStream::DecompressionStream(std::unique_ptr<SeekableInputStream> in
           inputBufferEnd(nullptr),
           headerPosition(0),
           inputBufferStartPosition(0),
-          bytesReturned(0) {}
+          bytesReturned(0),
+          metrics(_metrics) {}
 
 std::string DecompressionStream::getStreamName() const {
     return input->getName();
 }
 
 void DecompressionStream::readBuffer(bool failOnEof) {
+    SCOPED_MINUS_STOPWATCH(metrics, DecompressionLatencyUs);
     int length;
     if (!input->Next(reinterpret_cast<const void**>(&inputBuffer), &length)) {
         if (failOnEof) {
@@ -413,6 +419,7 @@ void DecompressionStream::readHeader() {
 }
 
 bool DecompressionStream::Next(const void** data, int* size) {
+    SCOPED_STOPWATCH(metrics, DecompressionLatencyUs, DecompressionCall);
     // If we are starting a new header, we will have to store its positions
     // after decompressing.
     bool saveBufferPositions = false;
@@ -555,7 +562,8 @@ void DecompressionStream::seek(PositionProvider& position) {
 
 class ZlibDecompressionStream : public DecompressionStream {
 public:
-    ZlibDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool);
+    ZlibDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool,
+                            ReaderMetrics* metrics);
     ~ZlibDecompressionStream() override;
     std::string getName() const override;
 
@@ -573,8 +581,8 @@ DIAGNOSTIC_IGNORE("-Wold-style-cast")
 #endif
 
 ZlibDecompressionStream::ZlibDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize,
-                                                 MemoryPool& _pool)
-        : DecompressionStream(std::move(inStream), bufferSize, _pool) {
+                                                 MemoryPool& _pool, ReaderMetrics* _metrics)
+        : DecompressionStream(std::move(inStream), bufferSize, _pool, _metrics) {
     zstream.next_in = nullptr;
     zstream.avail_in = 0;
     zstream.zalloc = nullptr;
@@ -666,7 +674,8 @@ std::string ZlibDecompressionStream::getName() const {
 
 class BlockDecompressionStream : public DecompressionStream {
 public:
-    BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool);
+    BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool,
+                             ReaderMetrics* metrics);
 
     ~BlockDecompressionStream() override = default;
     std::string getName() const override = 0;
@@ -683,8 +692,8 @@ private:
 };
 
 BlockDecompressionStream::BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize,
-                                                   MemoryPool& _pool)
-        : DecompressionStream(std::move(inStream), blockSize, _pool), inputDataBuffer(pool, blockSize) {}
+                                                   MemoryPool& _pool, ReaderMetrics* _metrics)
+        : DecompressionStream(std::move(inStream), blockSize, _pool, _metrics), inputDataBuffer(pool, blockSize) {}
 
 void BlockDecompressionStream::NextDecompress(const void** data, int* size, size_t availableSize) {
     // Get contiguous bytes of compressed block.
@@ -719,8 +728,9 @@ void BlockDecompressionStream::NextDecompress(const void** data, int* size, size
 
 class SnappyDecompressionStream : public BlockDecompressionStream {
 public:
-    SnappyDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool)
-            : BlockDecompressionStream(std::move(inStream), blockSize, _pool) {
+    SnappyDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                              ReaderMetrics* _metrics)
+            : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
         // PASS
     }
 
@@ -753,8 +763,9 @@ uint64_t SnappyDecompressionStream::decompress(const char* _input, uint64_t leng
 
 class LzoDecompressionStream : public BlockDecompressionStream {
 public:
-    LzoDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool)
-            : BlockDecompressionStream(std::move(inStream), blockSize, _pool) {
+    LzoDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                           ReaderMetrics* _metrics)
+            : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
         // PASS
     }
 
@@ -775,8 +786,9 @@ uint64_t LzoDecompressionStream::decompress(const char* inputPtr, uint64_t lengt
 
 class Lz4DecompressionStream : public BlockDecompressionStream {
 public:
-    Lz4DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool)
-            : BlockDecompressionStream(std::move(inStream), blockSize, _pool) {
+    Lz4DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                           ReaderMetrics* _metrics)
+            : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
         // PASS
     }
 
@@ -1012,8 +1024,9 @@ DIAGNOSTIC_PUSH
    */
 class ZSTDDecompressionStream : public BlockDecompressionStream {
 public:
-    ZSTDDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool)
-            : BlockDecompressionStream(std::move(inStream), blockSize, _pool) {
+    ZSTDDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& _pool,
+                            ReaderMetrics* _metrics)
+            : BlockDecompressionStream(std::move(inStream), blockSize, _pool, _metrics) {
         this->init();
     }
 
@@ -1095,20 +1108,25 @@ std::unique_ptr<BufferedOutputStream> createCompressor(CompressionKind kind, Out
 
 std::unique_ptr<SeekableInputStream> createDecompressor(CompressionKind kind,
                                                         std::unique_ptr<SeekableInputStream> input, uint64_t blockSize,
-                                                        MemoryPool& pool) {
+                                                        MemoryPool& pool, ReaderMetrics* metrics) {
     switch (static_cast<int64_t>(kind)) {
     case CompressionKind_NONE:
         return REDUNDANT_MOVE(input);
     case CompressionKind_ZLIB:
-        return std::unique_ptr<SeekableInputStream>(new ZlibDecompressionStream(std::move(input), blockSize, pool));
+        return std::unique_ptr<SeekableInputStream>(
+                new ZlibDecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_SNAPPY:
-        return std::unique_ptr<SeekableInputStream>(new SnappyDecompressionStream(std::move(input), blockSize, pool));
+        return std::unique_ptr<SeekableInputStream>(
+                new SnappyDecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_LZO:
-        return std::unique_ptr<SeekableInputStream>(new LzoDecompressionStream(std::move(input), blockSize, pool));
+        return std::unique_ptr<SeekableInputStream>(
+                new LzoDecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_LZ4:
-        return std::unique_ptr<SeekableInputStream>(new Lz4DecompressionStream(std::move(input), blockSize, pool));
+        return std::unique_ptr<SeekableInputStream>(
+                new Lz4DecompressionStream(std::move(input), blockSize, pool, metrics));
     case CompressionKind_ZSTD:
-        return std::unique_ptr<SeekableInputStream>(new ZSTDDecompressionStream(std::move(input), blockSize, pool));
+        return std::unique_ptr<SeekableInputStream>(
+                new ZSTDDecompressionStream(std::move(input), blockSize, pool, metrics));
     default: {
         std::ostringstream buffer;
         buffer << "Unknown compression codec " << kind;

@@ -35,7 +35,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -270,8 +269,6 @@ public class Analyzer {
         String dbName = tableName.getDb();
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = getDefaultDb();
-        } else {
-            dbName = ClusterNamespace.getFullName(tableName.getDb());
         }
         if (Strings.isNullOrEmpty(dbName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);

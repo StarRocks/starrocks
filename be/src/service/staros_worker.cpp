@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "service/staros_worker.h"
-
 #ifdef USE_STAROS
+
+#include "service/staros_worker.h"
 
 #include <starlet.h>
 #include <worker.h>

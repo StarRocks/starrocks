@@ -20,15 +20,13 @@
 #include <memory>
 #include <string>
 
-#include "orc/ColumnPrinter.hh"
-#include "orc/Exceptions.hh"
-#include "orc/orc-config.hh"
+#include "ToolsHelper.hh"
 
 void printContents(const char* filename, const orc::RowReaderOptions& rowReaderOpts) {
     orc::ReaderOptions readerOpts;
     std::unique_ptr<orc::Reader> reader;
     std::unique_ptr<orc::RowReader> rowReader;
-    reader = orc::createReader(orc::readFile(std::string(filename)), readerOpts);
+    reader = orc::createReader(orc::readFile(std::string(filename), readerOpts.getReaderMetrics()), readerOpts);
     rowReader = reader->createRowReader(rowReaderOpts);
 
     std::unique_ptr<orc::ColumnVectorBatch> batch = rowReader->createRowBatch(1000);
@@ -48,41 +46,23 @@ void printContents(const char* filename, const orc::RowReaderOptions& rowReaderO
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cout << "Usage: orc-contents <filename> [--columns=1,2,...]\n"
-                  << "Print contents of <filename>.\n"
-                  << "If columns are specified, only these top-level (logical) columns are "
-                     "printed.\n";
+    uint64_t batchSize; // not used
+    orc::RowReaderOptions rowReaderOptions;
+    bool showMetrics = false;
+    bool success = parseOptions(&argc, &argv, &batchSize, &rowReaderOptions, &showMetrics);
+    if (argc < 1 || !success) {
+        std::cerr << "Usage: orc-contents [options] <filename>...\n";
+        printOptions(std::cerr);
+        std::cerr << "Print contents of ORC files.\n";
         return 1;
     }
-    try {
-        const std::string COLUMNS_PREFIX = "--columns=";
-        std::list<uint64_t> cols;
-        char* filename = ORC_NULLPTR;
-
-        // Read command-line options
-        char *param, *value;
-        for (int i = 1; i < argc; i++) {
-            if ((param = std::strstr(argv[i], COLUMNS_PREFIX.c_str()))) {
-                value = std::strtok(param + COLUMNS_PREFIX.length(), ",");
-                while (value) {
-                    cols.push_back(static_cast<uint64_t>(std::atoi(value)));
-                    value = std::strtok(ORC_NULLPTR, ",");
-                }
-            } else {
-                filename = argv[i];
-            }
+    for (int i = 0; i < argc; ++i) {
+        try {
+            printContents(argv[i], rowReaderOptions);
+        } catch (std::exception& ex) {
+            std::cerr << "Caught exception in " << argv[i] << ": " << ex.what() << "\n";
+            return 1;
         }
-        orc::RowReaderOptions rowReaderOpts;
-        if (cols.size() > 0) {
-            rowReaderOpts.include(cols);
-        }
-        if (filename != ORC_NULLPTR) {
-            printContents(filename, rowReaderOpts);
-        }
-    } catch (std::exception& ex) {
-        std::cerr << "Caught exception: " << ex.what() << "\n";
-        return 1;
     }
     return 0;
 }

@@ -21,6 +21,7 @@ DIAGNOSTIC_POP
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -181,7 +182,7 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, tablet_metadata_prefix) || HasPrefixString(name, txnlog_prefix)) {
-            objects.emplace_back(_location_provider->join_path(root_path, name));
+            objects.emplace_back(join_path(root_path, name));
         }
         return true;
     };
@@ -269,7 +270,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
-            objects.emplace_back(_location_provider->join_path(root, name));
+            objects.emplace_back(join_path(root, name));
         }
         return true;
     };
@@ -357,7 +358,7 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
-            objects.emplace_back(_location_provider->join_path(root, name));
+            objects.emplace_back(join_path(root, name));
         }
         return true;
     };

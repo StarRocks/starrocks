@@ -27,7 +27,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -61,8 +60,7 @@ public class StorageTypeCheckAction extends RestBaseAction {
             throw new DdlException("Parameter db is missing");
         }
 
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-        Database db = globalStateMgr.getDb(fullDbName);
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }

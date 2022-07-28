@@ -133,7 +133,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -377,13 +376,6 @@ public class StmtExecutor {
                 return;
             } else {
                 LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
-            }
-
-            // Only add the last running stmt for multi statement,
-            // because the audit log will only show the last stmt and
-            // the ConnectProcessor only add the last finished stmt
-            if (context.getIsLastStmt()) {
-                addRunningQueryDetail();
             }
 
             if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
@@ -1041,34 +1033,6 @@ public class StmtExecutor {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
-    }
-
-    private void addRunningQueryDetail() {
-        if (!Config.enable_collect_query_detail_info) {
-            return;
-        }
-        String sql;
-        if (parsedStmt.needAuditEncryption()) {
-            sql = parsedStmt.toSql();
-        } else {
-            sql = originStmt.originStmt;
-        }
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(context.getQueryId()),
-                isQuery,
-                context.connectionId,
-                context.getMysqlChannel() != null ?
-                        context.getMysqlChannel().getRemoteIp() : "System",
-                context.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                context.getDatabase(),
-                sql,
-                context.getQualifiedUser(),
-                Optional.ofNullable(context.getResourceGroup()).map(ResourceGroup::getName).orElse(""));
-        context.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {

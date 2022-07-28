@@ -190,6 +190,7 @@ protected:
     MemoryPool& memPool;
     std::unique_ptr<BufferedOutputStream> indexStream;
     std::unique_ptr<BufferedOutputStream> bloomFilterStream;
+    bool hasNullValue;
 };
 
 /**
