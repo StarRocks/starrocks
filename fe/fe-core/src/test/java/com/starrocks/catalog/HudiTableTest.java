@@ -170,7 +170,13 @@ public class HudiTableTest {
     public void testInputFormat() {
         Assert.assertEquals(HudiTable.HoodieTableType.COW,
                 HudiTable.fromInputFormat("org.apache.hudi.hadoop.HoodieParquetInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.COW,
+                HudiTable.fromInputFormat("com.uber.hoodie.hadoop.HoodieInputFormat"));
         Assert.assertEquals(HudiTable.HoodieTableType.MOR,
                 HudiTable.fromInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.MOR,
+                HudiTable.fromInputFormat("com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.UNKNOWN,
+                HudiTable.fromInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat"));
     }
 }
