@@ -124,6 +124,7 @@ statement
     | setUserPropertyStatement                                                              #setUserProperty
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
+    | showEnginesStatement                                                                  #showEngines
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -657,6 +658,10 @@ showStatusStatement
 
 showCharsetStatement
     : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showEnginesStatement
+    : SHOW ENGINES ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showNodesStatement

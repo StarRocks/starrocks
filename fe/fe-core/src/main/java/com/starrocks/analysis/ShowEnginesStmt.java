@@ -22,6 +22,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 public class ShowEnginesStmt extends ShowStmt {
+
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Engine", ScalarType.createVarchar(64)))
@@ -32,6 +33,30 @@ public class ShowEnginesStmt extends ShowStmt {
                     .addColumn(new Column("Savepoints", ScalarType.createVarchar(3)))
                     .build();
 
+    private String pattern;
+    private Expr where;
+
+    public ShowEnginesStmt() {
+
+    }
+
+    public ShowEnginesStmt(String pattern) {
+        this.pattern = pattern;
+    }
+
+    public ShowEnginesStmt(String pattern, Expr where) {
+        this.pattern = pattern;
+        this.where = where;
+    }
+
+    public String getPattern() {
+        return pattern;
+    }
+
+    public Expr getWhere() {
+        return where;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) {
 
@@ -39,7 +64,19 @@ public class ShowEnginesStmt extends ShowStmt {
 
     @Override
     public String toSql() {
-        return "SHOW ENGINES";
+        StringBuilder sb = new StringBuilder("SHOW ENGINES");
+        if (pattern != null) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
+        if (where != null) {
+            sb.append(" WHERE ").append(where.toSql());
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

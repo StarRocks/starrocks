@@ -125,6 +125,7 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
+import com.starrocks.analysis.ShowEnginesStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -267,7 +268,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         return visit(context.statement());
     }
-
 
     // ---------------------------------------- Database Statement -----------------------------------------------------
     @Override
@@ -855,7 +855,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
     }
-    
+
     @Override
     public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
         Map<String, String> properties = null;
@@ -901,9 +901,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
-    
+
     @Override
-    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext  context) {
+    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext context) {
         return new ShowOpenTableStmt();
     }
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -1509,8 +1509,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (context.ALL() != null) {
                 return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropAllClassifiers());
             } else {
-                return new AlterResourceGroupStmt(name, new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
-                        .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
+                return new AlterResourceGroupStmt(name,
+                        new AlterResourceGroupStmt.DropClassifiers(context.INTEGER_VALUE()
+                                .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList())));
             }
         } else {
             Map<String, String> properties = new HashMap<>();
@@ -2186,7 +2187,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAuthWithPlugin(StarRocksParser.AuthWithPluginContext context) {
         Identifier authPlugin = (Identifier) visit(context.identifierOrString());
-        String authString = context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
+        String authString =
+                context.string() == null ? null : ((StringLiteral) visit(context.string())).getStringValue();
         boolean isPasswordPlain = context.AS() == null;
         return new UserAuthOption(null, authPlugin.getValue().toUpperCase(), authString, isPasswordPlain);
     }
@@ -3583,7 +3585,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String partitionName = ((Identifier) visit(context.identifier())).getValue();
         return new RecoverPartitionStmt(tableName, partitionName);
     }
-    
+
     @Override
     public ParseNode visitShowCharsetStatement(StarRocksParser.ShowCharsetStatementContext context) {
         String pattern = null;
@@ -3598,5 +3600,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowCharsetStmt(pattern, where);
+    }
+
+    public ParseNode visitShowEnginesStatement(StarRocksParser.ShowEnginesStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        return new ShowEnginesStmt(pattern, where);
     }
 }

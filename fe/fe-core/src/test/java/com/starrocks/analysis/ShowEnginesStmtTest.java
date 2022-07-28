@@ -21,25 +21,42 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Analyzer;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class ShowEnginesStmtTest {
+    @Mocked
+    private ConnectContext ctx;
+
     @Test
     public void testNormal() {
-        ShowEnginesStmt stmt = new ShowEnginesStmt();
-        stmt.analyze((Analyzer) null);
-        Assert.assertEquals("SHOW ENGINES", stmt.toString());
-        ShowResultSetMetaData metaData = stmt.getMetaData();
-        Assert.assertNotNull(metaData);
-        Assert.assertEquals(6, metaData.getColumnCount());
-        Assert.assertEquals("Engine", metaData.getColumn(0).getName());
-        Assert.assertEquals("Support", metaData.getColumn(1).getName());
-        Assert.assertEquals("Comment", metaData.getColumn(2).getName());
-        Assert.assertEquals("Transactions", metaData.getColumn(3).getName());
-        Assert.assertEquals("XA", metaData.getColumn(4).getName());
-        Assert.assertEquals("Savepoints", metaData.getColumn(5).getName());
+        {
+            ShowEnginesStmt stmt = new ShowEnginesStmt();
+            Analyzer.analyze(stmt, ctx);
+            Assert.assertEquals("SHOW ENGINES", stmt.toString());
+            Assert.assertNull(stmt.getPattern());
+            Assert.assertNull(stmt.getWhere());
+        }
+        {
+            ShowEnginesStmt stmt = new ShowEnginesStmt("OLAP");
+            Analyzer.analyze(stmt, ctx);
+            Assert.assertEquals("SHOW ENGINES LIKE 'OLAP'", stmt.toString());
+            Assert.assertEquals("OLAP", stmt.getPattern());
+            Assert.assertNull(stmt.getWhere());
+        }
+        {
+            ShowEnginesStmt stmt =
+                    (ShowEnginesStmt) SqlParser.parse("SHOW ENGINES WHERE ENGINE = 'OLAP'", 32).get(0);
+            Analyzer.analyze(stmt, ctx);
+            Assert.assertEquals("SHOW ENGINES WHERE ENGINE = 'OLAP'", stmt.toString());
+            Assert.assertNull(stmt.getPattern());
+            Assert.assertEquals("ENGINE = 'OLAP'", stmt.getWhere().toSql());
+        }
+
     }
 
 }
