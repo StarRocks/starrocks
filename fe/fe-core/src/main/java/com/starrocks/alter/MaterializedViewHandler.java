@@ -903,16 +903,16 @@ public class MaterializedViewHandler extends AlterHandler {
 
     /**
      * create tablet and alter tablet in be is thread safe,so we can run rollup job for one table concurrently
+     * if the job is almost or already done return true.
      */
-    private void runAlterJobWithConcurrencyLimit(RollupJobV2 rollupJobV2) {
+    private boolean runAlterJobWithConcurrencyLimit(RollupJobV2 rollupJobV2) {
         if (rollupJobV2.isDone()) {
-            return;
+            return true;
         }
 
         if (rollupJobV2.isTimeout()) {
             // in run(), the timeout job will be cancelled.
-            rollupJobV2.run();
-            return;
+            return rollupJobV2.run();
         }
 
         // check if rollup job can be run within limitation.
@@ -937,23 +937,19 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         if (shouldJobRun) {
-            rollupJobV2.run();
+            return rollupJobV2.run();
         }
+        return false;
     }
 
     private void runAlterJobV2() {
         for (Map.Entry<Long, AlterJobV2> entry : getAlterJobsCopy().entrySet()) {
             RollupJobV2 alterJob = (RollupJobV2) entry.getValue();
             // run alter job
-            runAlterJobWithConcurrencyLimit(alterJob);
+            boolean isAfterRun = runAlterJobWithConcurrencyLimit(alterJob);
             // the following check should be right after job's running, so that the table's state
             // can be changed to NORMAL immediately after the last alter job of the table is done.
-            //
-            // ATTN(cmy): there is still a short gap between "job finish" and "table become normal",
-            // so if user send next alter job right after the "job finish",
-            // it may encounter "table's state not NORMAL" error.
-
-            if (alterJob.isDone()) {
+            if (isAfterRun || alterJob.isDone()) {
                 onJobDone(alterJob);
             }
         }
@@ -965,6 +961,11 @@ public class MaterializedViewHandler extends AlterHandler {
         removeJobFromRunningQueue(alterJob);
         if (removeAlterJobV2FromTableNotFinalStateJobMap(alterJob)) {
             changeTableStatus(alterJob.getDbId(), alterJob.getTableId(), OlapTableState.NORMAL);
+
+            // mv finish state must after olap table is normal
+            alterJob.jobState = AlterJobV2.JobState.FINISHED;
+            alterJob.finishedTimeMs = System.currentTimeMillis();
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterJob);
         }
     }
 

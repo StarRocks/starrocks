@@ -486,11 +486,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             db.writeUnlock();
         }
 
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        LOG.info("rollup job finished: {}", jobId);
+        LOG.info("rollup job will finished: {}", jobId);
         this.span.end();
     }
 

@@ -160,11 +160,12 @@ public abstract class AlterJobV2 implements Writable {
      * lock order:
      * synchronized
      * db lock
+     * if the job run after runRunningJob function without exception it will return true
      */
-    public synchronized void run() {
+    public synchronized boolean run() {
         if (isTimeout()) {
             cancelImpl("Timeout");
-            return;
+            return false;
         }
 
         try {
@@ -177,13 +178,14 @@ public abstract class AlterJobV2 implements Writable {
                     break;
                 case RUNNING:
                     runRunningJob();
-                    break;
+                    return true;
                 default:
                     break;
             }
         } catch (AlterCancelException e) {
             cancelImpl(e.getMessage());
         }
+        return false;
     }
 
     public final boolean cancel(String errMsg) {
