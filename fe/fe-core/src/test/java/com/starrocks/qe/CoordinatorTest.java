@@ -2,6 +2,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.planner.DataPartition;
@@ -15,7 +16,6 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.commons.compress.utils.Lists;
 import org.junit.Assert;
 import org.junit.Test;
 

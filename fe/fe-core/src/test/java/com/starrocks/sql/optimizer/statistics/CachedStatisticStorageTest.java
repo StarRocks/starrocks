@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import avro.shaded.com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;

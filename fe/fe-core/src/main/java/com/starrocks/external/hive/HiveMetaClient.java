@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -37,7 +38,6 @@ import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.hudi.common.config.HoodieMetadataConfig;
 import org.apache.hudi.common.engine.HoodieEngineContext;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
@@ -105,8 +105,7 @@ public class HiveMetaClient {
     public HiveMetaClient(String uris) throws DdlException {
         HiveConf conf = new HiveConf();
         conf.set("hive.metastore.uris", uris);
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
+        conf.set("hive.metastore.client.socket.timeout", String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf = conf;
 
         if (Config.enable_hms_events_incremental_sync) {
@@ -123,13 +122,8 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
-            if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
-                        HiveMetaStoreThriftClient.class.getName());
-            } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
-                        DLFProxyMetaStoreClient.class.getName());
-            }
+            hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                    HiveMetaStoreClient.class.getName());
         }
 
         @Override

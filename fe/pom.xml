@@ -47,10 +47,10 @@ under the License.
         <spark.version>2.4.6</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.0</hadoop.version>
+        <hadoop.version>2.7.2-TBDS-5.1.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.0</hudi.version>
-        <hive-apache.version>3.1.2-13</hive-apache.version>
+        <hive-apache.version>2.2.0-TBDS-5.1.3.0</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
@@ -576,8 +576,8 @@ under the License.
 
             <!-- https://mvnrepository.com/artifact/io.trino.hive/hive-apache -->
             <dependency>
-                <groupId>io.trino.hive</groupId>
-                <artifactId>hive-apache</artifactId>
+                <groupId>org.apache.hive</groupId>
+                <artifactId>hive-metastore</artifactId>
                 <version>${hive-apache.version}</version>
             </dependency>
 
