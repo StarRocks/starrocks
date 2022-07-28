@@ -266,7 +266,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
                     baseToMvNameRef, mvToBaseNameRef);
         }
-        if (!deletes.isEmpty()) {
+        if (!deletes.isEmpty() || !needRefreshMvPartitionNames.isEmpty()) {
             mv.cleanBasePartition(base);
         }
 
