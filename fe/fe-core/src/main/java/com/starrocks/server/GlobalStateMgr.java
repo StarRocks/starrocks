@@ -1630,6 +1630,15 @@ public class GlobalStateMgr {
                     isReady.set(true);
                 }
             }
+
+            // close current db after replayer finished
+            @Override
+            public void run() {
+                super.run();
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
         };
 
         replayer.setMetaContext(metaContext);
