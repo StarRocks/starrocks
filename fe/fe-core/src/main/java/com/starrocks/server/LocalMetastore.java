@@ -1385,6 +1385,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+        // for debug
+        LOG.info("enter dropPartition in LocalMetaStore");
         OlapTable olapTable = (OlapTable) table;
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
 
@@ -1412,6 +1414,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // drop
         Set<Long> tabletIdSet = new HashSet<Long>(); 
         if (isTempPartition) {
+            // for debug
+            LOG.info("isTempPartition");
             olapTable.dropTempPartition(partitionName, true);
         } else {
             if (!clause.isForceDrop()) {
@@ -1427,21 +1431,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
-<<<<<<< HEAD
-<<<<<<< HEAD
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-=======
-            Set<Long> tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-            if (!tabletIdSet.isEmpty()) {
-                // for debug
-                LOG.info("delete lake tablet : {}", tabletIdSet);
-                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                editLog.logAddUnusedShard(tabletIdSet);
-            }
->>>>>>> update codes
-=======
-            tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
->>>>>>> update codes
         }
 
         // log
@@ -1450,14 +1440,7 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logDropPartition(info);
 
         if (!tabletIdSet.isEmpty()) {
-<<<<<<< HEAD
             stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-=======
-            // for debug
-            LOG.info("delete lake tablet : {}", tabletIdSet);
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-            editLog.logAddUnusedShard(tabletIdSet);
->>>>>>> update codes
         }
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
