@@ -1413,16 +1413,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // drop
         Set<Long> tabletIdSet = new HashSet<Long>(); 
         if (isTempPartition) {
-            // for debug
-            LOG.info("isTempPartition");
-            Set<Long> tabletIdSet = olapTable.dropTempPartition(partitionName, true);
-            if (!tabletIdSet.isEmpty()) {
-                // for debug
-                LOG.info("delete lake tablet : {}", tabletIdSet);
-                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                editLog.logAddUnusedShard(tabletIdSet);
-            }
-
+            olapTable.dropTempPartition(partitionName, true);
         } else {
             if (!clause.isForceDrop()) {
                 Partition partition = olapTable.getPartition(partitionName);
