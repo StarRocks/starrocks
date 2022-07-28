@@ -4,37 +4,28 @@
 
 该语句用于将指定表的数据导出到指定位置。
 
-该功能通过 broker 进程实现。对于不同的目的存储系统，需要部署不同的 broker。可以通过 `SHOW BROKER` 查看已部署的 broker。
+该功能通过 broker 进程实现。对于不同的目标存储系统，需要部署不同的 broker。可以通过 `SHOW BROKER` 查看已部署的 broker。
 
-这是一个异步操作，任务提交成功则返回。执行后可使用 `SHOW EXPORT` 命令查看进度。
+这是一个异步操作，任务提交成功后返回结果。执行后可使用 `SHOW EXPORT` 命令查看进度。
 
 ## 语法
 
-注：方括号 [] 中内容可省略不写。
-
 ```sql
 EXPORT TABLE table_name
-[PARTITION (p1[,p2])]
+[PARTITION (partition_name[, ...])]
+[(column_name[, ...])]
 TO export_path
 [opt_properties]
 broker;
 ```
 
-1. table_name
+## 参数说明
 
-    当前要导出的表的表名，目前支持 engine 为 olap 和 mysql 的表的导出。
-
-2. partition
-
-    可以指定需要导出数据所在的分区，不指定的话默认导出表中所有分区的数据。
-
-3. export_path
-
-    导出的路径。目前不能导出到本地，需要导出到 broker。如果是目录，需要以斜线结尾。否则最后一个斜线后面的部分会作为导出文件的前缀。如不指定文件名前缀，文件名前缀默认为 **data_**。
-
-4. opt_properties
-
-    用于指定一些特殊参数。
+- `table_name`：导出数据所在的表，目前支持导出 `engine` 为 `olap` 或 `mysql` 的表。
+- `partition_name`：要导出的分区，如不指定则默认导出表中所有分区的数据。
+- `column_name`：要导出的列。列的导出顺序可以和源表结构 (schema) 不同，如不指定则默认导出表中所有列的数据。
+- `export_path`：导出的路径。目前不能导出到本地，需要导出到 Broker。如果是目录，需要以斜杠结尾。否则最后一个斜杠的后面部分会作为导出文件的前缀。如不指定文件名前缀，文件名前缀默认为 **data_**。
+- `opt_properties`：导出相关的属性配置。
 
     语法：
 
@@ -42,76 +33,84 @@ broker;
     [PROPERTIES ("key"="value", ...)]
     ```
 
-    可以指定如下参数：
+    配置项：
+  - `column_separator`: 指定导出的列分隔符，默认为`\t`。
+  - `line_delimiter`: 指定导出的行分隔符，默认为`\n`。
+  - `load_mem_limit`: 导出在单个 BE 节点的内存使用上限，默认为 2 GB，单位为字节。
+  - `timeout`：导出作业的超时时间，单位：秒。默认值为`86400`（1天）。
+  - `include_query_id`: 导出文件名中是否包含 `query_id`，默认为`true`，表示包含。
 
-    ```plain text
-    column_separator: 指定导出的列分隔符，默认为\t。
-    line_delimiter: 指定导出的行分隔符，默认为\n。
-    load_mem_limit: 导出在单个 BE 节点的内存使用上限，默认为 2GB，单位为字节。
-    timeout：导入作业的超时时间，默认为1天，单位是「秒」。
-    include_query_id: 导出文件名中是否包含 query id，默认为 true。
-    ```
-
-5. broker
-
-    用于指定导出使用的 broker
+- `broker`：导出使用的 Broker。
 
     语法：
 
     ```sql
-    WITH BROKER broker_name ("key"="value"[,...])
+    WITH BROKER broker_name ("key"="value"[, ...])
     ```
 
-    这里需要指定具体的 broker name, 以及所需的 broker 属性。
-
-    对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以在 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 章节中搜索 broker_properties。
+    参数：
+  - `broker_name`：Broker 名称。
+  - `"key"="value"`：Broker 属性。不同存储系统对应的 Broker 的属性不同。具体参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 。
 
 ## 示例
 
 ### 将表中所有数据导出到HDFS
 
-将 testTbl 表中的所有数据导出到 hdfs 上
+将 `testTbl` 表中的所有数据导出到 HDFS 上。
 
 ```sql
-EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/" WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
+EXPORT TABLE testTbl 
+TO "hdfs://hdfs_host:port/a/b/c/" 
+WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
 ```
 
 ### 将表中部分分区数据导出到HDFS
 
-将 testTbl 表中的分区 p1, p2 导出到 hdfs 上
+将 `testTbl` 表中`p1`和`p2`分区数据导出到 HDFS 上。
 
 ```sql
-EXPORT TABLE testTbl PARTITION (p1,p2) TO "hdfs://hdfs_host:port/a/b/c/" WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
+EXPORT TABLE testTbl PARTITION (p1,p2) 
+TO "hdfs://hdfs_host:port/a/b/c/" 
+WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
 ```
 
-### 将表中所有数据导出到HDFS并指定分隔符
+### 将表中所有数据导出到 HDFS 并指定分隔符
 
-1.将 testTbl 表中的所有数据导出到 hdfs 上，以 "," 作为列分隔符
+1.将 `testTbl` 表中的所有数据导出到 HDFS 上，以`,`作为列分隔符。
 
 ```sql
-EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/" PROPERTIES ("column_separator"=",") WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
+EXPORT TABLE testTbl 
+TO "hdfs://hdfs_host:port/a/b/c/" 
+PROPERTIES ("column_separator"=",") 
+WITH BROKER "broker_name" ("username"="xxx", "password"="yyy");
 ```
 
-2.将 testTbl 表中的所有数据导出到 hdfs 上，以 Hive 默认分隔符 "\x01" 作为列分隔符
+2.将 `testTbl` 表中的所有数据导出到 HDFS 上，以 Hive 默认分隔符`\x01`作为列分隔符。
 
 ```sql
-EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/" PROPERTIES ("column_separator"="\\x01") WITH BROKER "broker_name";
+EXPORT TABLE testTbl 
+TO "hdfs://hdfs_host:port/a/b/c/" 
+PROPERTIES ("column_separator"="\\x01") 
+WITH BROKER "broker_name";
 ```
 
 ### 指定导出文件名前缀
 
-将 testTbl 表中的所有数据导出到 hdfs 上，指定导出文件前缀为 testTbl_
+将 `testTbl` 表中的所有数据导出到 HDFS 上，指定导出文件前缀为 testTbl_。
 
 ```sql
-EXPORT TABLE testTbl TO "hdfs://hdfs_host:port/a/b/c/testTbl_" WITH BROKER "broker_name";
+EXPORT TABLE testTbl 
+TO "hdfs://hdfs_host:port/a/b/c/testTbl_" 
+WITH BROKER "broker_name";
 ```
 
-### 导出数据到OSS上
+### 导出数据到 OSS 上
 
-将 testTbl 表中的所有数据导出到 OSS。
+将 `testTbl` 表中的所有数据导出到 OSS。
 
 ```sql
-EXPORT TABLE testTbl TO "oss://oss-package/export/"
+EXPORT TABLE testTbl 
+TO "oss://oss-package/export/"
 WITH BROKER "broker_name"
 (
 "fs.oss.accessKeyId" = "xxx",
@@ -120,12 +119,13 @@ WITH BROKER "broker_name"
 );
 ```
 
-### 导出数据到COS上
+### 导出数据到 COS 上
 
-将 testTbl 表中的所有数据导出到 COS 上
+将 `testTbl` 表中的所有数据导出到 COS 上。
 
 ```sql
-EXPORT TABLE testTbl TO "cosn://cos-package/export/"
+EXPORT TABLE testTbl 
+TO "cosn://cos-package/export/"
 WITH BROKER "broker_name"
 (
 "fs.cosn.userinfo.secretId" = "xxx",
@@ -134,12 +134,13 @@ WITH BROKER "broker_name"
 );
 ```
 
-### 导出数据到S3上
+### 导出数据到 S3 上
 
-将 testTbl 表中的所有数据导出到 S3 上
+将 `testTbl` 表中的所有数据导出到 S3 上。
 
 ```sql
-EXPORT TABLE testTbl TO "s3a://s3-package/export/"
+EXPORT TABLE testTbl 
+TO "s3a://s3-package/export/"
 WITH BROKER "broker_name"
 (
 "fs.s3a.access.key" = "xxx",
