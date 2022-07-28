@@ -270,7 +270,8 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             mv.cleanBasePartition(base);
         }
 
-        LOG.info("Calculate the materialized view [{}] partitions that need to be refreshed [{}]", mv.getName(), needRefreshMvPartitionNames);
+        LOG.info("Calculate the materialized view [{}] partitions that need to be refreshed [{}]",
+                mv.getName(), needRefreshMvPartitionNames);
 
         return needRefreshMvPartitionNames;
     }
