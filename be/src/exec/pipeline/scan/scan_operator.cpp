@@ -58,7 +58,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
     _set_scan_table_id(state);
-    
+
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
