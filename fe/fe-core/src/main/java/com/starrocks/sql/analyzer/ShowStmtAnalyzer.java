@@ -170,7 +170,7 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt node, ConnectContext context) {
             String dbName = node.getDbFullName();
-            dbName = getFullDatabaseName(dbName, context);
+            dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);
             return null;
         }
