@@ -481,17 +481,19 @@ public:
         return Status::OK();
     }
 
-    Status write_shard(size_t key_size, size_t npage_hint, const std::vector<KVRef>& kvs) {
-        // only fixed length shards supported currently
+    // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
+    Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs) {
+        bool new_key_length = (_nshard == 0 || _cur_key_size != key_size);
         if (_nshard == 0) {
-            _fixed_key_size = key_size;
-            _fixed_value_size = kIndexValueSize;
+            _cur_key_size = key_size;
+            _cur_value_size = kIndexValueSize;
         } else {
-            CHECK(key_size == _fixed_key_size && kIndexValueSize == _fixed_value_size)
-                    << "key/value sizes not the same";
+            if (new_key_length) {
+                CHECK(key_size > _cur_key_size) << "key size is smaller than before";
+            }
+            _cur_value_size = key_size;
         }
-        size_t kv_size = key_size + kIndexValueSize;
-        auto rs_create = ImmutableIndexShard::create(key_size, npage_hint, kBucketPerPage, kvs);
+        auto rs_create = ImmutableIndexShard::create(key_size, npage_hint, nbucket, kvs);
         if (!rs_create.ok()) {
             return std::move(rs_create).status();
         }
@@ -502,13 +504,31 @@ public:
         auto shard_meta = _meta.add_shards();
         shard_meta->set_size(kvs.size());
         shard_meta->set_npage(shard->npage());
+        shard_meta->set_key_size(key_size);
+        shard_meta->set_value_size(kIndexValueSize);
         auto ptr_meta = shard_meta->mutable_data();
         ptr_meta->set_offset(pos_before);
         ptr_meta->set_size(pos_after - pos_before);
         _total += kvs.size();
         _total_moved += shard->num_entry_moved;
-        _total_kv_size += kvs.size() * kv_size;
+        if (key_size != 0) {
+            _total_kv_size += (key_size + kIndexValueSize) * kvs.size();
+        } else {
+            for (auto& kv : kvs) {
+                _total_kv_size += kv.size;
+            }
+        }
         _total_bytes += pos_after - pos_before;
+        auto iter = _shard_info_by_length.find(_cur_key_size);
+        if (iter == _shard_info_by_length.end()) {
+            auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}});
+            if (!inserted) {
+                LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size;
+                return Status::InternalError("insert shard info failed");
+            }
+        } else {
+            iter->second.second++;
+        }
         _nshard++;
         return Status::OK();
     }
@@ -520,9 +540,17 @@ public:
                 _total_bytes, _total_kv_size * 1000 / std::max(_total_bytes, 1UL) / 1000.0);
         _version.to_pb(_meta.mutable_version());
         _meta.set_size(_total);
-        _meta.set_fixed_key_size(_fixed_key_size);
-        _meta.set_fixed_value_size(_fixed_value_size);
+        // TODO_zq: fixed_key_size and fixed_value_size should be delete
+        // And format version should be set to 2
+        _meta.set_fixed_key_size(_cur_key_size);
+        _meta.set_fixed_value_size(_cur_value_size);
         _meta.set_format_version(PERSISTENT_INDEX_VERSION_1);
+        for (auto iter = _shard_info_by_length.begin(); iter != _shard_info_by_length.end(); iter++) {
+            auto info = _meta.add_shard_info();
+            info->set_key_size(iter->first);
+            info->set_shard_off(iter->second.first);
+            info->set_shard_num(iter->second.second);
+        }
         std::string footer;
         if (!_meta.SerializeToString(&footer)) {
             return Status::InternalError("ImmutableIndexMetaPB::SerializeToString failed");
@@ -544,9 +572,10 @@ private:
     string _idx_file_path;
     std::shared_ptr<FileSystem> _fs;
     std::unique_ptr<WritableFile> _wb;
+    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
     size_t _nshard = 0;
-    size_t _fixed_key_size = 0;
-    size_t _fixed_value_size = 0;
+    size_t _cur_key_size = -1;
+    size_t _cur_value_size = 0;
     size_t _total = 0;
     size_t _total_moved = 0;
     size_t _total_kv_size = 0;
@@ -816,7 +845,7 @@ public:
         if (nshard > 0) {
             auto kv_ref_by_shard = get_kv_refs_by_shard(nshard, size(), true);
             for (auto& kvs : kv_ref_by_shard) {
-                RETURN_IF_ERROR(writer.write_shard(KeySize, npage_hint, kvs));
+                RETURN_IF_ERROR(writer.write_shard(KeySize, npage_hint, kBucketPerPage, kvs));
             }
         }
         return writer.finish();
@@ -1182,6 +1211,19 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.npage = src.npage();
         dest.offset = src.data().offset();
         dest.bytes = src.data().size();
+        dest.key_size = src.key_size();
+        dest.value_size = src.value_size();
+        dest.nbucket = src.nbucket();
+    }
+    size_t nlength = meta.shard_info_size();
+    for (size_t i = 0; i < nlength; i++) {
+        const auto& src = meta.shard_info(i);
+        auto [it, inserted] = idx->_shard_info_by_length.insert({src.key_size(), {src.shard_off(), src.shard_num()}});
+        if (!inserted) {
+            LOG(WARNING) << "load failed because insert shard info failed, maybe duplicate key size: "
+                         << src.key_size();
+            return Status::InternalError("load failed because of insert failed");
+        }
     }
     idx->_file.swap(file);
     return std::move(idx);
@@ -1646,7 +1688,7 @@ Status PersistentIndex::_flush_l0() {
     ImmutableIndexWriter writer;
     RETURN_IF_ERROR(writer.init(_path, _version));
     for (auto& kvs : kv_ref_by_shard) {
-        RETURN_IF_ERROR(writer.write_shard(_key_size, npage_hint, kvs));
+        RETURN_IF_ERROR(writer.write_shard(_key_size, npage_hint, kBucketPerPage, kvs));
     }
     return writer.finish();
 }
@@ -1848,7 +1890,7 @@ Status PersistentIndex::_merge_compaction() {
             kvs.clear();
             RETURN_IF_ERROR(merge_shard_kvs(_key_size, l0_kvs_by_shard[cur_shard_idx], l1_kvs_by_shard[cur_shard_idx],
                                             estimated_size_per_shard, kvs));
-            RETURN_IF_ERROR(writer.write_shard(_key_size, npage_hint, kvs));
+            RETURN_IF_ERROR(writer.write_shard(_key_size, npage_hint, kBucketPerPage, kvs));
             // clear to optimize memory usage
             l0_kvs_by_shard[cur_shard_idx].clear();
             l0_kvs_by_shard[cur_shard_idx].shrink_to_fit();

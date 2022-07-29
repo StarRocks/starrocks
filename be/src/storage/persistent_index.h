@@ -26,6 +26,7 @@ class Column;
 enum PersistentIndexFileVersion {
     UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
+    PERSISTENT_INDEX_VERSION_2,
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -232,9 +233,13 @@ private:
         uint64_t bytes;
         uint32_t npage;
         uint32_t size;
+        uint32_t key_size;
+        uint32_t value_size;
+        uint32_t nbucket;
     };
 
     std::vector<ShardInfo> _shards;
+    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
