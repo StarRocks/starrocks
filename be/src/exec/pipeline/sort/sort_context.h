@@ -20,7 +20,6 @@ using SortContextPtr = std::shared_ptr<SortContext>;
 using vectorized::ChunkPtr;
 using vectorized::ChunksSorter;
 using vectorized::SortDescs;
-using vectorized::SortedRuns;
 
 class SortContext final : public ContextWithDependency {
 public:
@@ -52,14 +51,12 @@ public:
         return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
     }
 
-    bool is_output_finished() const {
-        return is_partition_sort_finished() && _is_merge_finish && _merged_runs.num_chunks() == 0;
-    }
+    bool is_output_finished() const { return is_partition_sort_finished() && _merger_inited && _required_rows == 0; }
 
     StatusOr<ChunkPtr> pull_chunk();
 
 private:
-    Status _merge_inputs();
+    Status _init_merger();
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;
@@ -73,9 +70,10 @@ private:
     std::atomic<int32_t> _num_partition_finished = 0;
 
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partions; // Partial sorters
-    bool _is_merge_finish = false;
-
-    SortedRuns _merged_runs;
+    std::vector<std::unique_ptr<vectorized::SimpleChunkSortCursor>> _partial_cursors;
+    vectorized::MergeCursorsCascade _merger;
+    int64_t _required_rows = 0;
+    bool _merger_inited = false;
 };
 
 class SortContextFactory {

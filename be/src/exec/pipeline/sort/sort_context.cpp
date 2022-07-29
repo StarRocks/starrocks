@@ -5,31 +5,30 @@
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "runtime/chunk_cursor.h"
 
 namespace starrocks::pipeline {
 
 using vectorized::Permutation;
 using vectorized::Columns;
-using vectorized::SortedRun;
 using vectorized::SortedRuns;
 
 void SortContext::close(RuntimeState* state) {
     _chunks_sorter_partions.clear();
-    _merged_runs.clear();
 }
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
-    if (!_is_merge_finish) {
-        _merge_inputs();
-        _is_merge_finish = true;
-    }
-    if (_merged_runs.num_chunks() == 0) {
+    _init_merger();
+
+    if (_required_rows <= 0) {
         return nullptr;
     }
-    size_t required_rows = _state->chunk_size();
-    required_rows = std::min<size_t>(required_rows, _total_rows);
-    if (_limit > 0 && _topn_type == TTopNType::ROW_NUMBER) {
-        required_rows = std::min<size_t>(required_rows, _limit);
+    vectorized::ChunkUniquePtr chunk = _merger.try_get_next();
+    if (_required_rows < chunk->num_rows()) {
+        chunk->set_num_rows(_required_rows);
+        _required_rows = 0;
+    } else {
+        _required_rows -= chunk->num_rows();
     }
 
     SortedRun& run = _merged_runs.front();
@@ -49,8 +48,10 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
     return res;
 }
 
-Status SortContext::_merge_inputs() {
-    int64_t total_rows = _total_rows.load(std::memory_order_relaxed);
+Status SortContext::_init_merger() {
+    if (_merger_inited) {
+        return Status::OK();
+    }
 
     // Keep all the data if topn type is RANK or DENSE_RANK
     int64_t require_rows = total_rows;
@@ -63,8 +64,26 @@ Status SortContext::_merge_inputs() {
         auto& partition_sorter = _chunks_sorter_partions[i];
         partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
     }
+    _partial_cursors.reserve(_num_partition_sinkers);
+    for (int i = 0; i < _num_partition_sinkers; i++) {
+        vectorized::ChunkProvider provider = [i, this](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {
+            auto& partition_sorter = _chunks_sorter_partions[i];
+            ChunkPtr chunk;
+            Status st = partition_sorter->get_next(&chunk, eos);
+            if (!st.ok() || *eos || chunk == nullptr) {
+                return false;
+            }
+            *out_chunk = chunk->clone_unique();
+            return true;
+        };
+        _partial_cursors.push_back(
+                std::make_unique<vectorized::SimpleChunkSortCursor>(std::move(provider), &_sort_exprs));
+    }
 
-    return merge_sorted_chunks(_sort_desc, &_sort_exprs, partial_sorted_runs, &_merged_runs, require_rows);
+    RETURN_IF_ERROR(_merger.init(_sort_desc, std::move(_partial_cursors)));
+    _merger_inited = true;
+
+    return Status::OK();
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
