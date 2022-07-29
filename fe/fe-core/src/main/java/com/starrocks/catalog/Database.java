@@ -43,7 +43,6 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.AgentBatchTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,7 +51,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
