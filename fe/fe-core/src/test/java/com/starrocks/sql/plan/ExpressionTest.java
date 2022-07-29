@@ -42,6 +42,17 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testDateVariableCast() throws Exception {
+        String sql = "select t1a, t1b from test_all_type where id_date > 2000";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 9: id_date > CAST(2000 AS DATE)");
+
+        sql = "select t1a, t1b from test_all_type where id_datetime > 2000";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime > CAST(2000 AS DATETIME)");
+    }
+
+    @Test
     public void testExpression1() throws Exception {
         String sql = "select sum(v1 + v2) from t0";
         String planFragment = getFragmentPlan(sql);
