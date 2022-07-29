@@ -41,8 +41,8 @@ public class Replica implements Writable {
     private static final Logger LOG = LogManager.getLogger(Replica.class);
     public static final VersionComparator<Replica> VERSION_DESC_COMPARATOR = new VersionComparator<Replica>();
 
-    public final int deprecatedPropConstSchameHash = 0;
-    public final int deprecatedPropConstPathHash = 0;
+    public static final int DEPRECATED_PROP_SCHEMA_HASH = 0;
+    public static final int DEPRECATED_PROP_PATH_HASH = 0;
 
     public enum ReplicaState {
         NORMAL,

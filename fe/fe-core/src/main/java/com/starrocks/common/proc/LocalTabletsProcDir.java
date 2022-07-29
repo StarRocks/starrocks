@@ -128,7 +128,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(tabletId);
                         tabletInfo.add(replica.getId());
                         tabletInfo.add(replica.getBackendId());
-                        tabletInfo.add(replica.deprecatedPropConstSchameHash);
+                        tabletInfo.add(Replica.DEPRECATED_PROP_SCHEMA_HASH);
                         tabletInfo.add(replica.getVersion());
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getLastSuccessVersion());
@@ -144,7 +144,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(localTablet.getCheckedVersion());
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
-                        tabletInfo.add(replica.deprecatedPropConstPathHash);
+                        tabletInfo.add(Replica.DEPRECATED_PROP_PATH_HASH);
                         Backend backend = backendMap.get(replica.getBackendId());
                         String metaUrl;
                         String compactionUrl;
