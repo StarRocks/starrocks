@@ -204,10 +204,6 @@ public class CatalogMgr {
 
     }
 
-    public ConcurrentHashMap<String, Catalog> getCatalogs() {
-        return catalogs;
-    }
-
     public List<List<String>> getCatalogsInfo() {
         return procNode.fetchResult().getRows();
     }
