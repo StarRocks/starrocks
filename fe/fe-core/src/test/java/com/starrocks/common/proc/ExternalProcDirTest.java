@@ -5,7 +5,6 @@ package com.starrocks.common.proc;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -14,7 +13,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import mockit.Mock;
 import mockit.MockUp;
@@ -24,19 +22,12 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class ExternalProcDirTest {
 
     @Before
     public void setUp() throws Exception {
-        Map<String, String> config = new HashMap<>();
-        config.put("type", "hive");
-        config.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-        String comment = "external catalog for hive";
-        GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogs().put("hive_catalog", new Catalog(1, "hive_catalog", config, comment));
         new MockUp<MetadataMgr>() {
             @Mock
             public List<String> listDbNames(String catalogName) throws DdlException {
