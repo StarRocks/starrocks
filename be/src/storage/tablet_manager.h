@@ -216,9 +216,11 @@ private:
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
-    Status _remove_tablet_meta(const TabletSharedPtr& tablet);
-    Status _remove_tablet_directories(const TabletSharedPtr& tablet);
-    Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
+    int32_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+
+    static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
+    static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
+    static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
     MemTracker* _mem_tracker = nullptr;
 
