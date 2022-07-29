@@ -520,34 +520,26 @@ public class RuntimeProfile {
             }
             counter0.setValue(mergedValue);
 
+            boolean updateMinMax = false;
             if (alreadyMerged) {
-                Counter minCounter =
-                        profile0.addCounter(mergedInfoPrefixMin + name, type, name);
-                Counter maxCounter =
-                        profile0.addCounter(mergedInfoPrefixMax + name, type, name);
-                minCounter.setValue(minValue);
-                maxCounter.setValue(maxValue);
+                updateMinMax = true;
             } else {
                 // If the values vary greatly, we need to save extra info (min value and max value) of this counter
                 double diff = maxValue - minValue;
                 if (Counter.isAverageType(counter0.getType())) {
                     if (diff > 5000000L && diff > mergedValue / 5.0) {
-                        Counter minCounter =
-                                profile0.addCounter(mergedInfoPrefixMin + name, type, name);
-                        Counter maxCounter =
-                                profile0.addCounter(mergedInfoPrefixMax + name, type, name);
-                        minCounter.setValue(minValue);
-                        maxCounter.setValue(maxValue);
+                        updateMinMax = true;
                     }
                 } else {
                     // All sum type counters will have extra info (min value and max value)
-                    Counter minCounter =
-                            profile0.addCounter(mergedInfoPrefixMin + name, type, name);
-                    Counter maxCounter =
-                            profile0.addCounter(mergedInfoPrefixMax + name, type, name);
-                    minCounter.setValue(minValue);
-                    maxCounter.setValue(maxValue);
+                    updateMinMax = true;
                 }
+            }
+            if (updateMinMax) {
+                Counter minCounter = profile0.addCounter(mergedInfoPrefixMin + name, type, name);
+                Counter maxCounter = profile0.addCounter(mergedInfoPrefixMax + name, type, name);
+                minCounter.setValue(minValue);
+                maxCounter.setValue(maxValue);
             }
         }
 
