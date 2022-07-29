@@ -199,6 +199,8 @@ private:
 
     std::shared_mutex& _get_tablets_shard_lock(TTabletId tabletId);
 
+    int32_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+
     TabletMap& _get_tablet_map(TTabletId tablet_id);
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
