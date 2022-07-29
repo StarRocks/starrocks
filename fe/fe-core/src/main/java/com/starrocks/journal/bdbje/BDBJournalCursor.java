@@ -111,7 +111,7 @@ public class BDBJournalCursor implements JournalCursor {
      *
      * there are two cases:
      * 1. if this is the first time, we're actually looking for the db of nextKey
-     * 2. otherwise, we're already open a db for previous key, we're looking for the next db of the previous key
+     * 2. otherwise, we've already opened a db for previous key. Now we're looking for the next db of the previous key
      **/
     protected void calculateNextDbIndex() throws JournalException {
         if (!localDBNames.isEmpty() && nextKey < localDBNames.get(0)) {
