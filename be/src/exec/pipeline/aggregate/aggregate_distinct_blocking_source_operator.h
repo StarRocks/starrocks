@@ -56,6 +56,8 @@ public:
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
+    // This flag will be inherited from the source operator of AggregateDistinctBlockingSinkOperator,
+    // by calling `set_need_local_shuffle` when decomposing to pipeline.
     bool _need_local_shuffle = true;
 };
 } // namespace starrocks::pipeline
