@@ -2553,7 +2553,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        StorageInfo partitionStorageInfo = partitionInfo.getStorageInfo(partitionId);
+        StorageInfo partitionStorageInfo = table.getTableProperty().getStorageInfo();
         CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(partitionStorageInfo.isEnableStorageCache())
                 .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS()).build();
         ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo())
