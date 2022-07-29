@@ -107,15 +107,13 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
                 Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
                 for (String syncedPartitionName : syncedPartitionNames) {
                     Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
-                    if (baseTablePartition == null) {
+                    if (baseTablePartition != null && materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
                         needRefresh = true;
-                        materializedView.removeBasePartition(baseTableId, syncedPartitionName);
-                    } else {
-                        if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
-                            needRefresh = true;
-                            materializedView.updateBasePartition(baseTableId, baseTablePartition);
-                        }
+                        materializedView.updateBasePartition(baseTableId, baseTablePartition);
                     }
+                }
+                if (materializedView.cleanBasePartition(olapTable) > 0) {
+                    needRefresh = true;
                 }
             }
             if (needRefresh) {
@@ -224,7 +222,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             String mvPartitionName = deleteEntry.getKey();
             dropPartition(db, mv, mvPartitionName);
         }
-        LOG.info("The process of synchronizing partitions delete range {}", deletes);
+        LOG.info("The process of synchronizing materialized view [{}] partitions delete range [{}]", mv.getName(), deletes);
 
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
@@ -234,7 +232,7 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             // The newly added partition must be the partition that needs to be refreshed
             needRefreshMvPartitionNames.add(mvPartitionName);
         }
-        LOG.info("The process of synchronizing partitions add range {} ", adds);
+        LOG.info("The process of synchronizing materialized view [{}] partitions add range [{}]", mv.getName(), adds);
 
         Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
@@ -266,11 +264,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
             SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
                     baseToMvNameRef, mvToBaseNameRef);
         }
-        if (!deletes.isEmpty()) {
+        if (!deletes.isEmpty() || !needRefreshMvPartitionNames.isEmpty()) {
             mv.cleanBasePartition(base);
         }
 
-        LOG.info("Calculate the partitions that need to be refreshed:[{}]", needRefreshMvPartitionNames);
+        LOG.info("Calculate the materialized view [{}] partitions that need to be refreshed [{}]",
+                mv.getName(), needRefreshMvPartitionNames);
 
         return needRefreshMvPartitionNames;
     }
@@ -290,12 +289,12 @@ public class MvTaskRunProcessor extends BaseTaskRunProcessor {
         Set<String> syncedPartitionNames = materializedView.getSyncedPartitionNames(baseTableId);
         for (String syncedPartitionName : syncedPartitionNames) {
             Partition baseTablePartition = olapTable.getPartition(syncedPartitionName);
-            if (baseTablePartition == null) {
-                refreshAllPartitions = true;
-                materializedView.removeBasePartition(baseTableId, syncedPartitionName);
-            } else if (materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
+            if (baseTablePartition != null && materializedView.needRefreshPartition(baseTableId, baseTablePartition)) {
                 refreshAllPartitions = true;
             }
+        }
+        if (materializedView.cleanBasePartition(olapTable) > 0) {
+            refreshAllPartitions = true;
         }
         return refreshAllPartitions;
     }
