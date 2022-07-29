@@ -178,7 +178,7 @@ public class UtilsTest {
 
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
         try {
-            new ArrayType(new ArrayType(itemType));
+            arrayType = new ArrayType(itemType);
             Assert.fail();
         } catch (InternalError e) {
             Assert.assertTrue(e.getMessage().contains("Decimal32/64/128"));
