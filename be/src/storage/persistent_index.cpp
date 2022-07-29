@@ -29,7 +29,9 @@ namespace starrocks {
 constexpr size_t kDefaultUsagePercent = 85;
 constexpr size_t kPageSize = 4096;
 constexpr size_t kPageHeaderSize = 64;
+constexpr size_t kBucketHeaderSize = 4;
 constexpr size_t kBucketPerPage = 16;
+constexpr size_t kRecordPerBucket = 8;
 constexpr size_t kShardMax = 1 << 16;
 constexpr uint64_t kPageMax = 1ULL << 32;
 constexpr size_t kPackSize = 16;
@@ -108,6 +110,19 @@ static std::tuple<size_t, size_t> estimate_nshard_and_npage(size_t kv_size, size
     size_t npage = npad(cap / nshard, kPageSize);
     return {nshard, npage};
 }
+/*
+static size_t estimate_nbucket(size_t key_size, size_t size, size_t npage, size_t nshard) {
+    if (key_size != 0 || key_size < 64) {
+        return kBucketPerPage;
+    }
+    // if size == 0, return 1 or return kBucketPerPage?
+    if (size == 0) {
+        return 1;
+    }
+    size_t pad = nshard * npage * kRecordPerBucket;
+    return npad(size, pad);
+}
+*/
 
 // Page storage layout:
 //   each page has 4096 / 16 = 256 packs, ie
@@ -153,11 +168,11 @@ struct ImmutableIndexShard {
 
     Status write(WritableFile& wb) const;
 
-    static StatusOr<std::unique_ptr<ImmutableIndexShard>> try_create(size_t kv_size, const std::vector<KVRef>& kv_refs,
-                                                                     size_t npage_hint);
+    static StatusOr<std::unique_ptr<ImmutableIndexShard>> try_create(size_t key_size, size_t npage, size_t nbucket,
+                                                                     const std::vector<KVRef>& kv_refs);
 
-    static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t kv_size, const std::vector<KVRef>& kv_refs,
-                                                                 size_t npage_hint);
+    static StatusOr<std::unique_ptr<ImmutableIndexShard>> create(size_t key_size, size_t npage, size_t nbucket,
+                                                                 const std::vector<KVRef>& kv_refs);
 
     vector<IndexPage> pages;
     size_t num_entry_moved = 0;
@@ -302,27 +317,37 @@ static StatusOr<std::vector<BucketMovement>> move_buckets(std::vector<BucketToMo
     return std::move(ret);
 }
 
-static void copy_kv_to_page(size_t kv_size, size_t num_kv, const KVPairPtr* kv_ptrs, const uint8_t* tags,
-                            uint8_t* dest_pack) {
+static void copy_kv_to_page(size_t key_size, size_t num_kv, const KVPairPtr* kv_ptrs, const uint8_t* tags,
+                            uint8_t* dest_pack, const uint16_t* kv_size) {
     uint8_t* tags_dest = dest_pack;
     size_t tags_len = pad(num_kv, kPackSize);
     memcpy(tags_dest, tags, num_kv);
     memset(tags_dest + num_kv, 0, tags_len - num_kv);
     uint8_t* kvs_dest = dest_pack + tags_len;
+    uint16_t offset = tags_len;
+    if (key_size == 0) {
+        for (size_t i = 0; i < num_kv; i++) {
+            encode_fixed16_le(kvs_dest, offset);
+            kvs_dest += sizeof(uint16_t);
+            offset += kv_size[i];
+        }
+        encode_fixed16_le(kvs_dest, offset);
+        kvs_dest += sizeof(uint16_t);
+    }
     for (size_t i = 0; i < num_kv; i++) {
-        memcpy(kvs_dest, kv_ptrs[i], kv_size);
-        kvs_dest += kv_size;
+        memcpy(kvs_dest, kv_ptrs[i], kv_size[i]);
+        kvs_dest += kv_size[i];
     }
 }
 
-StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t kv_size,
-                                                                           const std::vector<KVRef>& kv_refs,
-                                                                           size_t npage_hint) {
+StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_t key_size, size_t npage_hint,
+                                                                           size_t nbucket,
+                                                                           const std::vector<KVRef>& kv_refs) {
     if (kv_refs.size() == 0) {
         return std::make_unique<ImmutableIndexShard>(0);
     }
     for (size_t npage = npage_hint; npage < kPageMax; npage++) {
-        auto rs_create = ImmutableIndexShard::try_create(kv_size, kv_refs, npage);
+        auto rs_create = ImmutableIndexShard::try_create(key_size, npage, nbucket, kv_refs);
         // increase npage and retry
         if (!rs_create.ok()) {
             continue;
@@ -332,14 +357,14 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
     return Status::InternalError("failed to create immutable index shard");
 }
 
-StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(size_t kv_size,
-                                                                               const std::vector<KVRef>& kv_refs,
-                                                                               size_t npage) {
-    size_t bucket_size_limit = std::min(kBucketSizeMax, (kPageSize - kPageHeaderSize) / (kv_size + 1));
-    size_t nbucket = npage * kBucketPerPage;
-    std::vector<uint8_t> bucket_sizes(nbucket);
-    std::vector<std::pair<std::vector<KVPairPtr>, std::vector<uint8_t>>> bucket_kv_ptrs_tags(nbucket);
-    size_t estimated_entry_per_bucket = npad(kv_refs.size() * 100 / 85, nbucket);
+StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(size_t key_size, size_t npage,
+                                                                               size_t nbucket,
+                                                                               const std::vector<KVRef>& kv_refs) {
+    size_t total_bucket = npage * nbucket;
+    std::vector<uint8_t> bucket_sizes(total_bucket);
+    std::vector<std::pair<uint32_t, std::vector<uint16_t>>> bucket_data_size(total_bucket);
+    std::vector<std::pair<std::vector<KVPairPtr>, std::vector<uint8_t>>> bucket_kv_ptrs_tags(total_bucket);
+    size_t estimated_entry_per_bucket = npad(kv_refs.size() * 100 / 85, total_bucket);
     for (auto& p : bucket_kv_ptrs_tags) {
         p.first.reserve(estimated_entry_per_bucket);
         p.second.reserve(estimated_entry_per_bucket);
@@ -347,19 +372,22 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
     for (size_t i = 0; i < kv_refs.size(); i++) {
         auto h = IndexHash(kv_refs[i].hash);
         auto page = h.page() % npage;
-        auto bucket = h.bucket();
-        auto bid = page * kBucketPerPage + bucket;
+        auto bucket = h.bucket() % nbucket;
+        auto bid = page * nbucket + bucket;
         auto& sz = bucket_sizes[bid];
-        if (sz == bucket_size_limit) {
+        sz++;
+        auto& data_size = bucket_data_size[bid].first;
+        if (data_size + sz >= kPageSize) {
             return Status::InternalError("bucket size limit exceeded");
         }
-        sz++;
+        data_size += kv_refs[i].size;
+        bucket_data_size[bid].second.emplace_back(kv_refs[i].size);
         bucket_kv_ptrs_tags[bid].first.emplace_back(kv_refs[i].kv_pos);
         bucket_kv_ptrs_tags[bid].second.emplace_back(h.tag());
     }
-    std::vector<uint8_t> bucket_packs(nbucket);
-    for (size_t i = 0; i < nbucket; i++) {
-        auto npack = num_pack_for_bucket(kv_size, bucket_sizes[i]);
+    std::vector<uint8_t> bucket_packs(total_bucket);
+    for (size_t i = 0; i < total_bucket; i++) {
+        auto npack = npad((size_t)bucket_sizes[i], kPackSize) + npad(bucket_data_size[i].first, kPackSize);
         if (npack >= kPagePackLimit) {
             return Status::InternalError("page page limit exceeded");
         }
@@ -370,8 +398,8 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
     std::vector<MoveDest> dests;
     std::vector<bool> page_has_move(npage, false);
     for (uint32_t pageid = 0; pageid < npage; pageid++) {
-        const uint8_t* bucket_packs_in_page = &bucket_packs[pageid * kBucketPerPage];
-        int npack = std::accumulate(bucket_packs_in_page, bucket_packs_in_page + kBucketPerPage, 0);
+        const uint8_t* bucket_packs_in_page = &bucket_packs[pageid * nbucket];
+        int npack = std::accumulate(bucket_packs_in_page, bucket_packs_in_page + nbucket, 0);
         if (npack < kPagePackLimit) {
             dests.emplace_back(kPagePackLimit - npack, pageid);
         } else if (npack > kPagePackLimit) {
@@ -396,35 +424,37 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
     // calculate bucket positions
     std::unique_ptr<ImmutableIndexShard> ret = std::make_unique<ImmutableIndexShard>(npage);
     for (auto& move : moves) {
-        ret->num_entry_moved += bucket_sizes[move.src_pageid * kBucketPerPage + move.src_bucketid];
+        ret->num_entry_moved += bucket_sizes[move.src_pageid * nbucket + move.src_bucketid];
     }
     for (uint32_t pageid = 0; pageid < npage; pageid++) {
         IndexPage& page = ret->page(pageid);
         PageHeader& header = ret->header(pageid);
-        size_t cur_packid = kPageHeaderSize / kPackSize;
-        for (uint32_t bucketid = 0; bucketid < kBucketPerPage; bucketid++) {
+        size_t cur_packid = npad(nbucket * kBucketHeaderSize, kPackSize);
+        for (uint32_t bucketid = 0; bucketid < nbucket; bucketid++) {
             if (page_has_move[pageid] && bucket_moved(pageid, bucketid)) {
                 continue;
             }
-            auto bid = pageid * kBucketPerPage + bucketid;
+            auto bid = pageid * nbucket + bucketid;
             auto& bucket_info = header.buckets[bucketid];
             bucket_info.pageid = pageid;
             bucket_info.packid = cur_packid;
             bucket_info.size = bucket_sizes[bid];
-            copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
-                            bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
+            copy_kv_to_page(key_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
+                            bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid),
+                            bucket_data_size[bid].second.data());
             cur_packid += bucket_packs[bid];
             DCHECK(cur_packid <= kPageSize / kPackSize);
         }
         for (auto& move : moves) {
             if (move.dest_pageid == pageid) {
-                auto bid = move.src_pageid * kBucketPerPage + move.src_bucketid;
+                auto bid = move.src_pageid * nbucket + move.src_bucketid;
                 auto& bucket_info = ret->bucket(move.src_pageid, move.src_bucketid);
                 bucket_info.pageid = pageid;
                 bucket_info.packid = cur_packid;
                 bucket_info.size = bucket_sizes[bid];
-                copy_kv_to_page(kv_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
-                                bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid));
+                copy_kv_to_page(key_size, bucket_info.size, bucket_kv_ptrs_tags[bid].first.data(),
+                                bucket_kv_ptrs_tags[bid].second.data(), page.pack(cur_packid),
+                                bucket_data_size[bid].second.data());
                 cur_packid += bucket_packs[bid];
                 DCHECK(cur_packid <= kPageSize / kPackSize);
             }
@@ -461,7 +491,7 @@ public:
                     << "key/value sizes not the same";
         }
         size_t kv_size = key_size + kIndexValueSize;
-        auto rs_create = ImmutableIndexShard::create(kv_size, kvs, npage_hint);
+        auto rs_create = ImmutableIndexShard::create(key_size, npage_hint, kBucketPerPage, kvs);
         if (!rs_create.ok()) {
             return std::move(rs_create).status();
         }
@@ -774,7 +804,7 @@ public:
             const auto& k = e.first;
             IndexHash h(hasher(k));
             auto shard = h.shard(shard_bits);
-            ret[shard].emplace_back((uint8_t*)&(e.first), h.hash);
+            ret[shard].emplace_back((uint8_t*)&(e.first), h.hash, KeySize + kIndexValueSize);
         }
         return ret;
     }
@@ -983,7 +1013,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
             for (size_t i = 0; i < nele; i++) {
                 const uint8_t* kv = kvs + (_fixed_key_size + _fixed_value_size) * i;
                 IndexHash hash = IndexHash(key_index_hash(kv, _fixed_key_size));
-                kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash);
+                kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash, _fixed_key_size + kIndexValueSize);
             }
         }
     }

@@ -63,8 +63,10 @@ struct KeysInfo {
 struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
+    uint16_t size;
     KVRef() {}
-    KVRef(const uint8_t* kv_pos, uint64_t hash) : kv_pos(kv_pos), hash(hash) {}
+    //KVRef(const uint8_t* kv_pos, uint64_t hash) : kv_pos(kv_pos), hash(hash) {}
+    KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
 class PersistentIndex;
