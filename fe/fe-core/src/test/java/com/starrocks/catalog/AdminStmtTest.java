@@ -83,7 +83,7 @@ public class AdminStmtTest {
         for (Partition partition : tbl.getPartitions()) {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         tabletToBackendList.add(Pair.create(tablet.getId(), replica.getBackendId()));
                     }
                 }

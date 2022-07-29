@@ -1290,7 +1290,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             replica.setState(ReplicaState.NORMAL);
                         }
                     }
@@ -1397,7 +1397,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
-                                id, tablet.getId(), statusPair.first, localTablet.getReplicas());
+                                id, tablet.getId(), statusPair.first, localTablet.getImmutableReplicas());
                         return false;
                     }
                 }

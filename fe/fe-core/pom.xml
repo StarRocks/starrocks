@@ -608,6 +608,13 @@ under the License.
             <artifactId>opentelemetry-exporter-jaeger</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/mysql/mysql-connector-java -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -851,6 +858,8 @@ under the License.
                             <overWriteSnapshots>false</overWriteSnapshots>
                             <overWriteIfNewer>true</overWriteIfNewer>
                             <skip>${skip.plugin}</skip>
+                            <!-- exclude test only jars(junit&mysql-connector), GPL jar(mysql-connector) must be excluded in release package -->
+                            <includeScope>runtime</includeScope>
                         </configuration>
                     </execution>
                 </executions>

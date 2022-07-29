@@ -575,7 +575,17 @@ public class LeaderImpl {
         }
 
         PublishVersionTask publishVersionTask = (PublishVersionTask) task;
-        publishVersionTask.addErrorTablets(errorTabletIds);
+        publishVersionTask.setErrorTablets(errorTabletIds);
+        if (Config.enable_new_publish_mechanism) {
+            if (request.isSetTablet_versions()) {
+                publishVersionTask.updateReplicaVersions(request.getTablet_versions());
+            } else {
+                LOG.error(
+                        "new publish mechanism require BE to report tablet version, maybe BE has not upgraded?" +
+                                "db_id: {} tx_id: {} BE: {}",
+                        publishVersionTask.getDbId(), publishVersionTask.getTransactionId(), publishVersionTask.getBackendId());
+            }
+        }
         publishVersionTask.setIsFinished(true);
 
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
@@ -1027,7 +1037,7 @@ public class LeaderImpl {
                         tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
                         tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
                         // fill replica info
-                        for (Replica replica : localTablet.getReplicas()) {
+                        for (Replica replica : localTablet.getImmutableReplicas()) {
                             TReplicaMeta replicaMeta = new TReplicaMeta();
                             replicaMeta.setReplica_id(replica.getId());
                             replicaMeta.setBackend_id(replica.getBackendId());

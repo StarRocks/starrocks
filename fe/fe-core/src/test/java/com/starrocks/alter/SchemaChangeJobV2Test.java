@@ -138,7 +138,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
 
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
-        List<Replica> replicas = baseTablet.getReplicas();
+        List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
 
         assertEquals(1, replica1.getVersion());
@@ -173,7 +173,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         }
         MaterializedIndex shadowIndex = testPartition.getMaterializedIndices(IndexExtState.SHADOW).get(0);
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
+            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                 shadowReplica
                         .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());
@@ -207,7 +207,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
 
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
-        List<Replica> replicas = baseTablet.getReplicas();
+        List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
 
         assertEquals(1, replica1.getVersion());
@@ -248,7 +248,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         }
         MaterializedIndex shadowIndex = testPartition.getMaterializedIndices(IndexExtState.SHADOW).get(0);
         for (Tablet shadowTablet : shadowIndex.getTablets()) {
-            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
+            for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                 shadowReplica
                         .updateRowCount(testPartition.getVisibleVersion(),
                                 shadowReplica.getDataSize(), shadowReplica.getRowCount());

@@ -896,7 +896,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             int cnt = 0;
             for (Tablet tablet : index.getTablets()) {
-                List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                 if (replicas == null) {
                     continue;
                 }
@@ -1242,7 +1242,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             }
             for (Tablet tablet : index.getTablets()) {
-                List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                 if (replicas == null) {
                     continue;
                 }
@@ -1442,7 +1442,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 }
                             }
                             for (Tablet tablet : idx.getTablets()) {
-                                List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                                List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                                 if (replicas != null) {
                                     for (Replica replica : replicas) {
                                         if (replica.getState() != ReplicaState.NORMAL) {

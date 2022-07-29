@@ -183,6 +183,7 @@ public class AgentBatchTask implements Runnable {
                 if (ok) {
                     ClientPool.backendPool.returnObject(address, client);
                 } else {
+                    // TODO: notify tasks rpc failed in trace
                     ClientPool.backendPool.invalidateObject(address, client);
                 }
             }

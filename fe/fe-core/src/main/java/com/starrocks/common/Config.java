@@ -360,7 +360,7 @@ public class Config extends ConfigBase {
      *
      * <p>To disable the retention of these additional files, set this
      * parameter to zero.</p>
-     *
+     * <p>
      * If the bdb dir expands, set this param to 0.
      */
     @ConfField
@@ -763,7 +763,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
-     *
+     * <p>
      * The default value should better set to true because if user
      * has a deployment with only SSD or HDD medium storage paths,
      * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
@@ -1297,7 +1297,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_manager_sleep_time_sec = 60; // 60s
 
-
     /**
      * Analyze status keep time in catalog
      */
@@ -1671,4 +1670,7 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static long experimental_lake_compaction_max_interval_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static boolean enable_new_publish_mechanism = false;
 }
