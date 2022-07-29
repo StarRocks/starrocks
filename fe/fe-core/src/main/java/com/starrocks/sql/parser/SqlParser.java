@@ -12,6 +12,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.StatementPlanner;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.antlr.v4.runtime.atn.PredictionMode;
 
 import java.io.StringReader;
 import java.util.List;
@@ -30,7 +31,17 @@ public class SqlParser {
                 StarRocksParser.sqlMode = sqlMode;
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
-                StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+                parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+                StarRocksParser.SqlStatementsContext sqlStatements;
+                // SLL is faster than LL
+                try {
+                    sqlStatements = parser.sqlStatements();
+                } catch (ParsingException e) {
+                    tokenStream.reset();
+                    parser.reset();
+                    parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+                    sqlStatements = parser.sqlStatements();
+                }
                 StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
                         .visitSingleStatement(sqlStatements.singleStatement(0));
                 statement.setOrigStmt(new OriginStatement(sql, idx));

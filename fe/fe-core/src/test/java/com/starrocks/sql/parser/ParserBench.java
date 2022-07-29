@@ -3,7 +3,6 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.SqlModeHelper;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -53,7 +52,7 @@ public class ParserBench {
     @Param({"SLL", "LL"})
     public String mode;
 
-    @Param({"100", "1000", "5000", "10000"})
+    @Param({"100", "500", "1000"})
     public int times;
 
     @Benchmark
@@ -73,7 +72,7 @@ public class ParserBench {
         return "INSERT INTO test_load_decimal_1_0 VALUES " + result + ";";
     }
 
-    private StatementBase parseSql(String sql) {
+    private void parseSql(String sql) {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
@@ -81,9 +80,7 @@ public class ParserBench {
         parser.removeErrorListeners();
         parser.addErrorListener(new BaseErrorListener());
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
-        StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
-                .visitSingleStatement(sqlStatements.singleStatement(0));
+        parser.sqlStatements();
     }
 
 }
