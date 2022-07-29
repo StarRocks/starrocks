@@ -70,9 +70,10 @@ public:
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
-    static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
-
     int estimated_max_concurrent_chunks() const;
+
+    static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
+    static int compute_priority(int32_t num_submitted_tasks);
 
 private:
     friend class TabletScanner;
@@ -122,7 +123,6 @@ private:
     void _fill_chunk_pool(int count, bool force_column_pool);
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
-    int _compute_priority(int32_t num_submitted_tasks);
 
     // Reference the row sets into _tablet_rowsets in the preparation phase to avoid
     // the row sets being deleted. Should be called after set_scan_ranges.
