@@ -5,6 +5,8 @@ syntax="proto2";
 package starrocks.lake;
 option java_package = "com.starrocks.lake.proto";
 
+import "lake_delete.proto";
+
 option cc_generic_services = true;
 
 message PublishVersionRequest {
@@ -57,6 +59,16 @@ message DropTableRequest {
 message DropTableResponse {
 }
 
+message DeleteDataRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 txn_id = 2;
+    optional DeletePredicatePB delete_predicate = 3;
+}
+
+message DeleteDataResponse {
+    repeated int64 failed_tablets = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
@@ -64,5 +76,6 @@ service LakeService {
     // TODO: Rename to delete_tablet
     rpc drop_tablet(DropTabletRequest) returns (DropTabletResponse);
     rpc drop_table(DropTableRequest) returns (DropTableResponse);
+    rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
 }
 
