@@ -106,23 +106,32 @@ public class BDBJournalCursor implements JournalCursor {
         return cursor;
     }
 
+    /**
+     * calculate the index of next db to be opened
+     *
+     * there are two cases:
+     * 1. if this is the first time, we're actually looking for the db of currentKey
+     * 2. otherwise, we're already open a db for previous key, we're looking for the next db of the previous key
+     **/
     protected void calculateNextDbIndex() throws JournalException {
-        int dbIndex = 0;
-        // find the db which may contain the fromKey
-        String dbName = null;
+        if (!localDBNames.isEmpty() && currentKey < localDBNames.get(0)) {
+            throw new JournalException(String.format(
+                    "Can not find the key[%d] in %s: key too small", currentKey, localDBNames));
+        }
+        long objectKey = (database == null) ? currentKey : currentKey - 1;
+        // find the db index which may contain objectKey
+        int dbIndex = -1;
         for (long db : localDBNames) {
-            if (currentKey >= db) {
-                dbName = Long.toString(db);
+            if (objectKey >= db) {
                 dbIndex++;
             } else {
                 break;
             }
         }
-        if (dbName == null) {
-            throw new JournalException(String.format("Can not find the key:%d, fail to get journal cursor!", currentKey));
+        if (database != null) {
+            dbIndex += 1;
         }
-        // will open current db in next()
-        nextDbPositionIndex = dbIndex - 1;
+        nextDbPositionIndex = dbIndex;
         LOG.info("currentKey {}, currentDatabase {}, index of next opened db is {}",
                 currentKey, database, nextDbPositionIndex);
     }
