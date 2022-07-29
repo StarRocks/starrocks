@@ -272,7 +272,7 @@ The required parameters in `properties` are as follows:
 
 * `driver_url`:  the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported. For example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` or `file:///home/disk1/postgresql-42.3.3.jar`.
 
-* `driver_class`: the class name of the JDBC driver. The class names of common JDBC drivers are as follows:
+* `driver_class`: the class name of the JDBC driver. The JDBC driver class names of common databases are as follows:
   * MySQL: com.mysql.jdbc.Driver (MySQL 5.x and earlier), com.mysql.cj.jdbc.Driver (MySQL 6.x and later)
   * SQL Server: com.microsoft.sqlserver.jdbc.SQLServerDriver
   * Oracle: oracle.jdbc.driver.OracleDriver
