@@ -223,12 +223,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (!needRefreshColumn) {
             for (Column column : nameToColumn.values()) {
                 FieldSchema fieldSchema = updatedTableSchemas.get(column.getName());
-                if (fieldSchema == null) {
-                    needRefreshColumn = true;
-                    break;
-                }
-                Type type = convertColumnType(fieldSchema.getType());
-                if (!type.equals(column.getType())) {
+                if (fieldSchema == null ||
+                        !(convertColumnType(fieldSchema.getType()).equals(column.getType()))) {
                     needRefreshColumn = true;
                     break;
                 }
