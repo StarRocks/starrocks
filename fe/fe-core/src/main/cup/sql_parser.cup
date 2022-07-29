@@ -1368,6 +1368,14 @@ opt_broker ::=
     {:
         RESULT = null;
     :}
+    | KW_WITH KW_BROKER
+    {:
+        RESULT = new BrokerDesc(null);
+    :}
+    | KW_WITH KW_BROKER LPAREN key_value_map:properties RPAREN
+    {:
+        RESULT = new BrokerDesc(properties);
+    :}
     | KW_WITH KW_BROKER ident_or_text:name
     {:
         RESULT = new BrokerDesc(name, null);
