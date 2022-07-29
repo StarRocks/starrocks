@@ -33,25 +33,15 @@ public:
               _num_partition_sinkers(num_right_sinkers),
               _sort_exprs(sort_exprs),
               _sort_desc(sort_descs) {
-        _chunks_sorter_partions.reserve(num_right_sinkers);
+        _chunks_sorter_partitions.reserve(num_right_sinkers);
     }
 
     void close(RuntimeState* state) override;
 
-    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
-        _chunks_sorter_partions.push_back(chunks_sorter);
-    }
-
-    void finish_partition(uint64_t partition_rows) {
-        _total_rows.fetch_add(partition_rows, std::memory_order_relaxed);
-        _num_partition_finished.fetch_add(1, std::memory_order_release);
-    }
-
-    bool is_partition_sort_finished() const {
-        return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
-    }
-
-    bool is_output_finished() const { return is_partition_sort_finished() && _merger_inited && _required_rows == 0; }
+    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter);
+    void finish_partition(uint64_t partition_rows);
+    bool is_partition_sort_finished() const;
+    bool is_output_finished() const;
 
     StatusOr<ChunkPtr> pull_chunk();
 
@@ -69,7 +59,7 @@ private:
     std::atomic<int64_t> _total_rows = 0; // size of all chunks from all partitions.
     std::atomic<int32_t> _num_partition_finished = 0;
 
-    std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partions; // Partial sorters
+    std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partitions; // Partial sorters
     std::vector<std::unique_ptr<vectorized::SimpleChunkSortCursor>> _partial_cursors;
     vectorized::MergeCursorsCascade _merger;
     int64_t _required_rows = 0;

@@ -14,7 +14,24 @@ using vectorized::Columns;
 using vectorized::SortedRuns;
 
 void SortContext::close(RuntimeState* state) {
-    _chunks_sorter_partions.clear();
+    _chunks_sorter_partitions.clear();
+}
+
+void SortContext::add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
+    _chunks_sorter_partitions.push_back(chunks_sorter);
+}
+
+void SortContext::finish_partition(uint64_t partition_rows) {
+    _total_rows.fetch_add(partition_rows, std::memory_order_relaxed);
+    _num_partition_finished.fetch_add(1, std::memory_order_release);
+}
+
+bool SortContext::is_partition_sort_finished() const {
+    return _num_partition_finished.load(std::memory_order_acquire) == _num_partition_sinkers;
+}
+
+bool SortContext::is_output_finished() const {
+    return is_partition_sort_finished() && _merger_inited && _required_rows == 0;
 }
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
@@ -24,7 +41,9 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
         return nullptr;
     }
     vectorized::ChunkUniquePtr chunk = _merger.try_get_next();
-    if (_required_rows < chunk->num_rows()) {
+    if (!chunk) {
+        return nullptr;
+    } else if (_required_rows < chunk->num_rows()) {
         chunk->set_num_rows(_required_rows);
         _required_rows = 0;
     } else {
@@ -61,13 +80,17 @@ Status SortContext::_init_merger() {
 
     std::vector<SortedRuns> partial_sorted_runs;
     for (int i = 0; i < _num_partition_sinkers; ++i) {
-        auto& partition_sorter = _chunks_sorter_partions[i];
+        auto& partition_sorter = _chunks_sorter_partitions[i];
         partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
     }
     _partial_cursors.reserve(_num_partition_sinkers);
     for (int i = 0; i < _num_partition_sinkers; i++) {
         vectorized::ChunkProvider provider = [i, this](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {
-            auto& partition_sorter = _chunks_sorter_partions[i];
+            // data ready
+            if (out_chunk == nullptr || eos == nullptr) {
+                return true;
+            }
+            auto& partition_sorter = _chunks_sorter_partitions[i];
             ChunkPtr chunk;
             Status st = partition_sorter->get_next(&chunk, eos);
             if (!st.ok() || *eos || chunk == nullptr) {
