@@ -266,7 +266,7 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         GlobalStateMgr.getCurrentState().getStarRocksRepository().deRegisterTable(this);
     }
 

@@ -602,7 +602,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         if (hiveRepository.getCounter().reduce(resourceName, hiveDbName, hiveTableName) == 0) {
             hiveRepository.clearCache(hmsTableInfo);
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(this);

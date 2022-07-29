@@ -38,10 +38,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +49,6 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -375,8 +372,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.isOlapOrLakeTable() && !isCheckpointThread()) {
-                    GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, true);
+                if (!isCheckpointThread()) {
+                    table.delete(tableInfo.getDbId(), true);
                 }
             }
         }
@@ -742,15 +739,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
-            long tableId = table.getId();
-            if (table.isOlapTable()) {
-                HashMap<Long, AgentBatchTask> batchTaskMap =
-                        GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, false);
-                GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
-            } else if (table.isLakeTable()) {
-                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, false);
-            }
-            LOG.info("erased table [{}-{}].", tableId, table.getName());
+            table.delete(tableInfo.getDbId(), false);
+            LOG.info("erased table [{}-{}].", table.getId(), table.getName());
         }
     }
 

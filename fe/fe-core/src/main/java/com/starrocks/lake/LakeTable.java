@@ -5,13 +5,17 @@ package com.starrocks.lake;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -27,7 +31,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Metadata for StarRocks lake table
@@ -62,7 +68,7 @@ public class LakeTable extends OlapTable {
 
     public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS)
             throws DdlException {
-        String storageGroup = null;
+        String storageGroup;
         // s3://bucket/serviceId/tableId/
         String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
         try {
@@ -110,7 +116,58 @@ public class LakeTable extends OlapTable {
     public static LakeTable read(DataInput in) throws IOException {
         // type is already read in Table
         String json = Text.readString(in);
-        LakeTable table = GsonUtils.GSON.fromJson(json, LakeTable.class);
-        return table;
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
+    }
+
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        dropAllTempPartitions();
+    }
+
+    @Override
+    public Runnable delete(long dbId, boolean replay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(dbId, this);
+        return replay ? null : new DeleteTableTask(this, replay);
+    }
+
+    private static class DeleteTableTask implements Runnable {
+        private final LakeTable table;
+        private final boolean replay;
+
+        DeleteTableTask(LakeTable table, boolean replay) {
+            this.table = table;
+            this.replay = replay;
+        }
+
+        @Override
+        public void run() {
+            // inverted index
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            Collection<Partition> allPartitions = table.getAllPartitions();
+            for (Partition partition : allPartitions) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
+                }
+            }
+
+            if (replay) {
+                return;
+            }
+
+            // drop all replicas
+            Set<Long> tabletIds = new HashSet<>();
+            for (Partition partition : table.getAllPartitions()) {
+                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        tabletIds.add(tablet.getId());
+                    }
+                }
+            }
+            GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIds);
+            GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
+        }
     }
 }

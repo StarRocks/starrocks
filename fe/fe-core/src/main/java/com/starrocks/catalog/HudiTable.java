@@ -513,7 +513,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         if (this.resourceName != null) {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
         }

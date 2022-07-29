@@ -40,6 +40,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -54,12 +55,17 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -1338,7 +1344,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                        replicationNum, isInMemory, storageInfo);
+                    replicationNum, isInMemory, storageInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
@@ -1541,7 +1547,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (!column.isKey()) {
                 continue;
             }
-            if (column.getPrimitiveType() == PrimitiveType.VARCHAR 
+            if (column.getPrimitiveType() == PrimitiveType.VARCHAR
                     || column.getPrimitiveType() == PrimitiveType.CHAR) {
                 LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
                 return false;
@@ -1781,14 +1787,80 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
     }
 
     @Override
+    public Runnable delete(long dbId, boolean replay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(dbId, this);
+        return replay ? null : new DeleteTableTask(this);
+    }
+
+    @Override
     public boolean isSupported() {
         return true;
+    }
+
+    private static class DeleteTableTask implements Runnable {
+        private final OlapTable table;
+
+        public DeleteTableTask(OlapTable table) {
+            this.table = table;
+        }
+
+        @Override
+        public void run() {
+            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+
+            // drop all replicas
+            for (Partition partition : table.getAllPartitions()) {
+                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    long indexId = materializedIndex.getId();
+                    int schemaHash = table.getSchemaHashByIndexId(indexId);
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        long tabletId = tablet.getId();
+                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                        for (Replica replica : replicas) {
+                            long backendId = replica.getBackendId();
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
+                            batchTask.addTask(dropTask);
+                        } // end for replicas
+                    } // end for tablets
+                } // end for indices
+            } // end for partitions
+
+            int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+            for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+                AgentBatchTask originTasks = entry.getValue();
+                if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                    AgentBatchTask partTask = new AgentBatchTask();
+                    List<AgentTask> allTasks = originTasks.getAllTasks();
+                    int curTask = 1;
+                    for (AgentTask task : allTasks) {
+                        partTask.addTask(task);
+                        if (curTask++ > numDropTaskPerBe) {
+                            AgentTaskExecutor.submit(partTask);
+                            curTask = 1;
+                            partTask = new AgentBatchTask();
+                            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                        }
+                    }
+                    if (partTask.getAllTasks().size() > 0) {
+                        AgentTaskExecutor.submit(partTask);
+                    }
+                } else {
+                    AgentTaskExecutor.submit(originTasks);
+                }
+            }
+        }
     }
 }
