@@ -132,7 +132,11 @@ public class TabletStatMgr extends LeaderDaemon {
                 continue;
             }
             // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
-            replica.updateStat(entry.getValue().getData_size(), entry.getValue().getRow_num());
+            replica.updateStat(
+                    entry.getValue().getData_size(),
+                    entry.getValue().getRow_num(),
+                    entry.getValue().getVersion_count()
+            );
         }
     }
 }
