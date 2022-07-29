@@ -9,7 +9,7 @@
 namespace starrocks::lake {
 class Rowset {
 public:
-    explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata);
+    explicit Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index);
 
     ~Rowset();
 
@@ -33,6 +33,7 @@ private:
     // _tablet is owned by TabletReader
     Tablet* _tablet;
     RowsetMetadataPtr _rowset_metadata;
+    int _index;
 };
 
 } // namespace starrocks::lake

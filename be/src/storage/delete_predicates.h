@@ -10,6 +10,7 @@
 namespace starrocks::vectorized {
 
 // DeletePredicates is a set of delete predicates of different versions.
+// version is rowset index if tablet is lake tablet.
 class DeletePredicates {
 public:
     // Add a new version of delete predicates.
