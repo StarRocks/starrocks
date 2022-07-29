@@ -935,7 +935,6 @@ public class GlobalStateMgr {
                 throw new Exception("fencing failed. will exit");
             }
             long maxJournalId = journal.getMaxJournalId();
-            // replay journals. -1 means replay all the journals larger than current journal id.
             replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
             journalWriter.init(maxJournalId);
@@ -1633,6 +1632,7 @@ public class GlobalStateMgr {
                 super.run();
                 if (cursor != null) {
                     cursor.close();
+                    LOG.info("quit replay at {}", replayedJournalId.get());
                 }
             }
         };
@@ -1644,8 +1644,13 @@ public class GlobalStateMgr {
     /**
       * Replay journal from replayedJournalId + 1 to toJournalId
       * used by checkpointer/replay after state change
+      * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
       */
     public void replayJournal(long toJournalId) throws JournalException {
+        if (toJournalId <= replayedJournalId.get()) {
+            LOG.info("skip replay journal because {} <= {}", toJournalId, replayedJournalId.get());
+            return;
+        }
         long replayStartTime = System.currentTimeMillis();
         LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
         JournalCursor cursor = null;
