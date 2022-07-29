@@ -270,7 +270,7 @@ select * from es_table where esquery(k4, ' {
 
 ### 前提条件
 
-在创建 JDBC 资源以及首次查询 JDBC 外部表时，FE、BE 节点需要下载 JDBC 驱动程序，因此在这两个阶段，FE、BE 节点所在机器必须能够访问用于下载 JDBC 驱动程序 JAR 包的 URL，该 URL 由创建 JDBC 资源中的配置项 `driver_url` 指定。
+在您使用 JDBC 外表时， FE、BE 节点会下载 JDBC 驱动程序，因此 FE、BE 节点所在机器必须能够访问用于下载 JDBC 驱动程序 JAR 包的 URL，该 URL 由创建 JDBC 资源中的配置项 `driver_url` 指定。
 
 ### **创建和**管理**JDBC 资源**
 
@@ -313,7 +313,7 @@ properties (
   * Oracle： oracle.jdbc.driver.OracleDriver
   * PostgreSQL：org.postgresql.Driver
 
-成功创建资源后，在 FE 上通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 节点上下载的 JDBC 驱动程序 JAR 包的正确性。
+创建资源时，FE 通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 下载的 JDBC 驱动程序 JAR 包的正确性。
 
 > 说明：如果下载 JDBC 驱动程序失败，则创建资源也会失败。
 
