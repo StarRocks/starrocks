@@ -326,7 +326,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (modColumn.isKey()) {
+            if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
             if (modColumn.getAggregationType() != null) {
@@ -345,7 +345,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
-                        modColumn.getName());
+                modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
@@ -353,7 +353,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
-                        modColumn.getName());
+                modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
@@ -1182,7 +1182,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     addedTablets.add(shadowTablet);
 
                     schemaChangeJob.addTabletIdMap(partitionId, shadowIndexId, shadowTabletId, originTabletId);
-                    List<Replica> originReplicas = ((LocalTablet) originTablet).getReplicas();
+                    List<Replica> originReplicas = ((LocalTablet) originTablet).getImmutableReplicas();
 
                     int healthyReplicaNum = 0;
                     for (Replica originReplica : originReplicas) {
@@ -1556,7 +1556,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             ClearAlterTask alterTask = new ClearAlterTask(replica.getBackendId(), db.getId(),
                                     olapTable.getId(), partition.getId(), index.getId(), tablet.getId(), schemaHash);
                             batchTask.addTask(alterTask);
@@ -1681,7 +1681,7 @@ public class SchemaChangeHandler extends AlterHandler {
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                 int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                 for (Tablet tablet : index.getTablets()) {
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         Set<Pair<Long, Integer>> tabletIdWithHash =
                                 beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
                         tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));

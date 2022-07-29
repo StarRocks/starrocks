@@ -775,7 +775,7 @@ public class RestoreJob extends AbstractJob {
                     restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
+                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                     CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
@@ -872,7 +872,7 @@ public class RestoreJob extends AbstractJob {
                 LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
                 BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
                 LOG.debug("get tablet mapping: {} to {}, index {}", backupTabletInfo.id, localTablet.getId(), i);
-                for (Replica localReplica : localTablet.getReplicas()) {
+                for (Replica localReplica : localTablet.getImmutableReplicas()) {
                     IdChain src = new IdChain(remoteTblId, backupPartInfo.id, backupIdxInfo.id, backupTabletInfo.id,
                             -1L /* no replica id */);
                     IdChain dest = new IdChain(localTbl.getId(), localPartition.getId(),
@@ -935,7 +935,7 @@ public class RestoreJob extends AbstractJob {
                             restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                     for (Tablet restoreTablet : restoreIdx.getTablets()) {
                         GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                        for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
+                        for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                             GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                         }
                     }
@@ -953,7 +953,7 @@ public class RestoreJob extends AbstractJob {
                                 restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                         for (Tablet restoreTablet : restoreIdx.getTablets()) {
                             GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                            for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
+                            for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                                 GlobalStateMgr.getCurrentInvertedIndex()
                                         .addReplica(restoreTablet.getId(), restoreReplica);
                             }
@@ -1216,7 +1216,7 @@ public class RestoreJob extends AbstractJob {
                     // we also need to update the replica version of these overwritten restored partitions
                     for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : idx.getTablets()) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {
                                     replica.updateRowCount(part.getVisibleVersion(),
                                             replica.getDataSize(), replica.getRowCount());

@@ -91,7 +91,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
             for (Tablet tablet : index.getTablets()) {
                 LocalTablet localTablet = (LocalTablet) tablet;
                 long tabletId = tablet.getId();
-                if (localTablet.getReplicas().size() == 0) {
+                if (localTablet.getImmutableReplicas().size() == 0) {
                     List<Comparable> tabletInfo = new ArrayList<Comparable>();
                     tabletInfo.add(tabletId);
                     tabletInfo.add(-1); // replica id
@@ -117,7 +117,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
 
                     tabletInfos.add(tabletInfo);
                 } else {
-                    for (Replica replica : localTablet.getReplicas()) {
+                    for (Replica replica : localTablet.getImmutableReplicas()) {
                         if ((version > -1 && replica.getVersion() != version)
                                 || (backendId > -1 && replica.getBackendId() != backendId)
                                 || (state != null && replica.getState() != state)) {

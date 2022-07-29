@@ -1153,7 +1153,7 @@ public class ShowExecutor {
                         break;
                     }
 
-                    List<Replica> replicas = tablet.getReplicas();
+                    List<Replica> replicas = tablet.getImmutableReplicas();
                     for (Replica replica : replicas) {
                         Replica tmp = invertedIndex.getReplica(tabletId, replica.getBackendId());
                         if (tmp == null) {

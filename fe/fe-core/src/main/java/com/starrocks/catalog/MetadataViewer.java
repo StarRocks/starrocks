@@ -91,7 +91,7 @@ public class MetadataViewer {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         int count = replicationNum;
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             --count;
                             List<String> row = Lists.newArrayList();
 
@@ -225,7 +225,7 @@ public class MetadataViewer {
                 Partition partition = olapTable.getPartition(partId);
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             if (!countMap.containsKey(replica.getBackendId())) {
                                 continue;
                             }

@@ -406,7 +406,7 @@ public class MvTaskRunProcessorTest {
         MaterializedIndex baseIndex = partition.getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();
         for (Tablet tablet : tablets) {
-            List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
             for (Replica replica : replicas) {
                 replica.updateVersionInfo(version, -1, version);
             }

@@ -45,10 +45,11 @@ public abstract class AgentTask {
     // so whether the task is finished depends on caller's logic, not the value of this member.
     protected boolean isFinished = false;
     protected long createTime;
+    protected String traceParent;
 
     public AgentTask(TResourceInfo resourceInfo, long backendId, TTaskType taskType,
                      long dbId, long tableId, long partitionId, long indexId, long tabletId, long signature,
-                     long createTime) {
+                     long createTime, String traceParent) {
         this.backendId = backendId;
         this.signature = signature;
         this.taskType = taskType;
@@ -63,6 +64,14 @@ public abstract class AgentTask {
 
         this.failedTimes = 0;
         this.createTime = createTime;
+        this.traceParent = traceParent;
+    }
+
+    public AgentTask(TResourceInfo resourceInfo, long backendId, TTaskType taskType,
+                     long dbId, long tableId, long partitionId, long indexId, long tabletId, long signature,
+                     long createTime) {
+        this(resourceInfo, backendId, taskType, dbId, tableId, partitionId, indexId, tabletId, signature,
+                createTime, null);
     }
 
     public AgentTask(TResourceInfo resourceInfo, long backendId, TTaskType taskType,
@@ -137,6 +146,10 @@ public abstract class AgentTask {
 
     public boolean shouldResend(long currentTimeMillis) {
         return createTime == -1 || currentTimeMillis - createTime > Config.agent_task_resend_wait_time_ms;
+    }
+
+    public void setTraceParent(String traceParent) {
+        this.traceParent = traceParent;
     }
 
     @Override

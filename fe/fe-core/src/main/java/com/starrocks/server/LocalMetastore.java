@@ -291,7 +291,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (table.isLocalTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                     if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
                                         // set replica's schema hash
@@ -1325,7 +1325,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -1369,7 +1369,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -1682,7 +1682,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         TTabletType.TABLET_TYPE_LAKE);
                 tasks.add(task);
             } else {
-                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     CreateReplicaTask task = new CreateReplicaTask(
                             replica.getBackendId(),
                             dbId,
@@ -2452,7 +2452,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (table.isOlapTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
                             }
@@ -2486,7 +2486,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
                         if (tablet instanceof LocalTablet) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -4244,7 +4244,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (olapTable.isOlapTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
                             }
@@ -4500,7 +4500,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         if (olapTable.isOlapTable()) {
-                            List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                             for (Replica replica : replicas) {
                                 long backendId = replica.getBackendId();
                                 DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);

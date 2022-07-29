@@ -673,7 +673,7 @@ public class BackupJob extends AbstractJob {
      */
     private Replica chooseReplica(LocalTablet tablet, long visibleVersion) {
         List<Long> replicaIds = Lists.newArrayList();
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             replicaIds.add(replica.getId());
         }
 
