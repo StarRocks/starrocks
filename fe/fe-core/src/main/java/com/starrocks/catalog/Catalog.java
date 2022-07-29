@@ -192,6 +192,7 @@ import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
@@ -6874,7 +6875,7 @@ public class Catalog {
         if (partitions != null && partitions.size() > 0) {
             table.refreshPartCache(partitions);
         } else {
-            table.refreshTableCache();
+            table.refreshTableCache(dbName, tableName);
         }
     }
 
@@ -7512,6 +7513,26 @@ public class Catalog {
             pluginMgr.uninstallPlugin(pluginInfo.getName());
         } catch (Exception e) {
             LOG.warn("replay uninstall plugin failed.", e);
+        }
+    }
+
+    public void replayModifyHiveTableColumn(ModifyTableColumnOperationLog info) {
+        if (info.getDbName() == null) {
+            return;
+        }
+        String hiveExternalDb = info.getDbName();
+        String hiveExternalTable = info.getTableName();
+        LOG.info("replayModifyTableColumn hiveDb:{},hiveTable:{}", hiveExternalDb, hiveExternalTable);
+        List<Column> columns = info.getColumns();
+        Database db = getDb(hiveExternalDb);
+        HiveTable table;
+        db.writeLock();
+        try {
+            Table tbl = db.getTable(hiveExternalTable);
+            table = (HiveTable) tbl;
+            table.setNewFullSchema(columns);
+        } finally {
+            db.writeUnlock();
         }
     }
 
