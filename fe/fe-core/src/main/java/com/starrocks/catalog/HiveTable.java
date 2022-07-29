@@ -377,6 +377,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 throw new DdlException("Hive view table is not supported.");
             case "EXTERNAL_TABLE": // hive external table supported
             case "MANAGED_TABLE": // basic hive table supported
+            case "MATERIALIZED_VIEW": // hive materialized view table supported
                 break;
             default:
                 throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
