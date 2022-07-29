@@ -141,7 +141,7 @@ public class StatisticProcDir implements ProcDirInterface {
                                 }
 
                                 LocalTablet localTablet = (LocalTablet) tablet;
-                                dbReplicaNum += localTablet.getReplicas().size();
+                                dbReplicaNum += localTablet.getImmutableReplicas().size();
 
                                 Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
                                         infoService, partition.getVisibleVersion(),

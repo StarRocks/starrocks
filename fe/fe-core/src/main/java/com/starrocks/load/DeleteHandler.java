@@ -239,7 +239,7 @@ public class DeleteHandler implements Writable {
                 for (Partition partition : partitions) {
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
-                            totalReplicaNum += ((LocalTablet) tablet).getReplicas().size();
+                            totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
                         }
                     }
                 }
@@ -257,7 +257,7 @@ public class DeleteHandler implements Writable {
                             // set push type
                             TPushType type = TPushType.DELETE;
 
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 long replicaId = replica.getId();
                                 long backendId = replica.getBackendId();
                                 countDownLatch.addMark(backendId, tabletId);

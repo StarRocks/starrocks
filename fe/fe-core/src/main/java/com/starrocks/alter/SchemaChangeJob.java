@@ -301,7 +301,7 @@ public class SchemaChangeJob extends AlterJob {
                 long partitionId = partition.getId();
                 for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
-                        List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                         for (Replica replica : replicas) {
                             long backendId = replica.getBackendId();
                             ClearAlterTask clearAlterTask = new ClearAlterTask(backendId, dbId, tableId,
@@ -392,7 +392,7 @@ public class SchemaChangeJob extends AlterJob {
                         for (Tablet tablet : alterIndex.getTablets()) {
                             long tabletId = tablet.getId();
                             short replicaSendNum = 0;
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (replica.getState() != ReplicaState.SCHEMA_CHANGE) {
                                     // for now, all replica should be in SCHEMA_CHANGE,
                                     // because we don't allow tablet repair and balance during schema change.
@@ -479,7 +479,7 @@ public class SchemaChangeJob extends AlterJob {
                     }
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             if (replica.getState() == ReplicaState.CLONE
                                     || replica.getState() == ReplicaState.DECOMMISSION
                                     || replica.getState() == ReplicaState.NORMAL) {
@@ -650,7 +650,7 @@ public class SchemaChangeJob extends AlterJob {
                         }
 
                         for (Tablet tablet : materializedIndex.getTablets()) {
-                            List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
+                            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
                             List<Replica> errorReplicas = Lists.newArrayList();
                             int healthNum = replicas.size();
                             for (Replica replica : replicas) {
@@ -722,7 +722,7 @@ public class SchemaChangeJob extends AlterJob {
                         if (!this.partitionIdToFinishedIndexIds.containsKey(partitionId)
                                 || !this.partitionIdToFinishedIndexIds.get(partitionId).contains(indexId)) {
                             for (Tablet tablet : materializedIndex.getTablets()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     AgentTaskQueue.removeTask(replica.getBackendId(), TTaskType.SCHEMA_CHANGE,
                                             tablet.getId());
                                 }
@@ -760,7 +760,7 @@ public class SchemaChangeJob extends AlterJob {
                         Preconditions.checkState(materializedIndex.getState() == IndexState.SCHEMA_CHANGE);
                         for (Tablet tablet : materializedIndex.getTablets()) {
                             long tabletId = tablet.getId();
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (replica.getState() != ReplicaState.SCHEMA_CHANGE) {
                                     // all replicas should be in state SCHEMA_CHANGE
                                     cancelMsg = String.format(
@@ -877,7 +877,7 @@ public class SchemaChangeJob extends AlterJob {
                     MaterializedIndex index = partition.getIndex(entry.getKey());
                     // set state to SCHEMA_CHANGE
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             if (replica.getState() == ReplicaState.CLONE
                                     || replica.getState() == ReplicaState.DECOMMISSION) {
                                 // add log here, because there should no more CLONE replica when processing alter jobs.
@@ -917,7 +917,7 @@ public class SchemaChangeJob extends AlterJob {
                 for (Map.Entry<Long, Integer> entry : changedIndexIdToSchemaHash.entrySet()) {
                     MaterializedIndex index = partition.getIndex(entry.getKey());
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             replica.setState(ReplicaState.NORMAL);
                         }
                     }
@@ -1012,7 +1012,7 @@ public class SchemaChangeJob extends AlterJob {
                         continue;
                     }
                     for (Tablet tablet : index.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             if (replica.getState() == ReplicaState.CLONE
                                     || replica.getState() == ReplicaState.DECOMMISSION
                                     || replica.getState() == ReplicaState.NORMAL) {

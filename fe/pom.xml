@@ -594,7 +594,6 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-common</artifactId>
                 <version>${hadoop.version}</version>
-                <scope>provided</scope>
                 <exclusions>
                     <exclusion>
                         <artifactId>zookeeper</artifactId>
@@ -725,6 +724,14 @@ under the License.
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <!-- https://mvnrepository.com/artifact/mysql/mysql-connector-java -->
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>5.1.38</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 

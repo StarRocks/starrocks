@@ -1,7 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-package com.starrocks.pseudocluster;
+package com.starrocks.transaction;
 
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.common.Config;
+import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -11,11 +12,12 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Random;
 
-public class PseudoClusterTest {
+public class NewPublishTest {
     @BeforeClass
     public static void setUp() throws Exception {
         int fePort = new Random().nextInt(10000) + 50000;
         PseudoCluster.getOrCreate("pseudo_cluster", fePort, 3);
+        Config.enable_new_publish_mechanism = true;
     }
 
     @AfterClass
@@ -24,14 +26,7 @@ public class PseudoClusterTest {
     }
 
     @Test
-    public void testGetBackend() throws Exception {
-        for (int i = 0; i < 3; i++) {
-            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
-        }
-    }
-
-    @Test
-    public void testCreateTabletAndInsert() throws Exception {
+    public void testInsertUsingNewPublish() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {

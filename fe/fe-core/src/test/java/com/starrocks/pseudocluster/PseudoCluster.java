@@ -17,6 +17,9 @@ import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,6 +27,8 @@ public class PseudoCluster {
     private static final Logger LOG = LogManager.getLogger(PseudoCluster.class);
 
     private static volatile PseudoCluster instance;
+
+    int queryPort;
 
     PseudoFrontend frontend;
     Map<String, PseudoBackend> backends;
@@ -75,6 +80,17 @@ public class PseudoCluster {
         return backends.get(backendIdToHost.get(beId));
     }
 
+    public Connection getQueryConnection() throws SQLException {
+        Connection connection = DriverManager.getConnection(
+                "jdbc:mysql://localhost:" + queryPort + "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false",
+                "root",
+                "");
+        return connection;
+    }
+
+    public void shutdown() {
+    }
+
     /**
      * build cluster at specified dir
      *
@@ -83,8 +99,9 @@ public class PseudoCluster {
      * @return PseudoCluster
      * @throws Exception
      */
-    private static PseudoCluster build(String runDir, int numBackends) throws Exception {
+    private static PseudoCluster build(String runDir, int queryPort, int numBackends) throws Exception {
         PseudoCluster cluster = new PseudoCluster();
+        cluster.queryPort = queryPort;
         cluster.frontend = PseudoFrontend.getInstance();
 
         ClientPool.heartbeatPool = cluster.heartBeatPool;
@@ -95,6 +112,7 @@ public class PseudoCluster {
         Map<String, String> feConfMap = Maps.newHashMap();
 
         feConfMap.put("tablet_create_timeout_second", "10");
+        feConfMap.put("query_port", Integer.toString(queryPort));
         cluster.frontend.init(runDir + "/fe", feConfMap);
         cluster.frontend.start(new String[0]);
 
@@ -115,20 +133,25 @@ public class PseudoCluster {
                 retry++ < 600) {
             Thread.sleep(100);
         }
+        Thread.sleep(2000);
         return cluster;
     }
 
-    public static synchronized PseudoCluster getOrCreate(String runDir, int numBackends) throws Exception {
+    public static synchronized PseudoCluster getOrCreate(String runDir, int queryPort, int numBackends) throws Exception {
         if (instance == null) {
-            instance = build(runDir, numBackends);
+            instance = build(runDir, queryPort, numBackends);
         }
+        return instance;
+    }
+
+    public static synchronized PseudoCluster getInstance() {
         return instance;
     }
 
     public static void main(String[] args) throws Exception {
         String currentPath = new java.io.File(".").getCanonicalPath();
         String runDir = currentPath + "/pseudo_cluster";
-        PseudoCluster cluster = PseudoCluster.getOrCreate(runDir, 3);
+        PseudoCluster cluster = PseudoCluster.getOrCreate(runDir, 9030, 3);
         for (int i = 0; i < 3; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
         }

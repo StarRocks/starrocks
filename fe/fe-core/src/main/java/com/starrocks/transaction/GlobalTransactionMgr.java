@@ -430,14 +430,21 @@ public class GlobalTransactionMgr implements Writable {
         dbTransactionMgr.abortTransaction(label, reason);
     }
 
-    /*
+    /**
      * get all txns which is ready to publish
      * a ready-to-publish txn's partition's visible version should be ONE less than txn's commit version.
+     *
+     * @param nodep if true, only get txns without dependencies
+     * @return list of txn state
      */
-    public List<TransactionState> getReadyToPublishTransactions() {
+    public List<TransactionState> getReadyToPublishTransactions(boolean nodep) {
         List<TransactionState> transactionStateList = Lists.newArrayList();
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
-            transactionStateList.addAll(dbTransactionMgr.getCommittedTxnList());
+            if (nodep) {
+                transactionStateList.addAll(dbTransactionMgr.getReadyToPublishTxnList());
+            } else {
+                transactionStateList.addAll(dbTransactionMgr.getCommittedTxnList());
+            }
         }
         return transactionStateList;
     }
@@ -470,6 +477,11 @@ public class GlobalTransactionMgr implements Writable {
     public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds);
+    }
+
+    public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws UserException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnState.getDbId());
+        dbTransactionMgr.finishTransactionNew(txnState, publishErrorReplicas);
     }
 
     public boolean canTxnFinished(TransactionState txn, Set<Long> errReplicas,
