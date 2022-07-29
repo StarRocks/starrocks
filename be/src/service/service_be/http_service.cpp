@@ -156,7 +156,7 @@ Status HttpServiceBE::start() {
     }
 
     MetaAction* meta_action = new MetaAction(HEADER);
-    _ev_http_server->register_handler(HttpMethod::GET, "/api/meta/header/{tablet_id}/{schema_hash}", meta_action);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/meta/header/{tablet_id}", meta_action);
     _http_handlers.emplace_back(meta_action);
 
 #ifndef BE_TEST

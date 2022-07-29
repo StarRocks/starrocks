@@ -128,7 +128,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(tabletId);
                         tabletInfo.add(replica.getId());
                         tabletInfo.add(replica.getBackendId());
-                        tabletInfo.add(replica.getSchemaHash());
+                        tabletInfo.add(Replica.DEPRECATED_PROP_SCHEMA_HASH);
                         tabletInfo.add(replica.getVersion());
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getLastSuccessVersion());
@@ -144,22 +144,20 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(localTablet.getCheckedVersion());
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
-                        tabletInfo.add(replica.getPathHash());
+                        tabletInfo.add(Replica.DEPRECATED_PROP_PATH_HASH);
                         Backend backend = backendMap.get(replica.getBackendId());
                         String metaUrl;
                         String compactionUrl;
                         if (backend != null) {
-                            metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
+                            metaUrl = String.format("http://%s:%d/api/meta/header/%d",
                                     backend.getHost(),
                                     backend.getHttpPort(),
-                                    tabletId,
-                                    replica.getSchemaHash());
+                                    tabletId);
                             compactionUrl = String.format(
-                                    "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
+                                    "http://%s:%d/api/compaction/show?tablet_id=%d",
                                     backend.getHost(),
                                     backend.getHttpPort(),
-                                    tabletId,
-                                    replica.getSchemaHash());
+                                    tabletId);
                         } else {
                             metaUrl = "N/A";
                             compactionUrl = "N/A";

@@ -1126,6 +1126,7 @@ void TabletManager::_build_tablet_stat() {
                 stat.__set_data_size(tablet->tablet_footprint());
                 stat.__set_row_num(tablet->num_rows());
             }
+            stat.__set_version_count(tablet->version_count());
             _tablet_stat_cache.emplace(tablet_id, stat);
         }
     }
