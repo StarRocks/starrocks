@@ -278,7 +278,7 @@ The required parameters in `properties` are as follows:
   * Oracle: oracle.jdbc.driver.OracleDriver
   * PostgreSQL: org.postgresql.Driver
 
-When the resource is being created, the FEs download the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, generates a checksum, and saves the checksum to verify the correctness of the JDBC driver JAR package downloaded by BEs.
+When the resource is being created, the FEs download the JDBC driver JAR package by using the URL that is specified in the `driver_url` parameter, generates a checksum, and uses the checksum to verify the JDBC driver downloaded by BEs.
 
 > Note: If the download of  the JDBC driver JAR package fails, the creation of the resource also fails.
 
