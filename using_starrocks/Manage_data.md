@@ -14,7 +14,7 @@ Catalog（数据目录）用于管理数据。StarRocks 2.3 及以上版本提�
 2. 在所有 FE 和 BE 机器上执行 `kinit -kt keytab_path principal` 命令登录。注意使用该命令登录是有实效性的，所以需要将该命令放入 crontab 中定期执行。登录用户需要有访问 Hive 集群和 HDFS 集群的权限。
 3. 把 Hadoop 集群中的 **hive-site.xml**、**core-site.xml** 和 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 下，再把 **core-site.xml** 和 **hdfs-site.xml** 文件放到每个 BE 的 **$BE_HOME/conf** 下。
 4. 在每个 **$BE_HOME/conf/be.conf** 和每个 **$FE_HOME/conf/fe.conf** 文件中设置`JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`和`JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"`，其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径。
-5. 将 Hive 节点域名和 IP 的映射关系，以及 HDFS 节点域名和 IP 的映射关系配置到 **/etc/hosts** 路径中。注意 Hive 资源的 Hive metastore URI 需使用如下格式：`thrift://<Hive元数据的IP地址>:<端口号>`，例如`"hive.metastore.uris" = "thrift://10.10.44.98:9083"`。
+5. 将 Hive 节点域名和 IP 的映射关系，以及 HDFS 节点域名和 IP 的映射关系配置到 **/etc/hosts** 路径中。
 
 ## 创建 external catalog
 
@@ -43,7 +43,7 @@ PROPERTIES(
 | **参数**            | **描述**                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | type                | 数据源类型，取值为 `hive`。                                  |
-| hive.metastore.uris | Hive metastore 的 URI。格式为 `thrift://<``Hive元数据的IP地址``>:<端口号``>`，端口号默认为 9083。 |
+| hive.metastore.uris | Hive metastore 的 URI。格式为 `thrift://<Hive元数据的IP地址>:<端口号>`，端口号默认为 9083。|
 
 ## 查询数据
 
