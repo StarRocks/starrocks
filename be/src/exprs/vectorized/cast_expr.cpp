@@ -152,7 +152,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
             }
-            CHECK(false) << "not supported type " << FromType;
+            DCHECK(false) << "not supported type " << FromType;
         }
         if (overflow || value.is_null()) {
             if constexpr (AllowThrowException) {
@@ -205,7 +205,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 if constexpr (AllowThrowException) {
                     THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
                 }
-                CHECK(false) << "unreachable type " << ToType;
+                DCHECK(false) << "unreachable type " << ToType;
                 __builtin_unreachable();
             }
             if (ok) {
