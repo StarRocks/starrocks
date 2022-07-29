@@ -1651,11 +1651,14 @@ public class GlobalStateMgr {
             LOG.info("skip replay journal because {} <= {}", toJournalId, replayedJournalId.get());
             return;
         }
+
+        long startJournalId = replayedJournalId.get() + 1;
         long replayStartTime = System.currentTimeMillis();
-        LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
+        LOG.info("start to replay journal from {} to {}", startJournalId, toJournalId);
+
         JournalCursor cursor = null;
         try {
-            cursor = journal.read(replayedJournalId.get() + 1, toJournalId);
+            cursor = journal.read(startJournalId, toJournalId);
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
@@ -1674,8 +1677,9 @@ public class GlobalStateMgr {
                     "should replay to %d but actual replayed journal id is %d",
                     toJournalId, replayedJournalId.get()));
         }
-        long replayEndTime = System.currentTimeMillis();
-        LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
+
+        long replayInterval = System.currentTimeMillis() - replayStartTime;
+        LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
 
     /**
