@@ -460,12 +460,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         List<Runnable> finalRunnableList = runnableList;
-        return new Runnable() {
-            @Override
-            public void run() {
-                for (Runnable r : finalRunnableList) {
-                    r.run();
-                }
+        return () -> {
+            for (Runnable r : finalRunnableList) {
+                r.run();
             }
         };
     }

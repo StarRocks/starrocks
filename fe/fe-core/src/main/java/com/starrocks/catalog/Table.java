@@ -427,6 +427,7 @@ public class Table extends MetaObject implements Writable {
      * onCreate is called when this table is created
      */
     public void onCreate() {
+        // Do nothing by default.
     }
 
     /**
@@ -438,6 +439,7 @@ public class Table extends MetaObject implements Writable {
      * @param replay is this is a log replay operation
      */
     public void onDrop(Database db, boolean force, boolean replay) {
+        // Do nothing by default.
     }
 
     /**

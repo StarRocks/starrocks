@@ -385,7 +385,6 @@ public class Database extends MetaObject implements Writable {
     public Runnable unprotectDropTable(long tableId, boolean isForceDrop,
                                        boolean isReplay) {
         Runnable runnable = null;
-        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
         Table table = getTable(tableId);
         // delete from db meta
         if (table == null) {

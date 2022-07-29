@@ -1861,7 +1861,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                             ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
                         }
                     }
-                    if (partTask.getAllTasks().size() > 0) {
+                    if (!partTask.getAllTasks().isEmpty()) {
                         AgentTaskExecutor.submit(partTask);
                     }
                 } else {
