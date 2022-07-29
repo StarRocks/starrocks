@@ -249,6 +249,9 @@ int JsonValue::compare(const Slice& lhs, const Slice& rhs) {
 }
 
 int64_t JsonValue::hash() const {
+    if (binary_.empty()) {
+        return 0;
+    }
     return to_vslice().normalizedHash();
 }
 

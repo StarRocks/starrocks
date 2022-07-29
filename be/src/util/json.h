@@ -304,6 +304,11 @@ struct not_equal_to<starrocks::JsonValue> {
     }
 };
 
+template <>
+struct hash<starrocks::JsonValue> {
+    size_t operator()(const starrocks::JsonValue& value) const { return value.hash(); }
+    size_t operator()(const starrocks::JsonValue* value) const { return value->hash(); }
+};
 DIAGNOSTIC_POP
 
 } // namespace std

@@ -26,6 +26,7 @@ namespace starrocks::vectorized {
     M(phase1_string)                      \
     M(phase1_slice)                       \
     M(phase1_slice_two_level)             \
+    M(phase1_json)                        \
     M(phase1_int32_two_level)             \
     M(phase2_uint8)                       \
     M(phase2_int8)                        \
@@ -42,6 +43,7 @@ namespace starrocks::vectorized {
     M(phase2_slice)                       \
     M(phase2_slice_two_level)             \
     M(phase2_int32_two_level)             \
+    M(phase2_json)                        \
     M(phase1_slice_fx4)                   \
     M(phase1_slice_fx8)                   \
     M(phase1_slice_fx16)                  \
@@ -75,67 +77,9 @@ namespace starrocks::vectorized {
     M(phase2_null_timestamp)          \
     M(phase2_null_string)
 
-#define APPLY_FOR_AGG_VARIANT_ALL(M) \
-    M(phase1_uint8)                  \
-    M(phase1_int8)                   \
-    M(phase1_int16)                  \
-    M(phase1_int32)                  \
-    M(phase1_int64)                  \
-    M(phase1_int128)                 \
-    M(phase1_decimal32)              \
-    M(phase1_decimal64)              \
-    M(phase1_decimal128)             \
-    M(phase1_date)                   \
-    M(phase1_timestamp)              \
-    M(phase1_string)                 \
-    M(phase1_slice)                  \
-    M(phase1_null_uint8)             \
-    M(phase1_null_int8)              \
-    M(phase1_null_int16)             \
-    M(phase1_null_int32)             \
-    M(phase1_null_int64)             \
-    M(phase1_null_int128)            \
-    M(phase1_null_decimal32)         \
-    M(phase1_null_decimal64)         \
-    M(phase1_null_decimal128)        \
-    M(phase1_null_date)              \
-    M(phase1_null_timestamp)         \
-    M(phase1_null_string)            \
-    M(phase1_slice_two_level)        \
-    M(phase1_int32_two_level)        \
-    M(phase2_uint8)                  \
-    M(phase2_int8)                   \
-    M(phase2_int16)                  \
-    M(phase2_int32)                  \
-    M(phase2_int64)                  \
-    M(phase2_int128)                 \
-    M(phase2_decimal32)              \
-    M(phase2_decimal64)              \
-    M(phase2_decimal128)             \
-    M(phase2_date)                   \
-    M(phase2_timestamp)              \
-    M(phase2_string)                 \
-    M(phase2_slice)                  \
-    M(phase2_null_uint8)             \
-    M(phase2_null_int8)              \
-    M(phase2_null_int16)             \
-    M(phase2_null_int32)             \
-    M(phase2_null_int64)             \
-    M(phase2_null_int128)            \
-    M(phase2_null_decimal32)         \
-    M(phase2_null_decimal64)         \
-    M(phase2_null_decimal128)        \
-    M(phase2_null_date)              \
-    M(phase2_null_timestamp)         \
-    M(phase2_null_string)            \
-    M(phase2_slice_two_level)        \
-    M(phase2_int32_two_level)        \
-    M(phase1_slice_fx4)              \
-    M(phase1_slice_fx8)              \
-    M(phase1_slice_fx16)             \
-    M(phase2_slice_fx4)              \
-    M(phase2_slice_fx8)              \
-    M(phase2_slice_fx16)
+#define APPLY_FOR_AGG_VARIANT_ALL(M)  \
+    APPLY_FOR_AGG_VARIANT_NOT_NULL(M) \
+    APPLY_FOR_AGG_VARIANT_NULL(M)
 
 // Hash maps for phase1
 template <PhmapSeed seed>
@@ -202,6 +146,9 @@ using SerializedKeyTwoLevelAggHashMap = AggHashMapWithSerializedKey<SliceAggTwoL
 template <PhmapSeed seed>
 using Int32TwoLevelAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_INT, Int32AggTwoLevelHashMap<seed>>;
 
+template <PhmapSeed seed>
+using JsonKeyAggHashMap = AggHashMapWithJsonKey<JsonAggHashMap<seed>>;
+
 // fixed slice key type.
 template <PhmapSeed seed>
 using SerializedKeyFixedSize4AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize4SliceAggHashMap<seed>>;
@@ -250,6 +197,7 @@ struct AggHashMapVariant {
         phase1_null_string,
         phase1_slice,
         phase1_slice_two_level,
+        phase1_json,
         phase1_int32_two_level,
 
         phase1_slice_fx4,
@@ -282,6 +230,7 @@ struct AggHashMapVariant {
         phase2_null_string,
         phase2_slice,
         phase2_slice_two_level,
+        phase2_json,
         phase2_int32_two_level,
 
         phase2_slice_fx4,
@@ -303,6 +252,7 @@ struct AggHashMapVariant {
     std::unique_ptr<DateAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_date;
     std::unique_ptr<TimeStampAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_timestamp;
     std::unique_ptr<OneStringAggHashMap<PhmapSeed1>> phase1_string;
+    std::unique_ptr<JsonKeyAggHashMap<PhmapSeed1>> phase1_json;
 
     std::unique_ptr<NullUInt8AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_uint8;
     std::unique_ptr<NullInt8AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int8;
@@ -318,6 +268,7 @@ struct AggHashMapVariant {
     std::unique_ptr<NullDateAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_date;
     std::unique_ptr<NullTimeStampAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_timestamp;
     std::unique_ptr<NullOneStringAggHashMap<PhmapSeed1>> phase1_null_string;
+    std::unique_ptr<JsonKeyAggHashMap<PhmapSeed1>> phase1_null_json;
     std::unique_ptr<SerializedKeyAggHashMap<PhmapSeed1>> phase1_slice;
     std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed1>> phase1_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_int32_two_level;
@@ -340,6 +291,7 @@ struct AggHashMapVariant {
     std::unique_ptr<DateAggHashMapWithOneNumberKey<PhmapSeed2>> phase2_date;
     std::unique_ptr<TimeStampAggHashMapWithOneNumberKey<PhmapSeed2>> phase2_timestamp;
     std::unique_ptr<OneStringAggHashMap<PhmapSeed2>> phase2_string;
+    std::unique_ptr<JsonKeyAggHashMap<PhmapSeed2>> phase2_json;
     std::unique_ptr<NullUInt8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_uint8;
     std::unique_ptr<NullInt8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_int8;
     std::unique_ptr<NullInt16AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_int16;
@@ -492,6 +444,9 @@ using SerializedTwoLevelKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggTwoLev
 template <PhmapSeed seed>
 using Int32TwoLevelAggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_INT, Int32AggTwoLevelHashSet<seed>>;
 
+template <PhmapSeed seed>
+using JsonKeyAggHashSet = AggHashSetOfJsonKey<JsonAggHashSet<seed>>;
+
 // For fixed slice type.
 template <PhmapSeed seed>
 using SerializedKeyAggHashSetFixedSize4 = AggHashSetOfSerializedKeyFixedSize<FixedSize4SliceAggHashSet<seed>>;
@@ -538,6 +493,7 @@ struct AggHashSetVariant {
         phase1_null_string,
         phase1_slice,
         phase1_slice_two_level,
+        phase1_json,
         phase1_int32_two_level,
         phase2_uint8,
         phase2_int8,
@@ -565,6 +521,7 @@ struct AggHashSetVariant {
         phase2_null_string,
         phase2_slice,
         phase2_slice_two_level,
+        phase2_json,
         phase2_int32_two_level,
 
         phase1_slice_fx4,
@@ -590,6 +547,7 @@ struct AggHashSetVariant {
     std::unique_ptr<DateAggHashSetOfOneNumberKey<PhmapSeed1>> phase1_date;
     std::unique_ptr<TimeStampAggHashSetOfOneNumberKey<PhmapSeed1>> phase1_timestamp;
     std::unique_ptr<OneStringAggHashSet<PhmapSeed1>> phase1_string;
+    std::unique_ptr<JsonKeyAggHashSet<PhmapSeed1>> phase1_json;
 
     std::unique_ptr<NullUInt8AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_null_uint8;
     std::unique_ptr<NullInt8AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_null_int8;
@@ -624,6 +582,7 @@ struct AggHashSetVariant {
     std::unique_ptr<DateAggHashSetOfOneNumberKey<PhmapSeed2>> phase2_date;
     std::unique_ptr<TimeStampAggHashSetOfOneNumberKey<PhmapSeed2>> phase2_timestamp;
     std::unique_ptr<OneStringAggHashSet<PhmapSeed2>> phase2_string;
+    std::unique_ptr<JsonKeyAggHashSet<PhmapSeed2>> phase2_json;
 
     std::unique_ptr<NullUInt8AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_null_uint8;
     std::unique_ptr<NullInt8AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_null_int8;

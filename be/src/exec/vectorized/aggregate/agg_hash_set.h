@@ -34,6 +34,8 @@ using TimeStampAggHashSet = phmap::flat_hash_set<TimestampValue, StdHashWithSeed
 template <PhmapSeed seed>
 using SliceAggHashSet =
         phmap::flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>>;
+template <PhmapSeed seed>
+using JsonAggHashSet = phmap::flat_hash_set<JsonValue*, std::hash<JsonValue>>;
 
 // ==================
 // one level fixed size slice hash set
@@ -534,6 +536,53 @@ struct AggHashSetOfSerializedKeyFixedSize {
     std::vector<Slice> tmp_slices;
 
     int32_t _chunk_size;
+};
+
+template <typename HashSet>
+struct AggHashSetOfJsonKey {
+    using Iterator = typename HashSet::iterator;
+    using KeyType = typename HashSet::key_type;
+    using ResultVector = typename std::vector<JsonValue*>;
+    static constexpr bool has_single_null_key = false;
+
+    HashSet hash_set;
+    ResultVector results;
+
+    AggHashSetOfJsonKey(int32_t chunk_size) {}
+
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
+        auto* column = ColumnHelper::as_raw_column<JsonColumn>(key_columns[0]);
+
+        size_t row_num = column->size();
+        for (size_t i = 0; i < row_num; ++i) {
+            auto tmp = column->get_object(i);
+            KeyType key(tmp);
+
+            hash_set.lazy_emplace(key, [&](const auto& ctor) {
+                // we must persist the slice before insert
+                uint8_t* pos = pool->allocate(key.size);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+            });
+        }
+    }
+
+    // Elements queried in HashSet will be added to HashSet
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    void build_set(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        auto* column = ColumnHelper::as_raw_column<JsonColumn>(key_columns[0]);
+        not_founds->assign(chunk_size, 0);
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            auto key = column->get_object(i);
+            (*not_founds)[i] = !hash_set.contains(key);
+        }
+    }
+
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
+        CHECK(false) << "TODO";
+    }
 };
 
 } // namespace starrocks::vectorized

@@ -44,6 +44,8 @@ template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
 template <PhmapSeed seed>
 using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual>;
+template <PhmapSeed seed>
+using JsonAggHashMap = phmap::flat_hash_map<JsonValue*, AggDataPtr, std::hash<JsonValue>, std::equal_to<JsonValue>>;
 
 // ==================
 // one level fixed size slice hash map
@@ -819,6 +821,60 @@ struct AggHashMapWithSerializedKeyFixedSize {
     std::vector<Slice> tmp_slices;
 
     int32_t _chunk_size;
+};
+
+template <typename HashMap>
+struct AggHashMapWithJsonKey {
+    using KeyType = typename HashMap::key_type;
+    using Iterator = typename HashMap::iterator;
+    using ResultVector = typename std::vector<JsonValue*>;
+    static constexpr bool has_single_null_key = false;
+
+    HashMap hash_map;
+
+    AggHashMapWithJsonKey(int32_t chunk_size) {}
+
+    AggDataPtr get_null_key_data() { return nullptr; }
+
+    template <typename Func>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states) {
+        auto column = down_cast<JsonColumn*>(key_columns[0].get());
+
+        size_t num_rows = column->size();
+        for (size_t i = 0; i < num_rows; i++) {
+            auto key = column->get_object(i);
+            Slice key_slice = key->get_slice();
+            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                uint8_t* pos = pool->allocate(key_slice.size);
+                strings::memcpy_inlined(pos, key_slice.data, key_slice.size);
+                Slice pk{pos, key_slice.size};
+                AggDataPtr pv = allocate_func(pk);
+                ctor(pk, pv);
+            });
+            (*agg_states)[i] = iter->second;
+        }
+    }
+
+    // Elements queried in HashMap will be added to HashMap,
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    template <typename Func>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+        auto* column = ColumnHelper::as_raw_column<JsonColumn>(key_columns[0]);
+        not_founds->assign(chunk_size, 0);
+
+        for (size_t i = 0; i < chunk_size; i++) {
+            auto key = column->get_object(i);
+            if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+                (*agg_states)[i] = iter->second;
+            } else {
+                (*not_founds)[i] = 1;
+            }
+        }
+    }
+
 };
 
 } // namespace starrocks::vectorized
