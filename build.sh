@@ -107,6 +107,9 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
+	ENABLE_QUERY_DEBUG_TRACE=OFF
+fi
 
 
 HELP=0
@@ -162,6 +165,7 @@ echo "Get params:
     USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
 "
 
 # Clean and build generated code
@@ -208,11 +212,13 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
                     -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
+                    -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
                     -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
     else
       ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
@@ -222,6 +228,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
                     -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                    -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}

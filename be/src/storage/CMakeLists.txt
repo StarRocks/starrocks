@@ -158,9 +158,11 @@ add_library(Storage STATIC
     base_and_cumulative_compaction_policy.cpp
     cluster_id_mgr.cpp
     lake/async_delta_writer.cpp
+    lake/compaction_policy.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/fixed_location_provider.cpp
+    lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
     lake/starlet_location_provider.cpp

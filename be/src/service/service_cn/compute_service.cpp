@@ -21,49 +21,10 @@
 
 #include "compute_service.h"
 
-#include <arrow/record_batch.h>
-#include <thrift/concurrency/ThreadFactory.h>
-#include <thrift/processor/TMultiplexedProcessor.h>
-
-#include <memory>
-
-#include "common/config.h"
-#include "common/logging.h"
-#include "common/status.h"
-#include "gen_cpp/TStarrocksExternalService.h"
-#include "runtime/data_stream_mgr.h"
-#include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/external_scan_context_mgr.h"
-#include "runtime/fragment_mgr.h"
-#include "runtime/result_buffer_mgr.h"
-#include "runtime/result_queue_mgr.h"
-#include "runtime/routine_load/routine_load_task_executor.h"
-#include "storage/storage_engine.h"
-#include "util/blocking_queue.hpp"
-#include "util/thrift_server.h"
-
 namespace starrocks {
-
-using apache::thrift::TProcessor;
-using apache::thrift::concurrency::ThreadFactory;
 
 ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
 
-Status ComputeService::create_service(ExecEnv* exec_env, int port, ThriftServer** server) {
-    std::shared_ptr<ComputeService> handler(new ComputeService(exec_env));
-    // TODO: do we want a BoostThreadFactory?
-    // TODO: we want separate thread factories here, so that fe requests can't starve
-    // cn requests
-    std::shared_ptr<ThreadFactory> thread_factory(new ThreadFactory());
-
-    std::shared_ptr<TProcessor> cn_processor(new BackendServiceProcessor(handler));
-
-    *server = new ThriftServer("computer", cn_processor, port, exec_env->metrics(), config::be_service_threads);
-
-    LOG(INFO) << "StarRocksInternalService listening on " << port;
-
-    return Status::OK();
-}
+ComputeService::~ComputeService() = default;
 
 } // namespace starrocks

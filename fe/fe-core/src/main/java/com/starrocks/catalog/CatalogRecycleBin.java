@@ -29,7 +29,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -37,8 +36,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.lang.Math.max;
 
-public class CatalogRecycleBin extends MasterDaemon implements Writable {
+public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
@@ -106,7 +106,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
     public synchronized boolean recycleDatabase(Database db, Set<String> tableNames) {
         if (idToDatabase.containsKey(db.getId())) {
-            LOG.error("db[{}-{}] already in recycle bin.", db.getId(), db.getFullName());
+            LOG.error("db[{}-{}] already in recycle bin.", db.getId(), db.getOriginName());
             return false;
         }
 
@@ -120,7 +120,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
         RecycleDatabaseInfo databaseInfo = new RecycleDatabaseInfo(db, tableNames);
         idToDatabase.put(db.getId(), databaseInfo);
         idToRecycleTime.put(db.getId(), System.currentTimeMillis());
-        LOG.info("recycle db[{}-{}]", db.getId(), db.getFullName());
+        LOG.info("recycle db[{}-{}]", db.getId(), db.getOriginName());
         return true;
     }
 
@@ -282,7 +282,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
 
                 GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
-                LOG.info("erase db[{}-{}] finished", db.getId(), db.getFullName());
+                LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
@@ -655,7 +655,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
                         if (table.isLocalTable()) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -710,7 +710,7 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
                     if (olapTable.isLocalTable()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }

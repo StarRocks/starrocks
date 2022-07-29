@@ -9,11 +9,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -85,7 +82,6 @@ public class TaskRun implements Comparable<TaskRun> {
         TaskRunContext taskRunContext = new TaskRunContext();
         taskRunContext.setDefinition(status.getDefinition());
         runCtx = new ConnectContext(null);
-        runCtx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
@@ -93,19 +89,17 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+        runCtx.resetSessionVariable();
         if (properties != null) {
             for (String key : properties.keySet()) {
                 try {
-                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(properties.get(key))),
-                            true);
+                    runCtx.modifySessionVariable(new SetVar(key, new StringLiteral(properties.get(key))), true);
                 } catch (DdlException e) {
                     // not session variable
                     taskRunContextProperties.put(key, properties.get(key));
                 }
             }
         }
-        runCtx.setSessionVariable(sessionVariable);
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);

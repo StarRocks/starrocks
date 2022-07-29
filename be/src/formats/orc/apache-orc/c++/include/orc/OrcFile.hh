@@ -127,20 +127,23 @@ public:
 /**
    * Create a stream to a local file or HDFS file if path begins with "hdfs://"
    * @param path the name of the file in the local file system or HDFS
+   * @param metrics the metrics of the reader
    */
-ORC_UNIQUE_PTR<InputStream> readFile(const std::string& path);
+ORC_UNIQUE_PTR<InputStream> readFile(const std::string& path, ReaderMetrics* metrics = nullptr);
 
 /**
    * Create a stream to a local file.
    * @param path the name of the file in the local file system
+   * @param metrics the metrics of the reader
    */
-ORC_UNIQUE_PTR<InputStream> readLocalFile(const std::string& path);
+ORC_UNIQUE_PTR<InputStream> readLocalFile(const std::string& path, ReaderMetrics* metrics = nullptr);
 
 /**
    * Create a stream to an HDFS file.
    * @param path the uri of the file in HDFS
+   * @param metrics the metrics of the reader
    */
-ORC_UNIQUE_PTR<InputStream> readHdfsFile(const std::string& path);
+ORC_UNIQUE_PTR<InputStream> readHdfsFile(const std::string& path, ReaderMetrics* metrics = nullptr);
 
 /**
    * Create a reader to read the ORC file.

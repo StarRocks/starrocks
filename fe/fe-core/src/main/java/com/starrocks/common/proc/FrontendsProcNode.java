@@ -46,7 +46,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("IP").add("EditLogPort").add("HttpPort").add("QueryPort").add("RpcPort")
-            .add("Role").add("IsMaster").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
+            .add("Role").add("ClusterId").add("Join").add("Alive").add("ReplayedJournalId")
             .add("LastHeartbeat").add("IsHelper").add("ErrMsg").add("StartTime").add("Version")
             .build();
 
@@ -73,9 +73,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     public static void getFrontendsInfo(GlobalStateMgr globalStateMgr, List<List<String>> infos) {
-        String masterIp = GlobalStateMgr.getCurrentState().getMasterIp();
-        if (masterIp == null) {
-            masterIp = "";
+        String leaderIp = GlobalStateMgr.getCurrentState().getLeaderIp();
+        if (leaderIp == null) {
+            leaderIp = "";
         }
 
         // get all node which are joined in bdb group
@@ -100,13 +100,11 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(Integer.toString(fe.getRpcPort()));
             }
 
-            // set Role and isMaster field
-            if (fe.getHost().equals(masterIp)) {
-                info.add(FrontendNodeType.MASTER.name());
-                info.add("true");
+
+            if (fe.getHost().equals(leaderIp)) {
+                info.add(FrontendNodeType.LEADER.toString());
             } else {
                 info.add(fe.getRole().name());
-                info.add("false");
             }
 
             info.add(Integer.toString(globalStateMgr.getClusterId()));

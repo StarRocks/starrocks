@@ -1,5 +1,17 @@
 # StarRocks version 2.2
 
+## 2.2.3
+
+Release date: July 24, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- An error occurs when users delete a resource group. [#8036](https://github.com/StarRocks/starrocks/pull/8036)
+- Thrift server exits when the number of threads is insufficient. [#7974](https://github.com/StarRocks/starrocks/pull/7974)
+- In some scenarios, join reorder in CBO returns no results. [#7099](https://github.com/StarRocks/starrocks/pull/7099) [#7831](https://github.com/StarRocks/starrocks/pull/7831) [#6866](https://github.com/StarRocks/starrocks/pull/6866)
+
 ## 2.2.2
 
 Release date: June 29, 2022

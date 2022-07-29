@@ -153,6 +153,11 @@ Status ArrayColumnIterator::next_batch(const vectorized::SparseRange& range, vec
 
         RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _array_size_iterator->element_ordinal();
+        // if array column in nullable or element of array is empty, element_read_range may be empty.
+        // so we should reseek the element_ordinal
+        if (element_read_range.span_size() == 0) {
+            _element_iterator->seek_to_ordinal(element_ordinal);
+        }
         // 2. Read offset column
         // [1, 2, 3], [4, 5, 6]
         // In memory, it will be transformed to actual offset(0, 3, 6)

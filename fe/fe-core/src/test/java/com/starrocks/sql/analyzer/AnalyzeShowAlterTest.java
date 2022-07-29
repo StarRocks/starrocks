@@ -32,14 +32,14 @@ public class AnalyzeShowAlterTest {
     @Test
     public void testShowAlter1() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess("SHOW ALTER TABLE COLUMN FROM db");
-        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `default_cluster:db`", statement.toSql());
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `db`", statement.toSql());
     }
 
     @Test
     public void testShowAlter2() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
                 "SHOW ALTER TABLE COLUMN FROM db WHERE `TableName` = \'abc\' LIMIT 1, 2");
-        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `default_cluster:db` WHERE TableName = 'abc' LIMIT 1, 2",
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `db` WHERE TableName = 'abc' LIMIT 1, 2",
                 statement.toSql());
     }
 
@@ -47,7 +47,7 @@ public class AnalyzeShowAlterTest {
     public void testShowAlter3() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
                 "SHOW ALTER TABLE COLUMN FROM db ORDER BY CreateTime");
-        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `default_cluster:db` ORDER BY CreateTime ASC",
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `db` ORDER BY CreateTime ASC",
                 statement.toSql());
     }
 
@@ -55,7 +55,7 @@ public class AnalyzeShowAlterTest {
     public void testShowAlter4() {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
                 "SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00'");
-        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `default_cluster:db` " +
+        Assert.assertEquals("SHOW ALTER TABLE COLUMN FROM `db` " +
                         "WHERE CreateTime > '2019-12-04 00:00:00'",
                 statement.toSql());
     }
@@ -64,7 +64,7 @@ public class AnalyzeShowAlterTest {
     public void normalTest() {
         analyzeSuccess("SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1;");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM errordb",
-                "Unknown database 'default_cluster:errordb'");
+                "Unknown database 'errordb'");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM db WHERE `CreateTime` > '2019-12-04 00:00:00' " +
                         "AND `bad_column` < '2010-12-04 00:00:00'",
                 "The columns of TableName/CreateTime/FinishTime/State are supported");

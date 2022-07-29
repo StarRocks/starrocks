@@ -322,12 +322,11 @@ public class SparkLoadJob extends BulkLoadJob {
         if (dppResult != null) {
             // update load statistic and counters when spark etl job finished
             // fe gets these infos from spark dpp, so we use dummy load id and dummy backend id here
-            loadStatistic.fileNum = (int) dppResult.fileNumber;
-            loadStatistic.totalFileSizeB = dppResult.fileSize;
+            loadingStatus.setLoadFileInfo((int) dppResult.fileNumber, dppResult.fileSize);
             TUniqueId dummyId = new TUniqueId(0, 0);
             long dummyBackendId = -1L;
-            loadStatistic.initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
-            loadStatistic.updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
+            loadingStatus.getLoadStatistic().initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
+            loadingStatus.getLoadStatistic().updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
 
             Map<String, String> counters = loadingStatus.getCounters();
             counters.put(DPP_NORMAL_ALL, String.valueOf(dppResult.normalRows));
@@ -473,7 +472,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         indexId, bucket++, schemaHash);
                                 Set<Long> tabletAllReplicas = Sets.newHashSet();
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     long replicaId = replica.getId();
                                     tabletAllReplicas.add(replicaId);
                                     if (!tabletToSentReplicaPushTask.containsKey(tabletId)

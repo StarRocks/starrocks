@@ -301,6 +301,11 @@ public class Replica implements Writable {
                 lastSuccessVersion, dataSize, rowCount);
     }
 
+    public synchronized void updateVersion(long version) {
+        updateReplicaInfo(version, this.lastFailedVersion,
+                this.lastSuccessVersion, dataSize, rowCount);
+    }
+
     public void updateVersionInfoForRecovery(
             long newVersion,
             long lastFailedVersion,

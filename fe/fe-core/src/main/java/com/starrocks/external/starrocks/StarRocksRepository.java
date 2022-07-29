@@ -9,7 +9,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -22,7 +22,7 @@ import java.util.Map;
 /**
  * It is responsible for loading all StarRocks OLAP external table's meta-data periodically
  */
-public class StarRocksRepository extends MasterDaemon {
+public class StarRocksRepository extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StarRocksRepository.class);
 
     private Map<Long, ExternalOlapTable> srTables;

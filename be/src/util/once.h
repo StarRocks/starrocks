@@ -1,78 +1,86 @@
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
-#include <atomic>
+#include <bthread/sys_futex.h>
 
-#include "storage/olap_common.h"
+#include <atomic>
+#include <functional>
+
+#include "common/statusor.h"
 
 namespace starrocks {
 
-// Utility class for implementing thread-safe call-once semantics.
-//
-// call() will return stored result regardless of whether the first invocation
-// returns a success status or not.
-//
-// Example:
-//   class Resource {
-//   public:
-//     Status init() {
-//       _init_once.call([this] { return _do_init(); });
-//     }
-//
-//     bool is_inited() const {
-//       return _init_once.has_called() && _init_once.stored_result().ok();
-//     }
-//   private:
-//     Status _do_init() { /* init logic here */ }
-//     StarRocksCallOnce<Status> _init_once;
-//   };
-template <typename ReturnType>
-class StarRocksCallOnce {
-public:
-    StarRocksCallOnce() : _has_called(false) {}
-
-    // If the underlying `once_flag` has yet to be invoked, invokes the provided
-    // lambda and stores its return value. Otherwise, returns the stored Status.
-    template <typename Fn>
-    ReturnType call(Fn fn) {
-        std::call_once(_once_flag, [this, fn] {
-            _status = fn();
-            _has_called.store(true, std::memory_order_release);
-        });
-        return _status;
-    }
-
-    // Return whether `call` has been invoked or not.
-    bool has_called() const {
-        // std::memory_order_acquire here and std::memory_order_release in
-        // init(), taken together, mean that threads can safely synchronize on
-        // _has_called.
-        return _has_called.load(std::memory_order_acquire);
-    }
-
-    // Return the stored result. The result is only meaningful when `has_called() == true`.
-    ReturnType stored_result() const { return _status; }
-
-private:
-    std::atomic<bool> _has_called;
-    std::once_flag _once_flag;
-    ReturnType _status;
+struct OnceFlag {
+    std::atomic<int> flag{0};
 };
+
+inline bool invoked(const OnceFlag& once) {
+    return once.flag.load(std::memory_order_acquire) == 2;
+}
+
+// Executes the Callable object f exactly once, even if called concurrently, from several threads.
+//
+// If concurrent calls to invoke_once pass different functions f, it is unspecified which f will be called.
+// The selected function runs in the same thread as the invoke_once invocation it was passed to.
+//
+// Return value
+//  true: |fn| is invoked
+//  false: |fn| has been invoked before
+template <typename Callable, typename... Args>
+bool invoke_once(OnceFlag& once, Callable&& f, Args&&... args) {
+    while (true) {
+        auto curr_flag = once.flag.load(std::memory_order_acquire);
+        if (curr_flag == 2) {
+            return false;
+        }
+        if (curr_flag == 0 && once.flag.compare_exchange_weak(curr_flag, 1, std::memory_order_release)) {
+            std::invoke(std::forward<Callable>(f), std::forward<Args>(args)...);
+            once.flag.store(2, std::memory_order_release);
+            (void)bthread::futex_wake_private(&once.flag, INT_MAX);
+            return true;
+        }
+        if (curr_flag == 1) {
+            (void)bthread::futex_wait_private(&once.flag, curr_flag, nullptr);
+        }
+    }
+}
+
+// Executes the Callable object f *successfully* exactly once, even if called concurrently, from several threads.
+//
+// Whether the execution is successul is determinted by the return value of f: any non-OK value indicates the
+// execution is failed, in which case the Callable object f will be called again next time success_once invoked.
+//
+// If concurrent calls to invoke_once pass different functions f, it is unspecified which f will be called.
+// The selected function runs in the same thread as the invoke_once invocation it was passed to.
+//
+// Return value
+//  true: |fn| is invoked and returned an OK status.
+//  false: |fn| has been invoked before and returned an OK status.
+//  non-OK status: |fn| is invoked and returned a non-OK status.
+template <typename Callable, typename... Args>
+StatusOr<bool> success_once(OnceFlag& once, Callable&& f, Args&&... args) {
+    while (true) {
+        auto curr_flag = once.flag.load(std::memory_order_acquire);
+        if (curr_flag == 2) {
+            return false;
+        }
+        if (curr_flag == 0 && once.flag.compare_exchange_weak(curr_flag, 1, std::memory_order_release)) {
+            auto&& st = std::invoke(std::forward<Callable>(f), std::forward<Args>(args)...);
+            if (st.ok()) {
+                once.flag.store(2, std::memory_order_release);
+                (void)bthread::futex_wake_private(&once.flag, INT_MAX);
+                return true;
+            } else {
+                once.flag.store(0, std::memory_order_release);
+                (void)bthread::futex_wake_private(&once.flag, 1);
+                return st;
+            }
+        }
+        if (curr_flag == 1) {
+            (void)bthread::futex_wait_private(&once.flag, curr_flag, nullptr);
+        }
+    }
+}
 
 } // namespace starrocks

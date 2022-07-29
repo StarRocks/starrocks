@@ -116,7 +116,7 @@ std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t colum
             return createDecompressor(reader.getCompression(),
                                       std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
                                               &input, offset, stream.length(), *pool, myBlock)),
-                                      reader.getCompressionSize(), *pool);
+                                      reader.getCompressionSize(), *pool, reader.getFileContents().readerMetrics);
         }
         offset += stream.length();
     }
@@ -127,8 +127,16 @@ MemoryPool& StripeStreamsImpl::getMemoryPool() const {
     return *reader.getFileContents().pool;
 }
 
+ReaderMetrics* StripeStreamsImpl::getReaderMetrics() const {
+    return reader.getFileContents().readerMetrics;
+}
+
 bool StripeStreamsImpl::getThrowOnHive11DecimalOverflow() const {
     return reader.getThrowOnHive11DecimalOverflow();
+}
+
+bool StripeStreamsImpl::isDecimalAsLong() const {
+    return reader.getIsDecimalAsLong();
 }
 
 int32_t StripeStreamsImpl::getForcedScaleOnHive11Decimal() const {
@@ -145,7 +153,7 @@ void StripeInformationImpl::ensureStripeFooterLoaded() const {
                 createDecompressor(compression,
                                    std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(
                                            stream, offset + indexLength + dataLength, footerLength, memory)),
-                                   blockSize, memory);
+                                   blockSize, memory, metrics);
         stripeFooter.reset(new proto::StripeFooter());
         if (!stripeFooter->ParseFromZeroCopyStream(pbStream.get())) {
             throw ParseError("Failed to parse the stripe footer");

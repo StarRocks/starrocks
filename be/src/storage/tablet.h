@@ -283,7 +283,6 @@ private:
     bool _contains_rowset(const RowsetId rowset_id);
     Status _contains_version(const Version& version);
     Version _max_continuous_version_from_beginning_unlocked() const;
-    RowsetSharedPtr _rowset_with_largest_size();
     void _delete_inc_rowset_by_version(const Version& version);
     /// Delete stale rowset by version. This method not only delete the version in expired rowset map,
     /// but also delete the version in rowset meta vector.
@@ -308,7 +307,7 @@ private:
 
     TimestampedVersionTracker _timestamped_version_tracker;
 
-    StarRocksCallOnce<Status> _init_once;
+    OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
     // it will be used in econ-mode in the future
     std::shared_mutex _meta_store_lock;
@@ -366,7 +365,7 @@ private:
 };
 
 inline bool Tablet::init_succeeded() {
-    return _init_once.has_called() && _init_once.stored_result().ok();
+    return invoked(_init_once);
 }
 
 inline bool Tablet::is_used() {

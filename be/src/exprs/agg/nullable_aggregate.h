@@ -52,10 +52,10 @@ struct NullableAggregateFunctionState
 // If an aggregate function has at least one nullable argument, we should use this class.
 // If all row all are NULL, we will return NULL.
 // The State must be NullableAggregateFunctionState
-template <typename State, bool IsWindowFunc, bool IgnoreNull = true>
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
 class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State> {
 public:
-    explicit NullableAggregateFunctionBase(AggregateFunctionPtr nested_function_)
+    explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
             : nested_function(std::move(nested_function_)) {}
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
@@ -221,17 +221,21 @@ public:
     }
 
 protected:
-    AggregateFunctionPtr nested_function;
+    NestedAggregateFunctionPtr nested_function;
 };
 
-template <typename State, bool IsWindowFunc, bool IgnoreNull = true>
-class NullableAggregateFunctionUnary final : public NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull> {
+template <typename NestedAggregateFunctionPtr, typename State, bool IsWindowFunc, bool IgnoreNull = true>
+class NullableAggregateFunctionUnary final
+        : public NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull> {
 public:
-    explicit NullableAggregateFunctionUnary(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State, IsWindowFunc, IgnoreNull>(nested_function) {}
+    explicit NullableAggregateFunctionUnary(const NestedAggregateFunctionPtr& nested_function)
+            : NullableAggregateFunctionBase<NestedAggregateFunctionPtr, State, IsWindowFunc, IgnoreNull>(
+                      nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {}
+                size_t row_num) const override {
+        CHECK(false) << "unsupported update in NullableAggregateFunctionUnary";
+    }
 
     // TODO(kks): abstract the AVX2 filter process later
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
@@ -470,9 +474,9 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty,
         // we could directly return.
@@ -487,9 +491,9 @@ public:
             // The fast pass
             if (!column->has_null()) {
                 this->data(state).is_null = false;
-                this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                 &data_column, peer_group_start, peer_group_end,
-                                                                 frame_start, frame_end);
+                this->nested_function->update_batch_single_state_with_frame(ctx, this->data(state).mutable_nest_state(),
+                                                                            &data_column, peer_group_start,
+                                                                            peer_group_end, frame_start, frame_end);
                 return;
             }
 
@@ -497,9 +501,9 @@ public:
             for (size_t i = frame_start; i < frame_end; ++i) {
                 if (f_data[i] == 0) {
                     this->data(state).is_null = false;
-                    this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                     &data_column, peer_group_start, peer_group_end, i,
-                                                                     i + 1);
+                    this->nested_function->update_batch_single_state_with_frame(
+                            ctx, this->data(state).mutable_nest_state(), &data_column, peer_group_start, peer_group_end,
+                            i, i + 1);
                 } else if constexpr (!IgnoreNull) {
                     this->data(state).is_null = false;
                     this->nested_function->update_single_state_null(ctx, this->data(state).mutable_nest_state(),
@@ -508,8 +512,9 @@ public:
             }
         } else {
             this->data(state).is_null = false;
-            this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(), columns,
-                                                             peer_group_start, peer_group_end, frame_start, frame_end);
+            this->nested_function->update_batch_single_state_with_frame(ctx, this->data(state).mutable_nest_state(),
+                                                                        columns, peer_group_start, peer_group_end,
+                                                                        frame_start, frame_end);
         }
     }
 
@@ -547,8 +552,9 @@ public:
                                 ignore_addition);
                     } else {
                         // Build the frame for the first time
-                        this->nested_function->update_batch_single_state(ctx, this->data(state).mutable_nest_state(),
-                                                                         &data_column, -1, -1, frame_start, frame_end);
+                        this->nested_function->update_batch_single_state_with_frame(
+                                ctx, this->data(state).mutable_nest_state(), &data_column, -1, -1, frame_start,
+                                frame_end);
                         this->data(state).is_frame_init = true;
                     }
                     return;
@@ -583,7 +589,7 @@ public:
                     for (size_t i = frame_start; i < frame_end; ++i) {
                         if (f_data[i] == 0) {
                             this->data(state).is_null = false;
-                            this->nested_function->update_batch_single_state(
+                            this->nested_function->update_batch_single_state_with_frame(
                                     ctx, this->data(state).mutable_nest_state(), &data_column, -1, -1, i, i + 1);
                         } else {
                             this->data(state).null_count++;
@@ -602,33 +608,33 @@ public:
 };
 
 template <typename State>
-class NullableAggregateFunctionVariadic final : public NullableAggregateFunctionBase<State, false> {
+class NullableAggregateFunctionVariadic final
+        : public NullableAggregateFunctionBase<AggregateFunctionPtr, State, false> {
 public:
     NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
-            : NullableAggregateFunctionBase<State, false>(nested_function) {}
+            : NullableAggregateFunctionBase<AggregateFunctionPtr, State, false>(nested_function) {}
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         auto column_size = ctx->get_num_args();
         // This container stores the columns we really pass to the nested function.
-        std::vector<const Column*> data_columns;
-        data_columns.resize(column_size);
+        const Column* data_columns[column_size];
 
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->is_nullable()) {
-                const auto* column = down_cast<const NullableColumn*>(columns[i]);
-                if (column->is_null(row_num)) {
+                if (columns[i]->is_null(row_num)) {
                     // If at least one column has a null value in the current row,
                     // we don't process this row.
                     return;
                 }
+                const auto* column = down_cast<const NullableColumn*>(columns[i]);
                 data_columns[i] = &column->data_column_ref();
             } else {
                 data_columns[i] = columns[i];
             }
         }
         this->data(state).is_null = false;
-        this->nested_function->update(ctx, data_columns.data(), this->data(state).mutable_nest_state(), row_num);
+        this->nested_function->update(ctx, data_columns, this->data(state).mutable_nest_state(), row_num);
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
@@ -642,8 +648,7 @@ public:
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
         auto column_size = ctx->get_num_args();
         // This container stores the columns we really pass to the nested function.
-        std::vector<const Column*> data_columns;
-        data_columns.resize(column_size);
+        const Column* data_columns[column_size];
 
         std::vector<uint8_t> null_data_result;
         null_data_result.resize(chunk_size);
@@ -675,7 +680,7 @@ public:
                 for (size_t i = 0; i < chunk_size; ++i) {
                     if (!null_data_result[i] & !selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
-                        this->nested_function->update(ctx, data_columns.data(),
+                        this->nested_function->update(ctx, data_columns,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);
                     }
                 }
@@ -683,7 +688,7 @@ public:
                 for (size_t i = 0; i < chunk_size; ++i) {
                     if (!selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
-                        this->nested_function->update(ctx, data_columns.data(),
+                        this->nested_function->update(ctx, data_columns,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);
                     }
                 }

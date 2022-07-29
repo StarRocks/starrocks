@@ -23,9 +23,6 @@ public:
 
     virtual std::string segment_location(int64_t tablet_id, std::string_view segment_name) const = 0;
 
-    // TODO: remove this method after we removed the ShardId suffix from StarletFileSystem.
-    virtual std::string join_path(std::string_view parent, std::string_view child) const = 0;
-
     virtual Status list_root_locations(std::set<std::string>* groups) const = 0;
 };
 

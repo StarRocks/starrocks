@@ -25,13 +25,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -50,8 +46,6 @@ import java.util.Map;
  * and we need to mark the slots of resolved exprs as materialized.
  */
 public class SetOperationStmt extends QueryStmt {
-    private static final Logger LOG = LogManager.getLogger(SetOperationStmt.class);
-
     public enum Operation {
         UNION,
         INTERSECT,
@@ -168,39 +162,6 @@ public class SetOperationStmt extends QueryStmt {
         return operands;
     }
 
-    public List<SetOperand> getDistinctOperands() {
-        return distinctOperands_;
-    }
-
-    public boolean hasDistinctOps() {
-        return !distinctOperands_.isEmpty();
-    }
-
-    public List<SetOperand> getAllOperands() {
-        return allOperands_;
-    }
-
-    public AggregateInfo getDistinctAggInfo() {
-        return distinctAggInfo;
-    }
-
-    public boolean hasAnalyticExprs() {
-        return hasAnalyticExprs_;
-    }
-
-    public TupleId getTupleId() {
-        return tupleId;
-    }
-
-    public void removeAllOperands() {
-        operands.removeAll(allOperands_);
-        allOperands_.clear();
-    }
-
-    public List<Expr> getSetOpsResultExprs() {
-        return setOpsResultExprs_;
-    }
-
     @Override
     public void getDbs(ConnectContext context, Map<String, Database> dbs) throws AnalysisException {
         getWithClauseDbs(context, dbs);
@@ -209,249 +170,11 @@ public class SetOperationStmt extends QueryStmt {
         }
     }
 
-    /**
-     * Propagates DISTINCT from left to right, and checks that all
-     * set operands are set compatible, adding implicit casts if necessary.
-     */
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-    }
-
-    /**
-     * Analyzes all operands and checks that they return an equal number of exprs.
-     * Throws an AnalysisException if that is not the case, or if analyzing
-     * an operand fails.
-     */
-    private void analyzeOperands(Analyzer analyzer) throws AnalysisException, UserException {
-        for (int i = 0; i < operands.size(); ++i) {
-            operands.get(i).analyze(analyzer);
-            QueryStmt firstQuery = operands.get(0).getQueryStmt();
-            List<Expr> firstExprs = operands.get(0).getQueryStmt().getResultExprs();
-            QueryStmt query = operands.get(i).getQueryStmt();
-            List<Expr> exprs = query.getResultExprs();
-            if (firstExprs.size() != exprs.size()) {
-                throw new AnalysisException("Operands have unequal number of columns:\n" +
-                        "'" + queryStmtToSql(firstQuery) + "' has " +
-                        firstExprs.size() + " column(s)\n" +
-                        "'" + queryStmtToSql(query) + "' has " + exprs.size() + " column(s)");
-            }
-        }
-    }
-
-    /**
-     * Fill distinct-/allOperands and performs possible unnesting of SetOperationStmt
-     * operands in the process.
-     */
-    private void unnestOperands(Analyzer analyzer) throws AnalysisException {
-        if (operands.size() == 1) {
-            // ValuesStmt for a single row.
-            allOperands_.add(operands.get(0));
-            return;
-        }
-        // find index of first ALL operand
-        int firstAllIdx = operands.size();
-        for (int i = 1; i < operands.size(); ++i) {
-            SetOperand operand = operands.get(i);
-            if (operand.getQualifier() == Qualifier.ALL) {
-                firstAllIdx = (i == 1 ? 0 : i);
-                break;
-            }
-        }
-        // operands[0] is always implicitly ALL, so operands[1] can't be the
-        // first one
-        Preconditions.checkState(firstAllIdx != 1);
-
-        // unnest DISTINCT operands
-        Preconditions.checkState(distinctOperands_.isEmpty());
-        for (int i = 0; i < firstAllIdx; ++i) {
-            unnestOperand(distinctOperands_, Qualifier.DISTINCT, operands.get(i));
-        }
-
-        // unnest ALL operands
-        Preconditions.checkState(allOperands_.isEmpty());
-        for (int i = firstAllIdx; i < operands.size(); ++i) {
-            unnestOperand(allOperands_, Qualifier.ALL, operands.get(i));
-        }
-
-        for (SetOperand op : distinctOperands_) {
-            op.setQualifier(Qualifier.DISTINCT);
-        }
-        for (SetOperand op : allOperands_) {
-            op.setQualifier(Qualifier.ALL);
-        }
-
-        operands.clear();
-        operands.addAll(distinctOperands_);
-        operands.addAll(allOperands_);
-    }
-
-    /**
-     * Add a single operand to the target list; if the operand itself is a SetOperationStmt, apply
-     * unnesting to the extent possible (possibly modifying 'operand' in the process).
-     */
-    private void unnestOperand(
-            List<SetOperand> target, Qualifier targetQualifier, SetOperand operand) {
-        Preconditions.checkState(operand.isAnalyzed());
-        QueryStmt queryStmt = operand.getQueryStmt();
-        if (queryStmt instanceof SelectStmt) {
-            target.add(operand);
-            return;
-        }
-
-        Preconditions.checkState(queryStmt instanceof SetOperationStmt);
-        SetOperationStmt setOperationStmt = (SetOperationStmt) queryStmt;
-        boolean mixed = false;
-        if (operand.getOperation() != null) {
-            for (int i = 1; i < setOperationStmt.operands.size(); ++i) {
-                if (operand.getOperation() != setOperationStmt.operands.get(i).getOperation()) {
-                    mixed = true;
-                    break;
-                }
-            }
-        }
-        if (setOperationStmt.hasLimit() || setOperationStmt.hasOffset() || mixed) {
-            // we must preserve the nested SetOps
-            target.add(operand);
-        } else if (targetQualifier == Qualifier.DISTINCT || !setOperationStmt.hasDistinctOps()) {
-            // there is no limit in the nested SetOps and we can absorb all of its
-            // operands as-is
-            target.addAll(setOperationStmt.getDistinctOperands());
-            target.addAll(setOperationStmt.getAllOperands());
-        } else {
-            // the nested SetOps contains some Distinct ops and we're accumulating
-            // into our All ops; unnest only the All ops and leave the rest in place
-            target.addAll(setOperationStmt.getAllOperands());
-            setOperationStmt.removeAllOperands();
-            target.add(operand);
-        }
-    }
-
-    /**
-     * Sets the smap for the given operand. It maps from the output slots this SetOps's
-     * tuple to the corresponding result exprs of the operand.
-     */
-    private void setOperandSmap(SetOperand operand, Analyzer analyzer) {
-        TupleDescriptor tupleDesc = analyzer.getDescTbl().getTupleDesc(tupleId);
-        // operands' smaps were already set in the operands' analyze()
-        operand.getSmap().clear();
-        List<Expr> resultExprs = operand.getQueryStmt().getResultExprs();
-        Preconditions.checkState(resultExprs.size() == tupleDesc.getSlots().size());
-        for (int i = 0; i < tupleDesc.getSlots().size(); ++i) {
-            SlotDescriptor outputSlot = tupleDesc.getSlots().get(i);
-            // Map to the original (uncast) result expr of the operand.
-            Expr origExpr = resultExprs.get(i).unwrapExpr(true).clone();
-            operand.getSmap().put(new SlotRef(outputSlot), origExpr);
-        }
-    }
-
-    /**
-     * String representation of queryStmt used in reporting errors.
-     * Allow subclasses to override this.
-     */
-    protected String queryStmtToSql(QueryStmt queryStmt) {
-        return queryStmt.toSql();
-    }
-
-    /**
-     * Propagates DISTINCT (if present) from right to left.
-     * Implied associativity:
-     * A UNION ALL B UNION DISTINCT C = (A UNION ALL B) UNION DISTINCT C
-     * = A UNION DISTINCT B UNION DISTINCT C
-     */
-    private void propagateDistinct() {
-        int firstDistinctPos = -1;
-        for (int i = operands.size() - 1; i > 0; --i) {
-            SetOperand operand = operands.get(i);
-            if (firstDistinctPos != -1) {
-                // There is a DISTINCT somewhere to the right.
-                operand.setQualifier(Qualifier.DISTINCT);
-            } else if (operand.getQualifier() == Qualifier.DISTINCT) {
-                firstDistinctPos = i;
-            }
-        }
-    }
-
-    /**
-     * Create a descriptor for the tuple materialized by the setOps.
-     * Set resultExprs to be slot refs into that tuple.
-     * Also fills the substitution map, such that "order by" can properly resolve
-     * column references from the result of the setOps.
-     */
-    private void createMetadata(Analyzer analyzer) throws AnalysisException {
-        // Create tuple descriptor for materialized tuple created by the setOps.
-        TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor("SetOps");
-        tupleDesc.setIsMaterialized(true);
-        tupleId = tupleDesc.getId();
-        if (LOG.isTraceEnabled()) {
-            LOG.trace("SetOperationStmt.createMetadata: tupleId=" + tupleId.toString());
-        }
-
-        // One slot per expr in the select blocks. Use first select block as representative.
-        List<Expr> firstSelectExprs = operands.get(0).getQueryStmt().getResultExprs();
-
-        // Create tuple descriptor and slots.
-        for (int i = 0; i < firstSelectExprs.size(); ++i) {
-            Expr expr = firstSelectExprs.get(i);
-            SlotDescriptor slotDesc = analyzer.addSlotDescriptor(tupleDesc);
-            slotDesc.setLabel(getColLabels().get(i));
-            slotDesc.setType(expr.getType());
-            SlotRef outputSlotRef = new SlotRef(slotDesc);
-            resultExprs.add(outputSlotRef);
-
-            // Add to aliasSMap so that column refs in "order by" can be resolved.
-            if (orderByElements != null) {
-                SlotRef aliasRef = new SlotRef(null, getColLabels().get(i));
-                if (aliasSMap.containsMappingFor(aliasRef)) {
-                    ambiguousAliasList.add(aliasRef);
-                } else {
-                    aliasSMap.put(aliasRef, outputSlotRef);
-                }
-            }
-
-            boolean isNullable = false;
-            // register single-directional value transfers from output slot
-            // to operands' result exprs (if those happen to be slotrefs);
-            // don't do that if the operand computes analytic exprs
-            // (see Planner.createInlineViewPlan() for the reasoning)
-            for (SetOperand op : operands) {
-                Expr resultExpr = op.getQueryStmt().getResultExprs().get(i);
-                slotDesc.addSourceExpr(resultExpr);
-                SlotRef slotRef = resultExpr.unwrapSlotRef(false);
-                if (slotRef == null || slotRef.getDesc().getIsNullable()
-                        || analyzer.isOuterJoined(slotRef.getDesc().getParent().getId())
-                        || resultExpr.isNullable()) {
-                    isNullable = true;
-                }
-                if (op.hasAnalyticExprs()) {
-                    continue;
-                }
-                slotRef = resultExpr.unwrapSlotRef(true);
-                if (slotRef == null) {
-                    continue;
-                }
-                // analyzer.registerValueTransfer(outputSlotRef.getSlotId(), slotRef.getSlotId());
-            }
-            // If all the child slots are not nullable, then the SetOps output slot should not
-            // be nullable as well.
-            slotDesc.setIsNullable(isNullable);
-        }
-        baseTblResultExprs = resultExprs;
-    }
-
     @Override
     public void collectTableRefs(List<TableRef> tblRefs) {
         for (SetOperand op : operands) {
             op.getQueryStmt().collectTableRefs(tblRefs);
         }
-    }
-
-    @Override
-    public List<TupleId> collectTupleIds() {
-        List<TupleId> result = Lists.newArrayList();
-        for (SetOperand op : operands) {
-            result.addAll(op.getQueryStmt().collectTupleIds());
-        }
-        return result;
     }
 
     @Override
@@ -575,34 +298,6 @@ public class SetOperationStmt extends QueryStmt {
         }
     }
 
-    @Override
-    public void substituteSelectList(Analyzer analyzer, List<String> newColLabels)
-            throws UserException {
-        for (SetOperand operand : operands) {
-            operand.getQueryStmt().substituteSelectList(analyzer, newColLabels);
-        }
-        // substitute order by
-        if (orderByElements != null) {
-            orderByElements = OrderByElement.substitute(orderByElements,
-                    operands.get(0).getQueryStmt().aliasSMap, analyzer);
-        }
-    }
-
-    @Override
-    public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
-            throws UserException {
-        for (SetOperand operand : operands) {
-            operand.getQueryStmt().substituteSelectListForCreateView(analyzer, newColLabels);
-        }
-        // substitute order by
-        if (orderByElements != null) {
-            orderByElements = OrderByElement.substitute(orderByElements,
-                    operands.get(0).getQueryStmt().aliasSMap, analyzer);
-        }
-
-        toSqlString = null;
-    }
-
     /**
      * Represents an operand to a SetOperand. It consists of a query statement and its left
      * all/distinct qualifier (null for the first operand).
@@ -635,44 +330,6 @@ public class SetOperationStmt extends QueryStmt {
             this.operation = operation;
             qualifier_ = qualifier;
             smap_ = new ExprSubstitutionMap();
-        }
-
-        public void analyze(Analyzer parent) throws AnalysisException, UserException {
-            if (isAnalyzed()) {
-                return;
-            }
-            // union statement support const expr, so not need to equal
-            if (operation != Operation.UNION && queryStmt instanceof SelectStmt
-                    && ((SelectStmt) queryStmt).fromClause_.isEmpty()) {
-                // equal select 1 to select * from (select 1) __STARROCKS_DUAL__ , because when using select 1 it will be
-                // transformed to a union node, select 1 is a literal, it doesn't have a tuple but will produce a slot,
-                // this will cause be core dump
-                QueryStmt inlineQuery = queryStmt.clone();
-                Map<String, Integer> map = new HashMap<>();
-                // rename select 2,2 to select 2 as 2_1, 2 as 2_2 to avoid duplicated column in inline view
-                for (int i = 0; i < ((SelectStmt) inlineQuery).selectList.getItems().size(); ++i) {
-                    SelectListItem item = ((SelectStmt) inlineQuery).selectList.getItems().get(i);
-                    String col = item.toColumnLabel();
-                    Integer count = map.get(col);
-                    count = (count == null) ? 1 : count + 1;
-                    map.put(col, count);
-                    if (count > 1) {
-                        ((SelectStmt) inlineQuery).selectList.getItems()
-                                .set(i, new SelectListItem(item.getExpr(), col + "_" + count.toString()));
-                    }
-                }
-                ((SelectStmt) queryStmt).fromClause_.add(new InlineViewRef("__STARROCKS_DUAL__", inlineQuery));
-                List<SelectListItem> slist = ((SelectStmt) queryStmt).selectList.getItems();
-                slist.clear();
-                slist.add(SelectListItem.createStarItem(null));
-            }
-            // Oracle and ms-SQLServer do not support INTERSECT ALL and EXCEPT ALL, postgres support it,
-            // but it is very ambiguous
-            if (qualifier_ == Qualifier.ALL && (operation == Operation.EXCEPT || operation == Operation.INTERSECT)) {
-                throw new AnalysisException("INTERSECT and EXCEPT does not support ALL qualifier.");
-            }
-            analyzer = new Analyzer(parent);
-            queryStmt.analyze(analyzer);
         }
 
         public boolean isAnalyzed() {
@@ -710,15 +367,6 @@ public class SetOperationStmt extends QueryStmt {
 
         public ExprSubstitutionMap getSmap() {
             return smap_;
-        }
-
-        public boolean hasAnalyticExprs() {
-            if (queryStmt instanceof SelectStmt) {
-                return ((SelectStmt) queryStmt).hasAnalyticInfo();
-            } else {
-                Preconditions.checkState(queryStmt instanceof SetOperationStmt);
-                return ((SetOperationStmt) queryStmt).hasAnalyticExprs();
-            }
         }
 
         /**

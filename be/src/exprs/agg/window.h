@@ -130,9 +130,9 @@ class RowNumberWindowFunction final : public WindowFunction<RowNumberState> {
         this->data(state).cur_positon = 0;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         this->data(state).cur_positon++;
     }
 
@@ -159,9 +159,9 @@ class RankWindowFunction final : public WindowFunction<RankState> {
         this->data(state).peer_group_start = -1;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         int64_t peer_group_count = peer_group_end - peer_group_start;
         if (this->data(state).peer_group_start != peer_group_start) {
             this->data(state).peer_group_start = peer_group_start;
@@ -193,9 +193,9 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
         this->data(state).peer_group_start = -1;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         if (this->data(state).peer_group_start != peer_group_start) {
             this->data(state).peer_group_start = peer_group_start;
             this->data(state).rank++;
@@ -244,9 +244,9 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
         this->data(state).cur_position = -1;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         auto& s = this->data(state);
 
         if (-1 == s.cur_position) {
@@ -297,9 +297,9 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
         this->data(state).is_null = false;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         if (this->data(state).has_value) {
             return;
         }
@@ -348,9 +348,9 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
         this->data(state).is_null = false;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         // For cases like: rows between 2 preceding and 1 preceding
         // If frame_start ge frame_end, means the frame is empty
         if (frame_start >= frame_end) {
@@ -404,9 +404,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         // frame_end <= frame_start is for lag function
         // frame_end > peer_group_end is for lead function
         if ((frame_end <= frame_start) | (frame_end > peer_group_end)) {
@@ -454,9 +454,9 @@ class FirstValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public Wind
         this->data(state).is_null = false;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         if (this->data(state).has_value) {
             return;
         }
@@ -498,9 +498,9 @@ class LastValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public Windo
         this->data(state).is_null = false;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         if (columns[0]->is_null(frame_end - 1)) {
             this->data(state).is_null = true;
             return;
@@ -551,9 +551,9 @@ class LeadLagWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public WindowF
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         // frame_end <= frame_start is for lag function
         // frame_end > peer_group_end is for lead function
         if ((frame_end <= frame_start) | (frame_end > peer_group_end)) {

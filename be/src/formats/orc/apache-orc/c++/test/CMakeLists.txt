@@ -39,6 +39,7 @@ add_executable (orc-test
   TestDictionaryEncoding.cc
   TestDriver.cc
   TestInt128.cc
+  TestMurmur3.cc
   TestPredicateLeaf.cc
   TestPredicatePushdown.cc
   TestReader.cc

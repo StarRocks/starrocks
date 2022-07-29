@@ -22,10 +22,12 @@
 package com.starrocks.transaction;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -41,6 +43,7 @@ import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -75,7 +78,8 @@ public class TransactionState implements Writable {
         INSERT_STREAMING(3),            // insert stmt (streaming type) use this type
         ROUTINE_LOAD_TASK(4),           // routine load task use this type
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
-        DELETE(6);                      // synchronization delete job use this type
+        DELETE(6),                     // synchronization delete job use this type
+        LAKE_COMPACTION(7);            // compaction of LakeTable
 
         private final int flag;
 
@@ -101,6 +105,8 @@ public class TransactionState implements Writable {
                     return BATCH_LOAD_JOB;
                 case 6:
                     return DELETE;
+                case 7:
+                    return LAKE_COMPACTION;
                 default:
                     return null;
             }
@@ -200,6 +206,13 @@ public class TransactionState implements Writable {
     private long commitTime;
     private long finishTime;
     private String reason = "";
+
+    // whether this txn is finished using new mechanism
+    // this field needs to be persisted, so we shared the serialization field with `reason`.
+    // `reason` is only used when txn is aborted, so it's ok to reuse the space for visible txns.
+    private boolean newFinish = false;
+    private TxnFinishState finishState;
+
     // error replica ids
     private Set<Long> errorReplicas;
     private CountDownLatch latch;
@@ -230,6 +243,10 @@ public class TransactionState implements Writable {
 
     private long lastErrTimeMs = 0;
 
+    // used for PublishDaemon to check whether this txn can be published
+    // not persisted, so need to rebuilt if FE restarts
+    private TransactionChecker finishChecker = null;
+    private long checkTimes = 0;
     private Span txnSpan = null;
     private String traceParent = null;
 
@@ -402,7 +419,7 @@ public class TransactionState implements Writable {
         // 1. the transactionStatus status must be VISIBLE
         // 2. this.latch.countDown(); has not been called before
         // 3. this.latch can not be null
-        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {            
+        if (transactionStatus == TransactionStatus.VISIBLE && this.latch != null && this.latch.getCount() != 0) {
             this.latch.countDown();
         }
     }
@@ -557,7 +574,9 @@ public class TransactionState implements Writable {
 
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
-        return transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs;
+        return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
+                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
+                        / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
     /*
@@ -603,8 +622,19 @@ public class TransactionState implements Writable {
         sb.append(", prepare time: ").append(prepareTime);
         sb.append(", commit time: ").append(commitTime);
         sb.append(", finish time: ").append(finishTime);
-        sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+        if (commitTime > prepareTime) {
+            sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
+        }
+        if (finishTime > commitTime) {
+            sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+        }
+        if (finishTime > prepareTime) {
+            sb.append(", total cost: ").append(finishTime - prepareTime).append("ms");
+        }
         sb.append(", reason: ").append(reason);
+        if (newFinish) {
+            sb.append(", newFinish");
+        }
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);
         }
@@ -639,7 +669,21 @@ public class TransactionState implements Writable {
         out.writeLong(prepareTime);
         out.writeLong(commitTime);
         out.writeLong(finishTime);
-        Text.writeString(out, reason);
+        // if txn use new publish mechanism, store state in the space originally used by `reason`
+        if (transactionStatus == TransactionStatus.VISIBLE) {
+            if (newFinish) {
+                Preconditions.checkNotNull(finishState);
+                // write 1 as version number
+                byte[] bytes = finishState.toBytes();
+                out.writeInt(bytes.length + 1);
+                out.writeByte(1);
+                out.write(bytes);
+            } else {
+                out.writeInt(0);
+            }
+        } else {
+            Text.writeString(out, reason);
+        }
         out.writeInt(errorReplicas.size());
         for (long errorReplicaId : errorReplicas) {
             out.writeLong(errorReplicaId);
@@ -696,7 +740,23 @@ public class TransactionState implements Writable {
         prepareTime = in.readLong();
         commitTime = in.readLong();
         finishTime = in.readLong();
-        reason = Text.readString(in);
+        if (transactionStatus == TransactionStatus.VISIBLE) {
+            int len = in.readInt();
+            if (len == 0) {
+                newFinish = false;
+            } else {
+                in.readByte(); // skip the first byte, which is the version number
+                byte[] bytes = new byte[len - 1];
+                in.readFully(bytes);
+                if (finishState == null) {
+                    finishState = new TxnFinishState();
+                }
+                finishState.fromBytes(bytes);
+                newFinish = true;
+            }
+        } else {
+            reason = Text.readString(in);
+        }
         int errorReplicaNum = in.readInt();
         for (int i = 0; i < errorReplicaNum; ++i) {
             errorReplicas.add(in.readLong());
@@ -716,6 +776,19 @@ public class TransactionState implements Writable {
             for (int i = 0; i < tableListSize; i++) {
                 tableIdList.add(in.readLong());
             }
+        }
+
+        txnSpan.setAttribute("txn_id", transactionId);
+        txnSpan.setAttribute("label", label);
+        if (transactionStatus == TransactionStatus.COMMITTED) {
+            txnSpan.addEvent("set_committed");
+        } else if (transactionStatus == TransactionStatus.ABORTED) {
+            txnSpan.setAttribute("state", "aborted");
+            txnSpan.setStatus(StatusCode.ERROR, reason);
+            txnSpan.end();
+        } else if (transactionStatus == TransactionStatus.VISIBLE) {
+            txnSpan.addEvent("set_visible");
+            txnSpan.end();
         }
     }
 
@@ -780,11 +853,68 @@ public class TransactionState implements Writable {
                     commitTime,
                     partitionVersions,
                     traceParent,
+                    txnSpan,
                     createTime);
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }
         return tasks;
+    }
+
+    public boolean allPublishTasksFinishedOrQuorumWaitTimeout(Set<Long> publishErrorReplicas) {
+        boolean timeout = System.currentTimeMillis() - getCommitTime() > Config.quorom_publish_wait_time_ms;
+        for (PublishVersionTask publishVersionTask : getPublishVersionTasks().values()) {
+            if (publishVersionTask.isFinished()) {
+                publishErrorReplicas.addAll(publishVersionTask.getErrorReplicas());
+            } else if (!timeout) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Note: caller should hold db lock
+    public void buildFinishChecker(Database db) {
+        this.finishChecker = TransactionChecker.create(this, db);
+    }
+
+    public boolean checkCanFinish() {
+        // this may happen if FE restarts
+        if (finishChecker == null) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            db.readLock();
+            try {
+                finishChecker = TransactionChecker.create(this, db);
+            } finally {
+                db.readUnlock();
+            }
+        }
+        if (finishState == null) {
+            finishState = new TxnFinishState();
+        }
+        checkTimes++;
+        boolean ret = finishChecker.finished(finishState);
+        if (ret) {
+            txnSpan.addEvent("check_ok");
+            txnSpan.setAttribute("check_times", checkTimes);
+        }
+        return ret;
+    }
+
+    public void setFinishState(TxnFinishState finishState) {
+        this.finishState = finishState;
+    }
+
+    public TxnFinishState getFinishState() {
+        return finishState;
+    }
+
+    public void setNewFinish() {
+        newFinish = true;
+    }
+
+    public boolean isNewFinish() {
+        return newFinish;
     }
 
     public Span getTxnSpan() {

@@ -45,7 +45,7 @@ public:
         (void)g_worker->add_shard(shard_info);
 
         // Expect a clean root directory before testing
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
         fs->delete_dir_recursive(StarletPath("/"));
     }
     void TearDown() override {
@@ -59,27 +59,49 @@ public:
         }
     }
 
-    std::string StarletPath(std::string_view path) {
-        if (path.front() == '/') {
-            return fmt::format("{}{}?ShardId={}", kStarletPrefix, path.substr(1), 10086);
-        } else {
-            return fmt::format("{}{}?ShardId={}", kStarletPrefix, path, 10086);
-        }
-    }
+    std::string StarletPath(std::string_view path) { return build_starlet_uri(10086, path); }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
                           bool expected_is_dir = true) {
         const StatusOr<bool> status_or = fs->is_directory(dir_name);
-        EXPECT_EQ(expected_success, status_or.ok()) << dir_name;
+        EXPECT_EQ(expected_success, status_or.ok()) << status_or.status() << ": " << dir_name;
         if (status_or.ok()) {
             EXPECT_EQ(expected_is_dir, status_or.value());
         }
     }
 };
 
+TEST_P(StarletFileSystemTest, test_build_and_parse_uri) {
+    ASSERT_EQ("staros://10", build_starlet_uri(10, ""));
+    ASSERT_EQ("staros://10", build_starlet_uri(10, "/"));
+    ASSERT_EQ("staros://10", build_starlet_uri(10, "///"));
+    ASSERT_EQ("staros://10/abc", build_starlet_uri(10, "abc"));
+    ASSERT_EQ("staros://10/abc", build_starlet_uri(10, "/abc"));
+    ASSERT_EQ("staros://10/abc", build_starlet_uri(10, "////abc"));
+    ASSERT_EQ("staros://10/abc/xyz", build_starlet_uri(10, "////abc/xyz"));
+
+    ASSERT_FALSE(parse_starlet_uri("posix://x/y").ok());
+    ASSERT_FALSE(parse_starlet_uri("staros:/10").ok());
+    ASSERT_FALSE(parse_starlet_uri("staros://x/y").ok());
+    ASSERT_FALSE(parse_starlet_uri("Staros://x/y").ok());
+    ASSERT_FALSE(parse_starlet_uri("SATROS://x/y").ok());
+
+    ASSIGN_OR_ABORT(auto path_and_id, parse_starlet_uri("staros://10/abc"));
+    ASSERT_EQ("abc", path_and_id.first);
+    ASSERT_EQ(10, path_and_id.second);
+
+    ASSIGN_OR_ABORT(path_and_id, parse_starlet_uri("staros://10"));
+    ASSERT_EQ("", path_and_id.first);
+    ASSERT_EQ(10, path_and_id.second);
+
+    ASSIGN_OR_ABORT(path_and_id, parse_starlet_uri("staros://10/usr/bin"));
+    ASSERT_EQ("usr/bin", path_and_id.first);
+    ASSERT_EQ(10, path_and_id.second);
+}
+
 TEST_P(StarletFileSystemTest, test_write_and_read) {
     auto uri = StarletPath("test1");
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
     EXPECT_OK(wf->append(" world!"));
@@ -100,7 +122,7 @@ TEST_P(StarletFileSystemTest, test_write_and_read) {
 }
 
 TEST_P(StarletFileSystemTest, test_directory) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
     bool created = false;
 
     //
@@ -220,7 +242,7 @@ TEST_P(StarletFileSystemTest, test_directory) {
 }
 
 TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {
@@ -256,11 +278,14 @@ TEST_P(StarletFileSystemTest, test_delete_dir_recursive) {
     ASSERT_EQ(1, entries.size());
     ASSERT_EQ("dirname0x/", entries[0]);
     ASSERT_OK(fs->delete_dir(StarletPath("/dirname0x")));
-    ASSERT_ERROR(fs->delete_dir_recursive(StarletPath("/")));
+    ASSERT_OK(fs->delete_dir_recursive(StarletPath("/")));
+    entries.clear();
+    // NOTE: this is incompatible with other file systems.
+    EXPECT_TRUE(fs->iterate_dir(StarletPath("/"), cb).is_not_found());
 }
 
 TEST_P(StarletFileSystemTest, test_delete_nonexist_file) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(kStarletPrefix));
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(StarletPath("/")));
     ASSERT_OK(fs->delete_file(StarletPath("/nonexist.dat")));
 }
 

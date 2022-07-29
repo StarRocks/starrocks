@@ -60,7 +60,7 @@ The preceding figure shows the workflow of data synchronization:
 
     - `[table-rule.1]`: the rule based on which you want to match data. You can match the databases and tables by using regular expressions, thus generate the SQL statements that are used to create tables. You can configure multiple rules.
 
-    - `flink.starrocks.*`: the configuration information of your StarRocks cluster. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+    - `flink.starrocks.*`: the configuration information of your StarRocks cluster. For more information, see [Load data by using flink-connector-starrocks](Flink-connector-starrocks.md).
 
         ```Plain%20Text
         [db]
@@ -236,7 +236,7 @@ The preceding figure shows the workflow of data synchronization:
     flink.starrocks.sink.properties.format=json
     ```
 
-    > Note: If you want to configure more parameters, such as the frequency to load data, see [Load data by using Flink-connector-starrocks](../loading/Flink-connector-starrocks.md) for more information about `sink`.
+    > Note: If you want to configure more parameters, such as the frequency to load data, see [Load data by using Flink-connector-starrocks](Flink-connector-starrocks.md) for more information about `sink`.
 
 - You can configure an individual match rule for a sharded large table. For example, you have two databases, `edu_db_1` and `edu_db_2`, each database contains two tables, `course_1` and `course_2`. In addition, all these tables use the same schema. You can use the following configurations to load the preceding four tables into StarRocks:
 

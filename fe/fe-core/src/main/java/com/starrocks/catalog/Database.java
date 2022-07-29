@@ -54,7 +54,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -91,7 +91,6 @@ public class Database extends MetaObject implements Writable {
 
     private long id;
     private String fullQualifiedName;
-    private String clusterName;
     private QueryableReentrantReadWriteLock rwLock;
 
     // table family group map
@@ -112,6 +111,8 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Database(long id, String name) {
+        // used for remove cluster from stmt
+        name = ClusterNamespace.getFullName(name);
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
@@ -122,7 +123,6 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.default_db_data_quota_bytes;
         this.replicaQuotaSize = FeConstants.default_db_replica_quota_size;
-        this.clusterName = "";
     }
 
     public void readLock() {
@@ -193,6 +193,10 @@ public class Database extends MetaObject implements Writable {
 
     public long getId() {
         return id;
+    }
+
+    public String getOriginName() {
+        return ClusterNamespace.getNameFromFullName(fullQualifiedName);
     }
 
     public String getFullName() {
@@ -408,7 +412,19 @@ public class Database extends MetaObject implements Writable {
             }
         }
 
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getFullName(),
+        // process related materialized views
+        if (table.isOlapTable()) {
+            OlapTable olapTable = (OlapTable) table;
+            for (long mvId : olapTable.getRelatedMaterializedViews()) {
+                Table tmpTable = getTable(mvId);
+                if (tmpTable != null) {
+                    MaterializedView mv = (MaterializedView) tmpTable;
+                    mv.setActive(false);
+                }
+            }
+        }
+
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(),
                 table.getId());
         return batchTaskMap;
     }
@@ -542,13 +558,7 @@ public class Database extends MetaObject implements Writable {
     public int getSignature(int signatureVersion) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
-        String charsetName = "UTF-8";
-        try {
-            adler32.update(this.fullQualifiedName.getBytes(charsetName));
-        } catch (UnsupportedEncodingException e) {
-            LOG.error("encoding error", e);
-            return -1;
-        }
+        adler32.update(this.fullQualifiedName.getBytes(StandardCharsets.UTF_8));
         return Math.abs((int) adler32.getValue());
     }
 
@@ -566,7 +576,7 @@ public class Database extends MetaObject implements Writable {
         }
 
         out.writeLong(dataQuotaBytes);
-        Text.writeString(out, clusterName);
+        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
         // compatible for dbState
         Text.writeString(out, "NORMAL");
         // NOTE: compatible attachDbName
@@ -604,15 +614,12 @@ public class Database extends MetaObject implements Writable {
 
         // read quota
         dataQuotaBytes = in.readLong();
-        if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            clusterName = SystemInfoService.DEFAULT_CLUSTER;
-        } else {
-            clusterName = Text.readString(in);
-            // Compatible for dbState
-            Text.readString(in);
-            // Compatible for attachDbName
-            Text.readString(in);
-        }
+        // Compatible for Cluster
+        Text.readString(in);
+        // Compatible for dbState
+        Text.readString(in);
+        // Compatible for attachDbName
+        Text.readString(in);
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_47) {
             int numEntries = in.readInt();
@@ -662,14 +669,6 @@ public class Database extends MetaObject implements Writable {
 
         return (id == database.id) && (fullQualifiedName.equals(database.fullQualifiedName)
                 && dataQuotaBytes == database.dataQuotaBytes);
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
     }
 
     public void setName(String name) {

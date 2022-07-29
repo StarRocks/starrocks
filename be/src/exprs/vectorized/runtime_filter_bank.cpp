@@ -10,8 +10,10 @@
 #include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "runtime/runtime_filter_cache.h"
 #include "simd/simd.h"
 #include "util/time.h"
 
@@ -272,6 +274,7 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
                                             RuntimeProfile* profile) {
     _runtime_profile = profile;
+    _runtime_state = state;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
@@ -456,21 +459,40 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     _descriptors[desc->filter_id()] = desc;
 }
 
-void RuntimeFilterProbeCollector::wait() {
+void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     if (_descriptors.empty()) return;
 
     std::list<RuntimeFilterProbeDescriptor*> wait_list;
     for (auto& it : _descriptors) {
+        auto* rf = it.second;
+        int filter_id = rf->filter_id();
+        VLOG_FILE << "RuntimeFilterCollector::wait start. filter_id = " << filter_id
+                  << ", plan_node_id = " << _plan_node_id << ", finst_id = " << _runtime_state->fragment_instance_id();
         wait_list.push_back(it.second);
     }
 
     int wait_time = _wait_timeout_ms;
+    if (on_scan_node) {
+        wait_time = _scan_wait_timeout_ms;
+    }
     const int wait_interval = 5;
     auto wait_duration = std::chrono::milliseconds(wait_interval);
     while (wait_time >= 0 && !wait_list.empty()) {
         auto it = wait_list.begin();
         while (it != wait_list.end()) {
             auto* rf = (*it)->runtime_filter();
+            // find runtime filter in cache.
+            if (rf == nullptr) {
+                JoinRuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(
+                        _runtime_state->query_id(), (*it)->filter_id());
+                if (t != nullptr) {
+                    VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
+                              << ", plan_node_id = " << _plan_node_id
+                              << ", finst_id  = " << _runtime_state->fragment_instance_id();
+                    (*it)->set_shared_runtime_filter(t);
+                    rf = t.get();
+                }
+            }
             if (rf != nullptr) {
                 it = wait_list.erase(it);
             } else {
@@ -487,7 +509,9 @@ void RuntimeFilterProbeCollector::wait() {
             auto* rf = it.second;
             int filter_id = rf->filter_id();
             bool ready = (rf->runtime_filter() != nullptr);
-            VLOG_FILE << "RuntimeFilterCollector::wait. filter_id = " << filter_id
+            VLOG_FILE << "RuntimeFilterCollector::wait start. filter_id = " << filter_id
+                      << ", plan_node_id = " << _plan_node_id
+                      << ", finst_id = " << _runtime_state->fragment_instance_id()
                       << ", ready = " << std::to_string(ready);
         }
     }

@@ -23,11 +23,11 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.lake.StorageInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
@@ -160,6 +160,16 @@ public class PartitionInfo implements Writable, GsonPreProcessable, GsonPostProc
         idToDataProperty.put(partitionId, dataProperty);
         idToReplicationNum.put(partitionId, replicationNum);
         idToInMemory.put(partitionId, isInMemory);
+    }
+
+    public void addPartition(long partitionId, DataProperty dataProperty,
+                             short replicationNum,
+                             boolean isInMemory,
+                             StorageInfo storageInfo) {
+        this.addPartition(partitionId, dataProperty, replicationNum, isInMemory);
+        if (storageInfo != null) {
+            idToStorageInfo.put(partitionId, storageInfo);
+        }
     }
 
     public static PartitionInfo read(DataInput in) throws IOException {

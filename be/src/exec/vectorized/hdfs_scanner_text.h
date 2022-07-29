@@ -11,7 +11,7 @@ namespace starrocks::vectorized {
 class HdfsTextScanner final : public HdfsScanner {
 public:
     HdfsTextScanner() = default;
-    ~HdfsTextScanner() override { fianlize(); }
+    ~HdfsTextScanner() override = default;
 
     Status do_open(RuntimeState* runtime_state) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
@@ -27,6 +27,8 @@ private:
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     string _record_delimiter;
     string _field_delimiter;
+    char _collection_delimiter;
+    char _mapkey_delimiter;
     std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;

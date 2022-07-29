@@ -358,7 +358,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     // database lock should be held.
     public List<Replica> getReplicas() {
-        return tablet.getReplicas();
+        return tablet.getImmutableReplicas();
     }
 
     public void setVersionInfo(long visibleVersion,
@@ -416,7 +416,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     // database lock should be held.
     public long getTabletSize() {
         long max = Long.MIN_VALUE;
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.getDataSize() > max) {
                 max = replica.getDataSize();
             }
@@ -430,7 +430,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      */
     public boolean containsBE(long beId, boolean forColocate) {
         String host = infoService.getBackend(beId).getHost();
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             Backend be = infoService.getBackend(replica.getBackendId());
             if (be == null) {
                 // BE has been dropped, skip it
@@ -502,7 +502,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.isBad()) {
                 continue;
             }
@@ -585,7 +585,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public void chooseDestReplicaForVersionIncomplete(Map<Long, PathSlot> backendsWorkingSlots)
             throws SchedException {
         Replica chosenReplica = null;
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.isBad()) {
                 continue;
             }
@@ -683,7 +683,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 db.writeLock();
                 try {
                     List<Replica> cloneReplicas = Lists.newArrayList();
-                    tablet.getReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
+                    tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
                             cloneReplicas::add);
 
                     for (Replica cloneReplica : cloneReplicas) {

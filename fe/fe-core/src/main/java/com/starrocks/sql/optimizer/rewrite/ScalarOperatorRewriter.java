@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
@@ -21,12 +22,6 @@ import java.util.List;
 public class ScalarOperatorRewriter {
     public static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
             new ImplicitCastRule()
-    );
-
-    public static final List<ScalarOperatorRewriteRule> CAST_AND_FOLD_RULES = Lists.newArrayList(
-            new ImplicitCastRule(),
-            new ReduceCastRule(),
-            new FoldConstantsRule()
     );
 
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_RULES = Lists.newArrayList(

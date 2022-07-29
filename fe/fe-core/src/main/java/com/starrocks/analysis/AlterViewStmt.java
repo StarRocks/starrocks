@@ -21,15 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -48,40 +39,6 @@ public class AlterViewStmt extends BaseViewStmt {
 
     public TableName getTbl() {
         return tableName;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (tableName == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_TABLES_USED);
-        }
-        tableName.analyze(analyzer);
-
-        Table table = analyzer.getTable(tableName);
-        if (!(table instanceof View)) {
-            throw new AnalysisException(
-                    String.format("ALTER VIEW not allowed on a table:%s.%s", getDbName(), getTable()));
-        }
-
-        if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkTblPriv(ConnectContext.get(), tableName.getDb(), tableName.getTbl(),
-                        PrivPredicate.ALTER)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "ALTER VIEW",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tableName.getTbl());
-        }
-
-        if (cols != null) {
-            cloneStmt = viewDefStmt.clone();
-        }
-
-        viewDefStmt.setNeedToSql(true);
-        Analyzer viewAnalyzer = new Analyzer(analyzer);
-        viewDefStmt.analyze(viewAnalyzer);
-
-        createColumnAndViewDefs(analyzer);
     }
 
     @Override

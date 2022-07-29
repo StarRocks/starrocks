@@ -25,6 +25,7 @@ import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -42,12 +43,12 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-
+        Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
     }
 
@@ -58,6 +59,11 @@ public class CreateTableTest {
 
     private static void alterTable(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, connectContext);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    private static void alterTableWithNewParser(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
@@ -128,7 +134,7 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testAbormal() throws DdlException {
+    public void testAbnormal() throws DdlException {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "FLOAT column can not be distribution column",
                 () -> createTable("create table test.atbl1\n" + "(k1 int, k2 float)\n" + "duplicate key(k1)\n"
@@ -152,7 +158,8 @@ public class CreateTableTest {
                         + "properties('replication_num' = '1', 'short_key' = '4');"));
 
         ExceptionChecker
-                .expectThrowsWithMsg(DdlException.class, "Failed to find enough host in all backends. need: 3",
+                .expectThrowsWithMsg(DdlException.class, "Failed to find enough hosts with storage " +
+                                "medium HDD at all backends, number of replicas needed: 3",
                         () -> createTable("create table test.atbl5\n" + "(k1 int, k2 int, k3 int)\n"
                                 + "duplicate key(k1, k2, k3)\n" + "distributed by hash(k1) buckets 1\n"
                                 + "properties('replication_num' = '3');"));
@@ -170,7 +177,8 @@ public class CreateTableTest {
         ConfigBase.setMutableConfig("enable_strict_storage_medium_check", "true");
         ExceptionChecker
                 .expectThrowsWithMsg(DdlException.class,
-                        "Failed to find enough host with storage medium is SSD in all backends. need: 1",
+                        "Failed to find enough hosts with storage " +
+                                "medium SSD at all backends, number of replicas needed: 1",
                         () -> createTable(
                                 "create table test.tb7(key1 int, key2 varchar(10)) distributed by hash(key1) \n"
                                         + "buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
@@ -253,7 +261,7 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Invalid bloom filter column 'k3': unsupported type JSON",
-                () -> alterTable("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
 
         // Modify column in unique key
         ExceptionChecker.expectThrowsNoException(() -> createTable(

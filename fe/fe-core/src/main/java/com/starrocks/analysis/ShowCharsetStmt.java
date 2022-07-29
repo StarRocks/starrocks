@@ -21,27 +21,73 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
+/**
+ * Show charset statement
+ * Acceptable syntax:
+ * SHOW {CHAR SET | CHARSET}
+ *     [LIKE 'pattern' | WHERE expr]
+ */
 public class ShowCharsetStmt extends ShowStmt {
+    private static final String CHAR_SET_COL = "Charset";
+    private static final String DESC_COL = "Description";
+    private static final String DEFAULT_COLLATION_COL = "Default collation";
+    private static final String MAX_LEN_COL = "Maxlen";
+
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Charset", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Description", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Default collation", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Maxlen", ScalarType.createVarchar(20)))
+                    .addColumn(new Column(CHAR_SET_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(DESC_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(DEFAULT_COLLATION_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(MAX_LEN_COL, ScalarType.createVarchar(20)))
                     .build();
 
     private String pattern;
+    private Expr where;
+
+    public ShowCharsetStmt() {
+    }
 
     public ShowCharsetStmt(String pattern) {
         this.pattern = pattern;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) {
+    public ShowCharsetStmt(String pattern, Expr where) {
+        this.pattern = pattern;
+        this.where = where;
+    }
+
+    public String getPattern() {
+        return pattern;
+    }
+
+    public Expr getWhere() {
+        return where;
     }
 
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder("SHOW CHARSET");
+        if (pattern != null) {
+            sb.append(" LIKE '").append(pattern).append("'");
+        }
+        if (where != null) {
+            sb.append(" WHERE ").append(where.toSql());
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

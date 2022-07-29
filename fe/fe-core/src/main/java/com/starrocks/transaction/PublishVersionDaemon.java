@@ -31,13 +31,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTable;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.rpc.LakeServiceClient;
@@ -61,7 +62,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 
-public class PublishVersionDaemon extends MasterDaemon {
+public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
@@ -75,7 +76,8 @@ public class PublishVersionDaemon extends MasterDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            List<TransactionState> readyTransactionStates = globalTransactionMgr.getReadyToPublishTransactions();
+            List<TransactionState> readyTransactionStates =
+                    globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
@@ -132,6 +134,11 @@ public class PublishVersionDaemon extends MasterDaemon {
             AgentTaskExecutor.submit(batchTask);
         }
 
+        if (Config.enable_new_publish_mechanism) {
+            publishVersionNew(globalTransactionMgr, readyTransactionStates);
+            return;
+        }
+
         // try to finish the transaction, if failed just retry in next loop
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
@@ -142,7 +149,7 @@ public class PublishVersionDaemon extends MasterDaemon {
                 if (publishVersionTask.isFinished()) {
                     // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
                     // and it will upload the failed tabletinfo to fe and fe will deal with them
-                    Set<Long> errReplicas = publishVersionTask.collectErrorReplicas();
+                    Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
                     if (!errReplicas.isEmpty()) {
                         publishErrorReplicaIds.addAll(errReplicas);
                     }
@@ -179,6 +186,33 @@ public class PublishVersionDaemon extends MasterDaemon {
                 }
             }
         } // end for readyTransactionStates
+    }
+
+    private void publishVersionNew(GlobalTransactionMgr globalTransactionMgr, List<TransactionState> txns) {
+        for (TransactionState transactionState : txns) {
+            Set<Long> publishErrorReplicas = Sets.newHashSet();
+            if (!transactionState.allPublishTasksFinishedOrQuorumWaitTimeout(publishErrorReplicas)) {
+                continue;
+            }
+            try {
+                if (transactionState.checkCanFinish()) {
+                    globalTransactionMgr.finishTransactionNew(transactionState, publishErrorReplicas);
+                }
+                if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+                    transactionState.updateSendTaskTime();
+                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                            transactionState, transactionState.getErrorReplicas().size());
+                } else {
+                    for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
+                        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
+                    }
+                    // clear publish version tasks to reduce memory usage when state changed to visible.
+                    transactionState.clearPublishVersionTasks();
+                }
+            } catch (UserException e) {
+                LOG.error("errors while publish version to all backends", e);
+            }
+        }
     }
 
     // TODO: support mix OlapTable with LakeTable
@@ -273,7 +307,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
         for (MaterializedIndex index : indexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = choosePublishVersionBackend((LakeTablet) tablet);
+                Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     LOG.warn("No available backend can execute publish version task");
                     return false;
@@ -332,22 +366,9 @@ public class PublishVersionDaemon extends MasterDaemon {
         return finished;
     }
 
-    // Returns null if no backend available.
-    private Long choosePublishVersionBackend(LakeTablet tablet) {
-        try {
-            return tablet.getPrimaryBackendId();
-        } catch (UserException e) {
-            LOG.info("Fail to get primary backend for tablet {}, choose a random alive backend", tablet.getId());
-        }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds.isEmpty()) {
-            return null;
-        }
-        return backendIds.get(0);
-    }
-
     /**
      * Refresh the materialized view if it should be triggered after base table was loaded.
+     *
      * @param transactionState
      * @throws DdlException
      * @throws MetaNotFoundException

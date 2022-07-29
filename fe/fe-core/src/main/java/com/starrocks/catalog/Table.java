@@ -28,10 +28,10 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -70,7 +70,6 @@ public class Table extends MetaObject implements Writable {
         HIVE,
         ICEBERG,
         HUDI,
-        ODBC,
         JDBC,
         MATERIALIZED_VIEW,
         LAKE
@@ -243,8 +242,6 @@ public class Table extends MetaObject implements Writable {
             table = new HiveTable();
         } else if (type == TableType.HUDI) {
             table = new HudiTable();
-        } else if (type == TableType.ODBC) {
-            table = new OdbcTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
             table = new ExternalOlapTable();
         } else if (type == TableType.ICEBERG) {

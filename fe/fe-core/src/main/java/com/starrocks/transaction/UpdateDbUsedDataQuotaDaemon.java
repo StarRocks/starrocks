@@ -24,14 +24,14 @@ package com.starrocks.transaction;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class UpdateDbUsedDataQuotaDaemon extends MasterDaemon {
+public class UpdateDbUsedDataQuotaDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(UpdateDbUsedDataQuotaDaemon.class);
 
     public UpdateDbUsedDataQuotaDaemon() {
@@ -60,10 +60,10 @@ public class UpdateDbUsedDataQuotaDaemon extends MasterDaemon {
                 long usedDataQuotaBytes = db.getUsedDataQuotaWithLock();
                 globalTransactionMgr.updateDatabaseUsedQuotaData(dbId, usedDataQuotaBytes);
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("Update database[{}] used data quota bytes : {}.", db.getFullName(), usedDataQuotaBytes);
+                    LOG.debug("Update database[{}] used data quota bytes : {}.", db.getOriginName(), usedDataQuotaBytes);
                 }
             } catch (AnalysisException e) {
-                LOG.warn("Update database[" + db.getFullName() + "] used data quota failed", e);
+                LOG.warn("Update database[" + db.getOriginName() + "] used data quota failed", e);
             }
         }
     }

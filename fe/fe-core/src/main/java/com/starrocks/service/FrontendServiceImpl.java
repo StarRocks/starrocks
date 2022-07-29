@@ -53,9 +53,9 @@ import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
-import com.starrocks.master.MasterImpl;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -167,12 +167,12 @@ import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
-    private static final Logger LOG = LogManager.getLogger(MasterImpl.class);
-    private MasterImpl masterImpl;
+    private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
+    private LeaderImpl leaderImpl;
     private ExecuteEnv exeEnv;
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
-        masterImpl = new MasterImpl();
+        leaderImpl = new LeaderImpl();
         this.exeEnv = exeEnv;
     }
 
@@ -794,12 +794,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TMasterResult finishTask(TFinishTaskRequest request) throws TException {
-        return masterImpl.finishTask(request);
+        return leaderImpl.finishTask(request);
     }
 
     @Override
     public TMasterResult report(TReportRequest request) throws TException {
-        return masterImpl.report(request);
+        return leaderImpl.report(request);
     }
 
     @Override
@@ -845,7 +845,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                        String clientIp, PrivPredicate predicate) throws AuthenticationException {
 
         final String fullUserName = ClusterNamespace.getFullName(user);
-        final String fullDbName = ClusterNamespace.getFullName(db);
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth()
                 .checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
@@ -853,7 +852,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         Preconditions.checkState(currentUser.size() == 1);
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), fullDbName, tbl, predicate)) {
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser.get(0), db, tbl, predicate)) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the LOAD privilege(s) for this operation");
         }
@@ -868,7 +867,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
         // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
@@ -916,13 +915,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         // check database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        String fullDbName = ClusterNamespace.getFullName(request.getDb());
-        Database db = globalStateMgr.getDb(fullDbName);
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
-            String dbName = fullDbName;
-            if (Strings.isNullOrEmpty(request.getCluster())) {
-                dbName = request.getDb();
-            }
             throw new UserException("unknown database, database=" + dbName);
         }
         Table table = db.getTable(request.getTbl());
@@ -948,7 +943,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TLoadTxnCommitResult result = new TLoadTxnCommitResult();
         // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
@@ -982,8 +977,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
         }
+
         if (request.isSetAuth_code()) {
-            // TODO(cmy): find a way to check
+            // TODO: find a way to check
         } else {
             checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
@@ -991,13 +987,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        String fullDbName = ClusterNamespace.getFullName(request.getDb());
-        Database db = globalStateMgr.getDb(fullDbName);
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
-            String dbName = fullDbName;
-            if (Strings.isNullOrEmpty(request.getCluster())) {
-                dbName = request.getDb();
-            }
             throw new UserException("unknown database, database=" + dbName);
         }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
@@ -1052,6 +1044,66 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TLoadTxnCommitResult loadTxnPrepare(TLoadTxnCommitRequest request) throws TException {
+        String clientAddr = getClientAddrAsString();
+        LOG.info("receive txn prepare request. db: {}, tbl: {}, txn_id: {}, backend: {}",
+                request.getDb(), request.getTbl(), request.getTxnId(), clientAddr);
+        LOG.debug("txn prepare request: {}", request);
+
+        TLoadTxnCommitResult result = new TLoadTxnCommitResult();
+        // if current node is not master, reject the request
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        result.setStatus(status);
+        try {
+            loadTxnPrepareImpl(request);
+        } catch (UserException e) {
+            LOG.warn("failed to prepare txn_id: {}: {}", request.getTxnId(), e.getMessage());
+            status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
+            status.addToError_msgs(e.getMessage());
+        } catch (Throwable e) {
+            LOG.warn("catch unknown result.", e);
+            status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs(Strings.nullToEmpty(e.getMessage()));
+            return result;
+        }
+        return result;
+    }
+
+    private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws UserException {
+        String cluster = request.getCluster();
+        if (Strings.isNullOrEmpty(cluster)) {
+            cluster = SystemInfoService.DEFAULT_CLUSTER;
+        }
+
+        if (request.isSetAuth_code()) {
+            // TODO: find a way to check
+        } else {
+            checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
+        }
+
+        // get database
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
+        if (db == null) {
+            throw new UserException("unknown database, database=" + dbName);
+        }
+        TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(
+                db.getId(), request.getTxnId(),
+                TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                attachment);
+    }
+
+    @Override
     public TLoadTxnRollbackResult loadTxnRollback(TLoadTxnRollbackRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
         LOG.info("receive txn rollback request. db: {}, tbl: {}, txn_id: {}, reason: {}, backend: {}",
@@ -1060,7 +1112,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TLoadTxnRollbackResult result = new TLoadTxnRollbackResult();
         // if current node is not master, reject the request
-        if (!GlobalStateMgr.getCurrentState().isMaster()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
@@ -1096,15 +1148,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         if (request.isSetAuth_code()) {
-            // TODO(cmy): find a way to check
+            // TODO: find a way to check
         } else {
             checkPasswordAndPrivs(cluster, request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip(), PrivPredicate.LOAD);
         }
-        String dbName = ClusterNamespace.getFullName(request.getDb());
+        String dbName = request.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
-            throw new MetaNotFoundException("db " + request.getDb() + " does not exist");
+            throw new MetaNotFoundException("db " + dbName + " does not exist");
         }
         long dbId = db.getId();
         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
@@ -1145,18 +1197,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        String fullDbName = ClusterNamespace.getFullName(request.getDb());
-        Database db = globalStateMgr.getDb(fullDbName);
+        String dbName = request.getDb();
+        Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
-            String dbName = fullDbName;
-            if (Strings.isNullOrEmpty(request.getCluster())) {
-                dbName = request.getDb();
-            }
             throw new UserException("unknown database, database=" + dbName);
         }
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
         if (!db.tryReadLock(timeoutMs, TimeUnit.MILLISECONDS)) {
-            throw new UserException("get database read lock timeout, database=" + fullDbName);
+            throw new UserException("get database read lock timeout, database=" + dbName);
         }
         try {
             Table table = db.getTable(request.getTbl());
@@ -1231,22 +1279,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTableMetaResponse getTableMeta(TGetTableMetaRequest request) throws TException {
-        return masterImpl.getTableMeta(request);
+        return leaderImpl.getTableMeta(request);
     }
 
     @Override
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
-        return masterImpl.beginRemoteTxn(request);
+        return leaderImpl.beginRemoteTxn(request);
     }
 
     @Override
     public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
-        return masterImpl.commitRemoteTxn(request);
+        return leaderImpl.commitRemoteTxn(request);
     }
 
     @Override
     public TAbortRemoteTxnResponse abortRemoteTxn(TAbortRemoteTxnRequest request) throws TException {
-        return masterImpl.abortRemoteTxn(request);
+        return leaderImpl.abortRemoteTxn(request);
     }
 
     @Override

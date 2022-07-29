@@ -536,6 +536,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             Operator root = LogicalApplyOperator.builder().setCorrelationColumnRefs(correlation)
                     .setNeedCheckMaxRows(false)
                     .setUseSemiAnti(false)
+                    .setUnCorrelationSubqueryPredicateColumns(new ColumnRefSet())
                     .setNeedOutputRightChildColumns(true).build();
             return new LogicalPlan(
                     new OptExprBuilder(root, Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),

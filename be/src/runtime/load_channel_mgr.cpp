@@ -27,7 +27,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
-#include "service/backend_options.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -52,17 +51,18 @@ static int64_t calc_job_timeout_s(int64_t timeout_in_req_s) {
     return load_channel_timeout_s;
 }
 
-LoadChannelMgr::LoadChannelMgr() : _is_stopped(false) {
+LoadChannelMgr::LoadChannelMgr() : _mem_tracker(nullptr), _load_channels_clean_thread(INVALID_BTHREAD) {
     REGISTER_GAUGE_STARROCKS_METRIC(load_channel_count, [this]() {
-        std::lock_guard<std::mutex> l(_lock);
+        std::lock_guard l(_lock);
         return _load_channels.size();
     });
 }
 
 LoadChannelMgr::~LoadChannelMgr() {
-    _is_stopped.store(true);
-    if (_load_channels_clean_thread.joinable()) {
-        _load_channels_clean_thread.join();
+    if (_load_channels_clean_thread != INVALID_BTHREAD) {
+        [[maybe_unused]] void* ret;
+        bthread_stop(_load_channels_clean_thread);
+        bthread_join(_load_channels_clean_thread, &ret);
     }
 }
 
@@ -76,9 +76,9 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
     UniqueId load_id(request.id());
-    scoped_refptr<LoadChannel> channel;
+    std::shared_ptr<LoadChannel> channel;
     {
-        std::lock_guard<std::mutex> l(_lock);
+        std::lock_guard l(_lock);
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
@@ -128,32 +128,36 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     }
 }
 
-Status LoadChannelMgr::_start_bg_worker() {
-    _load_channels_clean_thread = std::thread([this] {
-#ifdef GOOGLE_PROFILER
-        ProfilerRegisterThread();
-#endif
-
+void* LoadChannelMgr::load_channel_clean_bg_worker(void* arg) {
 #ifndef BE_TEST
-        uint32_t interval = 60;
+    uint64_t interval = 60;
 #else
-        uint32_t interval = 1;
+    uint64_t interval = 1;
 #endif
-        while (!_is_stopped.load()) {
-            _start_load_channels_clean();
-            sleep(interval);
+    auto mgr = static_cast<LoadChannelMgr*>(arg);
+    while (!bthread_stopped(bthread_self())) {
+        if (bthread_usleep(interval * 1000 * 1000) == 0) {
+            mgr->_start_load_channels_clean();
         }
-    });
-    Thread::set_thread_name(_load_channels_clean_thread, "load_chan_clean");
+    }
+    return nullptr;
+}
+
+Status LoadChannelMgr::_start_bg_worker() {
+    int r = bthread_start_background(&_load_channels_clean_thread, nullptr, load_channel_clean_bg_worker, this);
+    if (UNLIKELY(r != 0)) {
+        PLOG(ERROR) << "Fail to create bthread.";
+        return Status::InternalError("Fail to create bthread");
+    }
     return Status::OK();
 }
 
-Status LoadChannelMgr::_start_load_channels_clean() {
-    std::vector<scoped_refptr<LoadChannel>> timeout_channels;
+void LoadChannelMgr::_start_load_channels_clean() {
+    std::vector<std::shared_ptr<LoadChannel>> timeout_channels;
 
     time_t now = time(nullptr);
     {
-        std::lock_guard<std::mutex> l(_lock);
+        std::lock_guard l(_lock);
         for (auto it = _load_channels.begin(); it != _load_channels.end(); /**/) {
             if (difftime(now, it->second->last_updated_time()) >= it->second->timeout()) {
                 timeout_channels.emplace_back(std::move(it->second));
@@ -164,7 +168,7 @@ Status LoadChannelMgr::_start_load_channels_clean() {
         }
     }
 
-    // we must cancel these load channels before destroying them.
+    // we must cancel these load channels before destroying them
     // otherwise some object may be invalid before trying to visit it.
     // eg: MemTracker in load channel
     for (auto& channel : timeout_channels) {
@@ -176,17 +180,15 @@ Status LoadChannelMgr::_start_load_channels_clean() {
     // on this Backend
     LOG(INFO) << "Memory consumption(bytes) limit=" << _mem_tracker->limit()
               << " current=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption();
-
-    return Status::OK();
 }
 
-scoped_refptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {
+std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {
     std::lock_guard l(_lock);
     auto it = _load_channels.find(load_id);
     return (it != _load_channels.end()) ? it->second : nullptr;
 }
 
-scoped_refptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id) {
+std::shared_ptr<LoadChannel> LoadChannelMgr::remove_load_channel(const UniqueId& load_id) {
     std::lock_guard l(_lock);
     if (auto it = _load_channels.find(load_id); it != _load_channels.end()) {
         auto ret = it->second;

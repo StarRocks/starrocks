@@ -20,10 +20,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -36,9 +37,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.common.Config.statistics_manager_sleep_time_sec;
-
-public class StatisticsMetaManager extends MasterDaemon {
+public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     static {
@@ -94,8 +93,10 @@ public class StatisticsMetaManager extends MasterDaemon {
         HISTOGRAM_STATISTICS_COLUMNS = ImmutableList.of(
                 new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("column_name", new TypeDef(columnNameType)),
+                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                 new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("histogram", new TypeDef(histogramType))
+                new ColumnDef("histogram", new TypeDef(histogramType)),
+                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
         );
     }
 
@@ -136,8 +137,8 @@ public class StatisticsMetaManager extends MasterDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false).size();
+        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
         // maybe cluster just shutdown, ignore
         if (aliveSize <= total / 2) {
             lossTableCount = 0;
@@ -185,8 +186,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, SAMPLE_STATISTICS_COLUMNS, "olap",
@@ -213,8 +213,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, FULL_STATISTICS_COLUMNS, "olap",
@@ -241,8 +240,7 @@ public class StatisticsMetaManager extends MasterDaemon {
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
-        int defaultReplicationNum = Math.min(3,
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+        int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
                 tableName, HISTOGRAM_STATISTICS_COLUMNS, "olap",
@@ -339,10 +337,11 @@ public class StatisticsMetaManager extends MasterDaemon {
         }
     }
 
+
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
-        trySleep(statistics_manager_sleep_time_sec * 1000);
+        trySleep(Config.statistic_manager_sleep_time_sec * 1000);
         while (!checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
@@ -353,5 +352,8 @@ public class StatisticsMetaManager extends MasterDaemon {
         refreshStatisticsTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
     }
 }

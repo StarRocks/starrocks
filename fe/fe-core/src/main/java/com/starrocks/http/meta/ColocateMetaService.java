@@ -22,7 +22,6 @@
 package com.starrocks.http.meta;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -93,15 +92,15 @@ public class ColocateMetaService {
         @Override
         public void executeWithoutPassword(BaseRequest request, BaseResponse response)
                 throws DdlException {
-            if (redirectToMaster(request, response)) {
+            if (redirectToLeader(request, response)) {
                 return;
             }
             checkGlobalAuth(ConnectContext.get().getCurrentUserIdentity(), PrivPredicate.ADMIN);
-            executeInMasterWithAdmin(request, response);
+            executeInLeaderWithAdmin(request, response);
         }
 
         // implement in derived classes
-        protected void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        protected void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
             throw new DdlException("Not implemented");
         }
@@ -119,7 +118,7 @@ public class ColocateMetaService {
         }
 
         @Override
-        public void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        public void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
             response.setContentType("application/json");
             RestResult result = new RestResult();
@@ -140,7 +139,7 @@ public class ColocateMetaService {
         }
 
         @Override
-        public void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        public void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
             GroupId groupId = checkAndGetGroupId(request);
 
@@ -168,7 +167,7 @@ public class ColocateMetaService {
         }
 
         @Override
-        public void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        public void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
             GroupId groupId = checkAndGetGroupId(request);
 
@@ -198,12 +197,8 @@ public class ColocateMetaService {
         }
 
         @Override
-        public void executeInMasterWithAdmin(BaseRequest request, BaseResponse response)
+        public void executeInLeaderWithAdmin(BaseRequest request, BaseResponse response)
                 throws DdlException {
-            final String clusterName = ConnectContext.get().getClusterName();
-            if (Strings.isNullOrEmpty(clusterName)) {
-                throw new DdlException("No cluster selected.");
-            }
             GroupId groupId = checkAndGetGroupId(request);
 
             String meta = request.getContent();

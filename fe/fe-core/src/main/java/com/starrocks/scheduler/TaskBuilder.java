@@ -38,7 +38,8 @@ public class TaskBuilder {
         taskProperties.put(MvTaskRunProcessor.MV_ID, String.valueOf(materializedView.getId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         task.setProperties(taskProperties);
-        task.setDefinition(materializedView.getViewDefineSql());
+        task.setDefinition(
+                "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
         task.setExpireTime(0L);
         return task;
     }

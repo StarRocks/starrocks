@@ -24,9 +24,9 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.lake.LakeTablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
@@ -223,7 +223,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             long replicaCount = 0;
             for (Tablet tablet : getTablets()) {
                 LocalTablet localTablet = (LocalTablet) tablet;
-                replicaCount += localTablet.getReplicas().size();
+                replicaCount += localTablet.getImmutableReplicas().size();
             }
             return replicaCount;
         }

@@ -35,10 +35,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -246,45 +246,39 @@ public class Util {
     public static int schemaHash(int schemaVersion, List<Column> columns, Set<String> bfColumns, double bfFpp) {
         Adler32 adler32 = new Adler32();
         adler32.update(schemaVersion);
-        String charsetName = "UTF-8";
-        try {
-            List<String> indexColumnNames = Lists.newArrayList();
-            List<String> bfColumnNames = Lists.newArrayList();
-            // columns
-            for (Column column : columns) {
-                adler32.update(column.getName().getBytes(charsetName));
-                String typeString = columnHashString(column);
-                adler32.update(typeString.getBytes(charsetName));
+        List<String> indexColumnNames = Lists.newArrayList();
+        List<String> bfColumnNames = Lists.newArrayList();
+        // columns
+        for (Column column : columns) {
+            adler32.update(column.getName().getBytes(StandardCharsets.UTF_8));
+            String typeString = columnHashString(column);
+            adler32.update(typeString.getBytes(StandardCharsets.UTF_8));
 
-                String columnName = column.getName();
-                if (column.isKey()) {
-                    indexColumnNames.add(columnName);
-                }
-
-                if (bfColumns != null && bfColumns.contains(columnName)) {
-                    bfColumnNames.add(columnName);
-                }
+            String columnName = column.getName();
+            if (column.isKey()) {
+                indexColumnNames.add(columnName);
             }
 
-            // index column name
-            for (String columnName : indexColumnNames) {
-                adler32.update(columnName.getBytes(charsetName));
+            if (bfColumns != null && bfColumns.contains(columnName)) {
+                bfColumnNames.add(columnName);
+            }
+        }
+
+        // index column name
+        for (String columnName : indexColumnNames) {
+            adler32.update(columnName.getBytes(StandardCharsets.UTF_8));
+        }
+
+        // bloom filter index
+        if (!bfColumnNames.isEmpty()) {
+            // bf column name
+            for (String columnName : bfColumnNames) {
+                adler32.update(columnName.getBytes(StandardCharsets.UTF_8));
             }
 
-            // bloom filter index
-            if (!bfColumnNames.isEmpty()) {
-                // bf column name
-                for (String columnName : bfColumnNames) {
-                    adler32.update(columnName.getBytes(charsetName));
-                }
-
-                // bf fpp
-                String bfFppStr = String.valueOf(bfFpp);
-                adler32.update(bfFppStr.getBytes(charsetName));
-            }
-        } catch (UnsupportedEncodingException e) {
-            LOG.error("encoding error", e);
-            return -1;
+            // bf fpp
+            String bfFppStr = String.valueOf(bfFpp);
+            adler32.update(bfFppStr.getBytes(StandardCharsets.UTF_8));
         }
 
         return Math.abs((int) adler32.getValue());

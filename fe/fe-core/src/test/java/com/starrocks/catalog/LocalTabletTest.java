@@ -86,7 +86,7 @@ public class LocalTabletTest {
         Assert.assertEquals(replica2, tablet.getReplicaById(replica2.getId()));
         Assert.assertEquals(replica3, tablet.getReplicaById(replica3.getId()));
 
-        Assert.assertEquals(3, tablet.getReplicas().size());
+        Assert.assertEquals(3, tablet.getImmutableReplicas().size());
         Assert.assertEquals(replica1, tablet.getReplicaByBackendId(replica1.getBackendId()));
         Assert.assertEquals(replica2, tablet.getReplicaByBackendId(replica2.getBackendId()));
         Assert.assertEquals(replica3, tablet.getReplicaByBackendId(replica3.getBackendId()));
@@ -109,11 +109,11 @@ public class LocalTabletTest {
 
         // delete replica2
         Assert.assertTrue(tablet.deleteReplica(replica2));
-        Assert.assertEquals(1, tablet.getReplicas().size());
+        Assert.assertEquals(1, tablet.getImmutableReplicas().size());
 
         // clear replicas
         tablet.clearReplica();
-        Assert.assertEquals(0, tablet.getReplicas().size());
+        Assert.assertEquals(0, tablet.getImmutableReplicas().size());
     }
 
     @Test
@@ -129,8 +129,8 @@ public class LocalTabletTest {
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         LocalTablet rTablet1 = LocalTablet.read(dis);
         Assert.assertEquals(1, rTablet1.getId());
-        Assert.assertEquals(3, rTablet1.getReplicas().size());
-        Assert.assertEquals(rTablet1.getReplicas().get(0).getVersion(), rTablet1.getReplicas().get(1).getVersion());
+        Assert.assertEquals(3, rTablet1.getImmutableReplicas().size());
+        Assert.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(), rTablet1.getImmutableReplicas().get(1).getVersion());
 
         Assert.assertTrue(rTablet1.equals(tablet));
         Assert.assertTrue(rTablet1.equals(rTablet1));

@@ -53,22 +53,10 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
         _scanner_columns.emplace_back(slot->col_name());
     }
 
-    // general conjuncts.
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_scanner_params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
-
-    // slot id conjuncts.
-    const auto& conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
-    if (!conjunct_ctxs_by_slot.empty()) {
-        for (auto iter = conjunct_ctxs_by_slot.begin(); iter != conjunct_ctxs_by_slot.end(); ++iter) {
-            SlotId slot_id = iter->first;
-            _conjunct_ctxs_by_slot.insert({slot_id, std::vector<ExprContext*>()});
-            RETURN_IF_ERROR(Expr::clone_if_not_exists(iter->second, runtime_state, &_conjunct_ctxs_by_slot[slot_id]));
-        }
-    }
-
-    // min/max conjuncts.
-    RETURN_IF_ERROR(
-            Expr::clone_if_not_exists(_scanner_params.min_max_conjunct_ctxs, runtime_state, &_min_max_conjunct_ctxs));
+    // No need to clone following conjunct ctxs. It's cloned & released from outside.
+    _min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
+    _conjunct_ctxs = _scanner_params.conjunct_ctxs;
+    _conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
 
     Status status = do_init(runtime_state, scanner_params);
     return status;
@@ -166,11 +154,6 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
-    Expr::close(_conjunct_ctxs, runtime_state);
-    Expr::close(_min_max_conjunct_ctxs, runtime_state);
-    for (auto& it : _conjunct_ctxs_by_slot) {
-        Expr::close(it.second, runtime_state);
-    }
     do_close(runtime_state);
     _file.reset(nullptr);
     _raw_file.reset(nullptr);
@@ -179,7 +162,7 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     }
 }
 
-void HdfsScanner::fianlize() {
+void HdfsScanner::finalize() {
     if (_runtime_state != nullptr) {
         close(_runtime_state);
     }

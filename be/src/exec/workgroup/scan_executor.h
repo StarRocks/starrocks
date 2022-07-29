@@ -8,12 +8,12 @@ namespace workgroup {
 
 class ScanExecutor;
 class WorkGroupManager;
-class ScanTask;
+struct ScanTask;
 class ScanTaskQueue;
 
 class ScanExecutor {
 public:
-    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, ScanExecutorType type);
+    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue);
     virtual ~ScanExecutor();
 
     void initialize(int32_t num_threads);

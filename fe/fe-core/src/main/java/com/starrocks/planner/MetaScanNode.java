@@ -10,7 +10,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.lake.LakeTablet;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -80,7 +80,7 @@ public class MetaScanNode extends ScanNode {
                                     ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());
                         } else {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
                             }
                         }

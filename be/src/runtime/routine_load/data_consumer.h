@@ -146,6 +146,7 @@ private:
     std::string _topic;
     std::unordered_map<std::string, std::string> _custom_properties;
 
+    size_t _non_eof_partition_count = 0;
     KafkaEventCb _k_event_cb;
     RdKafka::KafkaConsumer* _k_consumer = nullptr;
 };
