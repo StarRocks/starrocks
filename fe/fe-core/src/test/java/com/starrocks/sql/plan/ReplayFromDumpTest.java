@@ -214,19 +214,18 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains(" MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 51\n" +
+                "    EXCHANGE ID: 50\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 72\n" +
+                "    EXCHANGE ID: 69\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  39:Project\n" +
                 "  |  <slot 171> : 171: c_customer_sk\n" +
                 "  |  \n" +
-                "  38:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
+                "  38:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
     @Test
@@ -442,7 +441,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testMergeGroupWithDeleteBestExpression() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
@@ -451,7 +451,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }
