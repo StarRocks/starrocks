@@ -96,7 +96,7 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
-export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
+export CLASSPATH=$STARROCKS_HOME/lib/udf-extensions-jar-with-dependencies.jar:$STARROCKS_HOME/lib/starrocks-jdbc-bridge-jar-with-dependencies.jar:$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
