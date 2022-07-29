@@ -990,7 +990,7 @@ public class Config extends ConfigBase {
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
-    @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path", "schedule_slot_num_per_path_only_for_test"})
+    @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
     public static int tablet_sched_slot_num_per_path = 2;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets

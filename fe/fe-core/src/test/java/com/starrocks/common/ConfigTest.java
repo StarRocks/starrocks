@@ -19,6 +19,7 @@ package com.starrocks.common;
 
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.net.URL;
@@ -27,6 +28,11 @@ import java.util.List;
 
 public class ConfigTest {
     private Config config = new Config();
+
+    private static class ConfigForTest extends ConfigBase {
+        @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path", "schedule_slot_num_per_path_only_for_test"})
+        public static int tablet_sched_slot_num_per_path = 2;
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -56,13 +62,14 @@ public class ConfigTest {
 
     @Test
     public void testMultiAlias() throws Exception {
+        ConfigForTest configForTest = new ConfigForTest();
         URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
-        config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        configForTest.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path_only_for_test", false);
-        List<List<String>> configs = Config.getConfigInfo(matcher);
+        List<List<String>> configs = ConfigForTest.getConfigInfo(matcher);
         Assert.assertEquals(1, configs.size());
         Assert.assertEquals("5", configs.get(0).get(2));
-        Assert.assertEquals(5, Config.tablet_sched_slot_num_per_path);
+        Assert.assertEquals(5, ConfigForTest.tablet_sched_slot_num_per_path);
         Assert.assertTrue(configs.get(0).get(1).contains("schedule_slot_num_per_path_only_for_test"));
     }
 
