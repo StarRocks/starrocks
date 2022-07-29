@@ -4486,7 +4486,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public void onEraseTable(long dbId, @NotNull OlapTable olapTable) {
+    public void onEraseTable(@NotNull OlapTable olapTable) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
         for (Partition partition : allPartitions) {
@@ -4498,18 +4498,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         colocateTableIndex.removeTable(olapTable.getId());
-
-        // onEraseOlapTable is invoked within the protection of database's writer lock, no need
-        // to acquire lock again here.
-        Database db = getDb(dbId);
-
-        for (long mvId : olapTable.getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId);
-            if (tmpTable != null) {
-                MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setActive(false);
-            }
-        }
     }
 
     public void onErasePartition(Partition partition) {

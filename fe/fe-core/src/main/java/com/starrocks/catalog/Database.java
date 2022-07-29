@@ -399,10 +399,10 @@ public class Database extends MetaObject implements Writable {
         if (!isForceDrop) {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
             if (oldTable != null) {
-                runnable = oldTable.delete(getId(), isReplay);
+                runnable = oldTable.delete(isReplay);
             }
         } else {
-            runnable = table.delete(getId(), isReplay);
+            runnable = table.delete(isReplay);
         }
 
         LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(), tableId);
