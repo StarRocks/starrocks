@@ -9,6 +9,7 @@
 #include "column/hash_set.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_hdfs.h"
 #include "gutil/strings/substitute.h"
 #include "io/compressed_input_stream.h"
 #include "runtime/descriptors.h"
@@ -262,10 +263,17 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         break;
     }
     case TFileType::FILE_BROKER: {
-        BrokerFileSystem fs_broker(address, params.properties);
-        ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
-        src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
-        break;
+        if (params.__isset.use_broker && !params.use_broker) {
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto file, fs->new_sequential_file(range_desc.path));
+            src_file = std::shared_ptr<SequentialFile>(std::move(file));
+            break;
+        } else {
+            BrokerFileSystem fs_broker(address, params.properties);
+            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
+            src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
+            break;
+        }
     }
     }
     if (compression == CompressionTypePB::NO_COMPRESSION) {
@@ -291,10 +299,17 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
         break;
     }
     case TFileType::FILE_BROKER: {
-        BrokerFileSystem fs_broker(address, params.properties);
-        ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
-        src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
-        break;
+        if (params.__isset.use_broker && !params.use_broker) {
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(range_desc.path, FSOptions(&params)));
+            ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(RandomAccessFileOptions(), range_desc.path));
+            src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
+            break;
+        } else {
+            BrokerFileSystem fs_broker(address, params.properties);
+            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
+            src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
+            break;
+        }
     }
     case TFileType::FILE_STREAM:
         return Status::NotSupported("Does not support create random-access file from file stream");

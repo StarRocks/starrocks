@@ -265,6 +265,24 @@ public class Config extends ConfigBase {
     public static boolean ignore_unknown_log_id = false;
 
     /**
+     * hdfs_read_buffer_size_kb for reading hdfs
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_read_buffer_size_kb = 8192;
+
+    /**
+     * hdfs_write_buffer_size_kb for writing hdfs
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_write_buffer_size_kb = 1024;
+
+    /**
+     * expire seconds for unused file system manager
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_file_sytem_expire_seconds = 300;
+
+    /**
      * Non-master FE will stop offering service
      * if meta data delay gap exceeds *meta_delay_toleration_second*
      */

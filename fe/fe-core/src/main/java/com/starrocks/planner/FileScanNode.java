@@ -47,9 +47,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
@@ -62,6 +64,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -228,9 +231,19 @@ public class FileScanNode extends LoadScanNode {
     private void initParams(ParamCreateContext context)
             throws UserException {
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
+        params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
         context.params = params;
 
         BrokerFileGroup fileGroup = context.fileGroup;
+        List<String> filePaths = fileGroup.getFilePaths();
+        if (!brokerDesc.hasBroker()) {
+            if (filePaths.size() == 0) {
+                throw new DdlException("filegroup number=" + fileGroups.size() + " is illegal");
+            }
+            THdfsProperties hdfsProperties = new THdfsProperties();
+            HdfsUtil.getTProperties(filePaths.get(0), brokerDesc, hdfsProperties); 
+            params.setHdfs_properties(hdfsProperties);
+        }
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
@@ -250,6 +263,7 @@ public class FileScanNode extends LoadScanNode {
         params.setRow_delimiter(row_delimiter[0]);
         params.setStrict_mode(strictMode);
         params.setProperties(brokerDesc.getProperties());
+        params.setUse_broker(brokerDesc.hasBroker());
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -359,7 +373,7 @@ public class FileScanNode extends LoadScanNode {
         context.tupleDescriptor.computeMemLayout();
     }
 
-    private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName)
+    private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
             throws UserException {
         Backend selectedBackend = backends.get(nextBe++);
         nextBe = nextBe % backends.size();
@@ -368,13 +382,17 @@ public class FileScanNode extends LoadScanNode {
         TBrokerScanRange brokerScanRange = new TBrokerScanRange();
         brokerScanRange.setParams(params);
 
-        FsBroker broker = null;
-        try {
-            broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
-        } catch (AnalysisException e) {
-            throw new UserException(e.getMessage());
+        if (hasBroker) {
+            FsBroker broker = null;
+            try {
+                broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(brokerName, selectedBackend.getHost());
+            } catch (AnalysisException e) {
+                throw new UserException(e.getMessage());
+            }
+            brokerScanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
+        } else {
+            brokerScanRange.addToBroker_addresses(new TNetworkAddress("", 0));
         }
-        brokerScanRange.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
 
         // Scan range
         TScanRange scanRange = new TScanRange();
@@ -407,7 +425,11 @@ public class FileScanNode extends LoadScanNode {
             for (BrokerFileGroup fileGroup : fileGroups) {
                 List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
                 for (String path : fileGroup.getFilePaths()) {
-                    BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
+                    if (brokerDesc.hasBroker()) {
+                        BrokerUtil.parseFile(path, brokerDesc, fileStatuses);
+                    } else {
+                        HdfsUtil.parseFile(path, brokerDesc, fileStatuses);
+                    }
                 }
                 fileStatusesList.add(fileStatuses);
                 filesAdded += fileStatuses.size();
@@ -502,7 +524,7 @@ public class FileScanNode extends LoadScanNode {
         for (int i = 0; i < fileStatuses.size(); ) {
             TBrokerFileStatus fileStatus = fileStatuses.get(i);
             TFileFormatType formatType = formatType(context.fileGroup.getFileFormat(), fileStatus.path);
-            List<String> columnsFromPath = BrokerUtil.parseColumnsFromPath(fileStatus.path,
+            List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
             int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
 
@@ -567,7 +589,7 @@ public class FileScanNode extends LoadScanNode {
         long numInstances = bytesPerInstance == 0 ? 1 : (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
 
         for (int i = 0; i < numInstances; ++i) {
-            locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName()), 0L));
+            locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName(), brokerDesc.hasBroker()), 0L));
         }
     }
 
@@ -645,7 +667,7 @@ public class FileScanNode extends LoadScanNode {
             TScanRangeLocations newLocations = null;
             try {
                 // Get new alive be and broker here, and params is not used, so set null
-                newLocations = newLocations(null, brokerDesc.getName());
+                newLocations = newLocations(null, brokerDesc.getName(), true);
             } catch (UserException e) {
                 LOG.warn("new locations failed.", e);
                 // Just return, retry by LoadTask

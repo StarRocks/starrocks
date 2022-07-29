@@ -26,11 +26,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.fs.HdfsUtil;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -63,7 +63,7 @@ public class BrokerLoadPendingTaskTest {
                 result = "hdfs://localhost:8900/test_column";
             }
         };
-        new MockUp<BrokerUtil>() {
+        new MockUp<HdfsUtil>() {
             @Mock
             public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) {
                 fileStatuses.add(tBrokerFileStatus);
