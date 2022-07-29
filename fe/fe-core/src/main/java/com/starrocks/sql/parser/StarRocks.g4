@@ -83,7 +83,6 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
-    | SET setVarList                                                                        #setStmt
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -101,10 +100,10 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createResourceGroupStatement                                                              #createResourceGroup
-    | dropResourceGroupStatement                                                                #dropResourceGroup
-    | alterResourceGroupStatement                                                               #alterResourceGroup
-    | showResourceGroupStatement                                                                #showResourceGroup
+    | createResourceGroupStatement                                                          #createResourceGroup
+    | dropResourceGroupStatement                                                            #dropResourceGroup
+    | alterResourceGroupStatement                                                           #alterResourceGroup
+    | showResourceGroupStatement                                                            #showResourceGroup
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
@@ -125,6 +124,7 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | setStatement                                                                          #setStmt
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -668,18 +668,21 @@ showBrokerStatement
     : SHOW BROKER
     ;
 
-varType
-    : GLOBAL
-    | LOCAL
-    | SESSION
+setStatement
+    : SET setVar (',' setVar)*
     ;
 
 setVar
-    : varType? IDENTIFIER '=' expression
+    : varType? identifier '=' setExprOrDefault
+    | AT identifierOrString '=' expression
+    | AT AT (varType '.')? identifier '=' setExprOrDefault
     ;
 
-setVarList
-    : setVar (',' setVar)*
+setExprOrDefault
+    : DEFAULT
+    | ON
+    | ALL
+    | expression
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -808,7 +811,7 @@ outerAndSemiJoinType
     ;
 
 bracketHint
-    : '[' IDENTIFIER (',' IDENTIFIER)* ']'
+    : '[' identifier (',' identifier)* ']'
     ;
 
 setVarHint
@@ -816,7 +819,7 @@ setVarHint
     ;
 
 hintMap
-    : k=IDENTIFIER '=' v=literalExpression
+    : k=identifierOrString '=' v=literalExpression
     ;
 
 joinCriteria
@@ -969,7 +972,7 @@ aggregationFunction
     ;
 
 variable
-    : AT AT ((GLOBAL | SESSION | LOCAL) '.')? identifier
+    : AT AT (varType '.')? identifier
     ;
 
 columnReference
@@ -1132,6 +1135,12 @@ property
     : key=string '=' value=string
     ;
 
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
+    ;
+
 comment
     : COMMENT string
     ;
@@ -1215,10 +1224,10 @@ qualifiedName
     ;
 
 identifier
-    : IDENTIFIER             #unquotedIdentifier
+    : LETTER_IDENTIFIER      #unquotedIdentifier
     | nonReserved            #unquotedIdentifier
-    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
+    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     ;
 
 identifierList
