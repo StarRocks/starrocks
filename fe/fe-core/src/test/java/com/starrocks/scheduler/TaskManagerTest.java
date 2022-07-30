@@ -167,7 +167,7 @@ public class TaskManagerTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+            testDb = GlobalStateMgr.getCurrentState().getDb("test");
             MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
             Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
@@ -219,7 +219,7 @@ public class TaskManagerTest {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+            testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
             // at least 2 times = schedule 1 times + execute 1 times
             List<TaskRunStatus> taskRuns = null;

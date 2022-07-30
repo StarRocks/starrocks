@@ -44,12 +44,12 @@ public class LabelNameTest {
 
         LabelName label = new LabelName("testDb", "testLabel");
         label.analyze(analyzer);
-        Assert.assertEquals("`default_cluster:testDb`.`testLabel`", label.toString());
+        Assert.assertEquals("`testDb`.`testLabel`", label.toString());
 
         label = new LabelName("", "testLabel");
         label.analyze(analyzer);
-        Assert.assertEquals("`default_cluster:testDb`.`testLabel`", label.toString());
-        Assert.assertEquals("default_cluster:testDb", label.getDbName());
+        Assert.assertEquals("`testDb`.`testLabel`", label.toString());
+        Assert.assertEquals("testDb", label.getDbName());
         Assert.assertEquals("testLabel", label.getLabelName());
     }
 

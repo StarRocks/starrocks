@@ -117,7 +117,6 @@ import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -2801,20 +2800,17 @@ public class GlobalStateMgr {
     // Change current catalog and database of this session.
     // We can support 'USE CATALOG.DB'
     public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
-        String currentCatalogName = ctx.getCurrentCatalog();
         String dbName = ctx.getDatabase();
 
         String[] parts = identifier.split("\\.");
         if (parts.length != 1 && parts.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
         } else if (parts.length == 1) {
-            dbName = CatalogMgr.isInternalCatalog(currentCatalogName) ?
-                    ClusterNamespace.getFullName(identifier) : identifier;
+            dbName = identifier;
         } else {
             String newCatalogName = parts[0];
             if (catalogMgr.catalogExists(newCatalogName)) {
-                dbName = CatalogMgr.isInternalCatalog(newCatalogName) ?
-                        ClusterNamespace.getFullName(parts[1]) : parts[1];
+                dbName = parts[1];
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }

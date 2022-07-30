@@ -88,7 +88,6 @@ public class TablePattern implements Writable {
 
         if (!db.equals("*")) {
             FeNameFormat.checkDbName(db);
-            db = ClusterNamespace.getFullName(db);
         }
 
         if (!tbl.equals("*")) {
@@ -130,12 +129,17 @@ public class TablePattern implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         Preconditions.checkState(isAnalyzed);
-        Text.writeString(out, db);
+        // compatible with old version
+        if (db.equals("*")) {
+            Text.writeString(out, db);
+        } else {
+            Text.writeString(out, ClusterNamespace.getFullName(db));
+        }
         Text.writeString(out, tbl);
     }
 
     public void readFields(DataInput in) throws IOException {
-        db = Text.readString(in);
+        db = ClusterNamespace.getNameFromFullName(Text.readString(in));
         tbl = Text.readString(in);
         isAnalyzed = true;
     }

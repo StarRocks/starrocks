@@ -53,15 +53,13 @@ public class CreateLakeTableTest {
     }
 
     private void checkLakeTable(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table.isLakeTable());
     }
 
     private LakeTable getLakeTable(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table.isLakeTable());
         return (LakeTable) table;

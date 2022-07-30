@@ -5,9 +5,7 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -76,10 +74,6 @@ public class MetaUtils {
                 throw new SemanticException("No database selected");
             }
             tableName.setDb(connectContext.getDatabase());
-        } else {
-            if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-                tableName.setDb(ClusterNamespace.getFullName(tableName.getDb()));
-            }
         }
 
         if (Strings.isNullOrEmpty(tableName.getTbl())) {

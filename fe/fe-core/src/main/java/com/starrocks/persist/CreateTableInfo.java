@@ -58,15 +58,16 @@ public class CreateTableInfo implements Writable {
     }
 
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, dbName);
+        // compatible with old version
+        Text.writeString(out, ClusterNamespace.getFullName(dbName));
         table.write(out);
     }
 
     public void readFields(DataInput in) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            dbName = ClusterNamespace.getFullName(Text.readString(in));
-        } else {
             dbName = Text.readString(in);
+        } else {
+            dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
 
         table = Table.read(in);

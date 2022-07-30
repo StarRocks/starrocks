@@ -25,7 +25,7 @@ public class CancelRefreshMaterializedViewTest {
                 (CancelRefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
         String dbName = cancelRefresh.getMvName().getDb();
         String mvName = cancelRefresh.getMvName().getTbl();
-        Assert.assertEquals("default_cluster:test1", dbName);
+        Assert.assertEquals("test1", dbName);
         Assert.assertEquals("mv1", mvName);
     }
 }

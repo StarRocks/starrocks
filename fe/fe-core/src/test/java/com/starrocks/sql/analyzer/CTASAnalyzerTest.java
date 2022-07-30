@@ -197,7 +197,7 @@ public class CTASAnalyzerTest {
         String SQL = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
-        Table table = ctx.getGlobalStateMgr().getDb("default_cluster:ctas")
+        Table table = ctx.getGlobalStateMgr().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
                 1.5256461111280627E-4, 4.0, 64.0);
@@ -334,7 +334,7 @@ public class CTASAnalyzerTest {
     @Test
     public void testCTASReplicaNum() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Table table = ctx.getGlobalStateMgr().getDb("default_cluster:ctas")
+        Table table = ctx.getGlobalStateMgr().getDb("ctas")
                 .getTable("duplicate_table_with_null");
         OlapTable olapTable = (OlapTable) table;
         olapTable.setReplicationNum((short) 3);
