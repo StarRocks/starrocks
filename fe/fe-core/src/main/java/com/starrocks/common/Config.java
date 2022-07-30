@@ -776,20 +776,14 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String default_storage_medium = "HDD";
-    /**
-     * When create a table(or partition), you can specify its storage medium(HDD or SSD).
-     * If set to SSD, this specifies the default duration that tablets will stay on SSD.
-     * After that, tablets will be moved to HDD automatically.
-     * You can set storage cooldown time in CREATE TABLE stmt.
-     */
-    @ConfField(mutable = true)
-    public static long storage_cooldown_second = -1L; // won't cool down by default
+
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
      * And this specifies the maximal data retention time. After time, the data will be deleted permanently.
      */
     @ConfField(mutable = true)
     public static long catalog_trash_expire_second = 86400L; // 1day
+
     /**
      * Parallel load fragment instance num in single host
      */
@@ -1018,6 +1012,15 @@ public class Config extends ConfigBase {
     // no more balance check
     @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
     public static int tablet_sched_max_balancing_tablets = 100;
+
+    /**
+     * When create a table(or partition), you can specify its storage medium(HDD or SSD).
+     * If set to SSD, this specifies the default duration that tablets will stay on SSD.
+     * After that, tablets will be moved to HDD automatically.
+     * You can set storage cooldown time in CREATE TABLE stmt.
+     */
+    @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
+    public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
      * FOR BeLoadBalancer:

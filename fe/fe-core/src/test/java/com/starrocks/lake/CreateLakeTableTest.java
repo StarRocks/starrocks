@@ -201,7 +201,8 @@ public class CreateLakeTableTest {
             long partition2Id = lakeTable.getPartition("p2").getId();
             StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
             Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(Config.storage_cooldown_second, partition2StorageInfo.getStorageCacheTtlS());
+            Assert.assertEquals(Config.tablet_sched_storage_cooldown_second,
+                    partition2StorageInfo.getStorageCacheTtlS());
         }
     }
 
