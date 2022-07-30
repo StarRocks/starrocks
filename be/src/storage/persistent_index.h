@@ -211,10 +211,17 @@ public:
 private:
     friend class PersistentIndex;
 
+    Status _get_fixlen_kvs_for_shard(size_t key_size, size_t value_size, std::vector<std::vector<KVRef>>& kvs_by_shard,
+                                     size_t shard_idx, uint32_t shard_bits,
+                                     std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_varlen_kvs_for_shard(size_t value_size, std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                     uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
+
     // get all the kv refs of a single shard by `shard_idx`, and add them to `kvs_by_shard`, the shard number of
     // kvs_by_shard may be different from this object's own shard number
     // NOTE: used by PersistentIndex only
-    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t pow,
+    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,

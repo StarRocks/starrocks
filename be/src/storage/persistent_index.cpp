@@ -506,6 +506,7 @@ public:
         shard_meta->set_npage(shard->npage());
         shard_meta->set_key_size(key_size);
         shard_meta->set_value_size(kIndexValueSize);
+        shard_meta->set_nbucket(nbucket);
         auto ptr_meta = shard_meta->mutable_data();
         ptr_meta->set_offset(pos_before);
         ptr_meta->set_size(pos_after - pos_before);
@@ -1024,6 +1025,53 @@ size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint
 
 #endif
 
+Status ImmutableIndex::_get_fixlen_kvs_for_shard(size_t key_size, size_t value_size,
+                                                 std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                                 uint32_t shard_bits,
+                                                 std::unique_ptr<ImmutableIndexShard>* shard) const {
+    const auto& shard_info = _shards[shard_idx];
+    DCHECK(shard_info.nbucket == kBucketPerPage);
+    for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
+        auto& header = (*shard)->header(pageid);
+        for (uint32_t bucketid = 0; bucketid < shard_info.nbucket; bucketid++) {
+            auto& info = header.buckets[bucketid];
+            const uint8_t* bucket_pos = (*shard)->pages[info.pageid].pack(info.packid);
+            size_t nele = info.size;
+            const uint8_t* kvs = bucket_pos + pad(nele, kPackSize);
+            for (size_t i = 0; i < nele; i++) {
+                const uint8_t* kv = kvs + (key_size + value_size) * i;
+                IndexHash hash = IndexHash(key_index_hash(kv, key_size));
+                kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash, key_size + value_size);
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status ImmutableIndex::_get_varlen_kvs_for_shard(size_t value_size, std::vector<std::vector<KVRef>>& kvs_by_shard,
+                                                 size_t shard_idx, uint32_t shard_bits,
+                                                 std::unique_ptr<ImmutableIndexShard>* shard) const {
+    const auto& shard_info = _shards[shard_idx];
+    for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
+        auto& header = (*shard)->header(pageid);
+        for (uint32_t bucketid = 0; bucketid < shard_info.nbucket; bucketid++) {
+            auto& info = header.buckets[bucketid];
+            const uint8_t* bucket_pos = (*shard)->pages[info.pageid].pack(info.packid);
+            size_t nele = info.size;
+            const uint8_t* offsets = bucket_pos + pad(nele, kPackSize);
+            const uint8_t* kvs = offsets + (nele + 1) * sizeof(uint16_t);
+            for (size_t i = 0; i < nele; i++) {
+                auto kv_offset = UNALIGNED_LOAD16(offsets + sizeof(uint16_t) * i);
+                auto kv_size = UNALIGNED_LOAD16(offsets + sizeof(uint16_t) * (i + 1)) - kv_offset;
+                const uint8_t* kv = kvs + kv_offset;
+                IndexHash hash = IndexHash(key_index_hash(kv, kv_size - value_size));
+                kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash, kv_size);
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
                                           uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const {
     const auto& shard_info = _shards[shard_idx];
@@ -1032,21 +1080,16 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
     }
     *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, (*shard)->pages.data(), shard_info.bytes));
-    for (uint32_t pageid = 0; pageid < shard_info.npage; pageid++) {
-        auto& header = (*shard)->header(pageid);
-        for (uint32_t bucketid = 0; bucketid < kBucketPerPage; bucketid++) {
-            auto& info = header.buckets[bucketid];
-            const uint8_t* bucket_pos = (*shard)->pages[info.pageid].pack(info.packid);
-            size_t nele = info.size;
-            const uint8_t* kvs = bucket_pos + pad(nele, kPackSize);
-            for (size_t i = 0; i < nele; i++) {
-                const uint8_t* kv = kvs + (_fixed_key_size + _fixed_value_size) * i;
-                IndexHash hash = IndexHash(key_index_hash(kv, _fixed_key_size));
-                kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash, _fixed_key_size + kIndexValueSize);
-            }
-        }
+    size_t key_size = shard_info.key_size;
+    size_t value_size = shard_info.value_size;
+    DCHECK(key_size == _fixed_key_size);
+    DCHECK(value_size == _fixed_value_size);
+    if (key_size != 0) {
+        LOG(INFO) << "get fixed len kvs for shard";
+        return _get_fixlen_kvs_for_shard(key_size, value_size, kvs_by_shard, shard_idx, shard_bits, shard);
+    } else {
+        return _get_varlen_kvs_for_shard(value_size, kvs_by_shard, shard_idx, shard_bits, shard);
     }
-    return Status::OK();
 }
 
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
