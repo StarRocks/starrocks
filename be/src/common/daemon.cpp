@@ -22,11 +22,7 @@
 #include "common/daemon.h"
 
 #include <gflags/gflags.h>
-#ifdef USE_JEMALLOC
-#include "jemalloc/jemalloc.h"
-#else
 #include <gperftools/malloc_extension.h>
-#endif
 
 #include "column/column_helper.h"
 #include "column/column_pool.h"
@@ -87,18 +83,14 @@ void gc_tcmalloc_memory(void* arg_this) {
     Daemon* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         sleep(config::memory_maintenance_sleep_time_s);
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
 
-#ifdef USE_JEMALLOC
-        je_malloc_stats_print(nullptr, nullptr, nullptr);
-#endif
-
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         size_t used_size = 0;
         size_t free_size = 0;
         MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
@@ -284,7 +276,6 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     TimezoneUtils::init_time_zones();
 
-    // @TODO change name
     std::thread tcmalloc_gc_thread(gc_tcmalloc_memory, this);
     Thread::set_thread_name(tcmalloc_gc_thread, "tcmalloc_daemon");
     _daemon_threads.emplace_back(std::move(tcmalloc_gc_thread));

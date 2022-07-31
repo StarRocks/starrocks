@@ -211,7 +211,6 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (*output) << "Memory tracking is not available with address sanitizer builds.";
 #else
-    // @TODO support jemalloc
     char buf[2048];
     MallocExtension::instance()->GetStats(buf, 2048);
     // Replace new lines with <br> for html

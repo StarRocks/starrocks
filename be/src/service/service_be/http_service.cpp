@@ -113,7 +113,6 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/health", health_action);
     _http_handlers.emplace_back(health_action);
 
-#ifndef USE_JEMALLOC
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
         fs::create_directories(config::pprof_profile_dir);
@@ -148,7 +147,6 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
     _http_handlers.emplace_back(symbol_action);
-#endif
 
     // register metrics
     {
