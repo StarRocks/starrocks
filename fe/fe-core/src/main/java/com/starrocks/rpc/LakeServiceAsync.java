@@ -13,6 +13,8 @@ import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
+import com.starrocks.lake.proto.TabletStatRequest;
+import com.starrocks.lake.proto.TabletStatResponse;
 
 import java.util.concurrent.Future;
 
@@ -27,4 +29,6 @@ public interface LakeServiceAsync extends LakeService  {
     Future<CompactResponse> compact(CompactRequest request, RpcCallback<CompactResponse> callback);
 
     Future<DeleteDataResponse> deleteData(DeleteDataRequest request, RpcCallback<DeleteDataResponse> callback);
+
+    Future<TabletStatResponse> getTabletStats(TabletStatRequest request, RpcCallback<TabletStatResponse> callback);
 }

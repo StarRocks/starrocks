@@ -69,6 +69,25 @@ message DeleteDataResponse {
     repeated int64 failed_tablets = 1;
 }
 
+message TabletStatRequest {
+    message TabletInfo {
+        optional int64 tablet_id = 1;
+        optional int64 version = 2;
+    }
+
+    repeated TabletInfo tablet_infos = 1;
+}
+
+message TabletStatResponse {
+    message TabletStat {
+        optional int64 tablet_id = 1;
+        optional int64 num_rows = 2;
+        optional int64 data_size = 3;
+    }
+
+    repeated TabletStat tablet_stats = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
@@ -77,5 +96,6 @@ service LakeService {
     rpc drop_tablet(DropTabletRequest) returns (DropTabletResponse);
     rpc drop_table(DropTableRequest) returns (DropTableResponse);
     rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
+    rpc get_tablet_stats(TabletStatRequest) returns (TabletStatResponse);
 }
 
