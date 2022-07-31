@@ -65,6 +65,8 @@ public:
 
     const std::string& name() const { return _name; }
 
+    WorkGroupType type() const { return _type; }
+
     std::string to_string() const;
 
     size_t cpu_limit() const { return _cpu_limit; }
@@ -165,10 +167,10 @@ public:
     int64_t mem_limit() const;
 
 private:
-    std::string _name;
-    int64_t _id;
-    int64_t _version;
-    WorkGroupType _type;
+    const std::string _name;
+    const int64_t _id;
+    const int64_t _version;
+    const WorkGroupType _type;
 
     // Specified limitations
     size_t _cpu_limit;

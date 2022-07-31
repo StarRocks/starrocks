@@ -427,10 +427,14 @@ workgroup::WorkGroup* DriverQueueWithWorkGroup::_find_min_owner_wg(int worker_id
     auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_driver_worker(worker_id);
     if (owner_wgs != nullptr) {
         for (const auto& wg : *owner_wgs) {
-            if (_ready_wgs.find(wg.get()) != _ready_wgs.end() &&
-                (min_wg == nullptr || min_vruntime_ns > wg->vruntime_ns())) {
-                min_wg = wg.get();
-                min_vruntime_ns = wg->vruntime_ns();
+            if (_ready_wgs.find(wg.get()) != _ready_wgs.end()) {
+                if (wg->type() == workgroup::WorkGroupType::WG_REALTIME) {
+                    return wg.get();
+                }
+                if (min_wg == nullptr || min_vruntime_ns > wg->vruntime_ns()) {
+                    min_wg = wg.get();
+                    min_vruntime_ns = wg->vruntime_ns();
+                }
             }
         }
     }
