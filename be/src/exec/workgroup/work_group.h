@@ -167,10 +167,10 @@ public:
     int64_t mem_limit() const;
 
 private:
-    const std::string _name;
-    const int64_t _id;
-    const int64_t _version;
-    const WorkGroupType _type;
+    std::string _name;
+    int64_t _id;
+    int64_t _version;
+    WorkGroupType _type;
 
     // Specified limitations
     size_t _cpu_limit;

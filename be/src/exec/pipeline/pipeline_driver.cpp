@@ -113,6 +113,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
+    int64_t preempt_time = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
     DeferOp defer([&]() {
@@ -128,8 +129,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
+            int64_t operator_time_spent;
             {
-                SCOPED_RAW_TIMER(&time_spent);
+                SCOPED_RAW_TIMER(&operator_time_spent);
                 auto& curr_op = _operators[i];
                 auto& next_op = _operators[i + 1];
 
@@ -207,19 +209,28 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                     continue;
                 }
             }
-            // yield when total chunks moved or time spent on-core for evaluation
-            // exceed the designated thresholds.
+            time_spent += operator_time_spent;
+            preempt_time += operator_time_spent;
+            // Yield by time-slice
             if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
                 COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
                 break;
             }
 
-            if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            // Yield by time-slice of work-group
+            if (_workgroup != nullptr && time_spent >= YIELD_VOLUNTARY_MAX_TIME_SPENT &&
                 workgroup::WorkGroupManager::instance()->should_yield_driver_worker(worker_id, _workgroup)) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_VOLUNTARY_MAX_TIME_SPENT);
                 break;
+            }
+            // Yield by preempt
+            if (_workgroup != nullptr && preempt_time >= YIELD_PREEMPT_MAX_TIME_SPENT) {
+                if (_workgroup->driver_queue()->need_preempt()) {
+                    should_yield = true;
+                }
+                preempt_time = 0;
             }
         }
         // close finished operators and update _first_unfinished index

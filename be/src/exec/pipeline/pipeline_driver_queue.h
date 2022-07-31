@@ -25,6 +25,8 @@ public:
     virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
     virtual void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) = 0;
 
+    // Has some preemptive task
+    virtual bool need_preempt() const { return false; }
     virtual StatusOr<DriverRawPtr> take(int worker_id) = 0;
     virtual void cancel(DriverRawPtr driver) = 0;
 
@@ -186,6 +188,7 @@ public:
     void put_back_from_executor(const DriverRawPtr driver) override;
     void put_back_from_executor(const std::vector<DriverRawPtr>& drivers) override;
 
+    bool need_preempt() const override;
     // Return cancelled status, if the queue is closed.
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
@@ -212,6 +215,7 @@ private:
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+    std::atomic_bool _need_preempt = false;
     // _ready_wgs contains the workgroups which include the drivers need to be run.
     std::unordered_set<workgroup::WorkGroup*> _ready_wgs;
     size_t _sum_cpu_limit = 0;

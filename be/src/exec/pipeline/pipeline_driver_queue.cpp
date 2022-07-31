@@ -311,6 +311,10 @@ void DriverQueueWithWorkGroup::put_back_from_executor(const std::vector<DriverRa
     }
 }
 
+bool DriverQueueWithWorkGroup::need_preempt() const {
+    return _need_preempt;
+}
+
 StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int worker_id) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
@@ -338,6 +342,14 @@ StatusOr<DriverRawPtr> DriverQueueWithWorkGroup::take(int worker_id) {
     if (wg->driver_queue()->size() == 1) {
         _sum_cpu_limit -= wg->cpu_limit();
         _ready_wgs.erase(wg);
+    }
+
+    // Update preempt again
+    _need_preempt = false;
+    for (auto wg : _ready_wgs) {
+        if (wg->type() == workgroup::WorkGroupType::WG_REALTIME) {
+            _need_preempt = true;
+        }
     }
 
     return wg->driver_queue()->take(worker_id);
@@ -415,6 +427,9 @@ void DriverQueueWithWorkGroup::_put_back(const DriverRawPtr driver) {
             }
         }
         _ready_wgs.emplace(wg);
+    }
+    if (wg->type() == workgroup::WorkGroupType::WG_REALTIME) {
+        _need_preempt = true;
     }
     wg->driver_queue()->put_back(driver);
     _cv.notify_one();
