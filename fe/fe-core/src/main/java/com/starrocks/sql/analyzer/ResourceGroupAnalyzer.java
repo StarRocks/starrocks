@@ -185,15 +185,13 @@ public class ResourceGroupAnalyzer {
                 continue;
             }
             if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
+                String fullName = "WG_" + value.toUpperCase();
                 try {
-                    resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL) {
-                        throw new SemanticException("Only support 'normal' type");
-                    }
-                } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' type");
+                    resourceGroup.setResourceGroupType(TWorkGroupType.valueOf(fullName));
+                    continue;
+                } catch (Exception ex) {
+                    throw new SemanticException("Not supported resource group type: " + value);
                 }
-                continue;
             }
 
             throw new SemanticException("Unknown property: " + key);

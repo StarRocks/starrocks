@@ -46,6 +46,7 @@ public class ResourceGroup implements Writable {
                     .addColumn(new Column("type", ScalarType.createVarchar(200)))
                     .addColumn(new Column("classifiers", ScalarType.createVarchar(1024)))
                     .build();
+
     @SerializedName(value = "classifiers")
     List<ResourceGroupClassifier> classifiers;
     @SerializedName(value = "name")
