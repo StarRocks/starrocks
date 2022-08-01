@@ -12,7 +12,7 @@ public:
     explicit MemTableRowsetWriterSink(RowsetWriter* w) : _rowset_writer(w) {}
     ~MemTableRowsetWriterSink() override = default;
 
-    DISALLOW_COPY_AND_ASSIGN(MemTableRowsetWriterSink);
+    DISALLOW_COPY(MemTableRowsetWriterSink);
 
     Status flush_chunk(const Chunk& chunk) override { return _rowset_writer->flush_chunk(chunk); }
 

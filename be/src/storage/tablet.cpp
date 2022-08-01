@@ -113,7 +113,7 @@ Status Tablet::_init_once_action() {
 }
 
 Status Tablet::init() {
-    return _init_once.call([this] { return _init_once_action(); });
+    return success_once(_init_once, [this] { return _init_once_action(); }).status();
 }
 
 // should save tablet meta to remote meta store
@@ -322,21 +322,6 @@ RowsetSharedPtr Tablet::rowset_with_max_version() const {
     auto iter = _rs_version_map.find(max_version);
     DCHECK(iter != _rs_version_map.end()) << "invalid version:" << max_version;
     return iter->second;
-}
-
-RowsetSharedPtr Tablet::_rowset_with_largest_size() {
-    RowsetSharedPtr largest_rowset = nullptr;
-    for (auto& it : _rs_version_map) {
-        if (it.second->empty() || it.second->zero_num_rows()) {
-            continue;
-        }
-        if (largest_rowset == nullptr ||
-            it.second->rowset_meta()->index_disk_size() > largest_rowset->rowset_meta()->index_disk_size()) {
-            largest_rowset = it.second;
-        }
-    }
-
-    return largest_rowset;
 }
 
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.

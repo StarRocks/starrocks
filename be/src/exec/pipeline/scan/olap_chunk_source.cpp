@@ -26,7 +26,8 @@ using namespace vectorized;
 
 OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer(),
+                      workgroup::TypeOlapScanExecutor),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
@@ -51,6 +52,7 @@ void OlapChunkSource::close(RuntimeState* state) {
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
@@ -72,7 +74,6 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 }
 
 void OlapChunkSource::_init_counter(RuntimeState* state) {
-    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
@@ -312,7 +313,6 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         return Status::Cancelled("canceled state");
     }
 
-    SCOPED_TIMER(_scan_timer);
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk));
@@ -358,8 +358,9 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     // Update local counters.
     _local_sum_row_bytes += chunk->memory_usage();
     _local_num_rows += chunk->num_rows();
+    _local_max_chunk_rows = std::max(_local_max_chunk_rows, chunk->num_rows());
     if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
-        _chunk_buffer.limiter()->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows);
+        _chunk_buffer.limiter()->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows, _local_max_chunk_rows);
         _local_sum_row_bytes = 0;
         _local_num_rows = 0;
     }

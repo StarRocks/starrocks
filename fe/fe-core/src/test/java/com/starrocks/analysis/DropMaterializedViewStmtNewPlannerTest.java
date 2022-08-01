@@ -46,7 +46,7 @@ public class DropMaterializedViewStmtNewPlannerTest {
         connectContext = UtFrameUtils.createDefaultCtx();
 
         String createDbStmtStr = "create database test;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase("default_cluster:test");
     }

@@ -81,6 +81,8 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyLeftRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAssertOneRowProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
@@ -241,8 +243,13 @@ public class RuleSet {
                 new PushDownPredicateCTEConsumeRule()
         ));
 
-        rewriteRules.put(RuleSetType.SUBQUERY_REWRITE, ImmutableList.of(
+        rewriteRules.put(RuleSetType.PUSH_DOWN_SUBQUERY, ImmutableList.of(
                 new MergeApplyWithTableFunction(),
+                new PushDownApplyLeftProjectRule(),
+                new PushDownApplyLeftRule()
+        ));
+
+        rewriteRules.put(RuleSetType.SUBQUERY_REWRITE, ImmutableList.of(
                 new PushDownApplyProjectRule(),
                 new PushDownApplyFilterRule(),
                 new PushDownApplyAggFilterRule(),

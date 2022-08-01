@@ -67,7 +67,10 @@ public enum PrimitiveType {
     JSON("JSON", 16, TPrimitiveType.JSON),
 
     // Unsupported scalar types.
-    BINARY("BINARY", -1, TPrimitiveType.BINARY);
+    BINARY("BINARY", -1, TPrimitiveType.BINARY),
+
+    // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
+    UNKNOWN_TYPE("UNKNOWN_TYPE", 0, TPrimitiveType.INVALID_TYPE);
 
     private static final int DATE_INDEX_LEN = 3;
     private static final int DATETIME_INDEX_LEN = 8;
@@ -352,6 +355,7 @@ public enum PrimitiveType {
         switch (this) {
             case INVALID_TYPE:
             case BINARY:
+            case UNKNOWN_TYPE:
                 break;
             case NULL_TYPE:
             case BOOLEAN:

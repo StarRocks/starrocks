@@ -13,7 +13,6 @@ DIAGNOSTIC_POP
 
 #include <chrono>
 #include <cstdint>
-#include <shared_mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -30,6 +29,7 @@ DIAGNOSTIC_POP
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
+#include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
@@ -51,6 +51,7 @@ class LocalTabletsChannel : public TabletsChannel {
 
 public:
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    ~LocalTabletsChannel() override;
 
     LocalTabletsChannel(const LocalTabletsChannel&) = delete;
     LocalTabletsChannel(LocalTabletsChannel&&) = delete;
@@ -71,8 +72,6 @@ public:
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
-    ~LocalTabletsChannel() override;
-
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
     struct Sender {
@@ -84,22 +83,31 @@ private:
         int64_t last_sliding_packet_seq = -1;
     };
 
-    class WriteContext : public RefCountedThreadSafe<WriteContext> {
+    class WriteContext {
     public:
-        explicit WriteContext(PTabletWriterAddBatchResult* response) : _response(response), _latch(nullptr) {}
+        explicit WriteContext(PTabletWriterAddBatchResult* response)
+                : _response_lock(),
+                  _response(response),
+                  _latch(nullptr),
+                  _chunk(),
+                  _row_indexes(),
+                  _channel_row_idx_start_points() {}
 
-        WriteContext(const WriteContext&) = delete;
-        void operator=(const WriteContext&) = delete;
-        WriteContext(WriteContext&&) = delete;
-        void operator=(WriteContext&&) = delete;
+        ~WriteContext() {
+            if (_latch) _latch->count_down();
+        }
+
+        DISALLOW_COPY_AND_MOVE(WriteContext);
 
         void update_status(const Status& status) {
             if (status.ok() || _response == nullptr) {
                 return;
             }
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_response_lock);
             if (_response->status().status_code() == TStatusCode::OK) {
-                status.to_protobuf(_response->mutable_status());
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg);
             }
         }
 
@@ -113,10 +121,6 @@ private:
 
     private:
         friend class LocalTabletsChannel;
-        friend class RefCountedThreadSafe<WriteContext>;
-        ~WriteContext() {
-            if (_latch) _latch->count_down();
-        }
 
         mutable bthread::Mutex _response_lock;
         PTabletWriterAddBatchResult* _response;
@@ -129,9 +133,9 @@ private:
 
     class WriteCallback : public AsyncDeltaWriterCallback {
     public:
-        explicit WriteCallback(WriteContext* context) : _context(context) { _context->AddRef(); }
+        explicit WriteCallback(std::shared_ptr<WriteContext> context) : _context(std::move(context)) {}
 
-        ~WriteCallback() override { _context->Release(); }
+        ~WriteCallback() override = default;
 
         void run(const Status& st, const CommittedRowsetInfo* info) override;
 
@@ -141,15 +145,15 @@ private:
         void operator=(WriteCallback&&) = delete;
 
     private:
-        WriteContext* _context;
+        std::shared_ptr<WriteContext> _context;
     };
 
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    StatusOr<scoped_refptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest& request,
-                                                                PTabletWriterAddBatchResult* response);
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest& request,
+                                                                  PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
@@ -165,7 +169,6 @@ private:
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
     OlapTableSchemaParam* _schema = nullptr;
-    TupleDescriptor* _tuple_desc = nullptr;
     RowDescriptor* _row_desc = nullptr;
 
     // next sequence we expect
@@ -216,8 +219,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     _index_id = params.index_id();
     _schema = new OlapTableSchemaParam();
     RETURN_IF_ERROR(_schema->init(params.schema()));
-    _tuple_desc = _schema->tuple_desc();
-    _row_desc = new RowDescriptor(_tuple_desc, false);
+    _row_desc = new RowDescriptor(_schema->tuple_desc(), false);
 
     _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     _senders = std::vector<Sender>(params.num_senders());
@@ -335,7 +337,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
 
         // The reference count of context is increased in the constructor of WriteCallback
         // and decreased in the destructor of WriteCallback.
-        auto cb = new WriteCallback(context.get());
+        auto cb = new WriteCallback(context);
 
         delta_writer->write(req, cb);
     }
@@ -356,7 +358,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
                 // no data load, abort txn without printing log
                 delta_writer->abort(false);
             } else {
-                auto cb = new WriteCallback(context.get());
+                auto cb = new WriteCallback(context);
                 delta_writer->commit(cb);
             }
         }
@@ -468,11 +470,9 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         vectorized::DeltaWriterOptions options;
         options.tablet_id = tablet.tablet_id();
         options.schema_hash = schema_hash;
-        options.write_type = vectorized::WriteType::LOAD;
         options.txn_id = _txn_id;
         options.partition_id = tablet.partition_id();
         options.load_id = params.id();
-        options.tuple_desc = _tuple_desc;
         options.slots = index_slots;
         options.global_dicts = &_global_dicts;
         options.parent_span = _load_channel->get_span();
@@ -531,13 +531,13 @@ Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized
     return Status::OK();
 }
 
-StatusOr<scoped_refptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
+StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
         const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     if (!request.has_chunk() && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 
-    scoped_refptr<WriteContext> context(new WriteContext(response));
+    auto context = std::make_shared<WriteContext>(response);
 
     if (!request.has_chunk()) {
         return std::move(context);
@@ -607,9 +607,9 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
     delete this;
 }
 
-scoped_refptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                        MemTracker* mem_tracker) {
-    return scoped_refptr<TabletsChannel>(new LocalTabletsChannel(load_channel, key, mem_tracker));
+std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                          MemTracker* mem_tracker) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker);
 }
 
 } // namespace starrocks

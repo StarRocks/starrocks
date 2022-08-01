@@ -4,11 +4,15 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.utframe.StarRocksAssert;
+import mockit.Expectations;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Optional;
 
 public class LowCardinalityTest extends PlanTestBase {
     @BeforeClass
@@ -32,6 +36,11 @@ public class LowCardinalityTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE table_int (id_int INT, id_bigint BIGINT) " +
+                "DUPLICATE KEY(`id_int`) " +
+                "DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 " +
+                "PROPERTIES (\"replication_num\" = \"1\");");
 
         starRocksAssert.withTable("CREATE TABLE part_v2  ( P_PARTKEY     INTEGER NOT NULL,\n" +
                 "                          P_NAME        VARCHAR(55) NOT NULL,\n" +
@@ -678,7 +687,8 @@ public class LowCardinalityTest extends PlanTestBase {
         // test worth for rewrite
         sql = "select concat(S_ADDRESS, S_COMMENT) from supplier";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  |  9 <-> concat[([3: S_ADDRESS, VARCHAR, false], [7: S_COMMENT, VARCHAR, false]); args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]"));
+        Assert.assertTrue(plan.contains(
+                "  |  9 <-> concat[([3: S_ADDRESS, VARCHAR, false], [7: S_COMMENT, VARCHAR, false]); args: VARCHAR; result: VARCHAR; args nullable: false; result nullable: true]"));
         // Test common expression reuse 1
         // couldn't reuse case
         // DictExpr return varchar and int
@@ -701,7 +711,8 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("Decode"));
 
         // common expression reuse 3
-        sql = "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
+        sql =
+                "select if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT), concat(upper(S_COMMENT), S_ADDRESS) from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  |  output columns:\n" +
                 "  |  9 <-> if[(DictExpr(11: S_ADDRESS,[<place-holder> = 'kks']), [13: expr, VARCHAR, true], DictExpr(12: S_COMMENT,[<place-holder>])); args: BOOLEAN,VARCHAR,VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]\n" +
@@ -820,6 +831,11 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
+
+        sql = "select count(*) from supplier l join [broadcast] (select max(id_int) as id_int from table_int) r on l.S_ADDRESS = r.id_int where l.S_ADDRESS not like '%key%'";
+        plan = getVerboseExplain(sql);
+        Assert.assertFalse(plan.contains("Decode"));
+
         sql = "select *\n" +
                 "from(\n" +
                 "        select S_SUPPKEY,\n" +
@@ -931,6 +947,24 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  order by: [11, INT, true] ASC"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testAnalytic() throws Exception {
+        // Test partition by string column
+        String sql;
+        String plan;
+        // Analytic with where
+        sql = "select sum(rm) from (" +
+                "select row_number() over( partition by L_COMMENT order by L_PARTKEY) as rm from lineitem" +
+                ") t where rm < 10";
+        plan = getCostExplain(sql);
+
+        Assert.assertTrue(plan.contains("  3:SORT\n" +
+                "  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
+        Assert.assertTrue(plan.contains("  1:PARTITION-TOP-N\n" +
+                "  |  partition by: [20: L_COMMENT, INT, false] "));
+        Assert.assertTrue(plan.contains("  |  order by: [20, INT, false] ASC, [2, INT, false] ASC"));
     }
 
     @Test
@@ -1171,6 +1205,25 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
                 "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+    }
+
+    @Test
+    public void testHasGlobalDictButNotFound() throws Exception {
+        IDictManager dictManager = IDictManager.getInstance();
+
+        new Expectations(dictManager) {
+            {
+                dictManager.hasGlobalDict(anyLong, "S_ADDRESS", anyLong);
+                result = true;
+                dictManager.getGlobalDict(anyLong, "S_ADDRESS");
+                result = Optional.empty();
+            }
+        };
+
+        String sql = "select S_ADDRESS from supplier group by S_ADDRESS";
+        // Check No Exception
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
 }

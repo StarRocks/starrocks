@@ -12,12 +12,20 @@
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         BalancedChunkBuffer& chunk_buffer)
+                         BalancedChunkBuffer& chunk_buffer, workgroup::ScanExecutorType executor_type)
         : _scan_operator_seq(scan_operator_id),
           _runtime_profile(runtime_profile),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
-          _chunk_token(nullptr) {}
+          _chunk_token(nullptr),
+          _executor_type(executor_type) {}
+
+Status ChunkSource::prepare(RuntimeState* state) {
+    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _io_task_wait_timer = ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
+    _io_task_exec_timer = ADD_TIMER(_runtime_profile, "IOTaskExecTime");
+    return Status::OK();
+}
 
 StatusOr<vectorized::ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
     vectorized::ChunkPtr chunk = nullptr;
@@ -41,48 +49,23 @@ void ChunkSource::unpin_chunk_token() {
     _chunk_token.reset(nullptr);
 }
 
-Status ChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, RuntimeState* state) {
-    if (!_status.ok()) {
-        return _status;
-    }
+std::pair<Status, size_t> ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
+                                                                         const workgroup::WorkGroupPtr& running_wg,
+                                                                         int worker_id) {
     using namespace vectorized;
 
-    for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
-        if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
-            return Status::OK();
-        }
-
-        ChunkPtr chunk;
-        _status = _read_chunk(state, &chunk);
-        if (!_status.ok()) {
-            // end of file is normal case, need process chunk
-            if (_status.is_end_of_file()) {
-                _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
-            }
-            break;
-        }
-
-        _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
-    }
-
-    return _status;
-}
-
-Status ChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch_size, RuntimeState* state,
-                                                                    size_t* num_read_chunks, int worker_id,
-                                                                    workgroup::WorkGroupPtr running_wg) {
     if (!_status.ok()) {
-        return _status;
+        return std::make_pair(_status, 0);
     }
 
-    using namespace vectorized;
     int64_t time_spent = 0;
+    size_t num_read_chunks = 0;
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent);
 
             if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
-                return Status::OK();
+                return std::make_pair(_status, num_read_chunks);
             }
 
             ChunkPtr chunk;
@@ -90,13 +73,13 @@ Status ChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
-                    ++(*num_read_chunks);
+                    ++num_read_chunks;
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 }
                 break;
             }
 
-            ++(*num_read_chunks);
+            ++num_read_chunks;
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
@@ -104,14 +87,13 @@ Status ChunkSource::buffer_next_batch_chunks_blocking_for_workgroup(size_t batch
             break;
         }
 
-        if (time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(workgroup::TypeOlapScanExecutor,
-                                                                               worker_id, running_wg)) {
+        if (running_wg != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            workgroup::WorkGroupManager::instance()->should_yield_scan_worker(_executor_type, worker_id, running_wg)) {
             break;
         }
     }
 
-    return _status;
+    return std::make_pair(_status, num_read_chunks);
 }
 
 using namespace vectorized;

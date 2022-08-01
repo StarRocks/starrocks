@@ -29,6 +29,7 @@ import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.JdkUtils;
+import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -108,8 +109,18 @@ public class StarRocksFE {
             FrontendOptions.init(args);
             ExecuteEnv.setup();
 
-            // init globalStateMgr and wait it be ready
+            // init globalStateMgr
             GlobalStateMgr.getCurrentState().initialize(args);
+
+            StateChangeExecutor.getInstance().setMetaContext(
+                    GlobalStateMgr.getCurrentState().getMetaContext());
+
+            StateChangeExecutor.getInstance().registerStateChangeExecution(
+                    GlobalStateMgr.getCurrentState().getStateChangeExecution());
+            // start state change executor
+            StateChangeExecutor.getInstance().start();
+
+            // wait globalStateMgr to be ready
             GlobalStateMgr.getCurrentState().waitForReady();
 
             FrontendOptions.saveStartType();

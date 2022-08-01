@@ -36,7 +36,6 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
 
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
 public class ArithmeticExpr extends Expr {
@@ -389,15 +388,6 @@ public class ArithmeticExpr extends Expr {
             return false;
         }
         return ((ArithmeticExpr) obj).opcode == opcode;
-    }
-
-    @Override
-    public void computeOutputColumn(Analyzer analyzer) {
-        super.computeOutputColumn(analyzer);
-
-        List<TupleId> tupleIds = Lists.newArrayList();
-        getIds(tupleIds, null);
-        Preconditions.checkArgument(tupleIds.size() == 1);
     }
 
     public static Type getCommonType(Type t1, Type t2) {

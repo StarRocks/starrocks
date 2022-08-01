@@ -138,6 +138,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         throw new UnsupportedOperationException("Not implemented");
     }
 
+    @Override
     public List<String> listAllDatabases() {
         try {
             return new ArrayList<>(clients.run(IMetaStoreClient::getAllDatabases));
@@ -146,6 +147,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         }
     }
 
+    @Override
     public Database getDB(String dbName) throws InterruptedException, TException {
         org.apache.hadoop.hive.metastore.api.Database db = clients.run(client -> client.getDatabase(dbName));
         if (db == null || db.getName() == null) {

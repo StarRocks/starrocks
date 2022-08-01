@@ -42,7 +42,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -181,7 +180,6 @@ public class WebBaseAction extends BaseAction {
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
             ctx.setThreadLocalInfo();
 
             return true;
@@ -213,7 +211,6 @@ public class WebBaseAction extends BaseAction {
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                ctx.setCluster(SystemInfoService.DEFAULT_CLUSTER);
                 ctx.setThreadLocalInfo();
                 return true;
             }

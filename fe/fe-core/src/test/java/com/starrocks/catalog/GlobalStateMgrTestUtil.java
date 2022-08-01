@@ -54,7 +54,6 @@ public class GlobalStateMgrTestUtil {
     public static String testPartition1 = "testPartition1";
     public static long testPartitionId1 = 3;
     public static String testIndex1 = "testIndex1";
-    public static String testIndex2 = "testIndex2";
     public static long testIndexId1 = 2; // the base indexid == tableid
     public static int testSchemaHash1 = 93423942;
     public static long testBackendId1 = 5;
@@ -65,21 +64,12 @@ public class GlobalStateMgrTestUtil {
     public static long testReplicaId3 = 10;
     public static long testTabletId1 = 11;
     public static long testStartVersion = 12;
-    public static long testRollupIndexId2 = 13;
     public static String testRollupIndex2 = "newRollupIndex";
     public static String testRollupIndex3 = "newRollupIndex2";
     public static String testTxnLable1 = "testTxnLable1";
     public static String testTxnLable2 = "testTxnLable2";
     public static String testTxnLable3 = "testTxnLable3";
     public static String testTxnLable4 = "testTxnLable4";
-    public static String testTxnLable5 = "testTxnLable5";
-    public static String testTxnLable6 = "testTxnLable6";
-    public static String testTxnLable7 = "testTxnLable7";
-    public static String testTxnLable8 = "testTxnLable8";
-    public static String testTxnLable9 = "testTxnLable9";
-    public static String testTxnLable10 = "testTxnLable10";
-    public static String testTxnLable11 = "testTxnLable11";
-    public static String testTxnLable12 = "testTxnLable12";
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
@@ -140,7 +130,7 @@ public class GlobalStateMgrTestUtil {
                     if (slaveTablet == null) {
                         return false;
                     }
-                    List<Replica> allReplicas = ((LocalTablet) masterTablet).getReplicas();
+                    List<Replica> allReplicas = ((LocalTablet) masterTablet).getImmutableReplicas();
                     for (Replica masterReplica : allReplicas) {
                         Replica slaveReplica = ((LocalTablet) slaveTablet).getReplicaById(masterReplica.getId());
                         if (slaveReplica.getBackendId() != masterReplica.getBackendId()
@@ -218,14 +208,11 @@ public class GlobalStateMgrTestUtil {
         // db
         Database db = new Database(dbId, testDb1);
         db.createTable(table);
-        db.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         // add a es table to globalStateMgr
         try {
             createEsTable(db);
-        } catch (DdlException e) {
-            // TODO Auto-generated catch block
-            // e.printStackTrace();
+        } catch (DdlException ignored) {
         }
         return db;
     }
@@ -264,7 +251,6 @@ public class GlobalStateMgrTestUtil {
 
     public static Backend createBackend(long id, String host, int heartPort, int bePort, int httpPort) {
         Backend backend = new Backend(id, host, heartPort);
-        // backend.updateOnce(bePort, httpPort, 10000);
         backend.setAlive(true);
         return backend;
     }

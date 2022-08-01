@@ -25,7 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
@@ -42,7 +42,7 @@ import java.util.Map;
  * TabletStatMgr is for collecting tablet(replica) statistics from backends.
  * Each FE will collect by itself.
  */
-public class TabletStatMgr extends MasterDaemon {
+public class TabletStatMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletStatMgr.class);
 
     public TabletStatMgr() {
@@ -132,7 +132,11 @@ public class TabletStatMgr extends MasterDaemon {
                 continue;
             }
             // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
-            replica.updateStat(entry.getValue().getData_size(), entry.getValue().getRow_num());
+            replica.updateStat(
+                    entry.getValue().getData_size(),
+                    entry.getValue().getRow_num(),
+                    entry.getValue().getVersion_count()
+            );
         }
     }
 }

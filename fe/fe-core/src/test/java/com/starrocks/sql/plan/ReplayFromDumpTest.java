@@ -200,12 +200,41 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second.contains(" |  \n" +
-                "  |----30:EXCHANGE\n" +
-                "  |       cardinality: 6304\n" +
+        Assert.assertTrue(replayPair.second.contains("  49:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  other predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
+                "  |  cardinality: 18262\n" +
+                "  |  column statistics: \n" +
+                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
+                "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
+                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
+                "  |  \n" +
+                "  |----48:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
                 "  |    \n" +
-                "  14:OlapScanNode\n" +
-                "     table: customer, rollup: customer"));
+                "  41:Project\n" +
+                "  |  output columns:\n" +
+                "  |  931 <-> [931: d_date_sk, INT, false]\n" +
+                "  |  934 <-> [934: d_month_seq, INT, true]\n" +
+                "  |  cardinality: 36525\n" +
+                "  |  column statistics: \n" +
+                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 36524.5] ESTIMATE\n" +
+                "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
+                "  |  \n" +
+                "  40:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  other predicates: cast([934: d_month_seq, INT, true] as BIGINT) >= [987: expr, BIGINT, true]\n" +
+                "  |  cardinality: 36525\n" +
+                "  |  column statistics: \n" +
+                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 36524.5] ESTIMATE\n" +
+                "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
+                "  |  * expr-->[1.0, 2401.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
+                "  |  \n" +
+                "  |----39:EXCHANGE\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  32:OlapScanNode\n" +
+                "     table: date_dim, rollup: date_dim"));
     }
 
     @Test
@@ -471,7 +500,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testMergeGroupWithDeleteBestExpression() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
@@ -480,7 +510,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
     }
@@ -501,5 +532,12 @@ public class ReplayFromDumpTest {
         // check without exception
         Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
+    }
+
+    @Test
+    public void testIntersectCardinality() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/intersect_cardinality"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("cardinality: 152160"));
     }
 }

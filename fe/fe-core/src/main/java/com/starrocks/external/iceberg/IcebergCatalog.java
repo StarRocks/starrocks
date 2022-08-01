@@ -2,10 +2,14 @@
 
 package com.starrocks.external.iceberg;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.thrift.TException;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -39,4 +43,10 @@ public interface IcebergCatalog {
     Table loadTable(TableIdentifier tableId,
                     String tableLocation,
                     Map<String, String> properties) throws StarRocksIcebergException;
+
+    List<String> listAllDatabases();
+
+    Database getDB(String dbName) throws InterruptedException, TException;
+
+    List<TableIdentifier> listTables(Namespace of);
 }

@@ -2,13 +2,10 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
@@ -20,7 +17,7 @@ import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 
-public class StatisticAutoCollector extends MasterDaemon {
+public class StatisticAutoCollector extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
     private static final StatisticExecutor statisticExecutor = new StatisticExecutor();
@@ -36,8 +33,6 @@ public class StatisticAutoCollector extends MasterDaemon {
             setInterval(Config.statistic_collect_interval_sec * 1000);
         }
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().expireAnalyzeJob();
-
         if (!Config.enable_statistic_collect || FeConstants.runningUnitTest) {
             return;
         }
@@ -49,7 +44,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         initDefaultJob();
 
-        if (Config.enable_collect_full_statistics) {
+        if (Config.enable_collect_full_statistic) {
             List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                     new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                             AnalyzeType.FULL, ScheduleType.SCHEDULE,
@@ -66,8 +61,6 @@ public class StatisticAutoCollector extends MasterDaemon {
                 analyzeJob.run(statisticExecutor);
             }
         }
-
-        expireStatistic();
     }
 
     private void initDefaultJob() {
@@ -81,29 +74,5 @@ public class StatisticAutoCollector extends MasterDaemon {
                 Collections.emptyList(), AnalyzeType.SAMPLE, ScheduleType.SCHEDULE, Maps.newHashMap(),
                 ScheduleStatus.PENDING, LocalDateTime.MIN);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
-    }
-
-    private void expireStatistic() {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
-        List<Long> tables = Lists.newArrayList();
-        for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
-                continue;
-            }
-
-            db.getTables().stream().map(Table::getId).forEach(tables::add);
-        }
-        try {
-            List<String> expireTables = statisticExecutor.queryExpireTableSync(tables);
-
-            if (expireTables.isEmpty()) {
-                return;
-            }
-            LOG.info("Statistic expire tableIds: {}", expireTables);
-            statisticExecutor.expireStatisticSync(expireTables);
-        } catch (Exception e) {
-            LOG.warn("expire statistic failed.", e);
-        }
     }
 }

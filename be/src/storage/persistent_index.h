@@ -30,6 +30,12 @@ enum PersistentIndexFileVersion {
 
 static constexpr uint64_t NullIndexValue = -1;
 
+enum CommitType {
+    kFlush = 0,
+    kSnapshot = 1,
+    kAppendWAL = 2,
+};
+
 // Use `uint8_t[8]` to store the value of a `uint64_t` to reduce memory cost in phmap
 struct IndexValue {
     uint8_t v[8];
@@ -40,6 +46,9 @@ struct IndexValue {
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
+
+static constexpr size_t kIndexValueSize = 8;
+static_assert(sizeof(IndexValue) == kIndexValueSize);
 
 class ImmutableIndexShard;
 
@@ -103,6 +112,12 @@ public:
     // |values|: value array
     virtual Status load_wals(size_t n, const void* keys, const IndexValue* values) = 0;
 
+    // load snapshot
+    virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
+
+    // load according meta
+    virtual Status load(const MutableIndexMetaPB& meta) = 0;
+
     // batch insert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -124,12 +139,17 @@ public:
     // |replace_idxes|: the idx array of the kv needed to be replaced
     virtual Status replace(const void* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
 
+    virtual Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) = 0;
+
+    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values) = 0;
+
+    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values,
+                              const std::vector<size_t>& idxes) = 0;
+
     // get dump size of hashmap
     virtual size_t dump_bound() = 0;
 
     virtual bool dump(phmap::BinaryOutputArchive& ar_out) = 0;
-
-    virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
 
     // [not thread-safe]
     virtual size_t capacity() = 0;
@@ -152,7 +172,7 @@ public:
     // [not thread-safe]
     virtual Status flush_to_immutable_index(const std::string& dir, const EditVersion& version) const = 0;
 
-    static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
+    static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size, const std::string& path);
 };
 
 class ImmutableIndex {
@@ -241,9 +261,9 @@ public:
     std::string path() const { return _path; }
 
     size_t key_size() const { return _key_size; }
+    size_t kv_pair_size() const { return _kv_pair_size; }
 
     size_t size() const { return _size; }
-    size_t kv_size = key_size() + sizeof(IndexValue);
     size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
     size_t memory_usage() const { return _l0 ? _l0->memory_usage() : 0; }
 
@@ -317,23 +337,13 @@ public:
     Status try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
-    size_t mutable_index_size();
-
-    size_t mutable_index_capacity();
-
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
 
 private:
-    std::string _get_l0_index_file_name(std::string& dir, const EditVersion& version);
-
     size_t _dump_bound();
-
-    bool _dump(phmap::BinaryOutputArchive& ar_out);
 
     // check _l0 should dump as snapshot or not
     bool _can_dump_directly();
-
-    bool _load_snapshot(phmap::BinaryInputArchive& ar_in);
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
 
@@ -363,18 +373,14 @@ private:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
+    size_t _kv_pair_size = 0;
     size_t _size = 0;
     EditVersion _version;
     // _l1_version is used to get l1 file name, update in on_committed
     EditVersion _l1_version;
     std::unique_ptr<MutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
-    // |_offset|: the start offset of last wal in index file
-    // |_page_size|: the size of last wal in index file
-    uint64_t _offset = 0;
-    uint32_t _page_size = 0;
     std::shared_ptr<FileSystem> _fs;
-    std::unique_ptr<WritableFile> _index_file;
 
     bool _dump_snapshot = false;
     bool _flushed = false;

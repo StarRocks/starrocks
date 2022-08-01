@@ -24,15 +24,8 @@ package com.starrocks.analysis;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowFunctionsStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -87,32 +80,18 @@ public class ShowFunctionsStmt extends ShowStmt {
         return str.matches(wild.replace(".", "\\.").replace("?", ".").replace("%", ".*").toLowerCase());
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            dbName = ClusterNamespace.getFullName(dbName);
-        }
-
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
-            ErrorReport.reportAnalysisException(
-                    ErrorCode.ERR_DB_ACCESS_DENIED, ConnectContext.get().getQualifiedUser(), dbName);
-        }
-
-        if (expr != null) {
-            throw new AnalysisException("Only support like 'function_pattern' syntax.");
-        }
+    public void setDbName(String db) {
+        this.dbName = db;
     }
 
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowFunctions(this, context);
     }
 
     @Override
@@ -130,9 +109,14 @@ public class ShowFunctionsStmt extends ShowStmt {
             sb.append("`").append(dbName).append("` ");
         }
         if (wild != null) {
-            sb.append("LIKE ").append("`").append(wild).append("`");
+            sb.append("LIKE ").append("'").append(wild).append("'");
         }
         return sb.toString();
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

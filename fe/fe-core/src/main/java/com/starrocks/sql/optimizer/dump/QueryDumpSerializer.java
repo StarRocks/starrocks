@@ -13,6 +13,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.logging.log4j.LogManager;
@@ -78,7 +79,8 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
         // 7. BE number
-        long beNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size();
+        ConnectContext ctx = ConnectContext.get();
+        long beNum = ctx.getAliveBackendNumber();
         dumpJson.addProperty("be_number", beNum);
         // 8. exception
         JsonArray exceptions = new JsonArray();

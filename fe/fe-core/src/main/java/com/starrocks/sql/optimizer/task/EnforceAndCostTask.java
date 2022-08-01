@@ -5,7 +5,7 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
@@ -26,11 +26,13 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * EnforceAndCostTask costs a physical expression.
@@ -241,10 +243,12 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // Only when right table is not significantly smaller than left table, consider the
         // broadcastRowCountLimit, Otherwise, this limit is not considered, which can avoid
         // shuffling large left-hand table data
+        ConnectContext ctx = ConnectContext.get();
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
-                        ConnectContext.get().getSessionVariable().getDegreeOfParallelism()));
-        int beNum = Math.max(1, GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).size());
+                        sv.getDegreeOfParallelism()));
+        int beNum = Math.max(1, ctx.getAliveBackendNumber());
         Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
         Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
         if (leftChildStats == null || rightChildStats == null) {
@@ -253,9 +257,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
         double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
 
-        if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * 10
+        if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * sv.getBroadcastRightTableScaleFactor()
                 && rightChildStats.getOutputRowCount() >
-                ConnectContext.get().getSessionVariable().getBroadcastRowCountLimit()) {
+                sv.getBroadcastRowCountLimit()) {
             return false;
         }
         return true;
@@ -323,6 +327,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
+        List<CallOperator> distinctAggCallOperator = aggregate.getAggregations().values().stream()
+                .filter(CallOperator::isDistinct).collect(Collectors.toList());
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
@@ -332,7 +338,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                     childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
                 return false;
             }
-            // 1.2 disable one stage agg with multi group by columns
+            // 1.2 disable one stage agg with distinct aggregate
+            if (distinctAggCallOperator.size() > 0) {
+                return false;
+            }
+            // 1.3 disable one stage agg with multi group by columns
             return aggregate.getGroupBys().size() <= 1;
         }
         return true;

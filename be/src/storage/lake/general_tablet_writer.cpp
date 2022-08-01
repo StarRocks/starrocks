@@ -73,9 +73,9 @@ Status GeneralTabletWriter::reset_segment_writer() {
 
 Status GeneralTabletWriter::flush_segment_writer() {
     if (_seg_writer != nullptr) {
-        uint64_t segment_size;
-        uint64_t index_size;
-        uint64_t footer_position;
+        uint64_t segment_size = 0;
+        uint64_t index_size = 0;
+        uint64_t footer_position = 0;
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
         _data_size += segment_size;
         _seg_writer.reset();

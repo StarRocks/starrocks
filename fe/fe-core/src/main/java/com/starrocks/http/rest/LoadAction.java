@@ -22,7 +22,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -61,11 +60,6 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("There is no 100-continue header");
         }
 
-        final String clusterName = ConnectContext.get().getClusterName();
-        if (Strings.isNullOrEmpty(clusterName)) {
-            throw new DdlException("No cluster selected.");
-        }
-
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
             throw new DdlException("No database selected.");
@@ -76,12 +70,10 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-
         String label = request.getRequest().headers().get(LABEL_KEY);
 
         // check auth
-        checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.LOAD);
+        checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), dbName, tableName, PrivPredicate.LOAD);
 
         // Choose a backend sequentially.
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);

@@ -262,20 +262,24 @@ public:
     std::vector<TWorkGroup> list_all_workgroups();
 
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_driver_worker(int worker_id);
-    bool should_yield_driver_worker(int worker_id, WorkGroupPtr running_wg);
+    bool should_yield_driver_worker(int worker_id, const WorkGroupPtr& running_wg);
 
     std::shared_ptr<WorkGroupPtrSet> get_owners_of_scan_worker(ScanExecutorType type, int worker_id);
-    bool get_owners_of_scan_worker(ScanExecutorType type, int worker_id, WorkGroupPtr running_wg);
+    bool should_yield_scan_worker(ScanExecutorType type, int worker_id, const WorkGroupPtr& running_wg);
 
     int num_total_driver_workers() const { return _driver_worker_owner_manager->num_total_workers(); }
 
     void update_metrics();
 
 private:
+    using MutexType = std::shared_mutex;
+    using UniqueLockType = std::unique_lock<MutexType>;
+    using SharedLockType = std::shared_lock<MutexType>;
+
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
     // WorkGroupManager::_mutex is held when invoking these method.
-    void create_workgroup_unlocked(const WorkGroupPtr& wg);
-    void alter_workgroup_unlocked(const WorkGroupPtr& wg);
+    void create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueLockType& lock);
+    void alter_workgroup_unlocked(const WorkGroupPtr& wg, UniqueLockType& lock);
     void delete_workgroup_unlocked(const WorkGroupPtr& wg);
 
     // Label each executor thread to a specific workgroup by cpu limit.
@@ -306,7 +310,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_concurrency_overflow_count;
     std::unordered_map<std::string, std::unique_ptr<starrocks::IntGauge>> _wg_bigquery_count;
 
-    void add_metrics_unlocked(const WorkGroupPtr& wg);
+    void add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockType& unique_lock);
     void update_metrics_unlocked();
 };
 

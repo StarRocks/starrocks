@@ -155,7 +155,9 @@ set(EXEC_FILES
         ./storage/tablet_mgr_test.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
+        ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
+        ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
         ./storage/lake/tablet_manager_test.cpp
@@ -228,6 +230,7 @@ set(EXEC_FILES
         ./runtime/large_int_value_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
+        ./runtime/memory/memory_resource_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/raw_value_test.cpp
         ./runtime/result_queue_mgr_test.cpp
@@ -273,7 +276,6 @@ set(EXEC_FILES
         ./util/path_trie_test.cpp
         ./util/path_util_test.cpp
         ./util/priority_queue_test.cpp
-        ./util/radix_sort_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp

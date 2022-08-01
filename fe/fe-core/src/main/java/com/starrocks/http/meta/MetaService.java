@@ -23,13 +23,12 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
-import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.master.MetaHelper;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -50,6 +49,7 @@ public class MetaService {
 
     public static class ImageAction extends MetaBaseAction {
         private static final String VERSION = "version";
+        private static final String SUBDIR = "subdir";
 
         public ImageAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -69,13 +69,21 @@ public class MetaService {
                 return;
             }
 
+            String subDirStr = request.getSingleParameter(SUBDIR);
+            File realDir = null;
+            if (Strings.isNullOrEmpty(subDirStr)) {
+                realDir = imageDir;
+            } else {
+                realDir = new File(imageDir.getAbsolutePath() + subDirStr);
+            }
+
             long version = checkLongParam(versionStr);
             if (version < 0) {
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 return;
             }
 
-            File imageFile = Storage.getImageFile(imageDir, version);
+            File imageFile = Storage.getImageFile(realDir, version);
             if (!imageFile.exists()) {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
                 return;
@@ -87,6 +95,7 @@ public class MetaService {
 
     public static class InfoAction extends MetaBaseAction {
         private static final Logger LOG = LogManager.getLogger(InfoAction.class);
+        private static final String SUBDIR = "subdir";
 
         public InfoAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -99,8 +108,16 @@ public class MetaService {
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
+            String subDirStr = request.getSingleParameter(SUBDIR);
+            File realDir = null;
+            if (Strings.isNullOrEmpty(subDirStr)) {
+                realDir = imageDir;
+            } else {
+                realDir = new File(imageDir.getAbsolutePath() + subDirStr);
+            }
+
             try {
-                Storage currentStorageInfo = new Storage(imageDir.getAbsolutePath());
+                Storage currentStorageInfo = new Storage(realDir.getAbsolutePath());
                 StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getClusterID(),
                         currentStorageInfo.getImageJournalId());
 
@@ -140,6 +157,7 @@ public class MetaService {
 
         private static final String VERSION = "version";
         private static final String PORT = "port";
+        private static final String SUBDIR = "subdir";
 
         public PutAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
@@ -177,29 +195,39 @@ public class MetaService {
             long version = checkLongParam(versionStr);
 
             // for master node, reject image put
-            if (GlobalStateMgr.getCurrentState().isMaster()) {
+            if (GlobalStateMgr.getCurrentState().isLeader()) {
                 response.appendContent("this node is master, reject image put");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                 LOG.error("this node is master, but receive image put from host{}, reject it", machine);
                 return;
             }
 
+            String subDirStr = request.getSingleParameter(SUBDIR);
+            long maxJournalId = 0;
+            if (Strings.isNullOrEmpty(subDirStr)) { // default GlobalStateMgr
+                subDirStr = "";
+                maxJournalId = GlobalStateMgr.getCurrentState().getMaxJournalId();
+            } else { // star mgr
+                // do nothing for now
+                // maxJournalId = StarMgrServer.getCurrentState().getMaxJournalId();
+            }
+
             // do not accept image whose version is bigger than max journalId
             // if accepted, newly added log will not be replayed when restart
-            long maxJournalId = GlobalStateMgr.getCurrentState().getMaxJournalId();
             if (version > maxJournalId) {
                 response.appendContent("image version is bigger than local max journal id, reject image put");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
-                LOG.error("receive image whose version [{}] is bigger than local max journal id [{}], reject it",
-                        version, maxJournalId);
+                LOG.error("receive image whose version [{}] is bigger than local max journal id [{}] " +
+                        "in dir[{}], reject it.", version, maxJournalId, subDirStr);
                 return;
             }
 
             String url = "http://" + machine + ":" + portStr
-                    + "/image?version=" + versionStr;
+                    + "/image?version=" + versionStr + "&subdir=" + subDirStr;
             String filename = Storage.IMAGE + "." + versionStr;
 
-            File dir = new File(GlobalStateMgr.getCurrentState().getImageDir());
+            String realDir = GlobalStateMgr.getCurrentState().getImageDir() + subDirStr;
+            File dir = new File(realDir);
             try {
                 OutputStream out = MetaHelper.getOutputStream(filename, dir);
                 MetaHelper.getRemoteFile(url, TIMEOUT_SECOND * 1000, out);
@@ -218,7 +246,7 @@ public class MetaService {
             GlobalStateMgr.getCurrentState().setImageJournalId(version);
 
             // Delete old image files
-            MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");
+            MetaCleaner cleaner = new MetaCleaner(realDir);
             try {
                 cleaner.clean();
             } catch (IOException e) {
@@ -228,6 +256,8 @@ public class MetaService {
     }
 
     public static class JournalIdAction extends MetaBaseAction {
+        private static final String PREFIX = "prefix";
+
         public JournalIdAction(ActionController controller, File imageDir) {
             super(controller, imageDir);
         }
@@ -239,7 +269,15 @@ public class MetaService {
 
         @Override
         public void executeGet(BaseRequest request, BaseResponse response) {
-            long id = GlobalStateMgr.getCurrentState().getReplayedJournalId();
+            String prefixStr = request.getSingleParameter(PREFIX);
+            long id = 0;
+            if (Strings.isNullOrEmpty(prefixStr)) { // default GlobalStateMgr
+                id = GlobalStateMgr.getCurrentState().getReplayedJournalId();
+            } else { // star mgr
+                // do nothing for now
+                // id = StarMgrServer.getCurrentState().getReplayId();
+            }
+
             response.updateHeader("id", Long.toString(id));
             writeResponse(request, response);
         }

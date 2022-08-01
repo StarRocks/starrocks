@@ -21,6 +21,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
@@ -29,6 +30,8 @@ import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
@@ -44,19 +47,14 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class MaterializedViewAnalyzer {
-
-    private static final Logger LOG = LoggerFactory.getLogger(MaterializedViewAnalyzer.class);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
@@ -110,7 +108,7 @@ public class MaterializedViewAnalyzer {
                 if (db.getTable(table.getId()) == null) {
                     throw new SemanticException(
                             "Materialized view do not support table: " + table.getName() +
-                                    " do not exist in database: " + db.getFullName());
+                                    " do not exist in database: " + db.getOriginName());
                 }
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException(
@@ -209,7 +207,7 @@ public class MaterializedViewAnalyzer {
                         + slotRef.toSql() + " must related to column");
             }
             for (Column column : columns) {
-                if (slotRef.getColumnName().equals(column.getName())) {
+                if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                     statement.setPartitionColumn(column);
                     break;
                 }
@@ -291,7 +289,7 @@ public class MaterializedViewAnalyzer {
                 }
                 boolean isInPartitionColumns = false;
                 for (Column basePartitionColumn : partitionColumns) {
-                    if (basePartitionColumn.getName().equals(slotRef.getColumnName())) {
+                    if (basePartitionColumn.getName().equalsIgnoreCase(slotRef.getColumnName())) {
                         isInPartitionColumns = true;
                         break;
                     }
@@ -359,8 +357,13 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view should contain distribution desc");
                 }
             }
-            distributionDesc.analyze(
-                    mvColumnItems.stream().map(Column::getName).collect(Collectors.toSet()));
+            Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column columnDef : mvColumnItems) {
+                if (!columnSet.add(columnDef.getName())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
+                }
+            }
+            distributionDesc.analyze(columnSet);
         }
 
         @Override
@@ -411,6 +414,17 @@ public class MaterializedViewAnalyzer {
         public Void visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement statement,
                                                           ConnectContext context) {
             statement.getMvName().normalization(context);
+            TableName mvName = statement.getMvName();
+            Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
+            if (db == null) {
+                throw new SemanticException("Can not find database:" + mvName.getDb());
+            }
+            Table table = db.getTable(mvName.getTbl());
+            Preconditions.checkState(table instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) table;
+            if (!mv.isActive()) {
+                throw new SemanticException("Refresh materialized view failed because " + mv.getName() + " is not active.");
+            }
             return null;
         }
 

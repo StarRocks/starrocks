@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "formats/csv/array_reader.h"
 #include "formats/csv/converter.h"
 
 namespace starrocks::vectorized::csv {
@@ -18,8 +19,7 @@ public:
     bool read_quoted_string(Column* column, Slice s, const Options& options) const override;
 
 private:
-    bool _split_array_elements(Slice s, std::vector<Slice>* elements) const;
-
+    mutable std::unique_ptr<ArrayReader> _array_reader;
     std::unique_ptr<Converter> _element_converter;
 };
 

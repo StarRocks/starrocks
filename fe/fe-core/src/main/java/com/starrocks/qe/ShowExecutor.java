@@ -76,7 +76,6 @@ import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.ShowWorkGroupStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
@@ -88,7 +87,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Index;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -103,7 +101,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.lake.LakeTable;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -125,6 +122,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -144,6 +142,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -153,7 +152,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -279,8 +277,8 @@ public class ShowExecutor {
             handleShowBasicStatsMeta();
         } else if (stmt instanceof ShowHistogramStatsMetaStmt) {
             handleShowHistogramStatsMeta();
-        } else if (stmt instanceof ShowWorkGroupStmt) {
-            handleShowWorkGroup();
+        } else if (stmt instanceof ShowResourceGroupStmt) {
+            handleShowResourceGroup();
         } else if (stmt instanceof ShowUserStmt) {
             handleShowUser();
         } else if (stmt instanceof ShowCatalogsStmt) {
@@ -783,7 +781,7 @@ public class ShowExecutor {
             Table table = db.getTable(showStmt.getTableName().getTbl());
             if (table == null) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        db.getFullName() + "." + showStmt.getTableName().toString());
+                        db.getOriginName() + "." + showStmt.getTableName().toString());
             } else if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
@@ -1153,7 +1151,7 @@ public class ShowExecutor {
                         break;
                     }
 
-                    List<Replica> replicas = tablet.getReplicas();
+                    List<Replica> replicas = tablet.getImmutableReplicas();
                     for (Replica replica : replicas) {
                         Replica tmp = invertedIndex.getReplica(tabletId, replica.getBackendId());
                         if (tmp == null) {
@@ -1615,16 +1613,15 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
-    private void handleShowWorkGroup() throws AnalysisException {
-        ShowWorkGroupStmt showWorkGroupStmt = (ShowWorkGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getWorkGroupMgr().showWorkGroup(showWorkGroupStmt);
-        resultSet = new ShowResultSet(showWorkGroupStmt.getMetaData(), rows);
+    private void handleShowResourceGroup() throws AnalysisException {
+        ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
+        resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
         List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogsInfo();
-        rowSet.add(Arrays.asList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
         rowSet.sort(new Comparator<List<String>>() {
             @Override
             public int compare(List<String> o1, List<String> o2) {

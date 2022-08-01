@@ -23,14 +23,12 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -48,21 +46,14 @@ public class CancelStreamLoad extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
 
-        if (redirectToMaster(request, response)) {
+        if (redirectToLeader(request, response)) {
             return;
-        }
-
-        final String clusterName = ConnectContext.get().getClusterName();
-        if (Strings.isNullOrEmpty(clusterName)) {
-            throw new DdlException("No cluster selected.");
         }
 
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
             throw new DdlException("No database selected.");
         }
-
-        String fullDbName = ClusterNamespace.getFullName(dbName);
 
         String label = request.getSingleParameter(LABEL_KEY);
         if (Strings.isNullOrEmpty(label)) {
@@ -72,7 +63,7 @@ public class CancelStreamLoad extends RestBaseAction {
         // FIXME(cmy)
         // checkWritePriv(authInfo.fullUserName, fullDbName);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             throw new DdlException("unknown database, database=" + dbName);
         }

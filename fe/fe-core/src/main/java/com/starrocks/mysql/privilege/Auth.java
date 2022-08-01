@@ -348,6 +348,9 @@ public class Auth implements Writable {
      * If the given db is null, which means it will no check if database name is matched.
      */
     public boolean checkDbPriv(UserIdentity currentUser, String db, PrivPredicate wanted) {
+        // used for remove default_cluster from stmt
+        db = ClusterNamespace.getFullName(db);
+
         if (!Config.enable_auth_check) {
             return true;
         }
@@ -391,6 +394,9 @@ public class Auth implements Writable {
     }
 
     public boolean checkTblPriv(UserIdentity currentUser, String db, String tbl, PrivPredicate wanted) {
+        // used for remove default_cluster from stmt
+        db = ClusterNamespace.getFullName(db);
+
         if (!Config.enable_auth_check) {
             return true;
         }
@@ -633,13 +639,13 @@ public class Auth implements Writable {
             }
 
             // other user properties
-            propertyMgr.addUserResource(userIdent.getQualifiedUser(), false /* not system user */);
+            propertyMgr.addUserResource(userIdent.getQualifiedUser()  /* not system user */);
 
-            if (!userIdent.getQualifiedUser().equals(ROOT_USER) && !userIdent.getQualifiedUser().equals(ADMIN_USER)) {
+            if (!userIdent.getQualifiedUser().equals(ROOT_USER)) {
                 // grant read privs to database information_schema
                 TablePattern tblPattern = new TablePattern(InfoSchemaDb.DATABASE_NAME, "*");
                 try {
-                    tblPattern.analyze(ClusterNamespace.getClusterNameFromFullName(userIdent.getQualifiedUser()));
+                    tblPattern.analyze();
                 } catch (AnalysisException e) {
                     LOG.warn("should not happen", e);
                 }
@@ -661,8 +667,8 @@ public class Auth implements Writable {
     public void dropUser(DropUserStmt stmt) throws DdlException {
         String user = stmt.getUserIdentity().getQualifiedUser();
         String host = stmt.getUserIdentity().getHost();
-        if ((ROOT_USER.equals(user) || ADMIN_USER.equals(user)) && "%".equals(host)) {
-            // Dropping `root@%` and `admin@%` is not allowed for `default_cluster`.
+        if (ROOT_USER.equals(user) && "%".equals(host)) {
+            // Dropping `root@%` is not allowed
             throw new DdlException(String.format("User `%s`@`%s` is not allowed to be dropped.", user, host));
         }
 
@@ -1582,42 +1588,6 @@ public class Auth implements Writable {
             return propertyMgr.fetchUserProperty(qualifiedUser);
         } catch (AnalysisException e) {
             return Lists.newArrayList();
-        } finally {
-            readUnlock();
-        }
-    }
-
-    public void dropUserOfCluster(String clusterName, boolean isReplay) {
-        writeLock();
-        try {
-            Set<UserIdentity> allUserIdents = getAllUserIdents(true);
-            for (UserIdentity userIdent : allUserIdents) {
-                if (userIdent.getQualifiedUser().startsWith(clusterName)) {
-                    dropUserInternal(userIdent, isReplay);
-                }
-            }
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    // user can enter a cluster, if it has any privs of database or table in this cluster.
-    public boolean checkCanEnterCluster(ConnectContext ctx, String clusterName) {
-        readLock();
-        try {
-            if (checkGlobalPriv(ctx, PrivPredicate.ALL)) {
-                return true;
-            }
-
-            if (dbPrivTable.hasClusterPriv(ctx, clusterName)) {
-                return true;
-            }
-
-            if (tablePrivTable.hasClusterPriv(ctx, clusterName)) {
-                return true;
-            }
-
-            return false;
         } finally {
             readUnlock();
         }

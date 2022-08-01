@@ -25,6 +25,7 @@ DIAGNOSTIC_POP
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
+#include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
@@ -39,6 +40,7 @@ class LakeTabletsChannel : public TabletsChannel {
 
 public:
     LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    ~LakeTabletsChannel() override;
 
     DISALLOW_COPY_AND_MOVE(LakeTabletsChannel);
 
@@ -55,8 +57,6 @@ public:
 
 private:
     using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
-
-    ~LakeTabletsChannel() override;
 
     struct Sender {
         bthread::Mutex lock;
@@ -76,9 +76,11 @@ private:
             if (status.ok()) {
                 return;
             }
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
-                status.to_protobuf(_response->mutable_status());
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg);
             }
         }
 
@@ -141,7 +143,7 @@ private:
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
         : TabletsChannel(), _load_channel(load_channel), _key(key), _mem_tracker(mem_tracker), _has_chunk_meta(false) {}
 
-LakeTabletsChannel::~LakeTabletsChannel() {}
+LakeTabletsChannel::~LakeTabletsChannel() = default;
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     _txn_id = params.txn_id();
@@ -446,9 +448,9 @@ StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::
     return std::move(context);
 }
 
-scoped_refptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                       MemTracker* mem_tracker) {
-    return scoped_refptr<TabletsChannel>(new LakeTabletsChannel(load_channel, key, mem_tracker));
+std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                         MemTracker* mem_tracker) {
+    return std::make_shared<LakeTabletsChannel>(load_channel, key, mem_tracker);
 }
 
 } // namespace starrocks

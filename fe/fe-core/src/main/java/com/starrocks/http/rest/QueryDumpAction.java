@@ -5,7 +5,6 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -48,14 +47,13 @@ public class QueryDumpAction extends RestBaseAction {
         ConnectContext context = ConnectContext.get();
         String dbName = request.getSingleParameter(DB);
         if (!Strings.isNullOrEmpty(dbName)) {
-            String fullDbName = ClusterNamespace.getFullName(dbName);
-            Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
-                response.getContent().append("Database [" + fullDbName + "] does not exists");
+                response.getContent().append("Database [" + dbName + "] does not exists");
                 sendResult(request, response, HttpResponseStatus.NOT_FOUND);
                 return;
             }
-            context.setDatabase(fullDbName);
+            context.setDatabase(db.getFullName());
         }
         context.setIsQueryDump(true);
 

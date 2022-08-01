@@ -75,6 +75,9 @@ Status HttpServiceBE::start() {
     // BeginTrasaction:     POST /api/transaction/begin
     // CommitTransaction:   POST /api/transaction/commit
     // RollbackTransaction: POST /api/transaction/rollback
+    // PrepreTransaction:   POST /api/transaction/prepare
+    //
+    // ListTransactions:    POST /api/transaction/list
     TransactionManagerAction* transaction_manager_action = new TransactionManagerAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);
@@ -153,7 +156,7 @@ Status HttpServiceBE::start() {
     }
 
     MetaAction* meta_action = new MetaAction(HEADER);
-    _ev_http_server->register_handler(HttpMethod::GET, "/api/meta/header/{tablet_id}/{schema_hash}", meta_action);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/meta/header/{tablet_id}", meta_action);
     _http_handlers.emplace_back(meta_action);
 
 #ifndef BE_TEST

@@ -155,7 +155,7 @@ public class TabletInvertedIndex {
                                 }
 
                                 // check and set path
-                                // path info of replica is only saved in Master FE
+                                // path info of replica is only saved in Leader FE
                                 if (backendTabletInfo.isSetPath_hash() &&
                                         replica.getPathHash() != backendTabletInfo.getPath_hash()) {
                                     replica.setPathHash(backendTabletInfo.getPath_hash());
@@ -486,6 +486,30 @@ public class TabletInvertedIndex {
                 return Lists.newArrayList(replicaMetaTable.row(tabletId).values());
             }
             return Lists.newArrayList();
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * For each tabletId in the tablet_id list, get the replica on specified backend or null, return as a list.
+     *
+     * @param tabletIds tablet_id list
+     * @param backendId backendid
+     * @return list of replica or null if backend not found
+     */
+    public List<Replica> getReplicasOnBackendByTabletIds(List<Long> tabletIds, long backendId) {
+        readLock();
+        try {
+            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithBackend != null) {
+                List<Replica> replicas = Lists.newArrayList();
+                for (long tabletId : tabletIds) {
+                    replicas.add(replicaMetaWithBackend.get(tabletId));
+                }
+                return replicas;
+            }
+            return null;
         } finally {
             readUnlock();
         }

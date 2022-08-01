@@ -23,12 +23,8 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
@@ -36,8 +32,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 public class BaseViewStmt extends DdlStmt {
     private static final Logger LOG = LogManager.getLogger(BaseViewStmt.class);
@@ -106,66 +100,6 @@ public class BaseViewStmt extends DdlStmt {
 
     public List<ColWithComment> getCols() {
         return cols;
-    }
-
-    /**
-     * Sets the originalViewDef and the expanded inlineViewDef based on viewDefStmt.
-     * If columnNames were given, checks that they do not contain duplicate column names
-     * and throws an exception if they do.
-     */
-    protected void createColumnAndViewDefs(Analyzer analyzer) throws AnalysisException, UserException {
-        if (cols != null) {
-            if (cols.size() != viewDefStmt.getColLabels().size()) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_VIEW_WRONG_LIST);
-            }
-            for (int i = 0; i < cols.size(); ++i) {
-                Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
-                Column col = new Column(cols.get(i).getColName(), type);
-                col.setComment(cols.get(i).getComment());
-                finalCols.add(col);
-            }
-        } else {
-            for (int i = 0; i < viewDefStmt.getBaseTblResultExprs().size(); ++i) {
-                Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
-                finalCols.add(new Column(viewDefStmt.getColLabels().get(i), type));
-            }
-        }
-        // Set for duplicate columns
-        Set<String> colSets = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        for (Column col : finalCols) {
-            if (!colSets.add(col.getName())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_DUP_FIELDNAME, col.getName());
-            }
-        }
-
-        // format view def string
-        originalViewDef = viewDefStmt.toSql();
-
-        if (cols == null) {
-            inlineViewDef = originalViewDef;
-            return;
-        }
-
-        Analyzer tmpAnalyzer = new Analyzer(analyzer);
-        List<String> colNames = cols.stream().map(c -> c.getColName()).collect(Collectors.toList());
-        cloneStmt.substituteSelectList(tmpAnalyzer, colNames);
-        inlineViewDef = cloneStmt.toSql();
-
-        //        StringBuilder sb = new StringBuilder();
-        //        sb.append("SELECT ");
-        //        for (int i = 0; i < finalCols.size(); ++i) {
-        //            if (i != 0) {
-        //                sb.append(", ");
-        //            }
-        //            String colRef = viewDefStmt.getColLabels().get(i);
-        //            if (!colRef.startsWith("`")) {
-        //                colRef = "`" + colRef + "`";
-        //            }
-        //            String colAlias = finalCols.get(i).getName();
-        //            sb.append(String.format("`%s`.%s AS `%s`", tableName.getTbl(), colRef, colAlias));
-        //        }
-        //        sb.append(String.format(" FROM (%s) %s", originalViewDef, tableName.getTbl()));
-        //        inlineViewDef = sb.toString();
     }
 
     @Override

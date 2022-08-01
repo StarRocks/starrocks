@@ -94,12 +94,12 @@ private:
     size_t _local_sum_row_bytes = 0;
     size_t _local_num_rows = 0;
     size_t _local_sum_chunks = 0;
+    size_t _local_max_chunk_rows = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-    RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _tablet_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;

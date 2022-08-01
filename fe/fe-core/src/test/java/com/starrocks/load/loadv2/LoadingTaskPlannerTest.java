@@ -33,6 +33,8 @@ import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -53,11 +55,13 @@ import com.starrocks.load.Load;
 import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -68,16 +72,21 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.io.StringReader;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -94,13 +103,15 @@ public class LoadingTaskPlannerTest {
     // backends
     private ImmutableMap<Long, Backend> idToBackend;
 
+    private static ConnectContext ctx;
+
     @Mocked
     Partition partition;
     @Mocked
     OlapTableSink sink;
 
     @Before
-    public void setUp() {
+    public void setUp() throws IOException {
         jobId = 1L;
         txnId = 2L;
         loadId = new TUniqueId(3, 4);
@@ -118,6 +129,7 @@ public class LoadingTaskPlannerTest {
         b2.setAlive(true);
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);
+        ctx = UtFrameUtils.createDefaultCtx();
     }
 
     @After
@@ -256,8 +268,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -393,8 +405,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -477,8 +489,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',') with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -563,8 +575,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',' set ( __op = 'delete')) with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -668,8 +680,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',' (c0,c1,c2,c3) set (pk=c0, v1=c1, v2=c2, __op = c3)) with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -763,8 +775,8 @@ public class LoadingTaskPlannerTest {
         // column mappings
         String sql =
                 "LOAD LABEL label0 (DATA INFILE('/path/file1') INTO TABLE t2 columns terminated by ',' (pk,v1,v2,__op)) with broker 'broker0'";
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(
+                sql, ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
                 "columnMappingList");
 
@@ -804,5 +816,200 @@ public class LoadingTaskPlannerTest {
         TExpr opExpr = exprOfDestSlot.get(3);
         Assert.assertEquals(1, opExpr.nodes.size());
         Assert.assertEquals(TExprNodeType.SLOT_REF, opExpr.nodes.get(0).node_type);
+    }
+
+    @Test
+    public void testShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, false, null, ""));
+
+        List<Column> keyColumns = Lists.newArrayList();
+        keyColumns.add(columns.get(0));
+        keyColumns.add(columns.get(1));
+        keyColumns.add(columns.get(2));
+
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
+                Type.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
+                Type.INT, true);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getKeysType();
+                result = KeysType.UNIQUE_KEYS;
+                table.getDefaultReplicationNum();
+                result = 3;
+                table.getBaseIndexId();
+                result = 1;
+                table.getKeyColumnsByIndexId((long) 1);
+                result = keyColumns;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("k1");
+                result = columns.get(0);
+                table.getColumn("k2");
+                result = columns.get(1);
+                table.getColumn("k3");
+                result = columns.get(2);
+                table.getColumn("v");
+                result = columns.get(3);
+                table.getColumn("k33");
+                result = null;
+                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                returns(f1, f1, f2);
+            }
+        };
+
+        // column mappings
+        String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
+                "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
+                "columnMappingList");
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("path/k2=1/file1");
+        List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
+        DataDescription desc = new DataDescription("t2", null, files, columnNames,
+                null, null, "ORC", Lists.newArrayList("k2"),
+                false, columnMappingList, null);
+        Deencapsulation.invoke(desc, "analyzeColumns");
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "ORC");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // plan
+        LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
+        planner.plan(loadId, fileStatusesList, 1);
+
+        // check fragment
+        List<PlanFragment> fragments = planner.getFragments();
+        Assert.assertEquals(2, fragments.size());
+    }
+
+    @Test
+    public void testAggShuffle(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                    @Injectable Database db, @Injectable OlapTable table) throws Exception {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("k1", Type.TINYINT, true, null, true, null, ""));
+        columns.add(new Column("k2", Type.INT, true, null, false, null, ""));
+        columns.add(new Column("k3", ScalarType.createVarchar(50), true, null, true, null, ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.REPLACE, false, null, ""));
+
+        List<Column> keyColumns = Lists.newArrayList();
+        keyColumns.add(columns.get(0));
+        keyColumns.add(columns.get(1));
+        keyColumns.add(columns.get(2));
+
+        Map<Long, List<Column>> indexSchema = Maps.newHashMap();
+        indexSchema.put((long) 1, columns);
+
+        Function f1 = new Function(new FunctionName(FunctionSet.SUBSTR), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
+                Type.VARCHAR, true);
+        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
+                Type.INT, true);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getKeysType();
+                result = KeysType.AGG_KEYS;
+                table.getDefaultReplicationNum();
+                result = 3;
+                table.getBaseIndexId();
+                result = 1;
+                table.getIndexIdToSchema();
+                result = indexSchema;
+                table.getKeyColumnsByIndexId((long) 1);
+                result = keyColumns;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("k1");
+                result = columns.get(0);
+                table.getColumn("k2");
+                result = columns.get(1);
+                table.getColumn("k3");
+                result = columns.get(2);
+                table.getColumn("v");
+                result = columns.get(3);
+                table.getColumn("k33");
+                result = null;
+                globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
+                returns(f1, f1, f2);
+            }
+        };
+
+        // column mappings
+        String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
+                "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+        LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
+                "columnMappingList");
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("path/k2=1/file1");
+        List<String> columnNames = Lists.newArrayList("k1", "k33", "v");
+        DataDescription desc = new DataDescription("t2", null, files, columnNames,
+                null, null, "ORC", Lists.newArrayList("k2"),
+                false, columnMappingList, null);
+        Deencapsulation.invoke(desc, "analyzeColumns");
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "ORC");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("path/k2=1/file1", false, 268435456, true));
+        fileStatusesList.add(fileStatusList);
+
+        // plan
+        LoadingTaskPlanner planner = new LoadingTaskPlanner(jobId, txnId, db.getId(), table, brokerDesc, fileGroups,
+                false, TimeUtils.DEFAULT_TIME_ZONE, 3600, System.currentTimeMillis(), false);
+        planner.plan(loadId, fileStatusesList, 1);
+
+        // check fragment
+        List<PlanFragment> fragments = planner.getFragments();
+        Assert.assertEquals(2, fragments.size());
     }
 }

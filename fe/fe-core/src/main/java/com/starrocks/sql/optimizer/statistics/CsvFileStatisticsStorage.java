@@ -148,12 +148,6 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         return Maps.newHashMap();
     }
 
-    @Override
-    public void expireHistogramStatistics(Long tableId, List<String> columns) {
-
-    }
-
-
     private class StatisticsEntry {
         public String tableId;
         public String columnName;

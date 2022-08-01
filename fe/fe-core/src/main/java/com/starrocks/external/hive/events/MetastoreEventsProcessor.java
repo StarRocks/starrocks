@@ -13,7 +13,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,7 +58,7 @@ import javax.annotation.Nullable;
  * iteration so the next batch can be requested appropriately. The current batch size is
  * constant and set to {@link Config#hms_events_batch_size_per_rpc}.
  */
-public class MetastoreEventsProcessor extends MasterDaemon {
+public class MetastoreEventsProcessor extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(MetastoreEventsProcessor.class);
     public static final String HMS_ADD_THRIFT_OBJECTS_IN_EVENTS_CONFIG_KEY =
             "hive.metastore.notifications.add.thrift.objects";

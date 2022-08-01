@@ -84,3 +84,19 @@ enum CompressionTypePB {
     LZ4_HADOOP = 13;
 }
 
+// Used to store additional information about a txn when it is finished/visible
+// It will be serialized with TransactionState
+message TxnFinishStatePB {
+    // Currently, only involved replica's versions are stored, to save space, replica are stored in 2 lists
+    //
+    // a list of int64 to store `normal` replicas, in the following form:
+    //   replica1Id, replica2Id, ...
+    //
+    // a list of int64 to store `abnormal` replica's versions, in the following form:
+    //   replica1Id, replica1Version, replica2Id, replica2Version, ...
+    //
+    // For all the replicas involved in a txn, if the replica's version != partition's txn commit version
+    // it is considered abnormal, and put into abnormal list.
+    repeated int64 normal_replicas = 1;
+    repeated int64 abnormal_replicas_with_version = 2;
+}

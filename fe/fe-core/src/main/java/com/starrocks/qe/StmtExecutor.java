@@ -50,9 +50,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.WorkGroup;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -99,10 +99,12 @@ import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.UseStmt;
+import com.starrocks.sql.ast.UseCatalogStmt;
+import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -131,10 +133,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -152,7 +154,7 @@ public class StmtExecutor {
     private StatementBase parsedStmt;
     private RuntimeProfile profile;
     private Coordinator coord = null;
-    private MasterOpExecutor masterOpExecutor = null;
+    private LeaderOpExecutor leaderOpExecutor = null;
     private RedirectStatus redirectStatus = null;
     private final boolean isProxy;
     private ShowResultSet proxyResultSet = null;
@@ -213,8 +215,8 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
-            if (context.getWorkGroup() != null) {
-                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getWorkGroup().getName()).append(",");
+            if (context.getResourceGroup() != null) {
+                sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName()).append(",");
             }
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
@@ -235,14 +237,14 @@ public class StmtExecutor {
         }
     }
 
-    public boolean isForwardToMaster() {
-        if (GlobalStateMgr.getCurrentState().isMaster()) {
+    public boolean isForwardToLeader() {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if ((parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) &&
-                !GlobalStateMgr.getCurrentState().isMaster()
+                !GlobalStateMgr.getCurrentState().isLeader()
                 && !GlobalStateMgr.getCurrentState().canRead()) {
             return true;
         }
@@ -250,15 +252,15 @@ public class StmtExecutor {
         if (redirectStatus == null) {
             return false;
         } else {
-            return redirectStatus.isForwardToMaster();
+            return redirectStatus.isForwardToLeader();
         }
     }
 
     public ByteBuffer getOutputPacket() {
-        if (masterOpExecutor == null) {
+        if (leaderOpExecutor == null) {
             return null;
         } else {
-            return masterOpExecutor.getOutputPacket();
+            return leaderOpExecutor.getOutputPacket();
         }
     }
 
@@ -267,10 +269,10 @@ public class StmtExecutor {
     }
 
     public ShowResultSet getShowResultSet() {
-        if (masterOpExecutor == null) {
+        if (leaderOpExecutor == null) {
             return null;
         } else {
-            return masterOpExecutor.getProxyResultSet();
+            return leaderOpExecutor.getProxyResultSet();
         }
     }
 
@@ -329,7 +331,7 @@ public class StmtExecutor {
                     StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
-                    if (!isForwardToMaster()) {
+                    if (!isForwardToLeader()) {
                         context.getDumpInfo().reset();
                         context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
                         if (parsedStmt instanceof ShowStmt) {
@@ -369,18 +371,11 @@ public class StmtExecutor {
             if (context.isQueryDump()) {
                 return;
             }
-            if (isForwardToMaster()) {
-                forwardToMaster();
+            if (isForwardToLeader()) {
+                forwardToLeader();
                 return;
             } else {
-                LOG.debug("no need to transfer to Master. stmt: {}", context.getStmtId());
-            }
-
-            // Only add the last running stmt for multi statement,
-            // because the audit log will only show the last stmt and
-            // the ConnectProcessor only add the last finished stmt
-            if (context.getIsLastStmt()) {
-                addRunningQueryDetail();
+                LOG.debug("no need to transfer to Leader. stmt: {}", context.getStmtId());
             }
 
             if (parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement) {
@@ -432,8 +427,10 @@ public class StmtExecutor {
                 }
             } else if (parsedStmt instanceof SetStmt) {
                 handleSetStmt();
-            } else if (parsedStmt instanceof UseStmt) {
-                handleUseStmt();
+            } else if (parsedStmt instanceof UseDbStmt) {
+                handleUseDbStmt();
+            } else if (parsedStmt instanceof UseCatalogStmt) {
+                handleUseCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
                 if (execPlanBuildByNewPlanner) {
                     handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
@@ -466,6 +463,8 @@ public class StmtExecutor {
                 handleAnalyzeStmt();
             } else if (parsedStmt instanceof DropHistogramStmt) {
                 handleDropHistogramStmt();
+            } else if (parsedStmt instanceof DropStatsStmt) {
+                handleDropStatsStmt();
             } else if (parsedStmt instanceof AddSqlBlackListStmt) {
                 handleAddSqlBlackListStmt();
             } else if (parsedStmt instanceof DelSqlBlackListStmt) {
@@ -495,6 +494,10 @@ public class StmtExecutor {
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         } finally {
+            if (context.getState().isError() && coord != null) {
+                coord.cancel();
+            }
+
             if (parsedStmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) parsedStmt;
                 // The transaction of an insert operation begin at analyze phase.
@@ -573,10 +576,10 @@ public class StmtExecutor {
         }
     }
 
-    private void forwardToMaster() throws Exception {
-        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus);
-        LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
-        masterOpExecutor.execute();
+    private void forwardToLeader() throws Exception {
+        leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
+        LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
+        leaderOpExecutor.execute();
     }
 
     private void writeProfile(long beginTimeInNanoSecond) {
@@ -605,7 +608,7 @@ public class StmtExecutor {
 
         // yiguolei: insertstmt's grammar analysis will write editlog, so that we check if the stmt should be forward to master here
         // if the stmt should be forward to master, then just return here and the master will do analysis again
-        if (isForwardToMaster()) {
+        if (isForwardToLeader()) {
             return;
         }
 
@@ -817,12 +820,26 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+    private void handleDropStatsStmt() {
+        DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
+        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropStatsStmt.getTableName());
+        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
+
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+    }
+
     private void handleDropHistogramStmt() {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) parsedStmt;
         OlapTable table = (OlapTable) MetaUtils.getTable(context, dropHistogramStmt.getTableName());
+        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
 
-        StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.dropHistogram(table.getId(), dropHistogramStmt.getColumnNames());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -850,12 +867,24 @@ public class StmtExecutor {
         context.getState().setOk();
     }
 
-    // Process use statement.
-    private void handleUseStmt() throws AnalysisException {
-        UseStmt useStmt = (UseStmt) parsedStmt;
+    // Process use [catalog].db statement.
+    private void handleUseDbStmt() throws AnalysisException {
+        UseDbStmt useDbStmt = (UseDbStmt) parsedStmt;
         try {
-            context.getGlobalStateMgr().changeCatalogDb(context, useStmt.getIdentifier());
-        } catch (DdlException e) {
+            context.getGlobalStateMgr().changeCatalogDb(context, useDbStmt.getIdentifier());
+        } catch (Exception e) {
+            context.getState().setError(e.getMessage());
+            return;
+        }
+        context.getState().setOk();
+    }
+
+    // Process use catalog statement
+    private void handleUseCatalogStmt() throws AnalysisException {
+        UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
+        try {
+            context.getGlobalStateMgr().changeCatalog(context, useCatalogStmt.getCatalogName());
+        } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
         }
@@ -961,9 +990,10 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                WorkGroup workGroup = Coordinator.prepareWorkGroup(context);
-                String workGroupStr = workGroup != null ? workGroup.getName() : WorkGroup.DEFAULT_WORKGROUP_NAME;
-                explainString += "RESOURCE GROUP: " + workGroupStr + "\n\n";
+                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                String resourceGroupStr =
+                        resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
+                explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
             }
         }
         explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
@@ -1005,34 +1035,6 @@ public class StmtExecutor {
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
     }
 
-    private void addRunningQueryDetail() {
-        if (!Config.enable_collect_query_detail_info) {
-            return;
-        }
-        String sql;
-        if (parsedStmt.needAuditEncryption()) {
-            sql = parsedStmt.toSql();
-        } else {
-            sql = originStmt.originStmt;
-        }
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(context.getQueryId()),
-                isQuery,
-                context.connectionId,
-                context.getMysqlChannel() != null ?
-                        context.getMysqlChannel().getRemoteIp() : "System",
-                context.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                context.getDatabase(),
-                sql,
-                context.getQualifiedUser(),
-                Optional.ofNullable(context.getWorkGroup()).map(WorkGroup::getName).orElse(""));
-        context.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
-    }
-
     public PQueryStatistics getQueryStatisticsForAuditLog() {
         if (statisticsForAuditLog == null) {
             statisticsForAuditLog = new PQueryStatistics();
@@ -1061,7 +1063,7 @@ public class StmtExecutor {
                 || statement instanceof CreateAnalyzeJobStmt;
     }
 
-    public void handleInsertOverwrite(InsertStmt insertStmt) {
+    public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
         Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
         Table table = insertStmt.getTargetTable();
         if (!(table instanceof OlapTable)) {
@@ -1072,13 +1074,8 @@ public class StmtExecutor {
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, database.getId(), olapTable.getId());
         insertStmt.setOverwriteJobId(insertOverwriteJob.getJobId());
-        try {
-            InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
-            manager.executeJob(context, this, insertOverwriteJob);
-        } catch (Exception e) {
-            LOG.warn("execute insert overwrite job:{} failed", insertOverwriteJob.getJobId(), e);
-            throw new RuntimeException("insert overwrite failed", e);
-        }
+        InsertOverwriteJobManager manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager();
+        manager.executeJob(context, this, insertOverwriteJob);
     }
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {

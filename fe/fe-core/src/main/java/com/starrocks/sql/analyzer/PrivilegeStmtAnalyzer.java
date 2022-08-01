@@ -1,13 +1,25 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
+import com.starrocks.analysis.AlterUserStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.mysql.privilege.Role;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -26,10 +38,10 @@ public class PrivilegeStmtAnalyzer {
         /**
          * analyse user identity + check if user exists in UserPrivTable
          */
-        private void analyseUserAndCheckExist(UserIdentity userIdent, ConnectContext session) {
-            // validate user
+        private void analyseUser(UserIdentity userIdent, ConnectContext session, boolean checkExist) {
+            // analyse user identity
             try {
-                userIdent.analyze(session.getClusterName());
+                userIdent.analyze();
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
@@ -37,9 +49,11 @@ public class PrivilegeStmtAnalyzer {
                 throw new SemanticException(e.getMessage());
             }
 
-            // check if user exists
-            if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
-                throw new SemanticException("user " + userIdent + " not exist!");
+            if (checkExist) {
+                // check if user exists
+                if (!session.getGlobalStateMgr().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
+                    throw new SemanticException("user " + userIdent + " not exist!");
+                }
             }
         }
 
@@ -68,7 +82,7 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            analyseUserAndCheckExist(stmt.getUserIdent(), session);
+            analyseUser(stmt.getUserIdent(), session, true);
             stmt.setQualifiedRole(analyseRoleName(stmt.getRole(), session));
             return null;
         }
@@ -79,8 +93,8 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt stmt, ConnectContext session) {
-            analyseUserAndCheckExist(stmt.getAuthorizedUser(), session);
-            analyseUserAndCheckExist(stmt.getSecuredUser(), session);
+            analyseUser(stmt.getAuthorizedUser(), session, true);
+            analyseUser(stmt.getSecuredUser(), session, true);
             return null;
         }
 
@@ -92,9 +106,79 @@ public class PrivilegeStmtAnalyzer {
             if (stmt.isAllowRevert()) {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
-            analyseUserAndCheckExist(stmt.getToUser(), session);
+            analyseUser(stmt.getToUser(), session, true);
             return null;
         }
 
+        /**
+         * convert password to hashed password
+         */
+        private byte[] analysePassword(UserIdentity userIdent, String originalPassword, boolean isPasswordPlain,
+                                       boolean checkReuse) {
+            if (Strings.isNullOrEmpty(originalPassword)) {
+                return new byte[0];
+            }
+            try {
+                if (isPasswordPlain) {
+                    // plain password should check for validation & reuse
+                    Auth.validatePassword(originalPassword);
+                    if (checkReuse) {
+                        GlobalStateMgr.getCurrentState().getAuth().checkPasswordReuse(userIdent, originalPassword);
+                    }
+                    // convert plain password to scramble
+                    return MysqlPassword.makeScrambledPassword(originalPassword);
+                } else {
+                    return MysqlPassword.checkPassword(originalPassword);
+                }
+            } catch (DdlException | AnalysisException e) {
+                // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
+                // that is permitted to throw during analyzing phrase under the new framework for compatibility.
+                // Remove it after all old methods migrate to the new framework
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
+            /*
+             * IDENTIFIED BY
+             */
+            stmt.setScramblePassword(
+                    analysePassword(stmt.getUserIdent(), stmt.getOriginalPassword(), stmt.isPasswordPlain(),
+                            stmt instanceof AlterUserStmt));
+            /*
+             * IDENTIFIED WITH
+             */
+            if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
+                if (AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name().equals(stmt.getAuthPlugin())) {
+                    stmt.setUserForAuthPlugin(stmt.getAuthString());
+                } else if (AuthPlugin.MYSQL_NATIVE_PASSWORD.name().equals(stmt.getAuthPlugin())) {
+                    // in this case, authString is password
+                    stmt.setScramblePassword(analysePassword(stmt.getUserIdent(), stmt.getAuthString(),
+                            stmt.isPasswordPlain(), stmt instanceof AlterUserStmt));
+                } else if (AuthPlugin.AUTHENTICATION_KERBEROS.name().equalsIgnoreCase(stmt.getAuthPlugin()) &&
+                        GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
+                    // In kerberos authentication, userForAuthPlugin represents the user principal realm.
+                    // If user realm is not specified when creating user, the service principal realm will be used as
+                    // the user principal realm by default.
+                    if (stmt.getAuthString() != null) {
+                        stmt.setUserForAuthPlugin(stmt.getAuthString());
+                    } else {
+                        stmt.setUserForAuthPlugin(Config.authentication_kerberos_service_principal.split("@")[1]);
+                    }
+                } else {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, stmt.getAuthPlugin());
+                }
+            }
+
+            if (stmt.hasRole()) {
+                if (stmt.getQualifiedRole().equalsIgnoreCase("SUPERUSER")) {
+                    // for forward compatibility
+                    stmt.setRole(Role.ADMIN_ROLE);
+                }
+                stmt.setRole(analyseRoleName(stmt.getQualifiedRole(), session));
+            }
+            return null;
+        }
     }
 }

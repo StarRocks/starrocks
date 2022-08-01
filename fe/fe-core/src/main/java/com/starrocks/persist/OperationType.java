@@ -111,7 +111,7 @@ public class OperationType {
     public static final short OP_UPDATE_USER_PROPERTY = 69;
 
     public static final short OP_TIMESTAMP = 70;
-    public static final short OP_MASTER_INFO_CHANGE = 71;
+    public static final short OP_LEADER_INFO_CHANGE = 71;
     public static final short OP_META_VERSION = 72;
     @Deprecated
     // replaced by OP_GLOBAL_VARIABLE_V2
@@ -203,9 +203,12 @@ public class OperationType {
     public static final short OP_ADD_ANALYZE_STATUS = 10012;
     public static final short OP_ADD_BASIC_STATS_META = 10013;
     public static final short OP_ADD_HISTOGRAM_STATS_META = 10014;
+    public static final short OP_REMOVE_BASIC_STATS_META = 10015;
+    public static final short OP_REMOVE_HISTOGRAM_STATS_META = 10016;
+    public static final short OP_REMOVE_ANALYZE_STATUS = 10017;
 
     // workgroup 10021 ~ 10030
-    public static final short OP_WORKGROUP = 10021;
+    public static final short OP_RESOURCE_GROUP = 10021;
 
     // external hive table column change
     public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;
@@ -229,15 +232,16 @@ public class OperationType {
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
 
-    // materialized view
+    // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
-
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
+    public static final short OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10097;
+    public static final short OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10098;
 
-    // manage system node info 10100 ~ 10120
+    // manage system node info 10101 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
 
     // manage compute node 10201 ~ 10220
@@ -247,4 +251,8 @@ public class OperationType {
     // shard operate 10221 ~ 10240
     public static final short OP_ADD_UNUSED_SHARD = 10221;
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
+
+    // new operator for add partition 10241 ~ 10260
+    // only used in list partition currently
+    public static final short OP_ADD_PARTITION_V2 = 10241;
 }

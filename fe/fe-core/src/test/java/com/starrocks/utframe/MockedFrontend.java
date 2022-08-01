@@ -28,14 +28,14 @@ import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.StateChangeExecution;
+import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
-import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
-
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.Level;
@@ -245,7 +245,12 @@ public class MockedFrontend {
                 };
 
                 GlobalStateMgr.getCurrentState().initialize(args);
-                GlobalStateMgr.getCurrentState().notifyNewFETypeTransfer(FrontendNodeType.MASTER);
+                StateChangeExecutor.getInstance().setMetaContext(
+                        GlobalStateMgr.getCurrentState().getMetaContext());
+                StateChangeExecutor.getInstance().registerStateChangeExecution(
+                        GlobalStateMgr.getCurrentState().getStateChangeExecution());
+                StateChangeExecutor.getInstance().start();
+                StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
 
                 GlobalStateMgr.getCurrentState().waitForReady();
 
@@ -259,13 +264,12 @@ public class MockedFrontend {
     }
 
     // must call init() before start.
-    public void start(boolean startBDB, String[] args) throws FeStartException, NotInitException {
+    public void start(boolean startBDB, String[] args) throws FeStartException, NotInitException, InterruptedException {
         initLock.lock();
         if (!isInit) {
             throw new NotInitException("fe process is not initialized");
         }
         initLock.unlock();
-
         Thread feThread = new Thread(new FERunnable(this, startBDB, args), FE_PROCESS);
         feThread.start();
         waitForCatalogReady();

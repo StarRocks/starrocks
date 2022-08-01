@@ -31,11 +31,11 @@ import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -50,9 +50,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
-import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.TxnStateCallbackFactory;
-import com.starrocks.transaction.TxnStateChangeCallback;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -63,11 +61,6 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -773,98 +766,54 @@ public class RoutineLoadManagerTest {
 
 
     @Test
-    public void testExpired(@Mocked GlobalStateMgr globalStateMgr, @Mocked GlobalTransactionMgr globalTransactionMgr, @Mocked
-                            TxnStateCallbackFactory callbackFactory) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
+    public void testLoadImageWithoutExpiredJob() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
 
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
-                minTimes = 0;
-                result = globalTransactionMgr;
-            }
-        };
-
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getCurrentStateJournalVersion();
-                minTimes =0;
-                result =FeMetaVersion.VERSION_CURRENT;
-            }
-        };
-
-        new Expectations(globalTransactionMgr) {
-            {
-                globalTransactionMgr.getCallbackFactory();
-                minTimes = 0;
-                result = callbackFactory;
-            }
-        };
-
-
-        new Expectations(callbackFactory) {
-            {
-                callbackFactory.addCallback((TxnStateChangeCallback) any);
-                minTimes = 0;
-            }
-            {
-                callbackFactory.removeCallback(anyLong);
-                minTimes = 0;
-            }
-        };
-
-        Config.label_keep_max_second = 1;
+        Config.label_keep_max_second = 10;
         Config.enable_dict_optimize_routine_load = true;
-        RoutineLoadManager loadManager = new RoutineLoadManager();
-        Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newHashMap();
-        Deencapsulation.setField(loadManager, "idToRoutineLoadJob", idToRoutineLoadJob);
-        Assert.assertEquals(0, idToRoutineLoadJob.size());
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.setThreadLocalInfo();
+        String DB = "test";
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +
+                "PROPERTIES(\"format\" = \"json\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
+
+        RoutineLoadManager leaderLoadManager = new RoutineLoadManager();
+        long now = System.currentTimeMillis();
 
         // 1. create a job that will be discard after image load
-        RoutineLoadJob discardJob = new KafkaRoutineLoadJob(1L, "discardJob", "default_cluster", 1, 1, "xxx", "xxtopic");
-        discardJob.setOrigStmt(new OriginStatement("select 1", 0));
-        loadManager.replayCreateRoutineLoadJob(discardJob);
-        Assert.assertEquals(1, idToRoutineLoadJob.size());
-        loadManager.replayChangeRoutineLoadJob(new RoutineLoadOperation(discardJob.getId(), RoutineLoadJob.JobState.CANCELLED));
-
-        Thread.sleep(2000);
+        long discardJobId = 1L;
+        RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob", "default_cluster", 1, 1, "xxx", "xxtopic");
+        discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        leaderLoadManager.addRoutineLoadJob(discardJob, DB);
+        discardJob.updateState(RoutineLoadJob.JobState.CANCELLED, new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+        discardJob.endTimestamp = now - Config.label_keep_max_second * 2 * 1000L;
 
         // 2. create a new job that will keep for a while
-        RoutineLoadJob goodJob = new KafkaRoutineLoadJob(2L, "goodJob", "default_cluster", 1, 1, "xxx", "xxtopic");
-        goodJob.setOrigStmt(new OriginStatement("select 1", 0));
-        loadManager.replayCreateRoutineLoadJob(goodJob);
-        loadManager.replayChangeRoutineLoadJob(new RoutineLoadOperation(goodJob.getId(), RoutineLoadJob.JobState.CANCELLED));
-        Assert.assertEquals(2, idToRoutineLoadJob.size());
+        long goodJobId = 2L;
+        RoutineLoadJob goodJob = new KafkaRoutineLoadJob(goodJobId, "goodJob", "default_cluster", 1, 1, "xxx", "xxtopic");
+        goodJob.setOrigStmt(new OriginStatement(createSQL, 0));
+        leaderLoadManager.addRoutineLoadJob(goodJob, DB);
+        goodJob.updateState(RoutineLoadJob.JobState.CANCELLED, new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
+        Assert.assertNotNull(leaderLoadManager.getJob(discardJobId));
+        Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
-        // 3. make sure it can not be clean
-        idToRoutineLoadJob.get(goodJob.getId()).endTimestamp = System.currentTimeMillis() + 100000L;
+        // 3. save image & reload
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        leaderLoadManager.write(pseudoImage.getDataOutputStream());
+        RoutineLoadManager restartedRoutineLoadManager = new RoutineLoadManager();
+        restartedRoutineLoadManager.readFields(pseudoImage.getDataInputStream());
+        // discard expired job
+        Assert.assertNull(restartedRoutineLoadManager.getJob(discardJobId));
+        Assert.assertNotNull(restartedRoutineLoadManager.getJob(goodJobId));
 
-        // 5. save image
-        File tempFile = File.createTempFile("RoutineLoadManagerTest", ".image");
-        System.err.println("write image " + tempFile.getAbsolutePath());
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        long checksum = 0;
-        long saveChecksum = loadManager.saveRoutineLoadJobs(dos, checksum);
-        dos.close();
+        // 4. clean expire
+        leaderLoadManager.cleanOldRoutineLoadJobs();
+        // discard expired job
+        Assert.assertNull(leaderLoadManager.getJob(discardJobId));
+        Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
 
-        // 6. clean expire
-        loadManager.cleanOldRoutineLoadJobs();
-        Assert.assertEquals(1, idToRoutineLoadJob.size());
-
-        // 7. load image, will discard discardJob
-        RoutineLoadManager newMgr = new RoutineLoadManager();
-        Map<Long, RoutineLoadJob> newIdToRoutineLoadJob = Maps.newHashMap();
-        Deencapsulation.setField(newMgr, "idToRoutineLoadJob", newIdToRoutineLoadJob);
-        Assert.assertEquals(0, newIdToRoutineLoadJob.size());
-        DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        checksum = 0;
-        long loadChecksum = newMgr.loadRoutineLoadJobs(dis, checksum);
-        Assert.assertEquals(1, newIdToRoutineLoadJob.size());
-        Assert.assertEquals(saveChecksum, loadChecksum);
-
-        tempFile.delete();
-        Config.label_keep_max_second = 10;
+        UtFrameUtils.tearDownForPersisTest();
     }
 }

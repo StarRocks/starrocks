@@ -87,7 +87,6 @@ public class ShowDeleteTest {
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setQualifiedUser("testCluster:testUser");
-        ctx.setCluster("testCluster");
 
         new Expectations(ctx) {
             {
@@ -113,7 +112,7 @@ public class ShowDeleteTest {
         ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
         String showSQL = "SHOW DELETE FROM testDb";
         ShowDeleteStmt stmt = (ShowDeleteStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
-        Assert.assertEquals("default_cluster:testDb", stmt.getDbName());
-        Assert.assertEquals("SHOW DELETE FROM `default_cluster:testDb`", stmt.toSql());
+        Assert.assertEquals("testDb", stmt.getDbName());
+        Assert.assertEquals("SHOW DELETE FROM `testDb`", stmt.toSql());
     }
 }

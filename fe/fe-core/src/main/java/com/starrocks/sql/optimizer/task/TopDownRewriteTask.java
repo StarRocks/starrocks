@@ -67,6 +67,7 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
                         return;
                     }
 
+                    context.incrementRewriteNum();
                     if (rewriteOnlyOnce) {
                         curGroupExpression = group.getFirstLogicalExpression();
                         break;

@@ -342,7 +342,7 @@ public class RollupJob extends AlterJob {
                     MaterializedIndex baseIndex = partition.getIndex(this.getBaseIndexId());
                     for (Tablet baseTablet : baseIndex.getTablets()) {
                         long baseTabletId = baseTablet.getId();
-                        List<Replica> baseReplicas = ((LocalTablet) baseTablet).getReplicas();
+                        List<Replica> baseReplicas = ((LocalTablet) baseTablet).getImmutableReplicas();
                         for (Replica baseReplica : baseReplicas) {
                             long backendId = baseReplica.getBackendId();
                             ClearAlterTask clearRollupTask = new ClearAlterTask(backendId, dbId, tableId,
@@ -417,7 +417,7 @@ public class RollupJob extends AlterJob {
                     Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
                     for (Tablet rollupTablet : rollupIndex.getTablets()) {
                         long rollupTabletId = rollupTablet.getId();
-                        List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getReplicas();
+                        List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                         for (Replica rollupReplica : rollupReplicas) {
                             long backendId = rollupReplica.getBackendId();
                             long rollupReplicaId = rollupReplica.getId();
@@ -456,7 +456,7 @@ public class RollupJob extends AlterJob {
         for (MaterializedIndex rollupIndex : this.partitionIdToRollupIndex.values()) {
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 long rollupTabletId = rollupTablet.getId();
-                List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getReplicas();
+                List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                 for (Replica rollupReplica : rollupReplicas) {
                     long backendId = rollupReplica.getBackendId();
                     AgentTaskQueue.removeTask(backendId, TTaskType.ROLLUP, rollupTabletId);
@@ -628,7 +628,7 @@ public class RollupJob extends AlterJob {
                     for (Tablet rollupTablet : rollupIndex.getTablets()) {
                         LocalTablet rollupLocalTablet = (LocalTablet) rollupTablet;
                         // yiguolei: the rollup tablet only contains the replica that is healthy at rollup time
-                        List<Replica> replicas = rollupLocalTablet.getReplicas();
+                        List<Replica> replicas = rollupLocalTablet.getImmutableReplicas();
                         List<Replica> errorReplicas = Lists.newArrayList();
                         for (Replica replica : replicas) {
                             if (!checkBackendState(replica)) {
@@ -654,7 +654,7 @@ public class RollupJob extends AlterJob {
                                     .removeTask(errorReplica.getBackendId(), TTaskType.ROLLUP, rollupTablet.getId());
                         }
 
-                        if (rollupLocalTablet.getReplicas().size() < (expectReplicationNum / 2 + 1)) {
+                        if (rollupLocalTablet.getImmutableReplicas().size() < (expectReplicationNum / 2 + 1)) {
                             cancelMsg = String.format(
                                     "rollup job[%d] cancelled. rollup tablet[%d] has few health replica."
                                             + " num: %d", tableId, rollupTablet.getId(), replicas.size());
@@ -679,7 +679,7 @@ public class RollupJob extends AlterJob {
                         // remove task for safety
                         // task may be left if some backends are down during schema change
                         for (Tablet tablet : rollupIndex.getTablets()) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 AgentTaskQueue.removeTask(replica.getBackendId(), TTaskType.ROLLUP,
                                         tablet.getId());
                             }
@@ -700,7 +700,7 @@ public class RollupJob extends AlterJob {
                     // 1. record replica info
                     for (Tablet tablet : rollupIndex.getTablets()) {
                         long tabletId = tablet.getId();
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             ReplicaPersistInfo replicaInfo =
                                     ReplicaPersistInfo.createForRollup(rollupIndexId, tabletId, replica.getBackendId(),
                                             replica.getVersion(),
@@ -776,7 +776,7 @@ public class RollupJob extends AlterJob {
                     for (Tablet tablet : rollupIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -809,7 +809,7 @@ public class RollupJob extends AlterJob {
                     // And checkpoint thread is no need to handle inverted index
                     for (Tablet tablet : rollupIndex.getTablets()) {
                         LocalTablet localTablet = (LocalTablet) tablet;
-                        List<Replica> copiedReplicas = Lists.newArrayList(localTablet.getReplicas());
+                        List<Replica> copiedReplicas = Lists.newArrayList(localTablet.getImmutableReplicas());
                         localTablet.clearReplica();
                         for (Replica copiedReplica : copiedReplicas) {
                             Replica replica = invertedIndex.getReplica(tablet.getId(), copiedReplica.getBackendId());
@@ -821,13 +821,13 @@ public class RollupJob extends AlterJob {
                 long rollupRowCount = 0L;
                 for (Tablet tablet : rollupIndex.getTablets()) {
                     LocalTablet localTablet = (LocalTablet) tablet;
-                    for (Replica replica : localTablet.getReplicas()) {
+                    for (Replica replica : localTablet.getImmutableReplicas()) {
                         replica.setState(ReplicaState.NORMAL);
                     }
 
                     // calculate rollup index row count
                     long tabletRowCount = 0L;
-                    for (Replica replica : localTablet.getReplicas()) {
+                    for (Replica replica : localTablet.getImmutableReplicas()) {
                         long replicaRowCount = replica.getRowCount();
                         if (replicaRowCount > tabletRowCount) {
                             tabletRowCount = replicaRowCount;

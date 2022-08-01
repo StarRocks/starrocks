@@ -59,9 +59,9 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
-                                   int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) const override {
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                              int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
+                                              int64_t frame_end) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
         const auto* data = column->get_data().data();
         for (size_t i = frame_start; i < frame_end; ++i) {

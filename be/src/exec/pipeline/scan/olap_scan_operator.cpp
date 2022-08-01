@@ -28,15 +28,15 @@ Status OlapScanOperatorFactory::do_prepare(RuntimeState* state) {
 void OlapScanOperatorFactory::do_close(RuntimeState*) {}
 
 OperatorPtr OlapScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
-    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, _scan_node,
+    return std::make_shared<OlapScanOperator>(this, _id, driver_sequence, dop, _scan_node,
                                               _ctx_factory->get_or_create(driver_sequence));
 }
 
 // ==================== OlapScanOperator ====================
 
-OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, ScanNode* scan_node,
-                                   OlapScanContextPtr ctx)
-        : ScanOperator(factory, id, driver_sequence, scan_node), _ctx(std::move(ctx)) {
+OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
+                                   ScanNode* scan_node, OlapScanContextPtr ctx)
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(std::move(ctx)) {
     _ctx->ref();
 }
 
@@ -98,8 +98,8 @@ bool OlapScanOperator::has_shared_chunk_source() const {
     return _ctx->has_active_input();
 }
 
-bool OlapScanOperator::has_buffer_output() const {
-    return !_ctx->get_chunk_buffer().empty(_driver_sequence);
+size_t OlapScanOperator::num_buffered_chunks() const {
+    return _ctx->get_chunk_buffer().size(_driver_sequence);
 }
 
 ChunkPtr OlapScanOperator::get_chunk_from_buffer() {
