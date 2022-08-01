@@ -60,9 +60,9 @@
 
 Fix the following bugs:
 
-- CPU utilization increases abnormally high due to an excessive number of tablets. [#5875](https://starrocks.atlassian.net/browse/SR-5875)
+- CPU utilization increases abnormally high due to an excessive number of tablets.
 
-- Problems cause the "fail to prepare tablet reader" error message to occur.[#7248](https://starrocks.atlassian.net/browse/SR-7248)、 [#7854](https://starrocks.atlassian.net/browse/SR-7854)、 [#8257](https://starrocks.atlassian.net/browse/SR-8257)
+- Problems cause the "fail to prepare tablet reader" error message to occur.
 
 - The FEs fail to restart.[#5642](https://github.com/StarRocks/starrocks/issues/5642 )、[#4969](https://github.com/StarRocks/starrocks/issues/4969 )、[#5580](https://github.com/StarRocks/starrocks/issues/5580)
 

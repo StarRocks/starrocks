@@ -210,6 +210,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // Aggregator must be used by a pair of sink and source operators,
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
+    source_operator->set_need_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
     ops_with_source.push_back(std::move(source_operator));
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {

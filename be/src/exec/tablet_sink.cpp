@@ -293,17 +293,18 @@ Status NodeChannel::add_chunk(vectorized::Chunk* input, const int64_t* tablet_id
     }
 
     if (LIKELY(!eos)) {
-        SCOPED_TIMER(_parent->_pack_chunk_timer);
         if (UNLIKELY(_cur_chunk == nullptr)) {
             _cur_chunk = input->clone_empty_with_slot();
         }
 
         if (is_full()) {
+            SCOPED_TIMER(_parent->_wait_response_timer);
             // wait previous request done then we can pop data from queue to send request
             // and make new space to push data.
             RETURN_IF_ERROR(_wait_one_prev_request());
         }
 
+        SCOPED_TIMER(_parent->_pack_chunk_timer);
         // 1. append data
         _cur_chunk->append_selective(*input, indexes, from, size);
         for (size_t i = 0; i < size; ++i) {
@@ -433,7 +434,6 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
 }
 
 Status NodeChannel::_wait_all_prev_request() {
-    SCOPED_TIMER(_parent->_wait_response_timer);
     if (_next_packet_seq == 0) {
         return Status::OK();
     }
@@ -474,7 +474,6 @@ bool NodeChannel::_check_all_prev_request_done() {
 }
 
 Status NodeChannel::_wait_one_prev_request() {
-    SCOPED_TIMER(_parent->_wait_response_timer);
     if (_next_packet_seq == 0) {
         return Status::OK();
     }
@@ -646,6 +645,8 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
 
+    _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
+    _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     // add all counter
     _input_rows_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);
     _output_rows_counter = ADD_COUNTER(_profile, "RowsReturned", TUnit::UNIT);
@@ -659,13 +660,14 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     _wait_response_timer = ADD_TIMER(_profile, "WaitResponseTime");
     _compress_timer = ADD_TIMER(_profile, "CompressTime");
     _pack_chunk_timer = ADD_TIMER(_profile, "PackChunkTime");
+    _send_rpc_timer = ADD_TIMER(_profile, "SendRpcTime");
+
+    SCOPED_TIMER(_profile->total_time_counter());
 
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
-
-    SCOPED_TIMER(_profile->total_time_counter());
 
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
@@ -886,7 +888,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         _number_output_rows += _validate_select_idx.size();
     }
 
-    SCOPED_RAW_TIMER(&_send_data_ns);
+    SCOPED_TIMER(_send_data_timer);
     size_t selection_size = _validate_select_idx.size();
     if (selection_size == 0) {
         return Status::OK();
@@ -1000,6 +1002,8 @@ bool OlapTableSink::is_close_done() {
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     if (close_status.ok()) {
+        SCOPED_TIMER(_profile->total_time_counter());
+        SCOPED_TIMER(_close_timer);
         do {
             close_status = try_close(state);
             if (!close_status.ok()) break;
@@ -1021,7 +1025,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         SCOPED_TIMER(_profile->total_time_counter());
         // BE id -> add_batch method counter
         std::unordered_map<int64_t, AddBatchCounter> node_add_batch_counter_map;
-        int64_t serialize_batch_ns = 0, mem_exceeded_block_ns = 0, queue_push_lock_ns = 0, actual_consume_ns = 0;
+        int64_t serialize_batch_ns = 0, actual_consume_ns = 0;
         {
             SCOPED_TIMER(_close_timer);
             bool intolerable_failure = false;
@@ -1030,8 +1034,8 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
             while (ordinal < _channels.size() && !intolerable_failure) {
                 auto& index_channel = _channels[ordinal];
                 index_channel->for_each_node_channel([&index_channel, &state, &node_add_batch_counter_map,
-                                                      &serialize_batch_ns, &mem_exceeded_block_ns, &queue_push_lock_ns,
-                                                      &actual_consume_ns, &err_st](NodeChannel* ch) {
+                                                      &serialize_batch_ns, &actual_consume_ns,
+                                                      &err_st](NodeChannel* ch) {
                     auto channel_status = ch->close_wait(state);
                     if (!channel_status.ok()) {
                         LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
@@ -1040,8 +1044,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         err_st = channel_status;
                         index_channel->mark_as_failed(ch);
                     }
-                    ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &mem_exceeded_block_ns,
-                                    &queue_push_lock_ns, &actual_consume_ns);
+                    ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
                 if (index_channel->has_intolerable_failure()) {
                     status = err_st;
@@ -1054,18 +1057,14 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                 index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
             }
         }
-        // TODO need to be improved
-        LOG(INFO) << "total mem_exceeded_block_ns=" << mem_exceeded_block_ns
-                  << " total queue_push_lock_ns=" << queue_push_lock_ns
-                  << " total actual_consume_ns=" << actual_consume_ns;
-
         COUNTER_SET(_input_rows_counter, _number_input_rows);
         COUNTER_SET(_output_rows_counter, _number_output_rows);
         COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
-        COUNTER_SET(_send_data_timer, _send_data_ns);
         COUNTER_SET(_convert_chunk_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
         COUNTER_SET(_serialize_chunk_timer, serialize_batch_ns);
+        COUNTER_SET(_send_rpc_timer, actual_consume_ns);
+
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
         int64_t num_rows_load_total =
                 _number_input_rows + state->num_rows_load_filtered() + state->num_rows_load_unselected();
@@ -1085,7 +1084,6 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_input_rows_counter, _number_input_rows);
         COUNTER_SET(_output_rows_counter, _number_output_rows);
         COUNTER_SET(_filtered_rows_counter, _number_filtered_rows);
-        COUNTER_SET(_send_data_timer, _send_data_ns);
         COUNTER_SET(_convert_chunk_timer, _convert_batch_ns);
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
 

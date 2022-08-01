@@ -500,7 +500,7 @@ public class EsTable extends Table {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         GlobalStateMgr.getCurrentState().getEsRepository().deRegisterTable(this.id);
     }
 

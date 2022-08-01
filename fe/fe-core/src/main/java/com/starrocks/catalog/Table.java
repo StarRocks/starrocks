@@ -423,12 +423,34 @@ public class Table extends MetaObject implements Writable {
         return true;
     }
 
-    // onCreate is called when this table is created
+    /**
+     * onCreate is called when this table is created
+     */
     public void onCreate() {
+        // Do nothing by default.
     }
 
-    // onDrop is called when this table is dropped
-    public void onDrop() {
+    /**
+     * This method is called right before the calling of {@link Database#dropTable(String)}, with the protection of the
+     * database's writer lock.
+     *
+     * @param db     the owner database of the table
+     * @param force  is this a force drop
+     * @param replay is this is a log replay operation
+     */
+    public void onDrop(Database db, boolean force, boolean replay) {
+        // Do nothing by default.
+    }
+
+    /**
+     * Delete this table. this method is called with the protection of the database's writer lock.
+     *
+     * @param replay is this a log replay operation.
+     * @return a Runnable object to be invoked after persisted the edit log and released the
+     * database's lock, null if no task need to run.
+     */
+    public Runnable delete(boolean replay) {
+        return null;
     }
 
     public boolean isSupported() {
