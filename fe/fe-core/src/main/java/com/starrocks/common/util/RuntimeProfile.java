@@ -494,14 +494,18 @@ public class RuntimeProfile {
                 }
 
                 Counter minCounter = profile.getCounter(mergedInfoPrefixMin + name);
-                if (minCounter != null && minCounter.getValue() < minValue) {
-                    minValue = minCounter.getValue();
+                if (minCounter != null) {
                     alreadyMerged = true;
+                    if (minCounter.getValue() < minValue) {
+                        minValue = minCounter.getValue();
+                    }
                 }
                 Counter maxCounter = profile.getCounter(mergedInfoPrefixMax + name);
-                if (maxCounter != null && maxCounter.getValue() > maxValue) {
-                    maxValue = maxCounter.getValue();
+                if (maxCounter != null) {
                     alreadyMerged = true;
+                    if (maxCounter.getValue() > maxValue) {
+                        maxValue = maxCounter.getValue();
+                    }
                 }
                 counters.add(counter);
             }
@@ -542,52 +546,6 @@ public class RuntimeProfile {
                 maxCounter.setValue(maxValue);
             }
         }
-
-        // As for counter's extra info (min value and max value) created by be
-        // we only need to update it across over all isomorphic profiles
-        Map<String, Long> minValues = Maps.newHashMap();
-        Map<String, Long> maxValues = Maps.newHashMap();
-        profiles.forEach(profile ->
-                profile.counterMap.entrySet().forEach(entry -> {
-                    String name = entry.getKey();
-                    Counter counter = entry.getValue();
-                    if (name.startsWith(mergedInfoPrefixMin)) {
-                        if (!minValues.containsKey(name)) {
-                            minValues.put(name, counter.getValue());
-                        } else if (counter.getValue() < minValues.get(name)) {
-                            minValues.put(name, counter.getValue());
-                        }
-                    } else if (name.startsWith(mergedInfoPrefixMax)) {
-                        if (!maxValues.containsKey(name)) {
-                            maxValues.put(name, counter.getValue());
-                        } else if (counter.getValue() > maxValues.get(name)) {
-                            maxValues.put(name, counter.getValue());
-                        }
-                    }
-                })
-        );
-        minValues.entrySet().forEach(entry -> {
-            String name = entry.getKey();
-            long minValue = entry.getValue();
-            Counter counter = profile0.getCounter(name);
-            if (counter == null) {
-                String parentName = name.substring(mergedInfoPrefixMin.length());
-                Counter parentCounter = profile0.getCounter(parentName);
-                counter = profile0.addCounter(name, parentCounter.getType(), parentName);
-            }
-            counter.setValue(minValue);
-        });
-        maxValues.entrySet().forEach(entry -> {
-            String name = entry.getKey();
-            long maxValue = entry.getValue();
-            Counter counter = profile0.getCounter(name);
-            if (counter == null) {
-                String parentName = name.substring(mergedInfoPrefixMax.length());
-                Counter parentCounter = profile0.getCounter(parentName);
-                counter = profile0.addCounter(name, parentCounter.getType(), parentName);
-            }
-            counter.setValue(maxValue);
-        });
 
         // merge children
         for (int i = 0; i < profile0.childList.size(); i++) {
