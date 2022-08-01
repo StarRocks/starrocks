@@ -568,7 +568,7 @@ public class LocalTablet extends Tablet {
      * tablet replicas:    1,2,3,4
      * <p>
      * No need to check if backend is available. We consider all backends in 'backendsSet' are available,
-     * If not, unavailable backends will be relocated by CalocateTableBalancer first.
+     * If not, unavailable backends will be relocated by ColocateTableBalancer first.
      */
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
