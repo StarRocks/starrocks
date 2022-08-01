@@ -479,7 +479,7 @@ public class GlobalStateMgr {
         return feStartTime;
     }
 
-    public ConnectorMetadata getLocalMetastore() {
+    public LocalMetastore getLocalMetastore() {
         return localMetastore;
     }
 
@@ -1640,12 +1640,11 @@ public class GlobalStateMgr {
         replayer.setMetaContext(metaContext);
     }
 
-
     /**
-      * Replay journal from replayedJournalId + 1 to toJournalId
-      * used by checkpointer/replay after state change
-      * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
-      */
+     * Replay journal from replayedJournalId + 1 to toJournalId
+     * used by checkpointer/replay after state change
+     * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
+     */
     public void replayJournal(long toJournalId) throws JournalException {
         if (toJournalId <= replayedJournalId.get()) {
             LOG.info("skip replay journal because {} <= {}", toJournalId, replayedJournalId.get());
@@ -3145,10 +3144,6 @@ public class GlobalStateMgr {
 
     public void onEraseDatabase(long dbId) {
         localMetastore.onEraseDatabase(dbId);
-    }
-
-    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
-        return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
     }
 
     public void onErasePartition(Partition partition) {
