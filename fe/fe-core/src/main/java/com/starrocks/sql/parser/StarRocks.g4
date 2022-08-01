@@ -111,7 +111,8 @@ statement
     | dropFunctionStatement                                                                 #dropFunctionst
     | createFunctionStatement                                                               #createFunction
 
-
+    // Load Statement
+    | loadStatement                                                                         #load
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -622,6 +623,55 @@ createFunctionStatement
 
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
+    ;
+
+// ------------------------------------------- Load Statement ----------------------------------------------------------
+
+loadStatement
+    : LOAD LABEL label=labelName
+        data=dataDescList?
+        broker=brokerDesc?
+        (BY system=identifierOrString)?
+        (PROPERTIES props=propertyList)?
+    | LOAD LABEL label=labelName
+        data=dataDescList?
+        resource=resourceDesc
+        (PROPERTIES props=propertyList)?
+    ;
+
+labelName
+    : (db=identifier '.')? label=identifier
+    ;
+
+dataDescList
+    : '(' dataDesc (',' dataDesc)* ')'
+    ;
+
+dataDesc
+    : DATA INFILE srcFiles=stringList
+        NEGATIVE?
+        INTO TABLE dstTableName=identifier
+        partitions=partitionNames?
+        (COLUMNS TERMINATED BY colSep=string)?
+        format=fileFormat?
+        colList=columnAliases?
+        (COLUMNS FROM PATH AS colFromPath=identifierList)?
+        (SET colMappingList=classifier)?
+        (WHERE where=expression)?
+    | DATA FROM TABLE srcTableName=identifier
+        NEGATIVE?
+        INTO TABLE dstTableName=identifier
+        partitions=partitionNames?
+        (SET colMappingList=classifier)?
+        (WHERE where=expression)?
+    ;
+
+brokerDesc
+    : WITH BROKER name=identifierOrString props=propertyList?
+    ;
+
+resourceDesc
+    : WITH RESOURCE name=identifierOrString props=propertyList?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------
