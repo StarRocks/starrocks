@@ -1398,7 +1398,7 @@ public class Coordinator {
             // hash-partitioned
             // output at the moment
 
-            // set params for pipeline level shuffle
+            // Set params for pipeline level shuffle.
             params.fragment.getDestNode().setPartitionType(params.fragment.getOutputPartition().getType());
             if (sink instanceof DataStreamSink) {
                 DataStreamSink dataStreamSink = (DataStreamSink) sink;
@@ -1470,12 +1470,16 @@ public class Coordinator {
 
             for (int i = 0; i < multi.getDestFragmentList().size(); i++) {
                 PlanFragment destFragment = multi.getDestFragmentList().get(i);
-                DataSink sink = multiSink.getDataStreamSinks().get(i);
+                DataStreamSink sink = multiSink.getDataStreamSinks().get(i);
 
                 if (destFragment == null) {
                     continue;
                 }
                 FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
+
+                // Set params for pipeline level shuffle.
+                multi.getDestNode(i).setPartitionType(params.fragment.getOutputPartition().getType());
+                sink.setExchDop(destFragment.getPipelineDop());
 
                 PlanNodeId exchId = sink.getExchNodeId();
                 // MultiCastSink only send to itself, destination exchange only one senders
