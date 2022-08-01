@@ -370,10 +370,14 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             Long dbId = dbIdOpt.get();
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
+                Runnable runnable = null;
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
                 if (!isCheckpointThread()) {
-                    table.delete(true);
+                    runnable = table.delete(true);
+                }
+                if (runnable != null) {
+                    runnable.run();
                 }
             }
         }
@@ -739,7 +743,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
-            table.delete(false);
+            Runnable runnable = table.delete(false);
+            if (runnable != null) {
+                runnable.run();
+            }
             LOG.info("erased table [{}-{}].", table.getId(), table.getName());
         }
     }

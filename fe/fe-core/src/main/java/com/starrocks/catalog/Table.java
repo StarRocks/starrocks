@@ -433,6 +433,10 @@ public class Table extends MetaObject implements Writable {
     /**
      * This method is called right before the calling of {@link Database#dropTable(String)}, with the protection of the
      * database's writer lock.
+     * <p>
+     * If {@code force} is false, this table will be placed into the {@link CatalogRecycleBin} and may be
+     * recovered later, so the implementation should not delete any real data otherwise there will be
+     * data loss after the table been recovered.
      *
      * @param db     the owner database of the table
      * @param force  is this a force drop
