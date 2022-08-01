@@ -189,7 +189,7 @@ WITH BROKER broker_name
 
         exec_mem_limit：  导入内存限制。默认为 2GB。单位为字节。
 
-        strict mode：     是否对数据进行严格限制。默认为 false。
+        strict_mode：     是否对数据进行严格限制。默认为 false。
 
         timezone:         指定某些受时区影响的函数的时区，如 strftime/alignment_timestamp/from_unixtime 等等，具体请查阅 [时区](/using_starrocks/timezone.md) 文档。如果不指定，则使用 "Asia/Shanghai" 时区。
 
