@@ -60,6 +60,7 @@ import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.ModifyPartitionClause;
@@ -299,6 +300,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowResourceGroupStmt(ShowResourceGroupStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    public R visitLoadStmt(LoadStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitDropTableStmt(DropTableStmt statement, C context) {

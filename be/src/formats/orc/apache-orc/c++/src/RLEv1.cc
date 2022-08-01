@@ -22,6 +22,7 @@
 
 #include "Adaptor.hh"
 #include "Compression.hh"
+#include "Utils.hh"
 #include "orc/Exceptions.hh"
 
 namespace orc {
@@ -136,6 +137,7 @@ void RleEncoderV1::write(int64_t value) {
 }
 
 signed char RleDecoderV1::readByte() {
+    SCOPED_MINUS_STOPWATCH(metrics, DecodingLatencyUs);
     if (bufferStart == bufferEnd) {
         int bufferLength;
         const void* bufferPointer;
@@ -186,8 +188,9 @@ void RleDecoderV1::readHeader() {
     }
 }
 
-RleDecoderV1::RleDecoderV1(std::unique_ptr<SeekableInputStream> input, bool hasSigned)
-        : inputStream(std::move(input)),
+RleDecoderV1::RleDecoderV1(std::unique_ptr<SeekableInputStream> input, bool hasSigned, ReaderMetrics* _metrics)
+        : RleDecoder(_metrics),
+          inputStream(std::move(input)),
           isSigned(hasSigned),
           remainingValues(0),
           value(0),
@@ -224,6 +227,7 @@ void RleDecoderV1::skip(uint64_t numValues) {
 }
 
 void RleDecoderV1::next(int64_t* const data, const uint64_t numValues, const char* const notNull) {
+    SCOPED_STOPWATCH(metrics, DecodingLatencyUs, DecodingCall);
     uint64_t position = 0;
     // skipNulls()
     if (notNull) {

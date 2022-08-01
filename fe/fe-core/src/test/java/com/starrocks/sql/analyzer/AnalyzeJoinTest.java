@@ -120,6 +120,12 @@ public class AnalyzeJoinTest {
         analyzeFail("select v1 from t0 right join [broadcast] t1 on t0.v1 = t1.v4");
         //Full outer does not support BROADCAST
         analyzeFail("select v1 from t0 full outer join [broadcast] t1 on t0.v1 = t1.v4");
+
+        QueryStatement queryStatement =
+                (QueryStatement) analyzeSuccess("select v1 from t0 inner join [broadcast] t1 on t0.v1 = t1.v4");
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
+        Assert.assertEquals("broadcast", joinRelation.getJoinHint());
     }
 
     @Test

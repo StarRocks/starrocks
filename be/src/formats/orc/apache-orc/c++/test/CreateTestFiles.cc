@@ -61,7 +61,6 @@ void writeCustomOrcFile(const std::string& filename, const orc::proto::Metadata&
     }
     output.put(static_cast<char>(ps.ByteSizeLong()));
 }
-
 /**
  * Create a file from a future version 19.99.
  */

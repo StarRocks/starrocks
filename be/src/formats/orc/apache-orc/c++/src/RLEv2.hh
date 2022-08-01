@@ -26,9 +26,11 @@
 
 #include "Adaptor.hh"
 #include "RLE.hh"
+#include "Utils.hh"
 #include "bit_packing.h"
 #include "orc/Exceptions.hh"
 
+#define MAX_LITERAL_SIZE 512
 #define MIN_REPEAT 3
 #define HIST_LEN 32
 namespace orc {
@@ -125,6 +127,7 @@ private:
     int64_t* adjDeltas;
 
     uint32_t getOpCode(EncodingType encoding);
+    int64_t* prepareForDirectOrPatchedBase(EncodingOption& option);
     void determineEncoding(EncodingOption& option);
     void computeZigZagLiterals(EncodingOption& option);
     void preparePatchedBlob(EncodingOption& option);
@@ -141,7 +144,7 @@ private:
 
 class RleDecoderV2 : public RleDecoder {
 public:
-    RleDecoderV2(std::unique_ptr<SeekableInputStream> input, bool isSigned, MemoryPool& pool,
+    RleDecoderV2(std::unique_ptr<SeekableInputStream> input, bool isSigned, MemoryPool& pool, ReaderMetrics* metrics,
                  DataBuffer<char>* sharedBufferPtr = nullptr);
 
     /**
@@ -160,35 +163,28 @@ public:
     void next(int64_t* data, uint64_t numValues, const char* notNull) override;
 
 private:
-    // Used by PATCHED_BASE
-    void adjustGapAndPatch() {
-        curGap = static_cast<uint64_t>(unpackedPatch[patchIdx]) >> patchBitSize;
-        curPatch = unpackedPatch[patchIdx] & patchMask;
-        actualGap = 0;
-
-        // special case: gap is >255 then patch value will be 0.
-        // if gap is <=255 then patch value cannot be 0
-        while (curGap == 255 && curPatch == 0) {
-            actualGap += 255;
-            ++patchIdx;
-            curGap = static_cast<uint64_t>(unpackedPatch[patchIdx]) >> patchBitSize;
-            curPatch = unpackedPatch[patchIdx] & patchMask;
-        }
-        // add the left over gap
-        actualGap += curGap;
-    }
+    /**
+   * Decode the next gap and patch from 'unpackedPatch' and update the index on it.
+   * Used by PATCHED_BASE.
+   *
+   * @param patchBitSize  bit size of the patch value
+   * @param patchMask     mask for the patch value
+   * @param resGap        result of gap
+   * @param resPatch      result of patch
+   * @param patchIdx      current index in the 'unpackedPatch' buffer
+   */
+    void adjustGapAndPatch(uint32_t patchBitSize, int64_t patchMask, int64_t* resGap, int64_t* resPatch,
+                           uint64_t* patchIdx);
 
     void resetReadLongs() {
         bitsLeft = 0;
         curByte = 0;
     }
 
-    void resetRun() {
-        resetReadLongs();
-        bitSize = 0;
-    }
+    void resetRun() { resetReadLongs(); }
 
     unsigned char readByte() {
+        SCOPED_MINUS_STOPWATCH(metrics, DecodingLatencyUs);
         if (bufferStart == bufferEnd) {
             int bufferLength;
             const void* bufferPointer;
@@ -241,114 +237,40 @@ private:
         return len;
     }
 
-    uint64_t readLongs(int64_t* data, uint64_t offset, uint64_t len, uint64_t fb, const char* notNull = nullptr) {
-        uint64_t ret = 0;
+    void readLongs(int64_t* data, uint64_t offset, uint64_t len, uint64_t fbs);
+    void plainUnpackLongs(int64_t* data, uint64_t offset, uint64_t len, uint64_t fbs);
 
-        // TODO: unroll to improve performance
-        for (uint64_t i = offset; i < (offset + len); i++) {
-            // skip null positions
-            if (notNull && !notNull[i]) {
-                continue;
-            }
-
-            uint64_t result = 0;
-            uint64_t bitsLeftToRead = fb;
-
-            // original implementation
-            // while (bitsLeftToRead > bitsLeft) {
-            //     result <<= bitsLeft;
-            //     result |= curByte & ((1 << bitsLeft) - 1);
-            //     bitsLeftToRead -= bitsLeft;
-            //     curByte = readByte();
-            //     bitsLeft = 8;
-            // }
-
-            if (bitsLeftToRead > bitsLeft) {
-                result <<= bitsLeft;
-                result |= curByte & ((1 << bitsLeft) - 1);
-                bitsLeftToRead -= bitsLeft;
-
-                size_t run = (bitsLeftToRead - 1) / 8;
-                bitsLeftToRead = bitsLeftToRead - run * 8;
-                bitsLeft = 8;
-
-                if (bufferSize() >= (run + 1)) {
-                    const char* buf = bufferStart;
-#define ORC_READ_LONG result = (result << 8) | uint8_t(*buf++);
-                    switch (run) {
-                    case 7:
-                        ORC_READ_LONG;
-                    case 6:
-                        ORC_READ_LONG;
-                    case 5:
-                        ORC_READ_LONG;
-                    case 4:
-                        ORC_READ_LONG;
-                    case 3:
-                        ORC_READ_LONG;
-                    case 2:
-                        ORC_READ_LONG;
-                    case 1:
-                        ORC_READ_LONG;
-                    }
-
-#undef ORC_READ_LONG
-                    curByte = uint8_t(*buf);
-                    bufferForward(run + 1);
-                } else {
-                    curByte = readByte();
-                    for (size_t j = 0; j < run; j++) {
-                        result = (result << 8) | curByte;
-                        curByte = readByte();
-                    }
-                }
-            }
-
-            // handle the left over bits
-            if (bitsLeftToRead > 0) {
-                result <<= bitsLeftToRead;
-                bitsLeft -= static_cast<uint32_t>(bitsLeftToRead);
-                result |= (curByte >> bitsLeft) & ((1 << bitsLeftToRead) - 1);
-            }
-            data[i] = static_cast<int64_t>(result);
-            ++ret;
-        }
-
-        return ret;
-    }
+    void unrolledUnpack4(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack8(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack16(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack24(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack32(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack40(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack48(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack56(int64_t* data, uint64_t offset, uint64_t len);
+    void unrolledUnpack64(int64_t* data, uint64_t offset, uint64_t len);
 
     uint64_t nextShortRepeats(int64_t* data, uint64_t offset, uint64_t numValues, const char* notNull);
     uint64_t nextDirect(int64_t* data, uint64_t offset, uint64_t numValues, const char* notNull);
     uint64_t nextPatched(int64_t* data, uint64_t offset, uint64_t numValues, const char* notNull);
     uint64_t nextDelta(int64_t* data, uint64_t offset, uint64_t numValues, const char* notNull);
 
+    uint64_t copyDataFromBuffer(int64_t* data, uint64_t offset, uint64_t numValues, const char* notNull);
+
     const std::unique_ptr<SeekableInputStream> inputStream;
     const bool isSigned;
 
     unsigned char firstByte;
-    uint64_t runLength;
-    uint64_t runRead;
+
+    uint64_t runLength; // Length of the current run
+    uint64_t runRead;   // Number of returned values of the current run
     const char* bufferStart;
     const char* bufferEnd;
-    int64_t deltaBase;                 // Used by DELTA
-    uint64_t byteSize;                 // Used by SHORT_REPEAT and PATCHED_BASE
-    int64_t firstValue;                // Used by SHORT_REPEAT and DELTA
-    int64_t prevValue;                 // Used by DELTA
-    uint32_t bitSize;                  // Used by DIRECT, PATCHED_BASE and DELTA
-    uint32_t bitsLeft;                 // Used by anything that uses readLongs
-    uint8_t curByte;                   // Used by anything that uses readLongs
-    uint32_t patchBitSize;             // Used by PATCHED_BASE
-    uint64_t unpackedIdx;              // Used by PATCHED_BASE
-    uint64_t patchIdx;                 // Used by PATCHED_BASE
-    int64_t base;                      // Used by PATCHED_BASE
-    uint64_t curGap;                   // Used by PATCHED_BASE
-    int64_t curPatch;                  // Used by PATCHED_BASE
-    int64_t patchMask;                 // Used by PATCHED_BASE
-    int64_t actualGap;                 // Used by PATCHED_BASE
-    DataBuffer<int64_t> unpacked;      // Used by PATCHED_BASE
+    uint32_t bitsLeft;                 // Used by readLongs when bitSize < 8
+    uint32_t curByte;                  // Used by anything that uses readLongs
     DataBuffer<int64_t> unpackedPatch; // Used by PATCHED_BASE
-    DataBuffer<int64_t> direct;        // used by DIRECT
-    uint64_t directIdx;
+    DataBuffer<int64_t> literals;      // Values of the current run
+
     // this shared buffer is just for testing
     // in prod environment, sharedBufferPtr is a pointer to sharedBuffer in Reader
     // and that sharedBuffer will be reused across multiple column readers.

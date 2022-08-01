@@ -193,7 +193,7 @@ public class ExternalTableTest extends PlanTestBase {
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         replica.updateRowCount(2, 200000, 10000);
                     }
                 }

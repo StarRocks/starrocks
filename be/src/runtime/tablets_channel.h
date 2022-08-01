@@ -27,9 +27,10 @@ class PTabletWriterOpenRequest;
 class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 
-class TabletsChannel : public RefCountedThreadSafe<TabletsChannel> {
+class TabletsChannel {
 public:
     TabletsChannel() = default;
+    virtual ~TabletsChannel() = default;
 
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params) = 0;
 
@@ -37,13 +38,6 @@ public:
                            PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) = 0;
 
     virtual void cancel() = 0;
-
-private:
-    friend class RefCountedThreadSafe<TabletsChannel>;
-    friend class LakeTabletsChannel;
-    friend class LocalTabletsChannel;
-
-    virtual ~TabletsChannel() = default;
 };
 
 struct TabletsChannelKey {

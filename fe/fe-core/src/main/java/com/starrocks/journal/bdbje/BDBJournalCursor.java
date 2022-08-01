@@ -46,7 +46,7 @@ public class BDBJournalCursor implements JournalCursor {
     private static final long SLEEP_INTERVAL_SEC = 3;
 
     private long toKey;
-    private long currentKey;
+    private long nextKey;
     private BDBEnvironment environment;
     // names of all local databases, will set on initialization, and will update every time `prelong()` is called
     protected List<Long> localDBNames = null;
@@ -106,31 +106,40 @@ public class BDBJournalCursor implements JournalCursor {
         return cursor;
     }
 
+    /**
+     * calculate the index of next db to be opened
+     *
+     * there are two cases:
+     * 1. if this is the first time, we're actually looking for the db of nextKey
+     * 2. otherwise, we've already opened a db for previous key. Now we're looking for the next db of the previous key
+     **/
     protected void calculateNextDbIndex() throws JournalException {
-        int dbIndex = 0;
-        // find the db which may contain the fromKey
-        String dbName = null;
+        if (!localDBNames.isEmpty() && nextKey < localDBNames.get(0)) {
+            throw new JournalException(String.format(
+                    "Can not find the key[%d] in %s: key too small", nextKey, localDBNames));
+        }
+        long objectKey = (database == null) ? nextKey : nextKey - 1;
+        // find the db index which may contain objectKey
+        int dbIndex = -1;
         for (long db : localDBNames) {
-            if (currentKey >= db) {
-                dbName = Long.toString(db);
+            if (objectKey >= db) {
                 dbIndex++;
             } else {
                 break;
             }
         }
-        if (dbName == null) {
-            throw new JournalException(String.format("Can not find the key:%d, fail to get journal cursor!", currentKey));
+        if (database != null) {
+            dbIndex += 1;
         }
-        // will open current db in next()
-        nextDbPositionIndex = dbIndex - 1;
-        LOG.info("currentKey {}, currentDatabase {}, index of next opened db is {}",
-                currentKey, database, nextDbPositionIndex);
+        nextDbPositionIndex = dbIndex;
+        LOG.info("nextKey {}, currentDatabase {}, index of next opened db is {}",
+                nextKey, database, nextDbPositionIndex);
     }
 
     protected BDBJournalCursor(BDBEnvironment env, String prefix, long fromKey, long toKey) {
         this.environment = env;
         this.prefix = prefix;
-        this.currentKey = fromKey;
+        this.nextKey = fromKey;
         this.toKey = toKey;
     }
 
@@ -144,7 +153,7 @@ public class BDBJournalCursor implements JournalCursor {
                 Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
             }
             try {
-                dbNames = environment.getDatabaseNames();
+                dbNames = environment.getDatabaseNamesWithPrefix(prefix);
                 break;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to get DB names for %s times!", i + 1);
@@ -176,7 +185,7 @@ public class BDBJournalCursor implements JournalCursor {
             return true;
         }
         // if current db does not contain any more data, then we go to search the next db
-        return nextDbPositionIndex < localDBNames.size() && currentKey == localDBNames.get(nextDbPositionIndex);
+        return nextDbPositionIndex < localDBNames.size() && nextKey == localDBNames.get(nextDbPositionIndex);
     }
 
     protected void openDatabaseIfNecessary()
@@ -220,7 +229,7 @@ public class BDBJournalCursor implements JournalCursor {
         } catch (IOException e) {
             // bad data, will not retry
             String errMsg = String.format("fail to read journal entity key=%s, data=%s",
-                    currentKey, data);
+                    nextKey, data);
             LOG.error(errMsg, e);
             JournalException exception = new JournalException(errMsg);
             exception.initCause(e);
@@ -232,8 +241,8 @@ public class BDBJournalCursor implements JournalCursor {
     @Override
     public JournalEntity next() throws InterruptedException, JournalException, JournalInconsistentException {
         // EOF
-        if (toKey > 0 && currentKey > toKey) {
-            LOG.info("cursor reaches the end: current key {} > to key {}", currentKey, toKey);
+        if (toKey > 0 && nextKey > toKey) {
+            LOG.info("cursor reaches the end: next key {} > to key {}", nextKey, toKey);
             return null;
         }
 
@@ -241,7 +250,7 @@ public class BDBJournalCursor implements JournalCursor {
         openDatabaseIfNecessary();
 
         // make the key
-        Long key = currentKey;
+        Long key = nextKey;
         DatabaseEntry theKey = new DatabaseEntry();
         TupleBinding<Long> myBinding = TupleBinding.getPrimitiveBinding(Long.class);
         myBinding.objectToEntry(key, theKey);
@@ -261,7 +270,7 @@ public class BDBJournalCursor implements JournalCursor {
                 if (operationStatus == OperationStatus.SUCCESS) {
                     // 3. serialized
                     JournalEntity entity = deserializeData(theData);
-                    currentKey++;
+                    nextKey++;
                     return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
                     // read until there is no more log exists, return

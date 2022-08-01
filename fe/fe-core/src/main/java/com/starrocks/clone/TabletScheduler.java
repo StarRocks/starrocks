@@ -1189,6 +1189,50 @@ public class TabletScheduler extends LeaderDaemon {
         rebalancer.createBalanceTask(tabletCtx, backendsWorkingSlots, batchTask);
     }
 
+    private RootPathLoadStatistic findPath(TabletSchedCtx tabletCtx,
+                                           List<RootPathLoadStatistic> allFitPaths,
+                                           boolean matchMedium) throws SchedException {
+        for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
+            if (matchMedium && rootPathLoadStatistic.getStorageMedium() != tabletCtx.getStorageMedium()) {
+                continue;
+            }
+
+            PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
+            if (slot == null) {
+                LOG.debug("backend {} does not found when getting slots", rootPathLoadStatistic.getBeId());
+                continue;
+            }
+
+            if (slot.takeSlot(rootPathLoadStatistic.getPathHash()) != -1) {
+                return rootPathLoadStatistic;
+            }
+        }
+
+        return null;
+    }
+
+    private RootPathLoadStatistic findAvailablePathWithMediumMatch(TabletSchedCtx tabletCtx,
+                                                                   List<RootPathLoadStatistic> allFitPaths)
+            throws SchedException {
+        return findPath(tabletCtx, allFitPaths, true /* match medium */);
+    }
+
+    private RootPathLoadStatistic findAvailablePathArbitrary(TabletSchedCtx tabletCtx,
+                                                             List<RootPathLoadStatistic> allFitPaths)
+            throws SchedException {
+        return findPath(tabletCtx, allFitPaths, false /* match medium */);
+    }
+
+    private RootPathLoadStatistic findAvailablePath(TabletSchedCtx tabletCtx,
+                                                    List<RootPathLoadStatistic> allFitPaths) throws SchedException {
+        RootPathLoadStatistic path = findAvailablePathWithMediumMatch(tabletCtx, allFitPaths);
+        if (path == null) {
+            path = findAvailablePathArbitrary(tabletCtx, allFitPaths);
+        }
+
+        return path;
+    }
+
     // choose a path on a backend which is fit for the tablet
     private RootPathLoadStatistic chooseAvailableDestPath(TabletSchedCtx tabletCtx, boolean forColocate)
             throws SchedException {
@@ -1233,37 +1277,13 @@ public class TabletScheduler extends LeaderDaemon {
 
         // all fit paths has already been sorted by load score in 'allFitPaths' in ascend order.
         // just get first available path.
-        // we try to find a path with specified media type, if not find, arbitrarily use one.
-        for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
-            if (rootPathLoadStatistic.getStorageMedium() != tabletCtx.getStorageMedium()) {
-                continue;
-            }
-
-            PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
-            if (slot == null) {
-                LOG.debug("backend {} does not found when getting slots", rootPathLoadStatistic.getBeId());
-                continue;
-            }
-
-            if (slot.takeSlot(rootPathLoadStatistic.getPathHash()) != -1) {
-                return rootPathLoadStatistic;
-            }
+        // we try to find a path with specified medium type, if not find, arbitrarily select one.
+        RootPathLoadStatistic path = findAvailablePath(tabletCtx, allFitPaths);
+        if (path != null) {
+            return path;
+        } else {
+            throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path which can be fit in");
         }
-
-        // no root path with specified media type is found, get arbitrary one.
-        for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
-            PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
-            if (slot == null) {
-                LOG.debug("backend {} does not found when getting slots", rootPathLoadStatistic.getBeId());
-                continue;
-            }
-
-            if (slot.takeSlot(rootPathLoadStatistic.getPathHash()) != -1) {
-                return rootPathLoadStatistic;
-            }
-        }
-
-        throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path which can be fit in");
     }
 
     private synchronized void addBackToPendingTablets(TabletSchedCtx tabletCtx) {

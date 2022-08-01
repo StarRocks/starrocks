@@ -12,7 +12,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TWorkGroupType;
@@ -72,10 +71,9 @@ public class ResourceGroupAnalyzer {
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
-                        String fullName = ClusterNamespace.getFullName(name);
-                        Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
+                        Database db = GlobalStateMgr.getCurrentState().getDb(name);
                         if (db == null) {
-                            throw new SemanticException(String.format("Specified database not exists: %s", fullName));
+                            throw new SemanticException(String.format("Specified database not exists: %s", name));
                         }
                         databaseIds.add(db.getId());
                     }

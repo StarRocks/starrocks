@@ -168,18 +168,18 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
                 return 1;
             }
         }
-        return 0;
+        return left.length() - right.length();
     } else if (left.isArray() && right.isArray()) {
-        int idx = 0;
-        for (auto it : vpack::ArrayIterator(left)) {
-            auto sub = right.at(idx);
-            if (!sub.isNone()) {
-                int x = sliceCompare(it, sub);
-                if (x != 0) {
-                    return x;
-                }
+        if (left.length() != right.length()) {
+            return left.length() - right.length();
+        }
+        for (size_t i = 0; i < left.length(); i++) {
+            auto left_item = left.at(i);
+            auto right_item = right.at(i);
+            int x = sliceCompare(left_item, right_item);
+            if (x != 0) {
+                return x;
             }
-            idx++;
         }
         return 0;
     } else if (vpack::valueTypeGroup(left.type()) == vpack::valueTypeGroup(right.type())) {

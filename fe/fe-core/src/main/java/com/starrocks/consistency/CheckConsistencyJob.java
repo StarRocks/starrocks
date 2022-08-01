@@ -161,7 +161,7 @@ public class CheckConsistencyJob {
 
             int sentTaskReplicaNum = 0;
             long maxDataSize = 0;
-            for (Replica replica : tablet.getReplicas()) {
+            for (Replica replica : tablet.getImmutableReplicas()) {
                 // 1. if state is CLONE, do not send task at this time
                 if (replica.getState() == ReplicaState.CLONE
                         || replica.getState() == ReplicaState.DECOMMISSION) {

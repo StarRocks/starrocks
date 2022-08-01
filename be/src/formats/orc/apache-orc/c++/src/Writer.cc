@@ -137,6 +137,13 @@ WriterOptions& WriterOptions::setFileVersion(const FileVersion& version) {
         privateBits->fileVersion = version;
         return *this;
     }
+    if (version == FileVersion::UNSTABLE_PRE_2_0()) {
+        *privateBits->errorStream << "Warning: ORC files written in " << FileVersion::UNSTABLE_PRE_2_0().toString()
+                                  << " will not be readable by other versions of the software."
+                                  << " It is only for developer testing.\n";
+        privateBits->fileVersion = version;
+        return *this;
+    }
     throw std::logic_error("Unsupported file version specified.");
 }
 

@@ -17,6 +17,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -57,47 +58,51 @@ public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
-        if (null == root) {
-            return Lists.newArrayList();
-        }
-
         LinkedList<ScalarOperator> list = new LinkedList<>();
-        if (!OperatorType.COMPOUND.equals(root.getOpType())) {
-            list.add(root);
+        if (null == root) {
             return list;
+        }
+        extractConjunctsImpl(root, list);
+        return list;
+    }
+
+    public static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
+        if (!OperatorType.COMPOUND.equals(root.getOpType())) {
+            result.add(root);
+            return;
         }
 
         CompoundPredicateOperator cpo = (CompoundPredicateOperator) root;
         if (!cpo.isAnd()) {
-            list.add(root);
-            return list;
+            result.add(root);
+            return;
         }
-
-        list.addAll(extractConjuncts(cpo.getChild(0)));
-        list.addAll(extractConjuncts(cpo.getChild(1)));
-        return list;
+        extractConjunctsImpl(cpo.getChild(0), result);
+        extractConjunctsImpl(cpo.getChild(1), result);
     }
 
     public static List<ScalarOperator> extractDisjunctive(ScalarOperator root) {
-        if (null == root) {
-            return Lists.newArrayList();
-        }
-
         LinkedList<ScalarOperator> list = new LinkedList<>();
-        if (!OperatorType.COMPOUND.equals(root.getOpType())) {
-            list.add(root);
+        if (null == root) {
             return list;
+        }
+        extractDisjunctiveImpl(root, list);
+        return list;
+    }
+
+    public static void extractDisjunctiveImpl(ScalarOperator root, List<ScalarOperator> result) {
+        if (!OperatorType.COMPOUND.equals(root.getOpType())) {
+            result.add(root);
+            return;
         }
 
         CompoundPredicateOperator cpo = (CompoundPredicateOperator) root;
-
-        if (cpo.isOr()) {
-            list.addAll(extractDisjunctive(cpo.getChild(0)));
-            list.addAll(extractDisjunctive(cpo.getChild(1)));
-        } else {
-            list.add(root);
+        if (!cpo.isOr()) {
+            result.add(root);
+            return;
         }
-        return list;
+        extractDisjunctiveImpl(cpo.getChild(0), result);
+        extractDisjunctiveImpl(cpo.getChild(1), result);
     }
 
     public static List<ColumnRefOperator> extractColumnRef(ScalarOperator root) {
@@ -446,8 +451,9 @@ public class Utils {
     public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
                                               Collection<Long> selectedPartitionId,
                                               Collection<Long> selectedTabletId) {
-        int backendSize = GlobalStateMgr.getCurrentSystemInfo().backendSize();
-        int aliveBackendSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        ConnectContext ctx = ConnectContext.get();
+        int backendSize = ctx.getTotalBackendNumber();
+        int aliveBackendSize = ctx.getAliveBackendNumber();
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);

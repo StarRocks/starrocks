@@ -58,7 +58,7 @@ void decodeAndVerify(const MemoryOutputStream& memStream, char* data, uint64_t n
     std::unique_ptr<SeekableInputStream> inStream(
             new SeekableArrayInputStream(memStream.getData(), memStream.getLength()));
 
-    std::unique_ptr<ByteRleDecoder> decoder = createByteRleDecoder(std::move(inStream));
+    std::unique_ptr<ByteRleDecoder> decoder = createByteRleDecoder(std::move(inStream), nullptr);
 
     char* decodedData = new char[numValues];
     decoder->next(decodedData, numValues, notNull);
@@ -76,7 +76,7 @@ void decodeAndVerifyBoolean(const MemoryOutputStream& memStream, char* data, uin
     std::unique_ptr<SeekableInputStream> inStream(
             new SeekableArrayInputStream(memStream.getData(), memStream.getLength()));
 
-    std::unique_ptr<ByteRleDecoder> decoder = createBooleanRleDecoder(std::move(inStream));
+    std::unique_ptr<ByteRleDecoder> decoder = createBooleanRleDecoder(std::move(inStream), nullptr);
 
     char* decodedData = new char[numValues];
     decoder->next(decodedData, numValues, notNull);

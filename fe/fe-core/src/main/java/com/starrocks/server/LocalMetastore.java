@@ -190,7 +190,6 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -218,6 +217,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
@@ -291,7 +291,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (table.isLocalTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                     if (MetaContext.get().getMetaVersion() < FeMetaVersion.VERSION_48) {
                                         // set replica's schema hash
@@ -404,23 +404,19 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 2. drop tables in db
             Database db = this.fullNameToDb.get(dbName);
-            HashMap<Long, AgentBatchTask> batchTaskMap;
+            Runnable runnable;
             db.writeLock();
             try {
-                if (!isForceDrop) {
-                    if (stateMgr.getGlobalTransactionMgr()
-                            .existCommittedTxns(db.getId(), null, null)) {
-                        throw new DdlException(
-                                "There are still some transactions in the COMMITTED state waiting to be completed. " +
-                                        "The database [" + dbName +
-                                        "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                        " please use \"DROP database FORCE\".");
-                    }
+                if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
+                    throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
+                            "The database [" + dbName +
+                            "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                            " please use \"DROP database FORCE\".");
                 }
 
                 // save table names for recycling
                 Set<String> tableNames = db.getTableNamesWithLock();
-                batchTaskMap = unprotectDropDb(db, isForceDrop, false);
+                runnable = unprotectDropDb(db, isForceDrop, false);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -429,7 +425,10 @@ public class LocalMetastore implements ConnectorMetadata {
             } finally {
                 db.writeUnlock();
             }
-            sendDropTabletTasks(batchTaskMap);
+
+            if (runnable != null) {
+                runnable.run();
+            }
 
             // 3. remove db from globalStateMgr
             idToDb.remove(db.getId());
@@ -445,22 +444,27 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public HashMap<Long, AgentBatchTask> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+    public Runnable unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
+        List<Runnable> runnableList = null;
         for (Table table : db.getTables()) {
-            HashMap<Long, AgentBatchTask> dropTasks = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (!isReplay) {
-                for (Long backendId : dropTasks.keySet()) {
-                    AgentBatchTask batchTask = batchTaskMap.get(backendId);
-                    if (batchTask == null) {
-                        batchTask = new AgentBatchTask();
-                        batchTaskMap.put(backendId, batchTask);
-                    }
-                    batchTask.addTasks(backendId, dropTasks.get(backendId).getAllTasks());
-                }
+            Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
+            if (runnable != null && runnableList == null) {
+                runnableList = new ArrayList<>();
+                runnableList.add(runnable);
+            } else if (runnable != null) {
+                runnableList.add(runnable);
             }
         }
-        return batchTaskMap;
+        if (runnableList == null) {
+            return null;
+        }
+
+        List<Runnable> finalRunnableList = runnableList;
+        return () -> {
+            for (Runnable r : finalRunnableList) {
+                r.run();
+            }
+        };
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
@@ -1325,7 +1329,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -1369,7 +1373,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
                     }
@@ -1682,7 +1686,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         TTabletType.TABLET_TYPE_LAKE);
                 tasks.add(task);
             } else {
-                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     CreateReplicaTask task = new CreateReplicaTask(
                             replica.getBackendId(),
                             dbId,
@@ -1802,6 +1806,10 @@ public class LocalMetastore implements ConnectorMetadata {
     // only for test
     public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
         this.colocateTableIndex = colocateTableIndex;
+    }
+
+    public ColocateTableIndex getColocateTableIndex() {
+        return colocateTableIndex;
     }
 
     // Create olap|lake table and related base index synchronously.
@@ -1962,7 +1970,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && olapTable.enablePersistentIndex()) {
             if (!olapTable.checkPersistentIndex()) {
                 throw new DdlException("PrimaryKey table using persistent index don't support varchar(char) as key so far," +
-                                       " and key length should be no more than 64 Bytes");
+                        " and key length should be no more than 64 Bytes");
             }
         }
 
@@ -2452,7 +2460,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (table.isOlapTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
                             }
@@ -2486,7 +2494,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
                         if (tablet instanceof LocalTablet) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -4244,7 +4252,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             long tabletId = tablet.getId();
                             invertedIndex.addTablet(tabletId, tabletMeta);
                             if (olapTable.isOlapTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     invertedIndex.addReplica(tabletId, replica);
                                 }
                             }
@@ -4475,8 +4483,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
-        // inverted index
+    public void onEraseTable(@NotNull OlapTable olapTable) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Collection<Partition> allPartitions = olapTable.getAllPartitions();
         for (Partition partition : allPartitions) {
@@ -4487,50 +4494,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-        if (!isReplay) {
-            // drop all replicas
-            Set<Long> tabletIds = new HashSet<>();
-            for (Partition partition : olapTable.getAllPartitions()) {
-                List<MaterializedIndex> allIndices =
-                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex materializedIndex : allIndices) {
-                    long indexId = materializedIndex.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                    for (Tablet tablet : materializedIndex.getTablets()) {
-                        long tabletId = tablet.getId();
-                        if (olapTable.isOlapTable()) {
-                            List<Replica> replicas = ((LocalTablet) tablet).getReplicas();
-                            for (Replica replica : replicas) {
-                                long backendId = replica.getBackendId();
-                                DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
-                                AgentBatchTask batchTask = batchTaskMap.get(backendId);
-                                if (batchTask == null) {
-                                    batchTask = new AgentBatchTask();
-                                    batchTaskMap.put(backendId, batchTask);
-                                }
-                                batchTask.addTask(dropTask);
-                            } // end for replicas
-                        }
-
-                        // drop shard and lake tablet
-                        if (olapTable.isLakeTable()) {
-                            tabletIds.add(tabletId);
-                        }
-
-                    } // end for tablets
-                } // end for indices
-            } // end for partitions
-
-            if (olapTable.isLakeTable()) {
-                GlobalStateMgr.getCurrentState().getShardManager()
-                        .getShardDeleter().addUnusedShardId(tabletIds);
-                GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
-            }
-        }
-        // colocation
         colocateTableIndex.removeTable(olapTable.getId());
-        return batchTaskMap;
     }
 
     public void onErasePartition(Partition partition) {

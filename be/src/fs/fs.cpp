@@ -22,7 +22,7 @@ static thread_local std::shared_ptr<FileSystem> tls_fs_starlet;
 
 inline std::shared_ptr<FileSystem> get_tls_fs_hdfs() {
     if (tls_fs_hdfs == nullptr) {
-        tls_fs_hdfs.reset(new_fs_hdfs().release());
+        tls_fs_hdfs.reset(new_fs_hdfs(FSOptions()).release());
     }
     return tls_fs_hdfs;
 }
@@ -36,7 +36,7 @@ inline std::shared_ptr<FileSystem> get_tls_fs_posix() {
 
 inline std::shared_ptr<FileSystem> get_tls_fs_s3() {
     if (tls_fs_s3 == nullptr) {
-        tls_fs_s3.reset(new_fs_s3().release());
+        tls_fs_s3.reset(new_fs_s3(FSOptions()).release());
     }
     return tls_fs_s3;
 }
@@ -56,7 +56,8 @@ inline bool starts_with(std::string_view s, std::string_view prefix) {
 
 inline bool is_s3_uri(std::string_view uri) {
     return starts_with(uri, "oss://") || starts_with(uri, "s3n://") || starts_with(uri, "s3a://") ||
-           starts_with(uri, "s3://") || starts_with(uri, "cos://");
+           starts_with(uri, "s3://") || starts_with(uri, "cos://") || starts_with(uri, "cosn://") ||
+           starts_with(uri, "obs://") || starts_with(uri, "ks3://");
 }
 
 inline bool is_hdfs_uri(std::string_view uri) {
@@ -67,15 +68,15 @@ inline bool is_posix_uri(std::string_view uri) {
     return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }
 
-StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri) {
+StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri, FSOptions options) {
     if (is_posix_uri(uri)) {
         return new_fs_posix();
     }
     if (is_hdfs_uri(uri)) {
-        return new_fs_hdfs();
+        return new_fs_hdfs(options);
     }
     if (is_s3_uri(uri)) {
-        return new_fs_s3();
+        return new_fs_s3(options);
     }
 #ifdef USE_STAROS
     if (is_starlet_uri(uri)) {

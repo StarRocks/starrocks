@@ -265,6 +265,24 @@ public class Config extends ConfigBase {
     public static boolean ignore_unknown_log_id = false;
 
     /**
+     * hdfs_read_buffer_size_kb for reading hdfs
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_read_buffer_size_kb = 8192;
+
+    /**
+     * hdfs_write_buffer_size_kb for writing hdfs
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_write_buffer_size_kb = 1024;
+
+    /**
+     * expire seconds for unused file system manager
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_file_sytem_expire_seconds = 300;
+
+    /**
      * Non-master FE will stop offering service
      * if meta data delay gap exceeds *meta_delay_toleration_second*
      */
@@ -360,7 +378,7 @@ public class Config extends ConfigBase {
      *
      * <p>To disable the retention of these additional files, set this
      * parameter to zero.</p>
-     *
+     * <p>
      * If the bdb dir expands, set this param to 0.
      */
     @ConfField
@@ -763,7 +781,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
-     *
+     * <p>
      * The default value should better set to true because if user
      * has a deployment with only SSD or HDD medium storage paths,
      * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
@@ -963,7 +981,7 @@ public class Config extends ConfigBase {
     /**
      * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a Backend storage path.
      * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a Backend storage path.
-     * If both limitations are reached, this storage path can not be chose as tablet balance destination.
+     * If both limitations are reached, this storage path can not be chosen as tablet balance destination.
      * But for tablet recovery, we may exceed these limit for keeping data integrity as much as possible.
      */
     @ConfField(mutable = true)
@@ -1297,7 +1315,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_manager_sleep_time_sec = 60; // 60s
 
-
     /**
      * Analyze status keep time in catalog
      */
@@ -1584,6 +1601,14 @@ public class Config extends ConfigBase {
     public static String starmgr_address = "127.0.0.1:6090";
     @ConfField
     public static boolean integrate_starmgr = false;
+    @ConfField
+    public static String starmgr_s3_bucket = "";
+    @ConfField
+    public static String starmgr_s3_endpoint = "";
+    @ConfField
+    public static String starmgr_s3_ak = "";
+    @ConfField
+    public static String starmgr_s3_sk = "";
 
     /**
      * default bucket number when create OLAP table without buckets info
@@ -1671,4 +1696,7 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static long experimental_lake_compaction_max_interval_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static boolean enable_new_publish_mechanism = false;
 }

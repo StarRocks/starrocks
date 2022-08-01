@@ -91,11 +91,9 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [ -z "$JAVA_OPTS_FOR_JDK_9" ]; then
-        echo "JAVA_OPTS_FOR_JDK_9 is not set in be.conf" >> $LOG_DIR/be.out
-        exit -1
+    if [ -n "$JAVA_OPTS_FOR_JDK_9_AND_LATER" ]; then
+    final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
     fi
-    final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
 export LIBHDFS_OPTS=$final_java_opt
 

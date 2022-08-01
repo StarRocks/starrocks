@@ -108,7 +108,7 @@ public class MigrationAction extends RestBaseAction {
                         row.add(partitionName);
                         row.add(tablet.getId());
                         row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             row.add(replica.getBackendId());
                             break;
                         }
@@ -134,7 +134,7 @@ public class MigrationAction extends RestBaseAction {
                             row.add(partitionName);
                             row.add(tablet.getId());
                             row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 row.add(replica.getBackendId());
                                 break;
                             }
