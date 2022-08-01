@@ -131,6 +131,6 @@ public class LakeTable extends OlapTable {
     @Override
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
-        return replay ? null : new DeleteTableTask(this);
+        return new DeleteTableTask(this);
     }
 }
