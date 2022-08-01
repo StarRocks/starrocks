@@ -61,8 +61,7 @@ public:
     static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
                                                                         FSOptions options = FSOptions());
 
-    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri,
-                                                                        FSOptions options = FSOptions());
+    static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
     // Return a default environment suitable for the current operating
     // system.  Sophisticated users may wish to provide their own FileSystem
