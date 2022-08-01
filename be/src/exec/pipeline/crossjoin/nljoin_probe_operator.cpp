@@ -12,8 +12,8 @@ namespace starrocks::pipeline {
 NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                          int32_t driver_sequence, TJoinOp::type join_op,
                                          const std::vector<ExprContext*>& conjunct_ctxs,
-                                         const std::vector<SlotDescriptor*>& col_types,
-                                         const size_t& probe_column_count, const size_t& build_column_count,
+                                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
+                                         size_t build_column_count,
                                          const std::shared_ptr<CrossJoinContext>& cross_join_context)
         : OperatorWithDependency(factory, id, "nljoin_probe", plan_node_id, driver_sequence),
           _join_op(join_op),

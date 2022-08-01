@@ -13,8 +13,8 @@ class NLJoinProbeOperator final : public OperatorWithDependency {
 public:
     NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                         TJoinOp::type join_op, const std::vector<ExprContext*>& conjunct_ctxs,
-                        const std::vector<SlotDescriptor*>& col_types, const size_t& probe_column_count,
-                        const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context);
+                        const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
+                        size_t build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context);
 
     ~NLJoinProbeOperator() override = default;
 
@@ -45,8 +45,8 @@ private:
 private:
     const TJoinOp::type _join_op;
     const std::vector<SlotDescriptor*>& _col_types;
-    const size_t& _probe_column_count;
-    const size_t& _build_column_count;
+    const size_t _probe_column_count;
+    const size_t _build_column_count;
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
