@@ -45,6 +45,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -566,7 +567,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // partition visible version won't update in schema change, so we need make global
         // dictionary invalid after schema change.
         for (Column column : tbl.getColumns()) {
-            IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+            if (Type.VARCHAR.equals(column.getType())) {
+                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+            }
         }
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
