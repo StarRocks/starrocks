@@ -898,6 +898,23 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testPartitionByAllowedFunctionUseWeek() {
+        String sql = "create materialized view mv1 " +
+                "partition by ss " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select date_trunc('week',k2) ss, k2 from tbl2;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("The function date_trunc used by the materialized view for partition does not support week formatting", e.getMessage());
+        }
+    }
+
+    @Test
     public void testPartitionByNoAllowedFunction() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
