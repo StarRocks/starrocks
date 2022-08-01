@@ -125,6 +125,16 @@ public class BDBJEJournalSystem implements JournalSystem {
                         }
                     }
                 }
+
+                // close current db after replayer finished
+                @Override
+                public void run() {
+                    super.run();
+                    if (cursor != null) {
+                        cursor.close();
+                        LOG.info("star mgr quit replay at {}.", replayedJournalId.get());
+                    }
+                }
             };
 
             replayer.start();
@@ -141,6 +151,11 @@ public class BDBJEJournalSystem implements JournalSystem {
 
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     public void replayTo(long journalId) throws StarException {
+        if (journalId <= replayedJournalId.get()) {
+            LOG.info("skip star mgr replay journal because {} <= {}.", journalId, replayedJournalId.get());
+            return;
+        }
+
         JournalCursor cursor = null;
         try {
             cursor = bdbjeJournal.read(replayedJournalId.get() + 1, journalId);
@@ -155,6 +170,13 @@ public class BDBJEJournalSystem implements JournalSystem {
             if (cursor != null) {
                 cursor.close();
             }
+        }
+
+        // verify if all log is replayed
+        if (journalId != replayedJournalId.get()) {
+            throw new StarException(ExceptionCode.JOURNAL, String.format(
+                    "should replay to %d but actual replayed journal id is %d",
+                    journalId, replayedJournalId.get()));
         }
     }
 
