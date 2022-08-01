@@ -227,7 +227,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             }
             // Yield by preempt
             if (_workgroup != nullptr && preempt_time >= YIELD_PREEMPT_MAX_TIME_SPENT) {
-                if (_workgroup->driver_queue()->need_preempt()) {
+                if (_workgroup->type() != workgroup::WorkGroupType::WG_REALTIME &&
+                    _workgroup->driver_queue()->need_preempt()) {
                     should_yield = true;
                 }
                 preempt_time = 0;
