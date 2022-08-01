@@ -271,8 +271,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tmp_dir|StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"|临时文件保存目录，例如 backup/restore 等进程保留的目录。|
 |locale|zh_CN.UTF-8|字符集。|
 |hive_meta_load_concurrency|4|Hive 元数据并发线程数。|
-|hive_meta_cache_refresh_interval_s|7200|定时刷新 Hive 外表元数据缓存的周期。|
-|hive_meta_cache_ttl_s|3600 *2|HIve 外表元数据缓存失效时间，默认 2h。|
+|hive_meta_cache_refresh_interval_s|7200|定时刷新 Hive 外表元数据缓存的周期，单位为秒。|
+|hive_meta_cache_ttl_s|86400|HIve 外表元数据缓存失效时间，单位为秒。|
 |hive_meta_store_timeout_s|10|连接 Hive Metastore 的超时时间。|
 |es_state_sync_interval_second|10|FE 获取 Elasticsearch Index 的时间，单位为秒。|
 |enable_auth_check|TRUE|是否开启鉴权。|
