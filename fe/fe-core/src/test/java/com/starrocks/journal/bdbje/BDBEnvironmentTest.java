@@ -25,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class BDBEnvironmentTest {
     private static final Logger LOG = LogManager.getLogger(BDBEnvironmentTest.class);
@@ -42,6 +43,10 @@ public class BDBEnvironmentTest {
         // give master time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
+        // set timeout to a really long time so that ut can pass even when IO load is very high
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
     }
 
     @After
@@ -114,7 +119,22 @@ public class BDBEnvironmentTest {
     private String[] followerNames = new String[2];
 
 
-   private void initClusterMasterFollower() throws Exception {
+    private void initClusterMasterFollower() throws Exception {
+        for (int i = 0; i != 3; ++ i) {
+            // might fail on high load, will sleep and retry
+            try {
+                initClusterMasterFollowerNoRetry();
+                return;
+            } catch (Exception e) {
+                // sleep 5 ~ 15 seconds
+                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
+                Thread.sleep(sleepSeconds * 1000L);
+            }
+        }
+
+    }
+    private void initClusterMasterFollowerNoRetry() throws Exception {
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();
