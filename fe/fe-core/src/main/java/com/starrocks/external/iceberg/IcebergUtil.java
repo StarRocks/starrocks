@@ -242,7 +242,7 @@ public class IcebergUtil {
             case STRUCT:
             case MAP:
             default:
-                throw new RuntimeException("Unsupported type " + icebergType.typeId().toString());
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return ScalarType.createType(primitiveType);
     }

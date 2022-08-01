@@ -274,7 +274,7 @@ public class IcebergTable extends Table {
             case LIST:
             case MAP:
             default:
-                return false;
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
     }
 
