@@ -30,6 +30,7 @@ import com.sleepycat.je.Durability;
 import com.sleepycat.je.Durability.ReplicaAckPolicy;
 import com.sleepycat.je.Durability.SyncPolicy;
 import com.sleepycat.je.EnvironmentConfig;
+import com.sleepycat.je.EnvironmentFailureException;
 import com.sleepycat.je.TransactionConfig;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
@@ -40,7 +41,6 @@ import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
 import com.sleepycat.je.rep.ReplicationNode;
-import com.sleepycat.je.rep.RestartRequiredException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
@@ -296,9 +296,10 @@ public class BDBEnvironment {
                 epochDB = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, "epochDB", dbConfig));
                 LOG.info("end setup bdb environment after {} times", i + 1);
                 return;
-            } catch (RestartRequiredException e) {
+            } catch (EnvironmentFailureException e) {
                 String errMsg = String.format(
-                        "catch a RestartRequiredException when setup environment after retried %d times, refresh and setup again",
+                        "catch a EnvironmentFailureException when setup environment after retried %d times, "
+                        + "may refresh and setup again",
                         i + 1);
                 LOG.warn(errMsg, e);
                 exception = new JournalException(errMsg);
@@ -306,7 +307,13 @@ public class BDBEnvironment {
                 if (e instanceof InsufficientLogException) {
                     refreshLog((InsufficientLogException) e);
                 }
-                close();
+                // Depending on the nature of the failure, this exception may indicate that Environment.close() must be
+                // called. The application should catch EnvironmentFailureException and then call Environment.isValid().
+                // If false is returned, all Environment handles (instances) must be closed and re-opened in order to
+                // run recovery and continue operating.
+                if (replicatedEnvironment != null && ! replicatedEnvironment.isValid()) {
+                    close();
+                }
             } catch (DatabaseException e) {
                 if (i == 0 && e instanceof UnknownMasterException) {
                     // The node may be unable to join the group because the Master could not be determined because a
@@ -315,6 +322,7 @@ public class BDBEnvironment {
                     // the first time.
                     LOG.warn("failed to setup environment because of UnknowMasterException for the first time, ignore it.");
                 } else {
+                    //
                     String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
                     LOG.error(errMsg, e);
                     exception = new JournalException(errMsg);
@@ -389,10 +397,10 @@ public class BDBEnvironment {
                 throw new JournalException(
                         String.format("bad environment %s! helper host %s not in local %s",
                                 envHome, helperHostPort, localNodes));
-            } catch (RestartRequiredException e) {
+            } catch (EnvironmentFailureException e) {
                 String errMsg = String.format(
-                        "catch a RestartRequiredException when checking if helper in local after retried %d times, " +
-                        "refresh and check again",
+                        "catch a EnvironmentFailureException when checking if helper in local after retried %d times, " +
+                        "may refresh and check again",
                         i + 1);
                 LOG.warn(errMsg, e);
                 exception = new JournalException(errMsg);
