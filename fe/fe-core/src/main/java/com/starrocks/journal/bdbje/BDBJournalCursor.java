@@ -153,7 +153,7 @@ public class BDBJournalCursor implements JournalCursor {
                 Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
             }
             try {
-                dbNames = environment.getDatabaseNames();
+                dbNames = environment.getDatabaseNamesWithPrefix(prefix);
                 break;
             } catch (DatabaseException e) {
                 String errMsg = String.format("failed to get DB names for %s times!", i + 1);
