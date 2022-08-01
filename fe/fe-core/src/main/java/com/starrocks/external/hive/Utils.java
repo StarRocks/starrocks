@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
 public class Utils {
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";

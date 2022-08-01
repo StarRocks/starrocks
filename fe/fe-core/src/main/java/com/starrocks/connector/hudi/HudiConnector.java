@@ -35,14 +35,9 @@ public class HudiConnector implements Connector {
     }
 
     @Override
-    public ConnectorMetadata getMetadata() throws DdlException {
+    public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            try {
-                metadata = new HudiMetadata(resourceName);
-            } catch (Exception e) {
-                LOG.error("Failed to create hive metadata on [catalog : {}]", catalogName, e);
-                throw e;
-            }
+            metadata = new HudiMetadata(resourceName);
         }
         return metadata;
     }
