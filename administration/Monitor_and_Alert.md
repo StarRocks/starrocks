@@ -120,7 +120,7 @@ nohup ./prometheus \
 
 #### 访问 Prometheus
 
-您可以通过 Web 页面访问 Prometheus。通过浏览器打开 `9090` 端口，即可访问 Prometheus 的页面。依次点击导航栏中 **Status** 和 **Targets**，即可看到所有分组 Job 的监控主机节点。正常情况下，所有节点都应为 UP，表示数据采集正常。如果节点状态不为 UP，您可以访问 StarRocks 的 Metrics 接口（`http://fe_host:fe_http_port/metrics` 或 `http://be_host:be_http_port/metrics`）检查是否可以访问。如果仍无法解决，您可以查询 Prometheus 相关文档虚招解决方案。
+您可以通过 Web 页面访问 Prometheus。通过浏览器打开 `9090` 端口，即可访问 Prometheus 的页面。依次点击导航栏中 **Status** 和 **Targets**，即可看到所有分组 Job 的监控主机节点。正常情况下，所有节点都应为 UP，表示数据采集正常。如果节点状态不为 UP，您可以访问 StarRocks 的 Metrics 接口（`http://fe_host:fe_http_port/metrics` 或 `http://be_host:be_http_port/metrics`）检查是否可以访问。如果仍无法解决，您可以查询 Prometheus 相关文档寻找解决方案。
 
 ![8.10.2-6](../assets/8.10.2-6.png)
 
