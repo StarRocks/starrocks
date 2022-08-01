@@ -15,14 +15,8 @@ StatusOr<vectorized::ChunkPtr> CrossJoinRightSinkOperator::pull_chunk(RuntimeSta
 }
 
 Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    const size_t row_number = chunk->num_rows();
-    if (row_number > 0) {
-        auto build_chunk = _cross_join_context->get_build_chunk(_driver_sequence);
-        if (build_chunk == nullptr) {
-            _cross_join_context->set_build_chunk(_driver_sequence, chunk);
-        } else {
-            build_chunk->append(*chunk);
-        }
+    if (chunk->num_rows() > 0) {
+        _cross_join_context->append_build_chunk(_driver_sequence, chunk);
     }
 
     return Status::OK();

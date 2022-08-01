@@ -17,14 +17,6 @@ void CrossJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }
 
-size_t CrossJoinContext::num_build_rows() const {
-    size_t rows = 0;
-    for (auto chunk : _build_chunks) {
-        rows += chunk->num_rows();
-    }
-    return rows;
-}
-
 Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     vectorized::ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;
@@ -51,4 +43,49 @@ Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     }
     return Status::OK();
 }
+
+void CrossJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
+    _tmp_chunks[sinker_id].push_back(chunk);
+}
+
+Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
+    if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
+        RETURN_IF_ERROR(_init_runtime_filter(state));
+
+        // Merge chunks
+        ChunkPtr chunk = nullptr;
+        for (auto& sink_chunks : _tmp_chunks) {
+            for (auto& tmp_chunk : sink_chunks) {
+                _num_build_rows += tmp_chunk->num_rows();
+                if (tmp_chunk == nullptr || tmp_chunk->is_empty()) {
+                    continue;
+                } else if (chunk == nullptr) {
+                    std::swap(chunk, tmp_chunk);
+                } else if (chunk->num_rows() == state->chunk_size()) {
+                    _build_chunks.emplace_back(std::move(chunk));
+                    chunk.reset();
+                } else if (chunk->num_rows() < state->chunk_size()) {
+                    int left_rows = std::min(state->chunk_size() - chunk->num_rows(), tmp_chunk->num_rows());
+                    chunk->append(*tmp_chunk, 0, left_rows);
+                    _build_chunks.emplace_back(std::move(chunk));
+
+                    int right_rows = tmp_chunk->num_rows() - left_rows;
+                    if (right_rows > 0) {
+                        chunk = tmp_chunk->clone_empty(state->chunk_size());
+                        chunk->append(*tmp_chunk, left_rows, right_rows);
+                    }
+                }
+            }
+        }
+        if (chunk) {
+            _build_chunks.emplace_back(std::move(chunk));
+        }
+        _tmp_chunks.clear();
+        _tmp_chunks.shrink_to_fit();
+
+        _all_right_finished = true;
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::pipeline
