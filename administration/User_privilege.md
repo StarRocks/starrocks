@@ -178,7 +178,7 @@ SHOW ROLES;
 ## 删除角色
 
 > 注意
-> 拥有 ADMIN 权限的用户可以删除角色。
+> 拥有 GRANT_PRIV 或 ADMIN_PRIV 权限的用户可以删除角色。
 
 通过以下命令删除指定角色。
 
@@ -318,7 +318,7 @@ ADMIN_PRIV 和 GRANT_PRIV 权限同时拥有授予权限的权限，较为特殊
 
 * `CREATE ROLE`/`DROP ROLE`
 
-  * 只有 ADMIN 权限可以创建角色。
+  * 只有拥有 GRANT_PRIV 或 ADMIN_PRIV 权限可以创建角色。
 
 * `GRANT/REVOKE`
 
