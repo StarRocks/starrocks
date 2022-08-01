@@ -6,7 +6,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.LoadDataSourceType;
@@ -17,7 +16,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.StringReader;
 import java.util.ArrayList;
 
 import static org.junit.Assert.assertFalse;
@@ -128,10 +126,9 @@ public class RestrictOpMaterializedViewTest {
     public void testBrokerLoad() {
         String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
-            SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql1)));
-            LoadStmt loadStmt = (LoadStmt) SqlParserUtils.getFirstStmt(parser);
+            LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql1, ctx.getSessionVariable().getSqlMode()).get(0);
             Deencapsulation.setField(loadStmt, "label", new LabelName("default_cluster:db1", "mv1"));
-            loadStmt.analyze(AccessTestUtil.fetchAdminAnalyzer(true));
+            com.starrocks.sql.analyzer.Analyzer.analyze(loadStmt, ctx);
             Assert.fail();
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("the data of materialized view must be consistent with the base table"));
