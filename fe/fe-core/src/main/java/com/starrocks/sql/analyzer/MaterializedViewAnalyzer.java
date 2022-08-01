@@ -456,6 +456,11 @@ public class MaterializedViewAnalyzer {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {
+                String fmt = ((StringLiteral) fnExpr.getChild(0)).getValue();
+                if (fmt.equalsIgnoreCase("week")) {
+                    throw new SemanticException("The function date_trunc used by the materialized view for partition" +
+                            " does not support week formatting");
+                }
                 SlotRef slotRef = (SlotRef) fnExpr.getChild(1);
                 PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
                 // must check slotRef type, because function analyze don't check it.
