@@ -71,6 +71,8 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.staros.StarMgrJournal;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -925,6 +927,11 @@ public class EditLog {
                     globalStateMgr.getShardManager().getShardDeleter().replayDeleteUnusedShard(shardInfo);
                     break;
                 }
+                case OperationType.OP_STARMGR: {
+                    StarMgrJournal j = (StarMgrJournal) journal.getData();
+                    StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1563,5 +1570,9 @@ public class EditLog {
 
     public void logRemoveMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
         logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    }
+
+    public void logStarMgrOperation(StarMgrJournal journal) {
+        logEdit(OperationType.OP_STARMGR, journal);
     }
 }
