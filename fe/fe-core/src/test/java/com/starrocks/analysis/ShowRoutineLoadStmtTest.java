@@ -39,14 +39,13 @@ public class ShowRoutineLoadStmtTest {
     @Test
     public void testNormal() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
-        ctx.setCluster("default_cluster");
         ctx.setDatabase("testDb");
 
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb","label"), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW ROUTINE LOAD FOR `testDb`.`label`", stmt.toString());
-        Assert.assertEquals("default_cluster:testDb", stmt.getDbFullName());
+        Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
         Assert.assertEquals(18, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
