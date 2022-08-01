@@ -938,6 +938,15 @@ public class PrivilegeChecker {
             return null;
         }
 
+        @Override
+        public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext session) {
+            String db = statement.getDbFullName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
         public Void visitShowBrokerStmt(ShowBrokerStmt statement, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
                     && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
