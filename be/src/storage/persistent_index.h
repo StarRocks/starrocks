@@ -211,11 +211,10 @@ public:
 private:
     friend class PersistentIndex;
 
-    Status _get_fixlen_kvs_for_shard(size_t key_size, size_t value_size, std::vector<std::vector<KVRef>>& kvs_by_shard,
-                                     size_t shard_idx, uint32_t shard_bits,
-                                     std::unique_ptr<ImmutableIndexShard>* shard) const;
+    Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                     uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_varlen_kvs_for_shard(size_t value_size, std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+    Status _get_varlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
                                      uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     // get all the kv refs of a single shard by `shard_idx`, and add them to `kvs_by_shard`, the shard number of
@@ -224,16 +223,22 @@ private:
     Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_in_fixlen_shard(size_t key_size, size_t value_size, size_t shard_idx, size_t n, const void* keys,
-                                const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+    Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
+                                IndexValue* values, size_t* num_found,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_in_varlen_shard(size_t value_size, size_t shard_idx, size_t n, const void* keys,
-                                const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+    Status _get_in_varlen_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
+                                IndexValue* values, size_t* num_found,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
+
+    Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
 
