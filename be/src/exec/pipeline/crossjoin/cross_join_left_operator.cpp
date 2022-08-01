@@ -5,6 +5,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/crossjoin/nljoin_probe_operator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -323,6 +324,12 @@ void CrossJoinLeftOperatorFactory::_init_row_desc() {
             _build_column_count++;
         }
     }
+}
+
+OperatorPtr CrossJoinLeftOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return std::make_shared<NLJoinProbeOperator>(this, _id, _plan_node_id, driver_sequence, _join_op, _conjunct_ctxs,
+                                                 _col_types, _probe_column_count, _build_column_count,
+                                                 _cross_join_context);
 }
 
 Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {

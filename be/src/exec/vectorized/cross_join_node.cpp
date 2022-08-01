@@ -32,6 +32,9 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
     }
+    if (tnode.__isset.nestloop_join_node) {
+        _join_op = tnode.nestloop_join_node.join_op;
+    }
 
     for (const auto& desc : tnode.cross_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
@@ -610,7 +613,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            std::move(_conjunct_ctxs), std::move(cross_join_context));
+            std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));

@@ -5,7 +5,9 @@
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
+#include "exec/vectorized/json_scanner.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -68,6 +70,7 @@ private:
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
 
+    TJoinOp::type _join_op;
     // previsou saved chunk.
     ChunkPtr _pre_output_chunk = nullptr;
     // used as right table's chunk.

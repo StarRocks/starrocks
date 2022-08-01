@@ -125,7 +125,8 @@ public:
     const std::vector<SlotId>& filter_null_value_columns() const;
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
-    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk);
+    Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
+                                         vectorized::FilterPtr filter = nullptr);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);

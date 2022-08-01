@@ -17,6 +17,14 @@ void CrossJoinContext::close(RuntimeState* state) {
     _build_chunks.clear();
 }
 
+size_t CrossJoinContext::num_build_rows() const {
+    size_t rows = 0;
+    for (auto chunk : _build_chunks) {
+        rows += chunk->num_rows();
+    }
+    return rows;
+}
+
 Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     vectorized::ChunkPtr one_row_chunk = nullptr;
     size_t num_rows = 0;

@@ -6,6 +6,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
@@ -16,10 +17,11 @@ namespace pipeline {
 class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
     CrossJoinLeftOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                          const std::vector<ExprContext*>& conjunct_ctxs,
+                          TJoinOp::type join_op, const std::vector<ExprContext*>& conjunct_ctxs,
                           const vectorized::Buffer<SlotDescriptor*>& col_types, const size_t& probe_column_count,
                           const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context)
             : OperatorWithDependency(factory, id, "cross_join_left", plan_node_id, driver_sequence),
+              _join_op(join_op),
               _col_types(col_types),
               _probe_column_count(probe_column_count),
               _build_column_count(build_column_count),
@@ -108,6 +110,7 @@ private:
     void _copy_build_rows_with_index_base_probe(vectorized::ColumnPtr& dest_col, vectorized::ColumnPtr& src_col,
                                                 size_t start_row, size_t row_count);
 
+    const TJoinOp::type _join_op;
     const vectorized::Buffer<SlotDescriptor*>& _col_types;
     const size_t& _probe_column_count;
     const size_t& _build_column_count;
@@ -154,8 +157,9 @@ public:
     CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                  const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
                                  std::vector<ExprContext*>&& conjunct_ctxs,
-                                 std::shared_ptr<CrossJoinContext>&& cross_join_context)
+                                 std::shared_ptr<CrossJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
+              _join_op(join_op),
               _row_descriptor(row_descriptor),
               _left_row_desc(left_row_desc),
               _right_row_desc(right_row_desc),
@@ -164,11 +168,7 @@ public:
 
     ~CrossJoinLeftOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinLeftOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs,
-                                                       _col_types, _probe_column_count, _build_column_count,
-                                                       _cross_join_context);
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -176,6 +176,7 @@ public:
 private:
     void _init_row_desc();
 
+    const TJoinOp::type _join_op;
     const RowDescriptor& _row_descriptor;
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;

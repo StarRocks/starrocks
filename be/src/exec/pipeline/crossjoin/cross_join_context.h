@@ -40,6 +40,7 @@ public:
     bool is_build_chunk_empty() const { return _is_build_chunk_empty; }
 
     int32_t num_build_chunks() const { return _num_right_sinkers; }
+    size_t num_build_rows() const;
 
     vectorized::Chunk* get_build_chunk(int32_t build_id) const { return _build_chunks[build_id].get(); }
 
