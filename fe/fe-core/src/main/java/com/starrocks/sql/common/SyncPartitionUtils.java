@@ -56,6 +56,19 @@ public class SyncPartitionUtils {
         return new PartitionDiff(adds, deletes);
     }
 
+    public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                      Map<String, Range<PartitionKey>> mvRangeMap) {
+        Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+            return true;
+        }
+        Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
+        if (deletes != null && !deletes.isEmpty()) {
+            return true;
+        }
+        return false;
+    }
+
     public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
                                                         Map<String, Range<PartitionKey>> mvRangeMap,
                                                         String granularity, PrimitiveType partitionType) {
@@ -298,14 +311,12 @@ public class SyncPartitionUtils {
 
         for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeLinkMap.entrySet()) {
             boolean found = false;
-            Iterator<Range<PartitionKey>> dstIter = dstRangeLinkMap.values().iterator();
-            while (dstIter.hasNext()) {
-                Range<PartitionKey> dstRange = dstIter.next();
+            for (Map.Entry<String, Range<PartitionKey>> dstEntry : dstRangeMap.entrySet()) {
+                Range<PartitionKey> dstRange = dstEntry.getValue();
                 int lowerCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.lowerEndpoint());
                 int upperCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.upperEndpoint());
-                // must be same range
-                if (lowerCmp == 0 && upperCmp == 0) {
-                    dstIter.remove();
+                // both range and name should be the same
+                if (lowerCmp == 0 && upperCmp == 0 && srcEntry.getKey().equals(dstEntry.getKey())) {
                     found = true;
                     break;
                 }

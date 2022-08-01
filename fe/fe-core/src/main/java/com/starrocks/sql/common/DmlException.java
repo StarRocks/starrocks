@@ -6,6 +6,10 @@ public class DmlException extends RuntimeException {
         super(message);
     }
 
+    public DmlException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
     @Override
     public String getMessage() {
         String message = super.getMessage();

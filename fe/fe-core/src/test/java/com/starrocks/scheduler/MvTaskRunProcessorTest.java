@@ -1,7 +1,6 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -14,7 +13,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -174,7 +172,7 @@ public class MvTaskRunProcessorTest {
         // mv need refresh with base table partition p0, p0 insert data after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         Map<Long, OlapTable> olapTables = Maps.newHashMap();
-        new MockUp<MvTaskRunProcessor>() {
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Set<Long> baseTableIds = materializedView.getBaseTableIds();
@@ -211,7 +209,7 @@ public class MvTaskRunProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p1, p1 renamed with p10 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<MvTaskRunProcessor>() {
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
@@ -264,7 +262,7 @@ public class MvTaskRunProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p2, p2 replace with tp2 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<MvTaskRunProcessor>() {
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
@@ -316,7 +314,7 @@ public class MvTaskRunProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<MvTaskRunProcessor>() {
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
@@ -359,7 +357,7 @@ public class MvTaskRunProcessorTest {
             throws Exception {
         // mv need refresh with base table partition p4, drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        new MockUp<MvTaskRunProcessor>() {
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
             public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
