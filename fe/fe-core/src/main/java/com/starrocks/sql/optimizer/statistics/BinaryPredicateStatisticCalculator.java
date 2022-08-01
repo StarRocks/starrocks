@@ -50,13 +50,12 @@ public class BinaryPredicateStatisticCalculator {
             predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, POSITIVE_INFINITY, 1);
         }
 
-
         Statistics estimatePredicateRange =
                 estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
 
         Map<Double, Long> histogramTopN;
         if (columnStatistic.getHistogram() != null) {
-            histogramTopN = columnStatistic.getHistogram().getTopN();
+            histogramTopN = columnStatistic.getHistogram().getMCV();
 
             if (histogramTopN.containsKey(constant.getAsDouble())) {
                 return Statistics.buildFrom(estimatePredicateRange)
