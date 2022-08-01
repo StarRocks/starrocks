@@ -20,9 +20,9 @@ static thread_local std::shared_ptr<FileSystem> tls_fs_hdfs;
 static thread_local std::shared_ptr<FileSystem> tls_fs_starlet;
 #endif
 
-inline std::shared_ptr<FileSystem> get_tls_fs_hdfs(FSOptions& options) {
+inline std::shared_ptr<FileSystem> get_tls_fs_hdfs() {
     if (tls_fs_hdfs == nullptr) {
-        tls_fs_hdfs.reset(new_fs_hdfs(options).release());
+        tls_fs_hdfs.reset(new_fs_hdfs(FSOptions()).release());
     }
     return tls_fs_hdfs;
 }
@@ -34,9 +34,9 @@ inline std::shared_ptr<FileSystem> get_tls_fs_posix() {
     return tls_fs_posix;
 }
 
-inline std::shared_ptr<FileSystem> get_tls_fs_s3(FSOptions& options) {
+inline std::shared_ptr<FileSystem> get_tls_fs_s3() {
     if (tls_fs_s3 == nullptr) {
-        tls_fs_s3.reset(new_fs_s3(options).release());
+        tls_fs_s3.reset(new_fs_s3(FSOptions()).release());
     }
     return tls_fs_s3;
 }
@@ -86,15 +86,15 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
     return Status::NotSupported(fmt::format("No FileSystem associated with {}", uri));
 }
 
-StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri, FSOptions options) {
+StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri) {
     if (is_posix_uri(uri)) {
         return get_tls_fs_posix();
     }
     if (is_hdfs_uri(uri)) {
-        return get_tls_fs_hdfs(options);
+        return get_tls_fs_hdfs();
     }
     if (is_s3_uri(uri)) {
-        return get_tls_fs_s3(options);
+        return get_tls_fs_s3();
     }
 #ifdef USE_STAROS
     if (is_starlet_uri(uri)) {
