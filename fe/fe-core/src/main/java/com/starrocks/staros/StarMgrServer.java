@@ -108,11 +108,6 @@ public class StarMgrServer {
         }
         int port = Integer.parseInt(starMgrAddr[1]);
 
-        if (Config.starmgr_s3_bucket.isEmpty()) {
-            LOG.fatal("Config.starmgr_s3_bucket is not set.");
-            System.exit(-1);
-        }
-
         // necessary starMgr config setting
         com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
         com.staros.util.Config.STARMGR_RPC_PORT = port;
