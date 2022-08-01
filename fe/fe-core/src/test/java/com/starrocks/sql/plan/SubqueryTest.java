@@ -395,7 +395,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                     "  |  other join predicates: 2: v2 > 9: anyValue\n" +
-                    "  |  other predicates: assert_true((8: countRows IS NULL) OR (8: countRows <= 1)))");
+                    "  |  other predicates: assert_true((8: countRows IS NULL) OR (8: countRows <= 1))");
         }
     }
 
