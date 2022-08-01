@@ -68,13 +68,6 @@ inline bool is_posix_uri(std::string_view uri) {
     return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }
 
-inline bool is_staros_uri(std::string_view uri) {
-#ifdef USE_STAROS
-    return starts_with(uri, kStarletPrefix);
-#endif
-    return false;
-}
-
 StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::string_view uri, FSOptions options) {
     if (is_posix_uri(uri)) {
         return new_fs_posix();
