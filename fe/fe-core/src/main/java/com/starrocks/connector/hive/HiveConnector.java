@@ -9,22 +9,16 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
 public class HiveConnector implements Connector {
-    private static final Logger LOG = LogManager.getLogger(HiveConnector.class);
-
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final Map<String, String> properties;
-    private final String catalogName;
     private String resourceName;
     private ConnectorMetadata metadata;
 
     public HiveConnector(ConnectorContext context) {
-        this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         validate();
         onCreate();

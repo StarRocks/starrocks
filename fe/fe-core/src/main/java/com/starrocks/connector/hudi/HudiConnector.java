@@ -7,22 +7,16 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
 public class HudiConnector implements Connector {
-    private static final Logger LOG = LogManager.getLogger(HudiConnector.class);
-
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final Map<String, String> properties;
-    private final String catalogName;
     private String resourceName;
     private ConnectorMetadata metadata;
 
     public HudiConnector(ConnectorContext context) {
-        this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         validate();
     }
