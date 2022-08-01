@@ -28,7 +28,7 @@ public:
 
     virtual ~ChunkSource() = default;
 
-    virtual Status prepare(RuntimeState* state) = 0;
+    virtual Status prepare(RuntimeState* state);
 
     virtual void close(RuntimeState* state) = 0;
 
@@ -47,6 +47,10 @@ public:
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
+
+    RuntimeProfile::Counter* scan_timer() { return _scan_timer; }
+    RuntimeProfile::Counter* io_task_wait_timer() { return _io_task_wait_timer; }
+    RuntimeProfile::Counter* io_task_exec_timer() { return _io_task_exec_timer; }
 
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
@@ -76,6 +80,12 @@ protected:
     ChunkBufferTokenPtr _chunk_token;
 
     const workgroup::ScanExecutorType _executor_type;
+
+private:
+    // _scan_timer = _io_task_wait_timer + _io_task_exec_timer
+    RuntimeProfile::Counter* _scan_timer = nullptr;
+    RuntimeProfile::Counter* _io_task_wait_timer = nullptr;
+    RuntimeProfile::Counter* _io_task_exec_timer = nullptr;
 };
 
 using ChunkSourcePtr = std::shared_ptr<ChunkSource>;

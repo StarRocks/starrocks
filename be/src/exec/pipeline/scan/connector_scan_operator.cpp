@@ -164,6 +164,7 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 }
 
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     return Status::OK();
 }
