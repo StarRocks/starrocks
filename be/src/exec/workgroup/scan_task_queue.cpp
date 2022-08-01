@@ -191,6 +191,10 @@ WorkGroupPtr ScanTaskQueueWithWorkGroup::_select_next_wg(int worker_id) {
         wg->update_cur_select_factor(wg->get_select_factor());
         total += wg->get_select_factor();
 
+        if (wg->type() == WorkGroupType::WG_REALTIME) {
+            return wg;
+        }
+
         if (owner_wgs->find(wg) != owner_wgs->end()) {
             if (max_owner_wg == nullptr || wg->get_cur_select_factor() > max_owner_wg->get_cur_select_factor()) {
                 max_owner_wg = wg;
