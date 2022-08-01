@@ -16,6 +16,17 @@
 # specific language governing permissions and limitations
 # under the License.
 
+#############################################################################
+# This script is used to stop BE process
+# Usage:
+#     sh stop_be.sh [option]
+#
+# Options:
+#     -h, --help              display this usage only
+#     -g, --graceful          send SIGTERM to BE process instead of SIGKILL
+#
+#############################################################################
+
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
@@ -29,6 +40,33 @@ source $STARROCKS_HOME/bin/common.sh
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 
 pidfile=$PID_DIR/be.pid
+
+sig=9
+
+usage() {
+    echo "
+This script is used to stop BE process
+Usage:
+    sh stop_be.sh [option]
+
+Options:
+    -h, --help              display this usage only
+    -g, --graceful          send SIGTERM to BE process instead of SIGKILL
+"
+    exit 0
+}
+
+for arg in "$@"
+do
+    case $arg in
+        --help|-h)
+            usage
+        ;;
+        --graceful|-g)
+            sig=15
+        ;;
+    esac
+done
 
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
