@@ -1408,5 +1408,39 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("Can not find database:default_cluster:db1", e.getMessage());
         }
     }
+
+    @Test
+    public void testPartitionAndDistributionByColumnNameIgnoreCase() {
+        String sql = "create materialized view mv1 " +
+                "partition by K1 " +
+                "distributed by hash(K2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, tbl1.k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testDuplicateColumn() {
+        String sql = "create materialized view mv1 " +
+                "partition by K1 " +
+                "distributed by hash(K2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, K1 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Duplicate column name 'K1'", e.getMessage());
+        }
+    }
 }
 
