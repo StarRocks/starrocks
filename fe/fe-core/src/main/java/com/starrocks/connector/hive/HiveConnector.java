@@ -4,7 +4,6 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
