@@ -2,7 +2,7 @@
 
 ## 功能
 
-修改资源的属性。
+修改资源的属性。仅 StarRocks 2.3 及以上版本支持修改资源属性。
 
 ## 语法
 
@@ -13,8 +13,7 @@ ALTER RESOURCE 'resource_name' SET PROPERTIES ("key"="value", ...)
 ## 参数说明
 
 - `resource_name`：待修改的资源名称。
-
-- `PROPERTIES ("key"="value", ...)`: 资源属性。不同类型的资源支持修改不同的属性，当前支持修改以下资源的 Hive metastore 地址。
+- `PROPERTIES ("key"="value", ...)`：资源属性。不同类型的资源支持修改不同的属性，当前支持修改以下资源的 Hive metastore 地址。
   - Apache Iceberg 资源支持修改以下属性：
     - `iceberg.catalog-impl`：[custom catalog](/using_starrocks/External_table#步骤一创建--iceberg-资源) 的全限定类名。
     - `iceberg.catalog.hive.metastore.uris`：Hive metastore 地址。
