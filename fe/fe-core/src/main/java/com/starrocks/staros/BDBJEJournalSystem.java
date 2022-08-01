@@ -82,7 +82,7 @@ public class BDBJEJournalSystem implements JournalSystem {
             bdbjeJournal.open();
 
             long replayStartTime = System.currentTimeMillis();
-            replayTo(-1);
+            replayTo(JournalCursor.CUROSR_END_KEY);
             long replayEndTime = System.currentTimeMillis();
             LOG.info("finish star manager replay in " + (replayEndTime - replayStartTime) + " msec.");
 
@@ -163,8 +163,7 @@ public class BDBJEJournalSystem implements JournalSystem {
         long startReplayId = replayedJournalId.get();
         long startTime = System.currentTimeMillis();
         while (true) {
-            JournalEntity entity = null;
-            entity = cursor.next();
+            JournalEntity entity = cursor.next();
 
             // EOF or aggressive retry
             if (entity == null) {

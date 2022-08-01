@@ -351,7 +351,10 @@ public class NodeMgr {
                 File dir = new File(subDir);
                 if (!dir.exists()) { // subDir might not exist
                     LOG.info("create image dir for {}.", dir.getAbsolutePath());
-                    dir.mkdir();
+                    if (!dir.mkdir()) {
+                        LOG.error("create image dir for star mgr failed! exit now.");
+                        System.exit(-1);
+                    }
                 }
                 getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
             }

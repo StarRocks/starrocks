@@ -1604,8 +1604,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_bucket = "";
     @ConfField
-    public static String starmgr_s3_region = "";
-    @ConfField
     public static String starmgr_s3_endpoint = "";
     @ConfField
     public static String starmgr_s3_ak = "";

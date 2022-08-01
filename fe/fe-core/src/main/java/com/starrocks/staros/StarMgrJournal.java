@@ -9,7 +9,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-// wrapper for star manager journal to help write to dbdje
+// wrapper for star manager journal to help write to bdbje
 public class StarMgrJournal implements Writable {
     private Journal journal;
 
