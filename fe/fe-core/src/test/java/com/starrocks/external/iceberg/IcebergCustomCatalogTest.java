@@ -4,9 +4,11 @@ package com.starrocks.external.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.external.iceberg.hive.CachedClientPool;
 import com.starrocks.external.iceberg.hive.HiveTableOperations;
+import com.starrocks.external.iceberg.io.IcebergCachingFileIO;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -32,9 +34,15 @@ import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.external.iceberg.IcebergUtil.convertToSRDatabase;
+import static com.starrocks.external.iceberg.IcebergUtil.getIcebergCustomCatalog;
 
 public class IcebergCustomCatalogTest {
 
@@ -80,6 +88,33 @@ public class IcebergCustomCatalogTest {
         IcebergCatalog customCatalog = IcebergUtil.getIcebergCustomCatalog(catalogImpl, icebergProperties);
         Table table = customCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
+    }
+
+    @Test
+    public void testListAllDatabases(@Mocked IcebergCustomTestingCatalog customCatalog) {
+        new Expectations() {
+            {
+                customCatalog.listAllDatabases();
+                result = Arrays.asList("db1", "db2");
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<CatalogUtil>() {
+            @Mock
+            public Catalog loadCatalog(String catalogImpl, String catalogName,
+                                       Map<String, String> properties,
+                                       Configuration hadoopConf) {
+                return customCatalog;
+            }
+        };
+
+        String catalogImpl = IcebergCustomTestingCatalog.class.getName();
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergCustomTestingCatalog icebergCustomCatalog = (IcebergCustomTestingCatalog) getIcebergCustomCatalog(
+                catalogImpl, icebergProperties);
+        List<String> dbs = icebergCustomCatalog.listAllDatabases();
+        Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 
     public static class IcebergCustomTestingCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
@@ -141,6 +176,11 @@ public class IcebergCustomCatalogTest {
             this.fileIO =
                     fileIOImpl == null ? new HadoopFileIO(conf) : CatalogUtil.loadFileIO(fileIOImpl, properties, conf);
 
+            // warp cache fileIO
+            IcebergCachingFileIO cachingFileIO = new IcebergCachingFileIO(fileIO);
+            cachingFileIO.initialize(properties);
+            this.fileIO = cachingFileIO;
+
             this.clients = new CachedClientPool(conf, properties);
         }
 
@@ -167,8 +207,32 @@ public class IcebergCustomCatalogTest {
         }
 
         @Override
+        public List<String> listAllDatabases() {
+            try {
+                return new ArrayList<>(clients.run(IMetaStoreClient::getAllDatabases));
+            } catch (TException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        @Override
+        public Database getDB(String dbName) throws InterruptedException, TException {
+            org.apache.hadoop.hive.metastore.api.Database db = clients.run(client -> client.getDatabase(dbName));
+            if (db == null || db.getName() == null) {
+                throw new TException("Hive db " + dbName + " doesn't exist");
+            }
+            return convertToSRDatabase(dbName);
+        }
+
+        @Override
         public List<TableIdentifier> listTables(Namespace namespace) {
-            throw new UnsupportedOperationException("Not implemented");
+            String database = namespace.level(0);
+            try {
+                List<String> tableNames = clients.run(client -> client.getAllTables(database));
+                return tableNames.stream().map(tblName -> TableIdentifier.of(namespace, tblName)).collect(Collectors.toList());
+            } catch (TException | InterruptedException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         @Override
