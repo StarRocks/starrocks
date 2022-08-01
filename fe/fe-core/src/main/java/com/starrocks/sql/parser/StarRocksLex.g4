@@ -381,7 +381,7 @@ DOUBLE_QUOTED_TEXT
     : '"' ('\\'. | '""' | ~('"'| '\\'))* '"'
     ;
 
-IDENTIFIER
+LETTER_IDENTIFIER
     : (LETTER | '_') (LETTER | DIGIT | '_')*
     ;
 

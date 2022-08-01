@@ -863,7 +863,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean exists = context.EXISTS() != null;
         return new DropPartitionClause(exists, partitionName, temp, force);
     }
-    
+
     @Override
     public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
         Map<String, String> properties = null;
@@ -909,9 +909,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowPartitionsStmt(tableName, where, orderByElements, limitElement, temp);
     }
-    
+
     @Override
-    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext  context) {
+    public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext context) {
         return new ShowOpenTableStmt();
     }
     // ------------------------------------------- View Statement ------------------------------------------------------
@@ -1923,8 +1923,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         TableRelation tableRelation = new TableRelation(tableName, partitionNames, tabletIds);
         if (context.bracketHint() != null) {
-            for (TerminalNode hint : context.bracketHint().IDENTIFIER()) {
-                if (hint.getText().equalsIgnoreCase("_META_")) {
+            for (Identifier identifier : visit(context.bracketHint().identifier(), Identifier.class)) {
+                if (identifier.getValue().equals("_META_")) {
                     tableRelation.setMetaQuery(true);
                 }
             }
@@ -1993,7 +1993,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         JoinRelation joinRelation = new JoinRelation(joinType, left, right, predicate, context.LATERAL() != null);
         joinRelation.setUsingColNames(usingColNames);
         if (context.bracketHint() != null) {
-            joinRelation.setJoinHint(context.bracketHint().IDENTIFIER(0).getText());
+            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier().get(0))).getValue());
         }
 
         return joinRelation;
@@ -2420,19 +2420,49 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitSetVar(StarRocksParser.SetVarContext ctx) {
-        Expr expr = (Expr) visit(ctx.expression());
-        String variable = ctx.IDENTIFIER().getText();
-        if (ctx.varType() != null) {
-            return new SetVar(getVariableType(ctx.varType()), variable, expr);
-        }
-        return new SetVar(variable, expr);
+    public ParseNode visitSetStatement(StarRocksParser.SetStatementContext context) {
+        List<SetVar> propertyList = visit(context.setVar(), SetVar.class);
+        return new SetStmt(propertyList);
     }
 
     @Override
-    public ParseNode visitSetStmt(StarRocksParser.SetStmtContext ctx) {
-        List<SetVar> propertyList = visit(ctx.setVarList().setVar(), SetVar.class);
-        return new SetStmt(propertyList);
+    public ParseNode visitSetVar(StarRocksParser.SetVarContext context) {
+        if (context.AT().isEmpty()) {
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            String variable = ((Identifier) visit(context.identifier())).getValue();
+            if (context.varType() != null) {
+                return new SetVar(getVariableType(context.varType()), variable, expr);
+            } else {
+                return new SetVar(variable, expr);
+            }
+        } else if (context.AT().size() == 1) {
+            Expr expr = (Expr) visit(context.expression());
+            String variable = ((Identifier) visit(context.identifierOrString())).getValue();
+            return new SetVar(variable, expr);
+        } else if (context.AT().size() == 2) {
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            String variable = ((Identifier) visit(context.identifier())).getValue();
+            if (context.varType() != null) {
+                return new SetVar(getVariableType(context.varType()), variable, expr);
+            } else {
+                return new SetVar(variable, expr);
+            }
+        } else {
+            throw new StarRocksPlannerException("Not support set var type", ErrorType.INTERNAL_ERROR);
+        }
+    }
+
+    @Override
+    public ParseNode visitSetExprOrDefault(StarRocksParser.SetExprOrDefaultContext context) {
+        if (context.DEFAULT() != null) {
+            return null;
+        } else if (context.ON() != null) {
+            return new StringLiteral("ON");
+        } else if (context.ALL() != null) {
+            return new StringLiteral("ALL");
+        } else {
+            return visit(context.expression());
+        }
     }
 
     @Override
@@ -3207,13 +3237,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitVariable(StarRocksParser.VariableContext context) {
-        SetType setType = SetType.DEFAULT;
-        if (context.GLOBAL() != null) {
-            setType = SetType.GLOBAL;
-        } else if (context.LOCAL() != null || context.SESSION() != null) {
-            setType = SetType.SESSION;
-        }
-
+        SetType setType = getVariableType(context.varType());
         return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
     }
 
@@ -3713,7 +3737,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String partitionName = ((Identifier) visit(context.identifier())).getValue();
         return new RecoverPartitionStmt(tableName, partitionName);
     }
-    
+
     @Override
     public ParseNode visitShowCharsetStatement(StarRocksParser.ShowCharsetStatementContext context) {
         String pattern = null;

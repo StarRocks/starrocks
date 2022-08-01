@@ -539,4 +539,11 @@ public class AnalyzeSingleTest {
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
     }
+
+    @Test
+    public void testLowCard() {
+        String sql = "select * from test.t0 [_META_]";
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
+    }
 }
