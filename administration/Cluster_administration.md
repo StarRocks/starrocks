@@ -21,6 +21,7 @@
 |edit_log_port|FE 集群（Leader，Follower，以及 Observer）间的通信端口。|9010|
 
 > 注意
+>
 > 由于 FE 节点的元数据涉及整个 StarRocks 系统，十分关键，建议您将 `meta_dir` 部署于单独路径下。
 
 #### 启动 FE 进程
@@ -35,6 +36,7 @@ sh bin/start_fe.sh --daemon
 为了保证 FE 高可用，您需要部署多个 FE 节点。我们建议您部署 3 个 FE 节点，其中包含 1 个 FE Leader 节点和 2 个 FE Follower 节点。
 
 > 注意
+>
 > 当拥有多个 FE Follower 节点时，集群内需要有半数以上的 FE Follower 节点存活才能够选举出 FE Master 节点，从而提供查询服务。
 
 每启动一台 FE 节点后，建议您验证该节点是否启动成功。您可以通过发送查询的方式进行验证。
@@ -117,7 +119,8 @@ sh bin/stop_be.sh
 > |1.19.x|必须从1.18.x升级||否|
 > |2.0.x|必须从1.19.x升级|升级过程中需要暂时关闭 Clone。|是|
 > |2.1.x|必须从2.0.x 升级|灰度升级前需要修改 <code>vector_chunk_size</code> 和 <code>batch_size</code>。|否|
-> |2.2.x|可以从2.0.x 或 2.1.x 升级|回滚需要特殊配置 <code>ignore_unknown_log_id</code>。||
+> |2.2.x|可以从2.0.x 或 2.1.x 升级|回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。||
+> |2.3.x|可以从2.0.x、2.1.x 或 2.2.x 升级|不建议跨版本回滚。回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。||
 
 ### 下载安装文件
 
