@@ -224,6 +224,14 @@ private:
     Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
+    Status _get_in_fixlen_shard(size_t key_size, size_t value_size, size_t shard_idx, size_t n, const void* keys,
+                                const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+                                std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_in_varlen_shard(size_t value_size, size_t shard_idx, size_t n, const void* keys,
+                                const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+                                std::unique_ptr<ImmutableIndexShard>* shard) const;
+
     Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
 

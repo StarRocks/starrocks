@@ -1085,11 +1085,79 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
     DCHECK(key_size == _fixed_key_size);
     DCHECK(value_size == _fixed_value_size);
     if (key_size != 0) {
-        LOG(INFO) << "get fixed len kvs for shard";
         return _get_fixlen_kvs_for_shard(key_size, value_size, kvs_by_shard, shard_idx, shard_bits, shard);
     } else {
         return _get_varlen_kvs_for_shard(value_size, kvs_by_shard, shard_idx, shard_bits, shard);
     }
+}
+
+Status ImmutableIndex::_get_in_fixlen_shard(size_t key_size, size_t value_size, size_t shard_idx, size_t n,
+                                            const void* keys, const KeysInfo& keys_info, IndexValue* values,
+                                            size_t* num_found, std::unique_ptr<ImmutableIndexShard>* shard) const {
+    const auto& shard_info = _shards[shard_idx];
+    size_t found = 0;
+    uint8_t candidate_idxes[kBucketSizeMax];
+    for (size_t i = 0; i < keys_info.size(); i++) {
+        IndexHash h(keys_info.hashes[i]);
+        auto pageid = h.page() % shard_info.npage;
+        auto bucketid = h.bucket() % shard_info.nbucket;
+        auto& bucket_info = (*shard)->bucket(pageid, bucketid);
+        uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
+        auto nele = bucket_info.size;
+        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+        auto key_idx = keys_info.key_idxes[i];
+        const uint8_t* fixed_key_probe = (const uint8_t*)keys + key_size * key_idx;
+        auto kv_pos = bucket_pos + pad(nele, kPackSize);
+        values[key_idx] = NullIndexValue;
+        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
+            auto idx = candidate_idxes[candidate_idx];
+            auto candidate_kv = kv_pos + (key_size + value_size) * idx;
+            if (strings::memeq(candidate_kv, fixed_key_probe, key_size)) {
+                values[key_idx] = UNALIGNED_LOAD64(candidate_kv + key_size);
+                found++;
+                break;
+            }
+        }
+    }
+    *num_found += found;
+    return Status::OK();
+}
+
+Status ImmutableIndex::_get_in_varlen_shard(size_t value_size, size_t shard_idx, size_t n, const void* keys,
+                                            const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const {
+    const auto& shard_info = _shards[shard_idx];
+    size_t found = 0;
+    uint8_t candidate_idxes[kBucketSizeMax];
+    const Slice* vkeys = reinterpret_cast<const Slice*>(keys);
+    for (size_t i = 0; i < keys_info.size(); i++) {
+        IndexHash h(keys_info.hashes[i]);
+        auto pageid = h.page() % shard_info.npage;
+        auto bucketid = h.bucket() % shard_info.nbucket;
+        auto& bucket_info = (*shard)->bucket(pageid, bucketid);
+        uint8_t* bucket_pos = (*shard)->pages[bucket_info.pageid].pack(bucket_info.packid);
+        auto nele = bucket_info.size;
+        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
+        auto key_idx = keys_info.key_idxes[i];
+        // key_probe的位置和长度怎么定位？
+        const uint8_t* key_probe = reinterpret_cast<const uint8_t*>(vkeys[key_idx].get_data());
+        auto offset_pos = bucket_pos + pad(nele, kPackSize);
+        auto kv_pos = offset_pos + (sizeof(uint16_t) * (nele + 1));
+        values[key_idx] = NullIndexValue;
+        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
+            auto idx = candidate_idxes[candidate_idx];
+            auto kv_offset = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * idx);
+            auto kv_size = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * (idx + 1)) - kv_offset;
+            auto candidate_kv = kv_pos + kv_offset;
+            if (strings::memeq(candidate_kv, key_probe, kv_size - value_size)) {
+                values[key_idx] = UNALIGNED_LOAD64(candidate_kv + kv_size - value_size);
+                found++;
+                break;
+            }
+        }
+    }
+    *num_found += found;
+    return Status::OK();
 }
 
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info,
@@ -1098,35 +1166,16 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const void* key
     if (shard_info.size == 0 || shard_info.npage == 0 || keys_info.size() == 0) {
         return Status::OK();
     }
-    size_t found = 0;
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     CHECK(shard->pages.size() * kPageSize == shard_info.bytes) << "illegal shard size";
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
-    uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info.hashes[i]);
-        auto pageid = h.page() % shard_info.npage;
-        auto bucketid = h.bucket();
-        auto& bucket_info = shard->bucket(pageid, bucketid);
-        uint8_t* bucket_pos = shard->pages[bucket_info.pageid].pack(bucket_info.packid);
-        auto nele = bucket_info.size;
-        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        auto key_idx = keys_info.key_idxes[i];
-        const uint8_t* fixed_key_probe = (const uint8_t*)keys + _fixed_key_size * key_idx;
-        auto kv_pos = bucket_pos + pad(nele, kPackSize);
-        values[key_idx] = NullIndexValue;
-        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
-            auto idx = candidate_idxes[candidate_idx];
-            auto candidate_kv = kv_pos + (_fixed_key_size + _fixed_value_size) * idx;
-            if (strings::memeq(candidate_kv, fixed_key_probe, _fixed_key_size)) {
-                values[key_idx] = UNALIGNED_LOAD64(candidate_kv + _fixed_key_size);
-                found++;
-                break;
-            }
-        }
+    size_t key_size = shard_info.key_size;
+    size_t value_size = shard_info.value_size;
+    if (key_size != 0) {
+        return _get_in_fixlen_shard(key_size, value_size, shard_idx, n, keys, keys_info, values, num_found, &shard);
+    } else {
+        return _get_in_varlen_shard(value_size, shard_idx, n, keys, keys_info, values, num_found, &shard);
     }
-    *num_found += found;
-    return Status::OK();
 }
 
 Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys,
