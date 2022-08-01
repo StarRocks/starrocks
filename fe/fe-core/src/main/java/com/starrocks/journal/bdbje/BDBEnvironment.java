@@ -322,7 +322,6 @@ public class BDBEnvironment {
                     // the first time.
                     LOG.warn("failed to setup environment because of UnknowMasterException for the first time, ignore it.");
                 } else {
-                    //
                     String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
                     LOG.error(errMsg, e);
                     exception = new JournalException(errMsg);
