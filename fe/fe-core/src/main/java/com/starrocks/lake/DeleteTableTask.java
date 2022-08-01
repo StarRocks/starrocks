@@ -30,5 +30,6 @@ class DeleteTableTask implements Runnable {
             }
         }
         GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIds);
+        GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIds);
     }
 }
