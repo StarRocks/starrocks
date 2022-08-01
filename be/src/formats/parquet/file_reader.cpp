@@ -38,7 +38,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
     if (_is_file_filtered) {
         return Status::OK();
     }
-    _init_group_reader();
+    RETURN_IF_ERROR(_init_group_reader());
     return Status::OK();
 }
 
