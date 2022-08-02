@@ -2,8 +2,6 @@
 
 #include "exprs/vectorized/utility_functions.h"
 
-#include <simd/simd.h>
-
 #ifdef __SSE4_2__
 #include <emmintrin.h>
 #endif
