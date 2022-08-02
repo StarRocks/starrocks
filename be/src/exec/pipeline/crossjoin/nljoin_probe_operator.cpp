@@ -139,10 +139,11 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
         if (multi_probe_rows) {
             size_t num_build_rows = _cross_join_context->num_build_rows();
             DCHECK_GE(filter->size(), num_build_rows);
+            size_t probe_row_start = _probe_row_index - filter->size() / num_build_rows;
             for (size_t i = 0; i < filter->size(); i += num_build_rows) {
                 bool probe_matched = SIMD::contain_nonzero(*filter, i, num_build_rows);
                 if (!probe_matched) {
-                    size_t probe_row_index = _probe_row_index + i / num_build_rows;
+                    size_t probe_row_index = probe_row_start + i / num_build_rows;
                     _permute_left_join(state, chunk, probe_row_index);
                 }
             }
@@ -161,10 +162,7 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
 // Permute enough rows from build side and probe side
 // The chunk either consists two conditions:
 // 1. Multiple probe rows and multiple build single-chunk
-//    1.1 It's indicated by _curr_build_index == num_build_chunks == 1
-//    1.2 In this case the probe match index could be calculated by _probe_row_index
 // 2. One probe rows and one build chunk
-//    2.1 In this case the probe match index is same as _probe_row_index
 void NLJoinProbeOperator::_permute_chunk(RuntimeState* state, ChunkPtr chunk) {
     // TODO: optimize the loop order for small build chunk
     for (; _probe_row_index < _probe_chunk->num_rows(); ++_probe_row_index) {
@@ -178,7 +176,6 @@ void NLJoinProbeOperator::_permute_chunk(RuntimeState* state, ChunkPtr chunk) {
         _probe_row_matched = false;
         _move_build_chunk(0);
     }
-    _probe_chunk.reset();
 }
 
 // Permute one probe row with current build chunk
@@ -208,6 +205,7 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
         bool is_probe = i < _probe_column_count;
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
+            DCHECK_LT(probe_row_index, src_col->size());
             dst_col->append(*src_col, probe_row_index, 1);
         } else {
             dst_col->append_nulls(1);
@@ -248,7 +246,7 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
     while (ChunkPtr chunk = _output_accumulator.pull()) {
         return chunk;
     }
-    while (_probe_row_index < _probe_chunk->num_rows()) {
+    while (_probe_chunk && _probe_row_index < _probe_chunk->num_rows()) {
         ChunkPtr chunk = _init_output_chunk(state);
         _permute_chunk(state, chunk);
         RETURN_IF_ERROR(_probe(state, chunk));
