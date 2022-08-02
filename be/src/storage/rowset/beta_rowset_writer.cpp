@@ -737,9 +737,9 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
 }
 
 Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
-    uint64_t segment_size;
-    uint64_t index_size;
-    uint64_t footer_position;
+    uint64_t segment_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
     RETURN_IF_ERROR((*segment_writer)->finalize(&segment_size, &index_size, &footer_position));
     _num_rows_of_tmp_segment_files.push_back(_num_rows_written - _num_rows_flushed);
     _num_rows_flushed = _num_rows_written;
