@@ -241,7 +241,7 @@ public class SystemInfoService {
         GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
 
         // Message
-        StringBuffer formatSb = new StringBuffer();
+        StringBuilder formatSb = new StringBuilder();
         String opMessage;
         formatSb.append("%s:%d's host has been modified to %s");
         if (candidateBackends.size() >= 2) {
@@ -293,7 +293,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
-            LOG.error("Cluster " + dropComputeNode.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster {} no exist.", dropComputeNode.getOwnerClusterName());
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -406,7 +406,7 @@ public class SystemInfoService {
 
             cluster.removeBackend(droppedBackend.getId());
         } else {
-            LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster {} no exist.", droppedBackend.getOwnerClusterName());
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
@@ -696,10 +696,10 @@ public class SystemInfoService {
 
         // debug
         for (Backend backend : backends) {
-            LOG.debug("random select: {}", backend.toString());
+            LOG.debug("random select: {}", backend);
         }
 
-        return null;
+        return new ArrayList<>();
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
@@ -828,13 +828,11 @@ public class SystemInfoService {
         try {
             String s = Text.readString(dis);
             SystemInfoService.SerializeData data = GsonUtils.GSON.fromJson(s, SystemInfoService.SerializeData.class);
-            if (data != null) {
-                if (data.computeNodes != null) {
-                    for (ComputeNode computeNode : data.computeNodes) {
-                        replayAddComputeNode(computeNode);
-                    }
-                    computeNodeSize = data.computeNodes.size();
+            if (data != null && data.computeNodes != null) {
+                for (ComputeNode computeNode : data.computeNodes) {
+                    replayAddComputeNode(computeNode);
                 }
+                computeNodeSize = data.computeNodes.size();
             }
             checksum ^= computeNodeSize;
             LOG.info("finished replaying compute node from image");
@@ -984,7 +982,7 @@ public class SystemInfoService {
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
             }
         } else {
-            LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster {} no exist.", backend.getOwnerClusterName());
         }
     }
 

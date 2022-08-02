@@ -138,7 +138,7 @@ public class TransactionLoadAction extends RestBaseAction {
             // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
             if (op.equalsIgnoreCase(TXN_BEGIN)) {
                 List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-                if (backendIds == null) {
+                if (backendIds.isEmpty()) {
                     throw new DdlException("No backend alive.");
                 }
                 backendID = backendIds.get(0);

@@ -547,7 +547,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                             .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
                                     true, true);
-                    if (beIds == null) {
+                    if (beIds.isEmpty()) {
                         return new Status(ErrCode.COMMON_ERROR, "failed to find "
                                 + partitionInfo.getReplicationNum(entry.getKey())
                                 + " different hosts to create table: " + name);

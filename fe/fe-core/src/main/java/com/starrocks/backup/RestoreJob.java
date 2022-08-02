@@ -843,7 +843,7 @@ public class RestoreJob extends AbstractJob {
                 List<Long> beIds =
                         GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
                                 true);
-                if (beIds == null) {
+                if (beIds.isEmpty()) {
                     status = new Status(ErrCode.COMMON_ERROR,
                             "failed to get enough backends for creating replica of tablet "
                                     + newTabletId + ". need: " + restoreReplicationNum);

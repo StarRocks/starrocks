@@ -2645,7 +2645,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throws DdlException {
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIdsByStorageMedium(replicationNum,
                 true, true, storageMedium);
-        if (chosenBackendIds == null) {
+        if (chosenBackendIds.isEmpty()) {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
                             " at all backends, number of replicas needed: " +
@@ -2660,7 +2660,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
         List<Long> chosenBackendIds =
                 systemInfoService.seqChooseBackendIds(replicationNum, true, true);
-        if (chosenBackendIds == null) {
+        if (chosenBackendIds.isEmpty()) {
             List<Long> backendIds = systemInfoService.getBackendIds(true);
             throw new DdlException("Failed to find enough host in all backends. need: " + replicationNum +
                     ", Current alive backend is [" + Joiner.on(",").join(backendIds) + "]");
