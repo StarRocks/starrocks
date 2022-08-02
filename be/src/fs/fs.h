@@ -37,8 +37,10 @@ struct SpaceInfo {
 };
 
 struct FSOptions {
-    FSOptions(const TBrokerScanRangeParams* params = nullptr) : params(params) {}
-    const TBrokerScanRangeParams* params;
+    FSOptions(const TBrokerScanRangeParams* scan_range_params = nullptr, const TExportSink* export_sink = nullptr)
+            : scan_range_params(scan_range_params), export_sink(export_sink) {}
+    const TBrokerScanRangeParams* scan_range_params;
+    const TExportSink* export_sink;
 };
 
 class FileSystem {

@@ -108,11 +108,11 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     S3ClientPtr client;
     string access_key_id;
     string secret_access_key;
-    if (opts.params != nullptr && opts.params->__isset.hdfs_properties) {
-        DCHECK(opts.params->hdfs_properties.__isset.access_key);
-        DCHECK(opts.params->hdfs_properties.__isset.secret_key);
-        access_key_id = opts.params->hdfs_properties.access_key;
-        secret_access_key = opts.params->hdfs_properties.secret_key;
+    if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
+        DCHECK(opts.scan_range_params->hdfs_properties.__isset.access_key);
+        DCHECK(opts.scan_range_params->hdfs_properties.__isset.secret_key);
+        access_key_id = opts.scan_range_params->hdfs_properties.access_key;
+        secret_access_key = opts.scan_range_params->hdfs_properties.secret_key;
     } else {
         access_key_id = config::object_storage_access_key_id;
         secret_access_key = config::object_storage_secret_access_key;
@@ -139,8 +139,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    if (opts.params != nullptr && opts.params->__isset.hdfs_properties) {
-        const THdfsProperties& hdfs_properties = opts.params->hdfs_properties;
+    if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
+        const THdfsProperties& hdfs_properties = opts.scan_range_params->hdfs_properties;
         DCHECK(hdfs_properties.__isset.end_point);
         if (hdfs_properties.__isset.end_point) {
             config.endpointOverride = hdfs_properties.end_point;
