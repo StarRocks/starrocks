@@ -20,6 +20,7 @@ package com.starrocks.load.loadv2.dpp;
 import com.starrocks.load.loadv2.datasource.DataSource;
 import org.apache.commons.collections.map.MultiValueMap;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.AnalysisException;
@@ -167,7 +168,8 @@ public class GlobalDictBuilder {
         Dataset<Row> sourceHiveDBTable = dataSource.getOrLoadTable(sourceHiveDBTableName);
 
         Map<String, DataType> sourceHiveTableColumn = Arrays.stream(sourceHiveDBTable.schema().fields())
-                .collect(Collectors.toMap(StructField::name, StructField::dataType));
+                .map(structField -> new ImmutablePair<>(structField.name().toLowerCase(), structField.dataType()))
+                .collect(Collectors.toMap(ImmutablePair<String, DataType>::getLeft, ImmutablePair<String, DataType>::getRight));
 
         // check and get starrocks column type in hive
         intermediateTableColumnList.stream().map(String::toLowerCase).forEach(columnName -> {
@@ -231,7 +233,7 @@ public class GlobalDictBuilder {
                         .selectExpr("max(dict_value) as max_value", "min(dict_value) as min_value")
                         .collectAsList();
                 if (maxGlobalDictValueRow.size() == 0) {
-                    throw new RuntimeException(String.format("get max dict value failed: %s", maxGlobalDictValueRow));
+                    throw new RuntimeException(String.format("get max dict value failed: %s", distinctColumnName));
                 }
 
                 long maxDictValue = 0;
