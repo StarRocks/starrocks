@@ -42,7 +42,7 @@ public class BDBEnvironmentTest {
         BDBEnvironment.RETRY_TIME = 3;
         // give master time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
-        BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
+        BDBEnvironment.SLEEP_INTERVAL_SEC = ThreadLocalRandom.current().nextInt(5, 15);;
         // set timeout to a really long time so that ut can pass even when IO load is very high
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
@@ -120,21 +120,6 @@ public class BDBEnvironmentTest {
 
 
     private void initClusterMasterFollower() throws Exception {
-        for (int i = 0; i != 3; ++ i) {
-            // might fail on high load, will sleep and retry
-            try {
-                initClusterMasterFollowerNoRetry();
-                return;
-            } catch (Exception e) {
-                // sleep 5 ~ 15 seconds
-                int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
-                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
-                Thread.sleep(sleepSeconds * 1000L);
-            }
-        }
-
-    }
-    private void initClusterMasterFollowerNoRetry() throws Exception {
         // setup master
         masterNodeHostPort = findUnbindHostPort();
         masterPath = createTmpDir();
