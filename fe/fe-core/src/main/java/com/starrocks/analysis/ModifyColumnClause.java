@@ -17,65 +17,29 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.catalog.Column;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
 // modify one column
-public class ModifyColumnClause extends AlterTableClause {
+public class ModifyColumnClause extends AlterTableColumnClause {
     private ColumnDef columnDef;
     private ColumnPosition colPos;
-    // which rollup is to be modify, if rollup is null, modify base table.
-    private String rollupName;
 
-    private Map<String, String> properties;
-
-    // set in analyze
-    private Column column;
-
-    public Column getColumn() {
-        return column;
+    public ColumnDef getColumnDef() {
+        return columnDef;
     }
 
     public ColumnPosition getColPos() {
         return colPos;
     }
 
-    public String getRollupName() {
-        return rollupName;
-    }
-
     public ModifyColumnClause(ColumnDef columnDef, ColumnPosition colPos, String rollup,
                               Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE);
+        super(AlterOpType.SCHEMA_CHANGE, rollup, properties);
         this.columnDef = columnDef;
         this.colPos = colPos;
-        this.rollupName = rollup;
-        this.properties = properties;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnDef == null) {
-            throw new AnalysisException("No column definition in modify column clause.");
-        }
-        columnDef.analyze(true);
-        if (colPos != null) {
-            colPos.analyze();
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
-
-        column = columnDef.toColumn();
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return this.properties;
     }
 
     @Override
@@ -94,5 +58,15 @@ public class ModifyColumnClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitModifyColumnClause(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

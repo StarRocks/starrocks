@@ -17,49 +17,22 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
 // Drop one column
-public class DropColumnClause extends AlterTableClause {
+public class DropColumnClause extends AlterTableColumnClause {
     private String colName;
-    private String rollupName;
-
-    private Map<String, String> properties;
 
     public String getColName() {
         return colName;
     }
 
-    public String getRollupName() {
-        return rollupName;
-    }
-
     public DropColumnClause(String colName, String rollupName, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE);
+        super(AlterOpType.SCHEMA_CHANGE, rollupName, properties);
         this.colName = colName;
-        this.rollupName = rollupName;
-        this.properties = properties;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(colName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_COLUMN_NAME, colName);
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return this.properties;
     }
 
     @Override
@@ -75,5 +48,15 @@ public class DropColumnClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitDropColumnClause(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
