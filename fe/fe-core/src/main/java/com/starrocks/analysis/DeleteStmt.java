@@ -91,8 +91,6 @@ public class DeleteStmt extends DmlStmt {
 
         tblName.analyze(analyzer);
 
-        CatalogUtils.checkIsLakeTable(tblName.getDb(), tblName.getTbl());
-
         if (partitionNames != null) {
             partitionNames.analyze(analyzer);
             if (partitionNames.isTemp()) {

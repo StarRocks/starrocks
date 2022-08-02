@@ -7,6 +7,8 @@ import com.starrocks.lake.proto.AbortTxnRequest;
 import com.starrocks.lake.proto.AbortTxnResponse;
 import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
+import com.starrocks.lake.proto.DeleteDataRequest;
+import com.starrocks.lake.proto.DeleteDataResponse;
 import com.starrocks.lake.proto.DropTabletRequest;
 import com.starrocks.lake.proto.DropTabletResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
@@ -23,4 +25,6 @@ public interface LakeServiceAsync extends LakeService  {
     Future<DropTabletResponse> dropTablet(DropTabletRequest request, RpcCallback<DropTabletResponse> callback);
 
     Future<CompactResponse> compact(CompactRequest request, RpcCallback<CompactResponse> callback);
+
+    Future<DeleteDataResponse> deleteData(DeleteDataRequest request, RpcCallback<DeleteDataResponse> callback);
 }

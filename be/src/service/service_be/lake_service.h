@@ -25,11 +25,14 @@ public:
     void drop_tablet(::google::protobuf::RpcController* controller, const ::starrocks::lake::DropTabletRequest* request,
                      ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) override;
 
-    void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* rquest,
+    void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* request,
                  ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
     void drop_table(::google::protobuf::RpcController* controller, const ::starrocks::lake::DropTableRequest* request,
                     ::starrocks::lake::DropTableResponse* response, ::google::protobuf::Closure* done) override;
+
+    void delete_data(::google::protobuf::RpcController* controller, const ::starrocks::lake::DeleteDataRequest* request,
+                     ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
     ExecEnv* _env;
