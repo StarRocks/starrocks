@@ -43,31 +43,6 @@ pidfile=$PID_DIR/be.pid
 
 sig=9
 
-usage() {
-    echo "
-This script is used to stop BE process
-Usage:
-    sh stop_be.sh [option]
-
-Options:
-    -h, --help              display this usage only
-    -g, --graceful          send SIGTERM to BE process instead of SIGKILL
-"
-    exit 0
-}
-
-for arg in "$@"
-do
-    case $arg in
-        --help|-h)
-            usage
-        ;;
-        --graceful|-g)
-            sig=15
-        ;;
-    esac
-done
-
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`
