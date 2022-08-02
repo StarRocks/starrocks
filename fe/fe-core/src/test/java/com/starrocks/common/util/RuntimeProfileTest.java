@@ -179,32 +179,125 @@ public class RuntimeProfileTest {
     }
 
     @Test
-    public void testMergeIsomorphicProfiles() {
+    public void testMergeIsomorphicProfiles1() {
         List<RuntimeProfile> profiles = Lists.newArrayList();
 
-        RuntimeProfile profile = new RuntimeProfile("profile1");
-        Counter counter = profile.addCounter("counter1", TUnit.TIME_NS);
-        counter.setValue(1000000000L);
-        Counter minCounter = profile.addCounter("__MIN_OF_counter1", TUnit.TIME_NS);
-        minCounter.setValue(100000000L);
-        Counter maxCounter = profile.addCounter("__MAX_OF_counter1", TUnit.TIME_NS);
-        maxCounter.setValue(2000000000L);
-        profiles.add(profile);
+        RuntimeProfile profile1 = new RuntimeProfile("profile");
+        {
+            Counter time1 = profile1.addCounter("time1", TUnit.TIME_NS);
+            time1.setValue(2000000000L);
+            Counter time2 = profile1.addCounter("time2", TUnit.TIME_NS);
+            time2.setValue(0);
 
-        profile = new RuntimeProfile("profile2");
-        counter = profile.addCounter("counter1", TUnit.TIME_NS);
-        counter.setValue(3000000000L);
-        profiles.add(profile);
+            Counter count1 = profile1.addCounter("count1", TUnit.UNIT);
+            count1.setValue(1);
+
+            profiles.add(profile1);
+        }
+
+        RuntimeProfile profile2 = new RuntimeProfile("profile");
+        {
+            Counter time1 = profile2.addCounter("time1", TUnit.TIME_NS);
+            time1.setValue(2000000000L);
+            Counter time2 = profile2.addCounter("time2", TUnit.TIME_NS);
+            time2.setValue(2000000000L);
+
+            Counter count1 = profile2.addCounter("count1", TUnit.UNIT);
+            count1.setValue(1);
+
+            profiles.add(profile2);
+        }
 
         RuntimeProfile.mergeIsomorphicProfiles(profiles);
-        profile = profiles.get(0);
-        counter = profile.getCounter("counter1");
-        Assert.assertEquals(2000000000L, counter.getValue());
-        minCounter = profile.getCounter("__MIN_OF_counter1");
-        maxCounter = profile.getCounter("__MAX_OF_counter1");
-        Assert.assertNotNull(minCounter);
-        Assert.assertNotNull(maxCounter);
-        Assert.assertEquals(100000000L, minCounter.getValue());
-        Assert.assertEquals(3000000000L, maxCounter.getValue());
+
+        RuntimeProfile mergedProfile = profiles.get(0);
+        Counter mergedTime1 = mergedProfile.getCounter("time1");
+        Assert.assertEquals(2000000000L, mergedTime1.getValue());
+        Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
+        Counter mergedMaxOfTime1 = mergedProfile.getCounter("__MAX_OF_time1");
+        Assert.assertNull(mergedMinOfTime1);
+        Assert.assertNull(mergedMaxOfTime1);
+
+        Counter mergedTime2 = mergedProfile.getCounter("time2");
+        Assert.assertEquals(1000000000L, mergedTime2.getValue());
+        Counter mergedMinOfTime2 = mergedProfile.getCounter("__MIN_OF_time2");
+        Counter mergedMaxOfTime2 = mergedProfile.getCounter("__MAX_OF_time2");
+        Assert.assertNotNull(mergedMinOfTime2);
+        Assert.assertNotNull(mergedMaxOfTime2);
+        Assert.assertEquals(0, mergedMinOfTime2.getValue());
+        Assert.assertEquals(2000000000L, mergedMaxOfTime2.getValue());
+
+        Counter mergedCount1 = mergedProfile.getCounter("count1");
+        Assert.assertEquals(2, mergedCount1.getValue());
+        Counter mergedMinOfCount1 = mergedProfile.getCounter("__MIN_OF_count1");
+        Counter mergedMaxOfCount1 = mergedProfile.getCounter("__MAX_OF_count1");
+        Assert.assertNotNull(mergedMinOfCount1);
+        Assert.assertNotNull(mergedMaxOfCount1);
+        Assert.assertEquals(1, mergedMinOfCount1.getValue());
+        Assert.assertEquals(1, mergedMaxOfCount1.getValue());
+    }
+
+    @Test
+    public void testMergeIsomorphicProfiles2() {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+
+        RuntimeProfile profile1 = new RuntimeProfile("profile");
+        {
+            Counter time1 = profile1.addCounter("time1", TUnit.TIME_NS);
+            time1.setValue(2000000000L);
+            Counter minOfTime1 = profile1.addCounter("__MIN_OF_time1", TUnit.TIME_NS);
+            minOfTime1.setValue(1500000000L);
+            Counter maxOfTime1 = profile1.addCounter("__MAX_OF_time1", TUnit.TIME_NS);
+            maxOfTime1.setValue(5000000000L);
+
+            Counter count1 = profile1.addCounter("count1", TUnit.UNIT);
+            count1.setValue(6);
+            Counter minOfCount1 = profile1.addCounter("__MIN_OF_count1", TUnit.UNIT);
+            minOfCount1.setValue(1);
+            Counter maxOfCount1 = profile1.addCounter("__MAX_OF_count1", TUnit.UNIT);
+            maxOfCount1.setValue(3);
+
+            profiles.add(profile1);
+        }
+
+        RuntimeProfile profile2 = new RuntimeProfile("profile");
+        {
+            Counter time1 = profile2.addCounter("time1", TUnit.TIME_NS);
+            time1.setValue(3000000000L);
+            Counter minOfTime1 = profile2.addCounter("__MIN_OF_time1", TUnit.TIME_NS);
+            minOfTime1.setValue(100000000L);
+            Counter maxOfTime1 = profile2.addCounter("__MAX_OF_time1", TUnit.TIME_NS);
+            maxOfTime1.setValue(4000000000L);
+
+            Counter count1 = profile2.addCounter("count1", TUnit.UNIT);
+            count1.setValue(15);
+            Counter minOfCount1 = profile2.addCounter("__MIN_OF_count1", TUnit.UNIT);
+            minOfCount1.setValue(4);
+            Counter maxOfCount1 = profile2.addCounter("__MAX_OF_count1", TUnit.UNIT);
+            maxOfCount1.setValue(6);
+
+            profiles.add(profile2);
+        }
+
+        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+
+        RuntimeProfile mergedProfile = profiles.get(0);
+        Counter mergedTime1 = mergedProfile.getCounter("time1");
+        Assert.assertEquals(2500000000L, mergedTime1.getValue());
+        Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
+        Counter mergedMaxOfTime1 = mergedProfile.getCounter("__MAX_OF_time1");
+        Assert.assertNotNull(mergedMinOfTime1);
+        Assert.assertNotNull(mergedMaxOfTime1);
+        Assert.assertEquals(100000000L, mergedMinOfTime1.getValue());
+        Assert.assertEquals(5000000000L, mergedMaxOfTime1.getValue());
+
+        Counter mergedCount1 = mergedProfile.getCounter("count1");
+        Assert.assertEquals(21, mergedCount1.getValue());
+        Counter mergedMinOfCount1 = mergedProfile.getCounter("__MIN_OF_count1");
+        Counter mergedMaxOfCount1 = mergedProfile.getCounter("__MAX_OF_count1");
+        Assert.assertNotNull(mergedMinOfCount1);
+        Assert.assertNotNull(mergedMaxOfCount1);
+        Assert.assertEquals(1, mergedMinOfCount1.getValue());
+        Assert.assertEquals(6, mergedMaxOfCount1.getValue());
     }
 }
