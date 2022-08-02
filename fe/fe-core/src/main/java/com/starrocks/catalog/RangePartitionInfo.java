@@ -248,9 +248,10 @@ public class RangePartitionInfo extends PartitionInfo {
     public void unprotectHandleNewSinglePartitionDesc(RangePartitionPersistInfo info) {
         Partition partition = info.getPartition();
         long partitionId = partition.getId();
-        this.idToDataProperty.put(partitionId, info.getDataProperty());
-        this.idToReplicationNum.put(partitionId, info.getReplicationNum());
-        this.idToInMemory.put(partitionId, info.isInMemory());
+        idToDataProperty.put(partitionId, info.getDataProperty());
+        idToReplicationNum.put(partitionId, info.getReplicationNum());
+        idToInMemory.put(partitionId, info.isInMemory());
+        idToStorageInfo.put(partitionId, info.getStorageInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

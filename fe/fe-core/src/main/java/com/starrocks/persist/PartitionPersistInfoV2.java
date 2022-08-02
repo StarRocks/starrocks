@@ -29,6 +29,8 @@ public class PartitionPersistInfoV2 implements Writable {
     private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
+    @SerializedName("StoarageInfo")
+    private com.starrocks.lake.StorageInfo storageInfo;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
@@ -40,6 +42,14 @@ public class PartitionPersistInfoV2 implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
+    }
+
+    public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
+                                  DataProperty dataProperty, short replicationNum,
+                                  boolean isInMemory, boolean isTempPartition,
+                                  com.starrocks.lake.StorageInfo storageInfo) {
+        this(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition);
+        this.storageInfo = storageInfo;
     }
 
     public final boolean isListPartitionPersistInfo() {
@@ -95,6 +105,10 @@ public class PartitionPersistInfoV2 implements Writable {
 
     public boolean isTempPartition() {
         return this.isTempPartition;
+    }
+
+    public com.starrocks.lake.StorageInfo getStorageInfo() {
+        return this.storageInfo;
     }
 
 }
