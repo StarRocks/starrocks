@@ -277,6 +277,7 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
             response->add_failed_tablets(tablet_id);
         }
     }
+}
 
 void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* controller,
                                        const ::starrocks::lake::TabletStatRequest* request,
