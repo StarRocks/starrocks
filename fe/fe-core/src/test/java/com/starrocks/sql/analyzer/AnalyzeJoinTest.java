@@ -1,16 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.UUID;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -75,8 +73,8 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
-        analyzeSuccess("select * from (t0 join tnotnull using(v1)) t , t1");
-        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1","Column 'v1' is ambiguous");
+        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1", "Syntax error");
+        analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
 
@@ -119,9 +117,31 @@ public class AnalyzeJoinTest {
         analyzeFail("select v1 from t0 full outer join [broadcast] t1 on t0.v1 = t1.v4");
     }
 
+    //The precedence of the comma operator is less than that of INNER JOIN, CROSS JOIN, LEFT JOIN, and so on
     @Test
-    public void testJoinPreceding() {
-        QueryStatement query = ((QueryStatement) analyzeSuccess("select * from t0,t1 inner join t2 on v4 = v7"));
-        System.out.println(AST2SQL.toString(query));
+    public void testJoinPrecedence() {
+        String sql = "SELECT * FROM t0,t1 INNER JOIN t2 on t1.v4 = t2.v7";
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        JoinRelation joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
+        Assert.assertTrue(joinRelation.getJoinOp().isCrossJoin());
+
+        sql = "SELECT * FROM t0 inner join t1 INNER JOIN t2 on t1.v4 = t2.v7";
+        statement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
+        Assert.assertTrue(joinRelation.getJoinOp().isInnerJoin());
+        Assert.assertNotNull(joinRelation.getOnPredicate());
+
+        sql = "SELECT * FROM t0 inner join t1,t2";
+        statement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
+        Assert.assertTrue(joinRelation.getJoinOp().isCrossJoin());
+
+        analyzeFail("SELECT * FROM t0,t1 INNER JOIN t2 on t0.v1 = t2.v4",
+                "Column '`t0`.`v1`' cannot be resolved");
+        analyzeSuccess("select * from t0 inner join t1 on t0.v1 = t1.v4 inner join t2 on t0.v2 = t2.v7");
+        analyzeSuccess("select * from t0 inner join t1 on t0.v1 = t1.v4 inner join t2 on t1.v5 = t2.v7");
     }
 }
