@@ -145,7 +145,7 @@ public class BDBEnvironmentTest {
             followerEnvironment.setup();
             Assert.assertEquals(0, followerEnvironment.getDatabaseNames().size());
         }
-        BDBEnvironment.RETRY_TIME = 1;
+        BDBEnvironment.RETRY_TIME = 3;
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
     }
 
