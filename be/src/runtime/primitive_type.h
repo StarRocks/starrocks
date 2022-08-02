@@ -63,7 +63,7 @@ enum PrimitiveType {
     TYPE_DECIMAL64,  /* 25 */
     TYPE_DECIMAL128, /* 26 */
 
-    TYPE_JSON, /* 27 */
+    TYPE_JSON,     /* 27 */
     TYPE_FUNCTION, /* 28 */
 };
 
@@ -82,8 +82,7 @@ inline bool is_enumeration_type(PrimitiveType type) {
 }
 
 inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
-    if (lhs == TYPE_FUNCTION || rhs == TYPE_FUNCTION)
-    {
+    if (lhs == TYPE_FUNCTION || rhs == TYPE_FUNCTION) {
         return false;
     }
 
