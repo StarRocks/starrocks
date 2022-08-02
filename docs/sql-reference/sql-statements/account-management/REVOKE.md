@@ -63,7 +63,7 @@ The role name.
 
 ## Examples
 
-Example 1: Revoke the read privilege on `testDb` and all tables in this database from user `jack`.
+Example 1: Revoke the read privilege on `db1` and all tables in this database from user `jack`.
 
 ```SQL
 REVOKE SELECT_PRIV ON db1.* FROM 'jack'@'192.%';
