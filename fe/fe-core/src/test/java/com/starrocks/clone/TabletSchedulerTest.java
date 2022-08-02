@@ -103,7 +103,7 @@ public class TabletSchedulerTest {
     private void updateSlotWithNewConfig(int new_slot_per_path, Method updateWorkingSlotsMethod,
                                          TabletScheduler tabletScheduler)
             throws InvocationTargetException, IllegalAccessException {
-        Config.schedule_slot_num_per_path = new_slot_per_path;
+        Config.tablet_sched_slot_num_per_path = new_slot_per_path;
         updateWorkingSlotsMethod.invoke(tabletScheduler, null);
     }
 

@@ -23,7 +23,6 @@ package com.starrocks.http.rest;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.ConfigBase;
-import com.starrocks.common.ConfigBase.ConfField;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -34,7 +33,6 @@ import com.starrocks.qe.ConnectContext;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -67,33 +65,19 @@ public class SetConfigAction extends RestBaseAction {
 
         LOG.debug("get config from url: {}", configs);
 
-        Field[] fields = ConfigBase.confClass.getFields();
-        for (Field f : fields) {
-            // ensure that field has "@ConfField" annotation
-            ConfField anno = f.getAnnotation(ConfField.class);
-            if (anno == null || !anno.mutable()) {
-                continue;
-            }
+        for (Map.Entry<String, List<String>> entry : configs.entrySet()) {
+            Field field = ConfigBase.getAllMutableConfigs().get(entry.getKey());
+            List<String> entryVal = entry.getValue();
+            if (field != null && entryVal != null && entryVal.size() == 1) {
+                try {
+                    ConfigBase.setConfigField(field, entryVal.get(0));
+                } catch (Exception e) {
+                    LOG.warn("failed to set config {}:{}", entry.getKey(), entryVal.get(0), e);
+                    continue;
+                }
 
-            // ensure that field has property string
-            String confKey = anno.value().equals("") ? f.getName() : anno.value();
-            List<String> confVals = configs.get(confKey);
-            if (confVals == null || confVals.isEmpty()) {
-                continue;
+                setConfigs.put(entry.getKey(), entryVal.get(0));
             }
-
-            if (confVals.size() > 1) {
-                continue;
-            }
-
-            try {
-                ConfigBase.setConfigField(f, confVals.get(0));
-            } catch (Exception e) {
-                LOG.warn("failed to set config {}:{}", confKey, confVals.get(0), e);
-                continue;
-            }
-
-            setConfigs.put(confKey, confVals.get(0));
         }
 
         for (String key : configs.keySet()) {
@@ -107,18 +91,7 @@ public class SetConfigAction extends RestBaseAction {
         resultMap.put("err", errConfigs);
 
         // to json response
-        String result = "";
-        ObjectMapper mapper = new ObjectMapper();
-        try {
-            result = mapper.writeValueAsString(resultMap);
-        } catch (Exception e) {
-            //  do nothing
-        }
-
-        // send result
-        response.setContentType("application/json");
-        response.getContent().append(result);
-        sendResult(request, response);
+        sendResultByJson(request, response, resultMap);
     }
 
     public static void print(String msg) {

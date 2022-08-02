@@ -36,6 +36,7 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.codehaus.jackson.map.ObjectMapper;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -101,6 +102,21 @@ public class RestBaseAction extends BaseAction {
 
     public void sendResult(BaseRequest request, BaseResponse response) {
         writeResponse(request, response, HttpResponseStatus.OK);
+    }
+
+    public void sendResultByJson(BaseRequest request, BaseResponse response, Object obj) {
+        String result = "";
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            result = mapper.writeValueAsString(obj);
+        } catch (Exception e) {
+            //  do nothing
+        }
+
+        // send result
+        response.setContentType("application/json");
+        response.getContent().append(result);
+        sendResult(request, response);
     }
 
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)

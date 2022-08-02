@@ -129,7 +129,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
      *  A    B    C    D
      */
     private void relocateAndBalanceGroup() {
-        if (Config.disable_colocate_balance) {
+        if (Config.tablet_sched_disable_colocate_balance) {
             return;
         }
 
@@ -554,7 +554,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             // 1. BE is dead for a long time
             // 2. BE is under decommission
             if ((!be.isAlive() &&
-                    (currTime - be.getLastUpdateMs()) > Config.tablet_repair_delay_factor_second * 1000 * 2)
+                    (currTime - be.getLastUpdateMs()) > Config.tablet_sched_repair_delay_factor_second * 1000 * 2)
                     || be.isDecommissioned()) {
                 return false;
             }
