@@ -21,7 +21,6 @@
 
 package com.starrocks.qe;
 
-import com.amazonaws.services.inspector.model.ResourceGroup;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.QueryStmt;
