@@ -2,7 +2,7 @@
 
 ## 功能
 
-GRANT 语句用于将指定权限授予某用户或某角色，该语句也可用于将指定角色授予某用户。
+将指定权限授予某用户或某角色。
 
 ## 语法
 
@@ -16,18 +16,6 @@ GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}
 
 ```SQL
 GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
-```
-
-- 授予用户 `a` 以用户 `b` 的身份执行操作的权限。
-
-```SQL
-GRANT IMPERSONATE ON user_identity_b TO user_identity_a;
-```
-
-- 将指定角色的权限授予某用户。指定角色必须存在。
-
-```SQL
-GRANT 'role_name' TO user_identity;
 ```
 
 ## 参数说明
@@ -46,11 +34,11 @@ GRANT 'role_name' TO user_identity;
 - `DROP_PRIV`：数据库和表的删除权限。
 - `USAGE_PRIV`：资源的使用权限。
 
-- 以上部分权限可划分为三类：
+以上部分权限可划分为三类：
 
-  - 节点权限：`NODE_PRIV`
-  - 库表权限：`SELECT_PRIV`、`LOAD_PRIV`、`ALTER_PRIV`、`CREATE_PRIV`、`DROP_PRIV`
-  - 资源权限：`USAGE_PRIV`
+- 节点权限：`NODE_PRIV`
+- 库表权限：`SELECT_PRIV`、`LOAD_PRIV`、`ALTER_PRIV`、`CREATE_PRIV`、`DROP_PRIV`
+- 资源权限：`USAGE_PRIV`
 
 ### db_name [.tbl_name]
 
@@ -105,26 +93,14 @@ GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
 GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
 ```
 
-示例五：将资源 spark_resource 的使用权限授予用户 `jack`。
+示例五：将资源 `spark_resource` 的使用权限授予用户 `jack`。
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
 ```
 
-示例六：将资源 spark_resource 的使用权限授予角色 `my_role` 。
+示例六：将资源 `spark_resource` 的使用权限授予角色 `my_role` 。
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
-```
-
-示例七：将角色 `my_role` 授予用户 `jack`。
-
-```SQL
-GRANT 'my_role' TO 'jack'@'%';
-```
-
-示例八：授予用户 `jack` 以用户 `rose` 的身份执行操作的权限。
-
-```SQL
-GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
