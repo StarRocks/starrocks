@@ -66,6 +66,7 @@ public class LakeServiceClient {
     public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) throws RpcException {
         RpcCallback<DeleteDataResponse> callback = new EmptyRpcCallback<DeleteDataResponse>();
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteData(request, callback));
+    }
 
     public Future<DropTableResponse> dropTable(DropTableRequest request) throws RpcException {
         RpcCallback<DropTableResponse> callback = new EmptyRpcCallback<DropTableResponse>();

@@ -145,9 +145,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         RecycleTableInfo tableInfo = new RecycleTableInfo(dbId, table);
         idToRecycleTime.put(table.getId(), recycleTime);
         idToTableInfo.put(dbId, table.getId(), tableInfo);
-        // If there is a table with the same name, its RecycleTableInfo will be replaced.
+        // Another table with the same name.
         RecycleTableInfo overwrittenTable = nameToTableInfo.put(dbId, table.getName(), tableInfo);
         if (overwrittenTable != null) {
+            // Set the recycle time of overwrittenTable to 0 in order to delete it more quickly.
             idToRecycleTime.put(overwrittenTable.getTable().getId(), 0L);
         }
         LOG.info("recycle table[{}-{}]", table.getId(), table.getName());
