@@ -69,3 +69,4 @@ be/tags
 !.clang-format
 !.github
 build/
+cmake-build-debug/
