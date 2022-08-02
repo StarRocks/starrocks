@@ -491,7 +491,7 @@ public class Load {
                     slotDescByName, useVectorizedLoad);
 
             // 2. replace src slot desc with cast return type after expr analyzed
-            replaceSrcSlotDescType(copiedExprsByName, srcTupleDesc, varcharColumns);
+            replaceSrcSlotDescType(tbl, copiedExprsByName, srcTupleDesc, varcharColumns);
         }
 
         // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
@@ -515,12 +515,32 @@ public class Load {
 
     /**
      * @param excludedColumns: columns that the type should not be inferred from expr.
-     *                         Such as, the type of column from path is VARCHAR, whether it is in expr args or not,
+     *                         Such as, the type of column from path is VARCHAR,
+     *                         whether it is in expr args or not,
      *                         and column exists in both schema and expr args.
      */
-    private static void replaceSrcSlotDescType(Map<String, Expr> exprsByName, TupleDescriptor srcTupleDesc,
-                                               Set<String> excludedColumns) throws UserException {
+    private static void replaceSrcSlotDescType(Table tbl, Map<String, Expr> exprsByName, TupleDescriptor srcTupleDesc,
+            Set<String> excludedColumns) throws UserException {
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
+            // if expr is a simple SlotRef such as set(k1=k)
+            // we can use k1's type for k, no need to convert to varchar
+            if (entry.getValue() instanceof SlotRef && !entry.getKey().equals(Load.LOAD_OP_COLUMN)) {
+                SlotRef slotRef = (SlotRef) entry.getValue();
+                String columnName = slotRef.getColumnName();
+                if (!excludedColumns.contains(columnName)) {
+                    Column col = tbl.getColumn(entry.getKey());
+                    if (col != null) {
+                        Type type = col.getType();
+                        SlotDescriptor srcSlotDesc = srcTupleDesc.getColumnSlot(columnName);
+                        if (type.isArrayType() && srcSlotDesc != null) {
+                            srcSlotDesc.setType(type);
+                            srcSlotDesc.setColumn(new Column(columnName, type));
+                            continue;
+                        }
+                    }
+                }
+            }
+
             List<CastExpr> casts = Lists.newArrayList();
             entry.getValue().collect(Expr.IS_VARCHAR_SLOT_REF_IMPLICIT_CAST, casts);
             if (casts.isEmpty()) {
