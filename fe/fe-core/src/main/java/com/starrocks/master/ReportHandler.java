@@ -822,7 +822,7 @@ public class ReportHandler extends Daemon {
                             // update counter
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
-                            LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                            LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                     tabletId, backendId, e.getMessage());
                             needDelete = true;
                         }
