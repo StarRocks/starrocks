@@ -47,6 +47,8 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
     public static final String ICEBERG_CATALOG = "iceberg.catalog.type";
+    @Deprecated
+    public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
     public static final String ICEBERG_DB = "database";

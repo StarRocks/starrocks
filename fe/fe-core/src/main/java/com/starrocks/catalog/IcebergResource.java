@@ -34,6 +34,8 @@ public class IcebergResource extends Resource {
     private static final Logger LOG = LogManager.getLogger(IcebergResource.class);
 
     private static final String ICEBERG_CATALOG = "iceberg.catalog.type";
+    @Deprecated
+    private static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
     private static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     private static final String ICEBERG_IMPL = "iceberg.catalog-impl";
 
@@ -60,7 +62,11 @@ public class IcebergResource extends Resource {
 
         catalogType = properties.get(ICEBERG_CATALOG);
         if (StringUtils.isBlank(catalogType)) {
-            throw new DdlException(ICEBERG_CATALOG + " must be set in properties");
+            catalogType = properties.get(ICEBERG_CATALOG_LEGACY);
+            if (StringUtils.isBlank(catalogType)) {
+                throw new DdlException(ICEBERG_CATALOG + " must be set in properties");
+            }
+            LOG.warn(ICEBERG_CATALOG_LEGACY + " will be deprecated, using " + ICEBERG_CATALOG + " instead.");
         }
 
         switch (IcebergCatalogType.fromString(catalogType)) {
