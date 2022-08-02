@@ -1090,6 +1090,10 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_PARTITIONS, info);
     }
 
+    public void logAddPartitions(AddPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_PARTITIONS, info);
+    }
+
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
     }

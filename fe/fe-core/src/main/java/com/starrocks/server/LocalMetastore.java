@@ -1072,40 +1072,68 @@ public class LocalMetastore implements ConnectorMetadata {
         // Version 1.15 is compatible if users only use single-partition syntax.
         // Otherwise, the followers will be crash when reading the new log
         if (partitionLen == 1) {
+            // for debug
+            LOG.info("enter partitionLen == 1 if");
             Partition partition = partitionList.get(0);
             if (existPartitionNameSet.contains(partition.getName())) {
                 LOG.info("add partition[{}] which already exists", partition.getName());
                 return;
             }
             long partitionId = partition.getId();
-            PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                    ((RangePartitionInfo) partitionInfo).getRange(partitionId),
-                    partitionDescs.get(0).getPartitionDataProperty(),
-                    partitionInfo.getReplicationNum(partitionId),
-                    partitionInfo.getIsInMemory(partitionId),
-                    isTempPartition);
-            editLog.logAddPartition(info);
+            if (olapTable.isLakeTable()) {
+                PartitionPersistInfoV2 info = new RangePartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                        partitionDescs.get(0).getPartitionDataProperty(), partitionInfo.getReplicationNum(partition.getId()),
+                        partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
+                        ((RangePartitionInfo) partitionInfo).getRange(partition.getId()));
+                editLog.logAddPartition(info);
+            } else {
+                PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                        ((RangePartitionInfo) partitionInfo).getRange(partitionId),
+                        partitionDescs.get(0).getPartitionDataProperty(),
+                        partitionInfo.getReplicationNum(partitionId),
+                        partitionInfo.getIsInMemory(partitionId),
+                        isTempPartition);
+                editLog.logAddPartition(info);
+            }
 
             LOG.info("succeed in creating partition[{}], name: {}, temp: {}", partitionId,
                     partition.getName(), isTempPartition);
         } else {
+            // for debug
+            LOG.info("enter multi partitions if");
             List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(partitionLen);
+            List<PartitionPersistInfoV2> partitionInfoListV2 = Lists.newArrayListWithCapacity(partitionLen);
             for (int i = 0; i < partitionLen; i++) {
                 Partition partition = partitionList.get(i);
                 if (!existPartitionNameSet.contains(partition.getName())) {
-                    PartitionPersistInfo info =
-                            new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                                    ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                                    partitionDescs.get(i).getPartitionDataProperty(),
-                                    partitionInfo.getReplicationNum(partition.getId()),
-                                    partitionInfo.getIsInMemory(partition.getId()),
-                                    isTempPartition);
-                    partitionInfoList.add(info);
+                    if (olapTable.isLakeTable()) {
+                        PartitionPersistInfoV2 info = new RangePartitionPersistInfo(db.getId(), olapTable.getId(), 
+                                partition, partitionDescs.get(i).getPartitionDataProperty(), 
+                                partitionInfo.getReplicationNum(partition.getId()),
+                                partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
+                                ((RangePartitionInfo) partitionInfo).getRange(partition.getId()));
+
+                        partitionInfoListV2.add(info);
+                    } else {
+                        PartitionPersistInfo info =
+                                new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                                        ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
+                                        partitionDescs.get(i).getPartitionDataProperty(),
+                                        partitionInfo.getReplicationNum(partition.getId()),
+                                        partitionInfo.getIsInMemory(partition.getId()),
+                                        isTempPartition);
+                        partitionInfoList.add(info);
+                    }
                 }
             }
 
-            AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
-            editLog.logAddPartitions(infos);
+            if (olapTable.isLakeTable()) {
+                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoListV2);
+                editLog.logAddPartitions(infos);
+            } else {
+                AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
+                editLog.logAddPartitions(infos);
+            }
 
             for (Partition partition : partitionList) {
                 LOG.info("succeed in creating partitions[{}], name: {}, temp: {}", partition.getId(),
