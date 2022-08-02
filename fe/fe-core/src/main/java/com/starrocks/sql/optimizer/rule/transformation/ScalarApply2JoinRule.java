@@ -90,7 +90,8 @@ public class ScalarApply2JoinRule extends TransformationRule {
      *       GROUP BY t1.v1
      *   ) as t1a
      *   ON t0.v1 = t1a.v1
-     *   WHERE t0.v2 > t1a.anyValue;
+     *   WHERE t0.v2 > t1a.anyValue
+     *   AND assert_true(t1a.countRows <= 1);
      */
     private List<OptExpression> transformCorrelateWithCheckOneRows(OptExpression input, LogicalApplyOperator apply,
                                                                    OptimizerContext context) {
@@ -124,10 +125,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
 
         // any_value aggregate
         ScalarOperator subqueryOperator = apply.getSubqueryOperator();
-        Function anyValueFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {subqueryOperator.getType()},
-                Function.CompareMode.IS_IDENTICAL);
-        CallOperator anyValueCallOp = new CallOperator(FunctionSet.ANY_VALUE, subqueryOperator.getType(),
-                Lists.newArrayList(subqueryOperator), anyValueFn);
+        CallOperator anyValueCallOp = SubqueryUtils.createAnyValueOperator(subqueryOperator);
         ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
         aggregates.put(anyValue, anyValueCallOp);
 

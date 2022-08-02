@@ -110,6 +110,12 @@ public class SubqueryUtils {
         return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(column), count, false);
     }
 
+    public static CallOperator createAnyValueOperator(ScalarOperator column) {
+        Function anyValueFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {column.getType()},
+                Function.CompareMode.IS_IDENTICAL);
+        return new CallOperator(FunctionSet.ANY_VALUE, column.getType(), Lists.newArrayList(column), anyValueFn);
+    }
+
     public static boolean isUnCorrelationScalarSubquery(LogicalApplyOperator apply) {
         if (!apply.isScalar()) {
             return false;
