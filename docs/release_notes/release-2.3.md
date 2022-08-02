@@ -26,8 +26,6 @@
   - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)、[base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)、[array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
   - [week](../sql-reference/sql-functions/date-time-functions/week.md)、[time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
 
-- Add the [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md) statement. After you use the GRANT statement to impersonate a specific user identity to perform operations, you can use the EXECUTE AS statement to switch the execution context of the current session to this user.
-
 ### Improvements
 
 - The compaction mechanism can merge large metadata more quickly. This prevents metadata squeezing and excessive disk usage that can occur shortly after frequent data updates.
@@ -50,19 +48,15 @@
 
 - When the sum() function calculates numeric strings, implicit conversion is  performed.
 
-- Optimize the [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 、[REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) statements.
-  - Use the GRANT statement to grant a role to a user, or to grant user `a` the privilege to perform operations as user `b`.
-  - Use the REVOKE statement to revoke a role from a user, or to revoke the privilege that allows user `a` to perform operations as user `b`.
-
 - The year, month, and day functions support the DATE data type.
 
 ### Bug Fixes
 
 Fix the following bugs:
 
-- CPU utilization increases abnormally high due to an excessive number of tablets. [#5875](https://starrocks.atlassian.net/browse/SR-5875)
+- CPU utilization increases abnormally high due to an excessive number of tablets.
 
-- Problems cause the "fail to prepare tablet reader" error message to occur.[#7248](https://starrocks.atlassian.net/browse/SR-7248)、 [#7854](https://starrocks.atlassian.net/browse/SR-7854)、 [#8257](https://starrocks.atlassian.net/browse/SR-8257)
+- Problems cause the "fail to prepare tablet reader" error message to occur.
 
 - The FEs fail to restart.[#5642](https://github.com/StarRocks/starrocks/issues/5642 )、[#4969](https://github.com/StarRocks/starrocks/issues/4969 )、[#5580](https://github.com/StarRocks/starrocks/issues/5580)
 
