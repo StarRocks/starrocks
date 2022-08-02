@@ -243,4 +243,40 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     }
 }
 
+void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
+                                  const ::starrocks::lake::DeleteDataRequest* request,
+                                  ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_delete_predicate()) {
+        cntl->SetFailed("missing delete_predicate");
+        return;
+    }
+
+    for (auto tablet_id : request->tablet_ids()) {
+        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        if (!tablet.ok()) {
+            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
+            response->add_failed_tablets(tablet_id);
+            continue;
+        }
+
+        auto res = tablet->delete_data(request->txn_id(), request->delete_predicate());
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to delete data. tablet_id: " << tablet_id << ", txn_id: " << request->txn_id()
+                         << ", error: " << res;
+            response->add_failed_tablets(tablet_id);
+        }
+    }
+}
+
 } // namespace starrocks

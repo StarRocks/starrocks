@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
+import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.rpc.FrontendServiceProxy;
@@ -448,13 +449,15 @@ public class LeaderImpl {
                 if (deleteJob == null) {
                     throw new MetaNotFoundException("cannot find delete job, job[" + transactionId + "]");
                 }
+                Preconditions.checkState(deleteJob instanceof OlapDeleteJob);
+                OlapDeleteJob olapDeleteJob = (OlapDeleteJob) deleteJob;
                 for (int i = 0; i < tabletMetaList.size(); i++) {
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     long tabletId = tabletIds.get(i);
                     Replica replica = findRelatedReplica(olapTable, partition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
-                        deleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
+                        olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
                         pushTask.countDownLatch(backendId, pushTabletId);
                     }
                 }
