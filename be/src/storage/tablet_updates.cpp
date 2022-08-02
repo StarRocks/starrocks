@@ -1329,7 +1329,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             LOG(WARNING) << msg;
             continue;
         }
-        uint32_t rowset_max_rssid = rowsetid + itr->second->num_segments();
+        uint32_t rowset_max_rssid = rowsetid + itr->second->num_segments() - 1;
         max_src_rssid = std::max(max_src_rssid, rowset_max_rssid);
     }
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
