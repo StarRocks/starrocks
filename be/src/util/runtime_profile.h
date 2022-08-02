@@ -622,7 +622,7 @@ private:
                                      std::ostream* s);
 
 public:
-    // Merge all the isomorphic sub profiles and the caller must known for sure
+    // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
     static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
@@ -631,8 +631,6 @@ private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
     // Merge all the isomorphic counters
     // The exact semantics of merge depends on TUnit::type
-    // TODO(hcf) is the classification right?
-    // TODO(hcf) merge bucket counters
     // sum:
     //     UNIT / UNIT_PER_SECOND
     //     BYTES / BYTES_PER_SECOND
@@ -640,8 +638,7 @@ private:
     // average:
     //     CPU_TICKS / TIME_NS / TIME_MS / TIME_S
     typedef std::tuple<int64_t, int64_t, int64_t> MergedInfo;
-    static MergedInfo merge_isomorphic_counters(TUnit::type type,
-                                                std::vector<std::tuple<Counter*, Counter*, Counter*>>& counters);
+    static MergedInfo merge_isomorphic_counters(TUnit::type type, std::vector<Counter*>& counters);
 
     static bool is_average_type(TUnit::type type) {
         return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||
