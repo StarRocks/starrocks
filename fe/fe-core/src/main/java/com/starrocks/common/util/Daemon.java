@@ -21,16 +21,21 @@ import com.starrocks.meta.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class Daemon extends Thread {
     private static final Logger LOG = LogManager.getLogger(Daemon.class);
     private static final int DEFAULT_INTERVAL_SECONDS = 30; // 30 seconds
 
+    private final Lock lock = new ReentrantLock();
+    private final Condition ready = lock.newCondition();
+    private final AtomicBoolean isStop;
+    private final AtomicBoolean isStart = new AtomicBoolean(false);
     private long intervalMs;
-    private AtomicBoolean isStop;
-    private Runnable runnable;
-    private AtomicBoolean isStart = new AtomicBoolean(false);
 
     private MetaContext metaContext = null;
 
@@ -42,18 +47,6 @@ public class Daemon extends Thread {
         super();
         intervalMs = DEFAULT_INTERVAL_SECONDS * 1000L;
         isStop = new AtomicBoolean(false);
-    }
-
-    public Daemon(Runnable runnable) {
-        super(runnable);
-        this.runnable = runnable;
-        this.setName(((Object) runnable).toString());
-    }
-
-    public Daemon(ThreadGroup group, Runnable runnable) {
-        super(group, runnable);
-        this.runnable = runnable;
-        this.setName(((Object) runnable).toString());
     }
 
     public Daemon(String name) {
@@ -68,10 +61,6 @@ public class Daemon extends Thread {
     public Daemon(long intervalMs) {
         this();
         this.intervalMs = intervalMs;
-    }
-
-    public Runnable getRunnable() {
-        return runnable;
     }
 
     @Override
@@ -97,6 +86,12 @@ public class Daemon extends Thread {
         this.intervalMs = intervalMs;
     }
 
+    public void wakeup() {
+        lock.lock();
+        this.ready.signal();
+        lock.unlock();
+    }
+
     /**
      * implement in child
      */
@@ -113,14 +108,11 @@ public class Daemon extends Thread {
         while (!isStop.get()) {
             try {
                 runOneCycle();
+                lock.lock();
+                ready.await(intervalMs, TimeUnit.MILLISECONDS); // Ignore the result intentionally
+                lock.unlock();
             } catch (Throwable e) {
                 LOG.error("daemon thread got exception. name: {}", getName(), e);
-            }
-
-            try {
-                Thread.sleep(intervalMs);
-            } catch (InterruptedException e) {
-                LOG.error("InterruptedException: ", e);
             }
         }
 

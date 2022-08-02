@@ -1801,9 +1801,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @Override
-    public Runnable delete(boolean replay) {
+    public DeleteTableAction delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
-        return replay ? null : new DeleteTableTask(this);
+        return replay ? null : new DeleteOlapTableAction(this);
     }
 
     @Override
@@ -1811,17 +1811,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return true;
     }
 
-    private static class DeleteTableTask implements Runnable {
+    private static class DeleteOlapTableAction implements DeleteTableAction {
         private final OlapTable table;
 
-        public DeleteTableTask(OlapTable table) {
+        public DeleteOlapTableAction(OlapTable table) {
             this.table = table;
         }
 
         @Override
-        public void run() {
+        public boolean execute() {
             HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-
             // drop all replicas
             for (Partition partition : table.getAllPartitions()) {
                 List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
@@ -1868,6 +1867,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     AgentTaskExecutor.submit(originTasks);
                 }
             }
+            return true;
         }
     }
 }

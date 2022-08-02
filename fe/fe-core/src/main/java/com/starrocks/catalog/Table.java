@@ -447,13 +447,12 @@ public class Table extends MetaObject implements Writable {
     }
 
     /**
-     * Delete this table. this method is called with the protection of the database's writer lock.
+     * Delete this table. this method is invoked by {@link CatalogRecycleBin}
      *
      * @param replay is this a log replay operation.
-     * @return a Runnable object to be invoked after persisted the edit log and released the
-     * database's lock, null if no task need to run.
+     * @return a instance {@link DeleteTableAction|.
      */
-    public Runnable delete(boolean replay) {
+    public DeleteTableAction delete(boolean replay) {
         return null;
     }
 

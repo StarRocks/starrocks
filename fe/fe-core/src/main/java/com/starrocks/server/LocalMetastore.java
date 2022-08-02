@@ -404,7 +404,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 2. drop tables in db
             Database db = this.fullNameToDb.get(dbName);
-            Runnable runnable;
             db.writeLock();
             try {
                 if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
@@ -416,7 +415,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
                 // save table names for recycling
                 Set<String> tableNames = db.getTableNamesWithLock();
-                runnable = unprotectDropDb(db, isForceDrop, false);
+                unprotectDropDb(db, isForceDrop, false);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -424,10 +423,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             } finally {
                 db.writeUnlock();
-            }
-
-            if (runnable != null) {
-                runnable.run();
             }
 
             // 3. remove db from globalStateMgr
@@ -444,27 +439,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public Runnable unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        List<Runnable> runnableList = null;
+    public void unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
         for (Table table : db.getTables()) {
-            Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (runnable != null && runnableList == null) {
-                runnableList = new ArrayList<>();
-                runnableList.add(runnable);
-            } else if (runnable != null) {
-                runnableList.add(runnable);
-            }
+            db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
         }
-        if (runnableList == null) {
-            return null;
-        }
-
-        List<Runnable> finalRunnableList = runnableList;
-        return () -> {
-            for (Runnable r : finalRunnableList) {
-                r.run();
-            }
-        };
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {

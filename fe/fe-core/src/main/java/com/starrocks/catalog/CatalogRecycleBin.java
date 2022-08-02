@@ -56,26 +56,29 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.lang.Math.max;
 
 public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
-    // erase meta at least after MIN_ERASE_LATENCY milliseconds
-    // to avoid erase log ahead of drop log
+    // erase meta at least after MIN_ERASE_LATENCY milliseconds to avoid erase log ahead of drop log
     private static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
     // Maximum value of a batch of operations for actually delete database(table/partition)
     // The erase operation will be locked, so one batch can not be too many.
     private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
 
-    private Map<Long, RecycleDatabaseInfo> idToDatabase;
+    private final Map<Long, RecycleDatabaseInfo> idToDatabase;
     // The first Long type is DdId, the second Long is TableId
-    private com.google.common.collect.Table<Long, Long, RecycleTableInfo> idToTableInfo;
+    private final com.google.common.collect.Table<Long, Long, RecycleTableInfo> idToTableInfo;
     // The first Long type is DdId, the second String is TableName
-    private com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
-    private Map<Long, RecyclePartitionInfo> idToPartition;
+    private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
+    private final Map<Long, RecyclePartitionInfo> idToPartition;
 
+    // Mapping from id of table/partition/database to the time when the table/partition/database was added
+    // to the CatalogRecycleBin.
+    // If the recycle time is 0, it means the table/partition/database cannot be recovered anymore.
     protected Map<Long, Long> idToRecycleTime;
 
     // The real recycle time will extend by LATE_RECYCLE_INTERVAL_SECONDS when enable `eraseLater`.
@@ -129,22 +132,25 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         return null;
     }
 
-    public synchronized Table recycleTable(long dbId, Table table) {
+    public void recycleTable(long dbId, Table table) {
+        recycleTable(dbId, table, false);
+    }
+
+    public synchronized void recycleTable(long dbId, Table table, boolean forceDropped) {
         if (idToTableInfo.row(dbId).containsKey(table.getId())) {
             LOG.error("table[{}-{}] already in recycle bin.", table.getId(), table.getName());
-            return null;
+            return;
         }
-
-        // erase table with same name
-        Table oldTable = eraseTableWithSameName(dbId, table.getName());
-
-        // recycle table
+        Long recycleTime = forceDropped ? 0 : System.currentTimeMillis();
         RecycleTableInfo tableInfo = new RecycleTableInfo(dbId, table);
-        idToRecycleTime.put(table.getId(), System.currentTimeMillis());
+        idToRecycleTime.put(table.getId(), recycleTime);
         idToTableInfo.put(dbId, table.getId(), tableInfo);
-        nameToTableInfo.put(dbId, table.getName(), tableInfo);
+        // If there is a table with the same name, its RecycleTableInfo will be replaced.
+        RecycleTableInfo overwrittenTable = nameToTableInfo.put(dbId, table.getName(), tableInfo);
+        if (overwrittenTable != null) {
+            idToRecycleTime.put(overwrittenTable.getTable().getId(), 0L);
+        }
         LOG.info("recycle table[{}-{}]", table.getId(), table.getName());
-        return oldTable;
     }
 
     public synchronized Table getTable(long dbId, long tableId) {
@@ -156,9 +162,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     }
 
     public synchronized List<Table> getTables(long dbId) {
-        return idToTableInfo.row(dbId).values().stream()
-                .map(RecycleTableInfo::getTable)
-                .collect(Collectors.toList());
+        return idToTableInfo.row(dbId).values().stream().map(RecycleTableInfo::getTable).collect(Collectors.toList());
     }
 
     public synchronized boolean recyclePartition(long dbId, long tableId, Partition partition,
@@ -224,9 +228,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     }
 
     public synchronized List<Partition> getPartitions(long tableId) {
-        return idToPartition.values().stream()
-                .filter(v -> (v.getTableId() == tableId))
-                .map(RecyclePartitionInfo::getPartition)
+        return idToPartition.values().stream().filter(v -> (v.getTableId() == tableId)).map(RecyclePartitionInfo::getPartition)
                 .collect(Collectors.toList());
     }
 
@@ -313,7 +315,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     }
 
     @VisibleForTesting
-    public synchronized List<RecycleTableInfo> eraseTable(long currentTimeMs) {
+    @NotNull
+    public synchronized List<RecycleTableInfo> pickTablesToErase(long currentTimeMs) {
         List<RecycleTableInfo> tableToRemove = Lists.newArrayList();
         int currentEraseOpCnt = 0;
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
@@ -321,45 +324,39 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 RecycleTableInfo tableInfo = entry.getValue();
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
-
                 if (canErase(tableId, currentTimeMs)) {
                     tableToRemove.add(tableInfo);
+                    // Set recycle time to 0 to prevent this table been recovered.
+                    idToRecycleTime.put(tableId, 0L);
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                         break;
                     }
                 }
-            } // end for tables
-        }
-
-        List<Long> tableIdList = Lists.newArrayList();
-        if (!tableToRemove.isEmpty()) {
-            for (RecycleTableInfo tableInfo : tableToRemove) {
-                Table table = tableInfo.getTable();
-                long tableId = table.getId();
-                removeRecycleMarkers(tableId);
-                nameToTableInfo.remove(tableInfo.dbId, table.getName());
-                idToTableInfo.remove(tableInfo.dbId, tableId);
-                tableIdList.add(tableId);
             }
-            GlobalStateMgr.getCurrentState().getEditLog().logEraseMultiTables(tableIdList);
-            LOG.info("multi erase write log finished. erased {} table(s)", currentEraseOpCnt);
         }
         return tableToRemove;
     }
 
-    private synchronized Table eraseTableWithSameName(long dbId, String tableName) {
-        Map<String, RecycleTableInfo> nameToTableInfoDBLevel = nameToTableInfo.row(dbId);
-        RecycleTableInfo tableInfo = nameToTableInfoDBLevel.get(tableName);
-        if (tableInfo == null) {
-            return null;
+    @VisibleForTesting
+    public synchronized void eraseTables(@NotNull List<RecycleTableInfo> tableInfos) {
+        if (tableInfos.isEmpty()) {
+            return;
         }
-        Table table = tableInfo.getTable();
-        nameToTableInfoDBLevel.remove(tableName);
-        idToTableInfo.row(dbId).remove(table.getId());
-        removeRecycleMarkers(table.getId());
-        LOG.info("erase table[{}-{}], because table with the same name is recycled", table.getId(), tableName);
-        return table;
+        List<Long> tableIdList = Lists.newArrayList();
+        for (RecycleTableInfo tableInfo : tableInfos) {
+            Table table = tableInfo.getTable();
+            long tableId = table.getId();
+            removeRecycleMarkers(tableId);
+            idToTableInfo.remove(tableInfo.dbId, tableId);
+            RecycleTableInfo tableInfoWithSameName = nameToTableInfo.get(tableInfo.getDbId(), table.getName());
+            if (tableInfoWithSameName != null && tableInfoWithSameName.getTable().getId() == tableId) {
+                nameToTableInfo.remove(tableInfo.dbId, table.getName());
+            }
+            tableIdList.add(tableId);
+        }
+        GlobalStateMgr.getCurrentState().getEditLog().logEraseMultiTables(tableIdList);
+        LOG.info("multi erase write log finished. erased {} table(s)", tableInfos.size());
     }
 
     public synchronized void replayEraseTable(long tableId) {
@@ -369,16 +366,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         if (dbIdOpt.isPresent()) {
             Long dbId = dbIdOpt.get();
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
-            if (tableInfo != null) {
-                Runnable runnable = null;
-                Table table = tableInfo.getTable();
+            Preconditions.checkState(tableInfo != null);
+            DeleteTableAction action = null;
+            Table table = tableInfo.getTable();
+            RecycleTableInfo tableInfoWithSameName = nameToTableInfo.get(dbId, table.getName());
+            if (tableInfoWithSameName != null && tableInfoWithSameName.getTable().getId() == tableId) {
                 nameToTableInfo.remove(dbId, table.getName());
-                if (!isCheckpointThread()) {
-                    runnable = table.delete(true);
-                }
-                if (runnable != null) {
-                    runnable.run();
-                }
+            }
+            if (!isCheckpointThread()) {
+                action = table.delete(true);
+            }
+            if (action != null) {
+                action.execute(); // ignore the result value intentionally.
             }
         }
         idToRecycleTime.remove(tableId);
@@ -521,6 +520,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
 
         Table table = recycleTableInfo.getTable();
+        if (idToRecycleTime.get(table.getId()) <= 0) {
+            return false;
+        }
+
         db.createTable(table);
         nameToTableInfoDbLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
@@ -551,9 +554,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         // make sure to get db write lock
         RecyclePartitionInfo recoverPartitionInfo = null;
 
-        Iterator<Map.Entry<Long, RecyclePartitionInfo>> iterator = idToPartition.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<Long, RecyclePartitionInfo> entry = iterator.next();
+        for (Map.Entry<Long, RecyclePartitionInfo> entry : idToPartition.entrySet()) {
             RecyclePartitionInfo partitionInfo = entry.getValue();
 
             if (partitionInfo.getTableId() != table.getId()) {
@@ -728,26 +729,27 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         // in case of partition(table) is still in recycle bin but table(db) is missing
         try {
             erasePartition(currentTimeMs);
+
             // synchronized is unfair lock, sleep here allows other high-priority operations to obtain a lock
             Thread.sleep(100);
-            List<RecycleTableInfo> recycleTableInfos = eraseTable(currentTimeMs);
-            postProcessEraseTable(recycleTableInfos);
+
+            List<RecycleTableInfo> recycleTableInfoList = pickTablesToErase(currentTimeMs);
+            Iterator<RecycleTableInfo> iterator = recycleTableInfoList.iterator();
+            while (iterator.hasNext()) {
+                RecycleTableInfo tableInfo = iterator.next();
+                Table table = tableInfo.getTable();
+                DeleteTableAction action = table.delete(false);
+                if (action != null && !action.execute()) {
+                    iterator.remove();
+                }
+            }
+            eraseTables(recycleTableInfoList);
+
             Thread.sleep(100);
+
             eraseDatabase(currentTimeMs);
         } catch (InterruptedException e) {
             LOG.warn(e);
-        }
-
-    }
-
-    private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
-        for (RecycleTableInfo tableInfo : tableToRemove) {
-            Table table = tableInfo.getTable();
-            Runnable runnable = table.delete(false);
-            if (runnable != null) {
-                runnable.run();
-            }
-            LOG.info("erased table [{}-{}].", table.getId(), table.getName());
         }
     }
 
