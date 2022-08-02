@@ -3,6 +3,7 @@
 #pragma once
 
 #include <memory>
+#include <queue>
 
 #include "column/vectorized_fwd.h"
 #include "storage/field.h"
@@ -77,13 +78,13 @@ public:
     void set_desired_size(size_t desired_size);
     void reset();
     void push(vectorized::ChunkPtr chunk);
+    void finalize();
     vectorized::ChunkPtr pull();
-    vectorized::ChunkPtr finalize();
 
 private:
     size_t _desired_size;
     vectorized::ChunkPtr _tmp_chunk;
-    vectorized::ChunkPtr _output;
+    std::deque<vectorized::ChunkPtr> _output;
 };
 
 } // namespace starrocks

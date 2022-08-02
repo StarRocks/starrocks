@@ -13,6 +13,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 #include "storage/types.h"
+#include "util/json.h"
 #include "util/metrics.h"
 #include "util/percentile_value.h"
 
@@ -395,39 +396,46 @@ void ChunkAccumulator::set_desired_size(size_t desired_size) {
 }
 
 void ChunkAccumulator::reset() {
-    _output.reset();
+    _output.clear();
     _tmp_chunk.reset();
 }
 
 void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
-    if (_tmp_chunk == nullptr) {
-        _tmp_chunk = std::move(chunk);
-    } else if (_tmp_chunk->num_rows() == _desired_size) {
-        DCHECK(_output == nullptr);
-        _output = std::move(_tmp_chunk);
-        _tmp_chunk = std::move(chunk);
-    } else if (_tmp_chunk->num_rows() < _desired_size) {
-        int left_rows = std::min(_desired_size - _tmp_chunk->num_rows(), chunk->num_rows());
-        _tmp_chunk->append(*chunk, 0, left_rows);
-        if (_tmp_chunk->num_rows() >= _desired_size) {
-            _output = std::move(_tmp_chunk);
+    size_t input_rows = chunk->num_rows();
+    // TODO: optimize for zero-copy scenario
+    // Cut the input chunk into pieces if larger than desired
+    for (size_t start = 0; start < input_rows;) {
+        size_t remain_rows = input_rows - start;
+        int need_rows = 0;
+        if (_tmp_chunk) {
+            need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
+            _tmp_chunk->append(*chunk, start, need_rows);
+        } else {
+            need_rows = std::min(_desired_size, remain_rows);
+            _tmp_chunk = chunk->clone_empty(_desired_size);
+            _tmp_chunk->append(*chunk, start, need_rows);
         }
 
-        int right_rows = chunk->num_rows() - left_rows;
-        if (right_rows > 0) {
-            _tmp_chunk = chunk->clone_empty(_desired_size);
-            _tmp_chunk->append(*chunk, left_rows, right_rows);
+        if (_tmp_chunk->num_rows() >= _desired_size) {
+            _output.emplace_back(std::move(_tmp_chunk));
         }
+        start += need_rows;
     }
 }
 
 vectorized::ChunkPtr ChunkAccumulator::pull() {
-    return std::move(_output);
+    if (!_output.empty()) {
+        auto res = std::move(_output.front());
+        _output.pop_front();
+        return res;
+    }
+    return nullptr;
 }
 
-vectorized::ChunkPtr ChunkAccumulator::finalize() {
-    std::swap(_output, _tmp_chunk);
-    return std::move(_output);
+void ChunkAccumulator::finalize() {
+    if (_tmp_chunk) {
+        _output.emplace_back(std::move(_tmp_chunk));
+    }
 }
 
 } // namespace starrocks

@@ -227,11 +227,11 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         _permute_build_rows_right_join(state, chunk);
         _output_accumulator.push(chunk);
         _output_right_join = true;
-        if (ChunkPtr res = _output_accumulator.finalize()) {
-            return res;
-        }
     }
-    return _output_accumulator.finalize();
+    if (_is_finished) {
+        _output_accumulator.finalize();
+    }
+    return _output_accumulator.pull();
 }
 
 Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {

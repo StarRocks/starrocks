@@ -60,13 +60,11 @@ Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
                 if (tmp_chunk && !tmp_chunk->is_empty()) {
                     _num_build_rows += tmp_chunk->num_rows();
                     accumulator.push(tmp_chunk);
-                    if (ChunkPtr output = accumulator.pull()) {
-                        _build_chunks.emplace_back(std::move(output));
-                    }
                 }
             }
         }
-        if (ChunkPtr output = accumulator.finalize()) {
+        accumulator.finalize();
+        while (ChunkPtr output = accumulator.pull()) {
             _build_chunks.emplace_back(std::move(output));
         }
         _tmp_chunks.clear();

@@ -48,8 +48,8 @@ private:
         tuple_builder.add_slot(_create_slot_desc(PrimitiveType::TYPE_INT, "c0", 0));
         tuple_builder.build(&table_builder);
 
-        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
+        std::vector<TTupleId> row_tuples{0};
+        std::vector<bool> nullable_tuples{true};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
@@ -264,22 +264,33 @@ TEST_F(ChunkHelperTest, ReorderChunk) {
 
 TEST_F(ChunkHelperTest, Accumulator) {
     constexpr size_t kDesiredSize = 4096;
-    auto* tuple_desc = _create_tuple_desc();
+    auto* tuple_desc = _create_simple_desc();
     ChunkAccumulator accumulator(kDesiredSize);
     size_t input_rows = 0;
     size_t output_rows = 0;
+    // push small chunks
     for (int i = 0; i < 10; i++) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1025);
         chunk->get_column_by_index(0)->append_default(1025);
-
         input_rows += 1025;
+
         accumulator.push(chunk);
         if (ChunkPtr output = accumulator.pull()) {
             output_rows += output->num_rows();
             EXPECT_EQ(kDesiredSize, output->num_rows());
         }
     }
-    if (ChunkPtr output = accumulator.finalize()) {
+    // push large chunks
+    for (int i = 0; i < 10; i++) {
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
+        chunk->get_column_by_index(0)->append_default(8888);
+        input_rows += 8888;
+        accumulator.push(chunk);
+    }
+
+    accumulator.finalize();
+    while (ChunkPtr output = accumulator.pull()) {
+        EXPECT_LE(output->num_rows(), kDesiredSize);
         output_rows += output->num_rows();
     }
     EXPECT_EQ(input_rows, output_rows);
