@@ -72,13 +72,16 @@ public:
 // Accumulate small chunk into desired size
 class ChunkAccumulator {
 public:
+    ChunkAccumulator() = default;
     ChunkAccumulator(size_t desired_size);
+    void set_desired_size(size_t desired_size);
+    void reset();
     void push(vectorized::ChunkPtr chunk);
     vectorized::ChunkPtr pull();
     vectorized::ChunkPtr finalize();
 
 private:
-    const size_t _desired_size;
+    size_t _desired_size;
     vectorized::ChunkPtr _tmp_chunk;
     vectorized::ChunkPtr _output;
 };

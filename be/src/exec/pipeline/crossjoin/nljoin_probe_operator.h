@@ -6,9 +6,16 @@
 #include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "runtime/descriptors.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
+// NestLoopJoin
+// Implement the block-wise nestloop algorithm, support inner/outer join
+// The algorithm consists of three steps:
+// 1. Permute the block from probe side and build side
+// 2. Apply the join conjuncts and filter data
+// 3. Emit the unmatched probe rows and build row for outer join
 class NLJoinProbeOperator final : public OperatorWithDependency {
 public:
     NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -18,6 +25,7 @@ public:
 
     ~NLJoinProbeOperator() override = default;
 
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     // Control flow
@@ -52,11 +60,12 @@ private:
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
 
     bool _is_finished = false;
+    bool _output_right_join = false;
+    ChunkAccumulator _output_accumulator;
 
     // Build states
     vectorized::Chunk* _curr_build_chunk = nullptr;
-    int32_t _curr_build_index =
-            -1; // Range from [-1, num_chunk_index], -1 denotes not-started, num_chunk_index denotes probe finied
+    int32_t _curr_build_index = -1;
     std::vector<uint8_t> _build_match_flag; // Whether this build row matched by probe
 
     // Probe states

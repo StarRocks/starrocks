@@ -390,6 +390,15 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
 
 ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}
 
+void ChunkAccumulator::set_desired_size(size_t desired_size) {
+    _desired_size = desired_size;
+}
+
+void ChunkAccumulator::reset() {
+    _output.reset();
+    _tmp_chunk.reset();
+}
+
 void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
     if (_tmp_chunk == nullptr) {
         _tmp_chunk = std::move(chunk);
@@ -413,14 +422,12 @@ void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
 }
 
 vectorized::ChunkPtr ChunkAccumulator::pull() {
-    vectorized::ChunkPtr res;
-    std::swap(res, _output);
-    return res;
+    return std::move(_output);
 }
 
 vectorized::ChunkPtr ChunkAccumulator::finalize() {
     std::swap(_output, _tmp_chunk);
-    return _output;
+    return std::move(_output);
 }
 
 } // namespace starrocks
