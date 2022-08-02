@@ -79,6 +79,7 @@ public:
     void reset();
     void push(vectorized::ChunkPtr chunk);
     void finalize();
+    bool empty() const;
     vectorized::ChunkPtr pull();
 
 private:

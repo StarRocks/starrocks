@@ -43,7 +43,7 @@ public:
     int32_t num_build_chunks() const { return _build_chunks.size(); }
     size_t num_build_rows() const { return _num_build_rows; }
 
-    vectorized::Chunk* get_build_chunk(int32_t build_id) const { return _build_chunks[build_id].get(); }
+    vectorized::Chunk* get_build_chunk(int32_t index) const { return _build_chunks[index].get(); }
 
     void append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr build_chunk);
 

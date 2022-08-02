@@ -30,6 +30,7 @@ public class NestLoopJoinNode extends JoinNode {
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.NESTLOOP_JOIN_NODE;
         msg.nestloop_join_node = new TNestLoopJoinNode();
+        msg.nestloop_join_node.join_op = joinOp.toThrift();
         if (!buildRuntimeFilters.isEmpty()) {
             msg.nestloop_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));

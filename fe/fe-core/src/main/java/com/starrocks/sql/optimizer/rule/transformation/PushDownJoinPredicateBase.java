@@ -5,7 +5,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -109,16 +108,12 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
 
         OptExpression root;
         if (joinPredicate == null) {
-            if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                LogicalJoinOperator crossJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(JoinOperator.CROSS_JOIN)
-                        .setOnPredicate(null)
-                        .setPredicate(Utils.compoundAnd(postJoinPredicate, join.getPredicate()))
-                        .build();
-                root = OptExpression.create(crossJoin, input.getInputs());
-            } else {
-                throw new SemanticException("No equal on predicate in " + join.getJoinType() + " is not supported");
-            }
+            LogicalJoinOperator crossJoin = new LogicalJoinOperator.Builder().withOperator(join)
+                    .setJoinType(join.getJoinType())
+                    .setOnPredicate(null)
+                    .setPredicate(postJoinPredicate)
+                    .build();
+            root = OptExpression.create(crossJoin, input.getInputs());
         } else {
             LogicalJoinOperator newJoin;
             if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {

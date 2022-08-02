@@ -29,7 +29,7 @@ public:
     void close(RuntimeState* state) override;
 
     // Control flow
-    bool is_ready() const override { return _cross_join_context->is_right_finished(); }
+    bool is_ready() const override;
     bool has_output() const override;
     bool need_input() const override;
     bool is_finished() const override;
@@ -42,6 +42,7 @@ public:
 
 private:
     int _num_build_chunks() const;
+    vectorized::Chunk* _move_build_chunk(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
     Status _probe(RuntimeState* state, ChunkPtr chunk);
     void _permute_probe_row(RuntimeState* state, ChunkPtr chunk);
@@ -49,6 +50,8 @@ private:
     void _permute_build_rows_right_join(RuntimeState* state, ChunkPtr chunk);
     void _permute_probe_row_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index);
     bool _is_curr_probe_chunk_finished() const;
+    bool _is_left_join() const;
+    bool _is_right_join() const;
 
 private:
     const TJoinOp::type _join_op;
@@ -65,7 +68,7 @@ private:
 
     // Build states
     vectorized::Chunk* _curr_build_chunk = nullptr;
-    int32_t _curr_build_index = -1;
+    int _curr_build_chunk_index = 0;
     std::vector<uint8_t> _build_match_flag; // Whether this build row matched by probe
 
     // Probe states

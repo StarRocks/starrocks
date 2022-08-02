@@ -113,7 +113,7 @@ const std::vector<SlotId>& Operator::filter_null_value_columns() const {
 }
 
 Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                               vectorized::FilterPtr filter) {
+                                               vectorized::FilterPtr* filter) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
                                                 conjuncts.end());
@@ -133,11 +133,7 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         _conjuncts_input_counter->update(before);
-        if (filter) {
-            RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, &filter));
-        } else {
-            RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, nullptr));
-        }
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter));
         auto after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
         _conjuncts_eval_counter->update(before - after);

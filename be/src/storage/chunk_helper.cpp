@@ -423,6 +423,10 @@ void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
     }
 }
 
+bool ChunkAccumulator::empty() const {
+    return _output.empty();
+}
+
 vectorized::ChunkPtr ChunkAccumulator::pull() {
     if (!_output.empty()) {
         auto res = std::move(_output.front());
