@@ -1446,12 +1446,16 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayDropPartition(DropPartitionInfo info) {
         Database db = this.getDb(info.getDbId());
         db.writeLock();
+        Set<Long> tabletIdSet = new HashSet<Long>();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
-                olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+                tabletIdSet = olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+            }
+            if (!tabletIdSet.isEmpty()) {
+                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
             }
         } finally {
             db.writeUnlock();
@@ -4510,6 +4514,7 @@ public class LocalMetastore implements ConnectorMetadata {
             for (Tablet tablet : index.getTablets()) {
                 long tabletId = tablet.getId();
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                // only need to return lakeTablet
                 if (tabletMeta != null && tabletMeta.isLakeTablet()) {
                     tabletIdSet.add(tabletId);
                 }
