@@ -46,6 +46,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -55,6 +56,11 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
+>>>>>>> c2f28ffc2 ([Bugfix] fix invalid dictionary in schema change (#9401))
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -554,7 +560,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        // 
+        // partition visible version won't update in schema change, so we need make global
+        // dictionary invalid after schema change.
+        for (Column column : tbl.getColumns()) {
+            if (Type.VARCHAR.equals(column.getType())) {
+                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+            }
+        }
+>>>>>>> c2f28ffc2 ([Bugfix] fix invalid dictionary in schema change (#9401))
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
