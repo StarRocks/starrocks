@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "exec/workgroup/work_group.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/defer_op.h"
@@ -79,6 +80,9 @@ void GlobalDriverExecutor::_worker_thread() {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
+        // Reset TLS state
+        CurrentThread::current().set_query_id({});
+        CurrentThread::current().set_pipeline_driver_id(0);
 
         auto maybe_driver = this->_driver_queue->take(worker_id);
         if (maybe_driver.status().is_cancelled()) {
@@ -89,6 +93,9 @@ void GlobalDriverExecutor::_worker_thread() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
+        CurrentThread::current().set_query_id(query_ctx->query_id());
+        CurrentThread::current().set_pipeline_driver_id(driver->driver_id());
+
         // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
         //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
