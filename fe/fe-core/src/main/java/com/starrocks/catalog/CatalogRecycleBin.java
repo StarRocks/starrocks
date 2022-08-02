@@ -431,7 +431,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
                 if (!tabletIdSet.isEmpty()) {
                     GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                    GlobalStateMgr.getCurrentState().getEditLog().logAddUnusedShard(tabletIdSet);
                 }
             }
         }

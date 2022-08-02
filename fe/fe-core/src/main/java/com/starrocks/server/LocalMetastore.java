@@ -1437,7 +1437,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         if (!tabletIdSet.isEmpty()) {
             stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-            editLog.logAddUnusedShard(tabletIdSet);
         }
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
