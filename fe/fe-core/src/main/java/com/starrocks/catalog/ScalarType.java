@@ -508,6 +508,7 @@ public class ScalarType extends Type implements Cloneable {
             case BITMAP:
             case PERCENTILE:
             case JSON:
+            case FUNCTION:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
             default:

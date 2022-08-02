@@ -64,6 +64,7 @@ enum PrimitiveType {
     TYPE_DECIMAL128, /* 26 */
 
     TYPE_JSON, /* 27 */
+    TYPE_FUNCTION, /* 28 */
 };
 
 inline bool is_enumeration_type(PrimitiveType type) {
@@ -81,6 +82,11 @@ inline bool is_enumeration_type(PrimitiveType type) {
 }
 
 inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
+    if (lhs == TYPE_FUNCTION || rhs == TYPE_FUNCTION)
+    {
+        return false;
+    }
+
     if (lhs == TYPE_VARCHAR) {
         return rhs == TYPE_CHAR || rhs == TYPE_VARCHAR || rhs == TYPE_HLL || rhs == TYPE_OBJECT;
     }
@@ -141,6 +147,7 @@ VALUE_GUARD(PrimitiveType, SumDecimal64PTGuard, pt_is_sum_decimal64, TYPE_DECIMA
 VALUE_GUARD(PrimitiveType, HllPTGuard, pt_is_hll, TYPE_HLL)
 VALUE_GUARD(PrimitiveType, BinaryPTGuard, pt_is_binary, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(PrimitiveType, JsonGuard, pt_is_json, TYPE_JSON)
+VALUE_GUARD(PrimitiveType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
 
 VALUE_GUARD(PrimitiveType, DatePTGuard, pt_is_date, TYPE_DATE)
 VALUE_GUARD(PrimitiveType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)
