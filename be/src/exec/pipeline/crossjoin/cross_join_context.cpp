@@ -49,6 +49,11 @@ void CrossJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPt
     _tmp_chunks[sinker_id].push_back(chunk);
 }
 
+int CrossJoinContext::get_build_chunk_start(int index) const {
+    DCHECK_LT(index, _build_chunks.size());
+    return _build_chunk_desired_size * index;
+}
+
 Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
     if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
         RETURN_IF_ERROR(_init_runtime_filter(state));
@@ -70,6 +75,7 @@ Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
         _tmp_chunks.clear();
         _tmp_chunks.shrink_to_fit();
 
+        _build_chunk_desired_size = state->chunk_size();
         _all_right_finished = true;
     }
     return Status::OK();

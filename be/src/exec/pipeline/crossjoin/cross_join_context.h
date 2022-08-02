@@ -45,12 +45,19 @@ public:
 
     vectorized::Chunk* get_build_chunk(int32_t index) const { return _build_chunks[index].get(); }
 
+    // Start row index of a chunk
+    int get_build_chunk_start(int index) const;
+
     void append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr build_chunk);
 
     Status finish_one_right_sinker(RuntimeState* state);
 
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
-
+    
+    bool enter_post_probe() {
+        bool value = false;
+        return _post_probe.compare_exchange_strong(value, true);
+    }
 private:
     Status _init_runtime_filter(RuntimeState* state);
 
@@ -65,10 +72,12 @@ private:
     // _build_chunks[i] contains all the rows from i-th CrossJoinRightSinkOperator.
     std::vector<std::vector<vectorized::ChunkPtr>> _tmp_chunks;
     std::vector<vectorized::ChunkPtr> _build_chunks;
+    int _build_chunk_desired_size = 0;
 
     // finished flags
     std::atomic_bool _all_right_finished = false;
     std::atomic_int64_t _num_build_rows = 0;
+    std::atomic_bool _post_probe = false; // Enter the post-probe state
 
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _conjuncts_ctx;

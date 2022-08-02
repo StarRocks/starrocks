@@ -45,6 +45,7 @@ private:
     vectorized::Chunk* _move_build_chunk(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
     Status _probe(RuntimeState* state, ChunkPtr chunk);
+    void _init_build_match();
     void _permute_probe_row(RuntimeState* state, ChunkPtr chunk);
     void _permute_chunk(RuntimeState* state, ChunkPtr chunk);
     void _permute_right_join(RuntimeState* state, ChunkPtr chunk);
@@ -63,18 +64,18 @@ private:
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
 
     bool _is_finished = false;
-    bool _output_right_join = false;
     ChunkAccumulator _output_accumulator;
 
     // Build states
-    vectorized::Chunk* _curr_build_chunk = nullptr;
     int _curr_build_chunk_index = 0;
+    vectorized::Chunk* _curr_build_chunk = nullptr;
     std::vector<uint8_t> _build_match_flag; // Whether this build row matched by probe
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;
     bool _probe_row_matched = false;
-    int32_t _probe_row_index = 0;
+    size_t _probe_row_start = 0;   // Start index of current chunk
+    size_t _probe_row_current = 0; // End index of current chunk
 };
 
 } // namespace starrocks::pipeline
