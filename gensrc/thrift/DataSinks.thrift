@@ -133,6 +133,8 @@ struct TExportSink {
     7: optional bool use_broker = false;
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     8: optional i32 hdfs_write_buffer_size_kb = 0; 
+    // properties from hdfs-site.xml, core-site.xml and load_properties
+    9: optional PlanNodes.THdfsProperties hdfs_properties
 
     // export file name prefix
     30: optional string file_name_prefix
