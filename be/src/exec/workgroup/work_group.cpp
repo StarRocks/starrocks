@@ -517,8 +517,9 @@ bool WorkGroupManager::should_yield_scan_worker(ScanExecutorType type, int worke
 }
 
 DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
-    auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, 1,
-                                                  1.0, 0, WorkGroupType::WG_DEFAULT);
+    int64_t default_cpu_limit = ExecEnv::GetInstance()->max_executor_threads();
+    auto default_wg = std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION,
+                                                  default_cpu_limit, 1.0, 0, WorkGroupType::WG_DEFAULT);
     WorkGroupManager::instance()->add_workgroup(default_wg);
 }
 
