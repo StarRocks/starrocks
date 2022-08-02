@@ -203,7 +203,9 @@ public class CTEContext {
         }
 
         Preconditions.checkState(produceCosts.containsKey(cteId));
-        Preconditions.checkState(consumeInlineCosts.containsKey(cteId));
+        if (!consumeInlineCosts.containsKey(cteId)) {
+            return false;
+        }
 
         if (inlineCTERatio <= 0) {
             return false;

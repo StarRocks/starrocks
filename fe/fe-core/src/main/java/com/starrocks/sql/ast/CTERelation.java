@@ -7,7 +7,8 @@ import com.starrocks.analysis.TableName;
 import java.util.List;
 
 public class CTERelation extends Relation {
-    private final int cteId;
+    // @Note: don't join hash method, maybe multi-change
+    private int cteId;
     private final String name;
     private List<String> columnOutputNames;
     private final QueryStatement cteQueryStatement;
@@ -18,6 +19,10 @@ public class CTERelation extends Relation {
         this.name = name;
         this.columnOutputNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
+    }
+
+    public void setCteId(int cteId) {
+        this.cteId = cteId;
     }
 
     public QueryStatement getCteQueryStatement() {
