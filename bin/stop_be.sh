@@ -16,17 +16,6 @@
 # specific language governing permissions and limitations
 # under the License.
 
-#############################################################################
-# This script is used to stop BE process
-# Usage:
-#     sh stop_be.sh [option]
-#
-# Options:
-#     -h, --help              display this usage only
-#     -g, --graceful          send SIGTERM to BE process instead of SIGKILL
-#
-#############################################################################
-
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
