@@ -324,8 +324,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             auto& chunk_source = _chunk_sources[chunk_source_index];
 
             DeferOp timer_defer([chunk_source]() {
-                COUNTER_UPDATE(chunk_source->scan_timer(), chunk_source->io_task_wait_timer()->value() +
-                                                                   chunk_source->io_task_exec_timer()->value());
+                COUNTER_SET(chunk_source->scan_timer(),
+                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
             });
             COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
             SCOPED_TIMER(chunk_source->io_task_exec_timer());
