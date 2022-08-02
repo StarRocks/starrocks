@@ -164,9 +164,12 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(max_network_send_bytes_rate);
     REGISTER_STARROCKS_METRIC(max_network_receive_bytes_rate);
 
+#ifndef USE_JEMALLOC
     REGISTER_STARROCKS_METRIC(tcmalloc_total_bytes_reserved);
     REGISTER_STARROCKS_METRIC(tcmalloc_pageheap_unmapped_bytes);
     REGISTER_STARROCKS_METRIC(tcmalloc_bytes_in_use);
+#else
+#endif
 
     _metrics.register_hook(_s_hook_name, [this] { _update(); });
 
