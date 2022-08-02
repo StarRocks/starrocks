@@ -1329,8 +1329,11 @@ public class LocalMetastore implements ConnectorMetadata {
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            invertedIndex.addReplica(tabletId, replica);
+                        // modify some logic
+                        if (!tabletMeta.isLakeTablet()) {
+                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
                         }
                     }
                 }
