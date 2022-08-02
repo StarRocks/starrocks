@@ -45,8 +45,8 @@ The preceding privileges can be classified into the following three categories:
 The database and table. This parameter supports the following three formats:
 
 - `*.*`: indicates all databases and tables.
-  - `db.*`: indicates a specific database and all tables in this database.
-  - `db.tbl`: indicates a specific table in a specific database.
+- `db.*`: indicates a specific database and all tables in this database.
+- `db.tbl`: indicates a specific table in a specific database.
 
 > Note: When you use the `db.*` or `db.tbl` format, you can specify a database or a table that does not exist.
 
@@ -55,7 +55,6 @@ The database and table. This parameter supports the following three formats:
  The resource name. This parameter supports the following two formats:
 
 - `*`: indicates all the resources.
-
 - `resource`: indicates a specific resource.
 
 > Note: When you use the `resource` format, you can specify a resource that does not exist.
@@ -94,13 +93,13 @@ Example 4: Grant the privilege to use all the resources to user `jack`.
 GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
 ```
 
-Example 5: Grant the privilege to use spark_resource to user `jack`.
+Example 5: Grant the privilege to use `spark_resource` to user `jack`.
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
 ```
 
-Example 6: Grant the privilege to use spark_resource to the `my_role`.
+Example 6: Grant the privilege to use `spark_resource` to the `my_role`.
 
 ```SQL
 GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';

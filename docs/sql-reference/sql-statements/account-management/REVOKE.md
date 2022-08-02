@@ -25,14 +25,14 @@ You can use the REVOKE statement to revoke specific privileges from a user or a 
 The privileges that can be revoked. If you want to revoke multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
 
 - `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes.
-  - `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
-  - `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
-  - `SELECT_PRIV`: the read privilege on databases and tables.
-  - `LOAD_PRIV`: the privilege to load data into databases and tables.
-  - `ALTER_PRIV`: the privilege to change schemas of databases and tables.
-  - `CREATE_PRIV`: the privilege to create databases and tables.
-  - `DROP_PRIV`: the privilege to delete databases and tables.
-  - `USAGE_PRIV`: the privilege to use resources.
+- `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
+- `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
+- `SELECT_PRIV`: the read privilege on databases and tables.
+- `LOAD_PRIV`: the privilege to load data into databases and tables.
+- `ALTER_PRIV`: the privilege to change schemas of databases and tables.
+- `CREATE_PRIV`: the privilege to create databases and tables.
+- `DROP_PRIV`: the privilege to delete databases and tables.
+- `USAGE_PRIV`: the privilege to use resources.
 
 ### db_name[.tbl_name]
 
@@ -49,7 +49,6 @@ The database and table. This parameter supports the following three formats:
  The resource name. This parameter supports the following two formats:
 
 - `*`: indicates all the resources.
-
 - `resource`: indicates a specific resource.
 
 > Note: When you use the `resource` format, you can specify a resource that does not exist.
@@ -70,7 +69,7 @@ Example 1: Revoke the read privilege on `testDb` and all tables in this database
 REVOKE SELECT_PRIV ON db1.* FROM 'jack'@'192.%';
 ```
 
-Example 2: Revoke the privilege to use spark_resource from user `jack`.
+Example 2: Revoke the privilege to use `spark_resource` from user `jack`.
 
 ```SQL
 REVOKE USAGE_PRIV ON RESOURCE 'spark_resource' FROM 'jack'@'192.%';
