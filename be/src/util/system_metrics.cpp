@@ -20,8 +20,11 @@
 // under the License.
 
 #include "util/system_metrics.h"
-
+#ifdef USE_JEMALLOC
+#include "jemalloc/jemalloc.h"
+#else
 #include <gperftools/malloc_extension.h>
+#endif
 #include <runtime/exec_env.h>
 #include <runtime/mem_tracker.h>
 
@@ -192,6 +195,7 @@ void SystemMetrics::_update_cpu_metrics() {
 
 void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     _memory_metrics = std::make_unique<MemoryMetrics>();
+#ifndef USE_JEMALLOC
     registry->register_metric("memory_allocated_bytes", &_memory_metrics->allocated_bytes);
     registry->register_metric("total_thread_cache_bytes", &_memory_metrics->total_thread_cache_bytes);
     registry->register_metric("central_cache_free_bytes", &_memory_metrics->central_cache_free_bytes);
@@ -199,6 +203,15 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("thread_cache_free_bytes", &_memory_metrics->thread_cache_free_bytes);
     registry->register_metric("pageheap_free_bytes", &_memory_metrics->pageheap_free_bytes);
     registry->register_metric("pageheap_unmapped_bytes", &_memory_metrics->pageheap_unmapped_bytes);
+#else
+    registry->register_metric("jemalloc_allocated_bytes", &_memory_metrics->jemalloc_allocated_bytes);
+    registry->register_metric("jemalloc_active_bytes", &_memory_metrics->jemalloc_active_bytes);
+    registry->register_metric("jemalloc_metadata_bytes", &_memory_metrics->jemalloc_metadata_bytes);
+    registry->register_metric("jemalloc_metadata_thp", &_memory_metrics->jemalloc_metadata_thp);
+    registry->register_metric("jemalloc_resident_bytes", &_memory_metrics->jemalloc_resident_bytes);
+    registry->register_metric("jemalloc_mapped_bytes", &_memory_metrics->jemalloc_mapped_bytes);
+    registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_mapped_bytes);
+#endif
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
@@ -242,11 +255,34 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
 }
 
 void SystemMetrics::_update_memory_metrics() {
+    size_t value = 0;
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
+#elif defined(USE_JEMALLOC)
+    size_t sz = sizeof(size_t);
+    if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_allocated_bytes.set_value(value);
+    }
+    if (je_mallctl("stats.active", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_active_bytes.set_value(value);
+    }
+    if (je_mallctl("stats.metadata", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_metadata_bytes.set_value(value);
+    }
+    if (je_mallctl("stats.metadata_thp", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_metadata_thp.set_value(value);
+    }
+    if (je_mallctl("stats.resident", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_resident_bytes.set_value(value);
+    }
+    if (je_mallctl("stats.mapped", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_mapped_bytes.set_value(value);
+    }
+    if (je_mallctl("stats.retained", &value, &sz, nullptr, 0) == 0) {
+        _memory_metrics->jemalloc_retained_bytes.set_value(value);
+    }
 #else
     MallocExtension* ext = MallocExtension::instance();
-    size_t value = 0;
     (void)ext->GetNumericProperty("generic.current_allocated_bytes", &value);
     _memory_metrics->allocated_bytes.set_value(value);
 
@@ -267,6 +303,7 @@ void SystemMetrics::_update_memory_metrics() {
 
     (void)ext->GetNumericProperty("tcmalloc.pageheap_unmapped_bytes", &value);
     _memory_metrics->pageheap_unmapped_bytes.set_value(value);
+#endif
 
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                \
     if (ExecEnv::GetInstance()->tracker() != nullptr) {                                   \
@@ -316,7 +353,6 @@ void SystemMetrics::_update_memory_metrics() {
     UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_datetime_bytes, TimestampColumn)
 
 #undef UPDATE_COLUMN_POOL_METRIC
-#endif
 }
 
 void SystemMetrics::_install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices) {
