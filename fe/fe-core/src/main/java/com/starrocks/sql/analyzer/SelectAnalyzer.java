@@ -197,7 +197,7 @@ public class SelectAnalyzer {
                         .map(Field::getName).collect(Collectors.toList());
                 if (!unknownTypeFields.isEmpty()) {
                     throw new SemanticException("External Table Column " + unknownTypeFields
-                            + " convert failed, and column type is known!");
+                            + " convert failed, and column type is unknown!");
                 }
                 if (fields.isEmpty()) {
                     if (item.getTblName() != null) {
