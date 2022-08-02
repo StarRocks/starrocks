@@ -256,6 +256,10 @@ public class ComputeNode implements IComputable, Writable {
         return this.isDecommissioned.get();
     }
 
+    public void setIsDecommissioned(boolean isDecommissioned) {
+        this.isDecommissioned.set(isDecommissioned);
+    }
+
     public boolean isAvailable() {
         return this.isAlive.get() && !this.isDecommissioned.get();
     }
