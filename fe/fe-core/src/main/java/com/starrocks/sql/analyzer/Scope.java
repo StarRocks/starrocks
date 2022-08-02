@@ -56,7 +56,7 @@ public class Scope {
         } else if (matchFields.size() == 1) {
             if (matchFields.get(0).getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE)) {
                 throw new SemanticException("External Table Column " + matchFields.get(0).getName()
-                        + " convert failed, and column type is known!");
+                        + " convert failed, and column type is unknown!");
             } else {
                 return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
             }

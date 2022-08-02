@@ -511,8 +511,6 @@ Status DataDir::update_capacity() {
     ASSIGN_OR_RETURN(auto space_info, FileSystem::Default()->space(_path));
     _available_bytes = space_info.available;
     _disk_capacity_bytes = space_info.capacity;
-    LOG(INFO) << "path: " << _path << " total capacity: " << _disk_capacity_bytes
-              << ", available capacity: " << _available_bytes;
     return Status::OK();
 }
 

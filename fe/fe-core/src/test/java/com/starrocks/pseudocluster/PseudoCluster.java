@@ -6,19 +6,17 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.LakeServiceAsync;
-import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PBackendServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
+import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +26,7 @@ public class PseudoCluster {
 
     private static volatile PseudoCluster instance;
 
+    String runDir;
     int queryPort;
 
     PseudoFrontend frontend;
@@ -36,6 +35,8 @@ public class PseudoCluster {
     HeatBeatPool heartBeatPool = new HeatBeatPool("heartbeat");
     BackendThriftPool backendThriftPool = new BackendThriftPool("backend");
     PseudoBrpcRroxy brpcProxy = new PseudoBrpcRroxy();
+
+    private BasicDataSource dataSource;
 
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
@@ -81,11 +82,11 @@ public class PseudoCluster {
     }
 
     public Connection getQueryConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection(
-                "jdbc:mysql://localhost:" + queryPort + "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false",
-                "root",
-                "");
-        return connection;
+        return dataSource.getConnection();
+    }
+
+    public String getRunDir() {
+        return runDir;
     }
 
     public void shutdown() {
@@ -101,8 +102,16 @@ public class PseudoCluster {
      */
     private static PseudoCluster build(String runDir, int queryPort, int numBackends) throws Exception {
         PseudoCluster cluster = new PseudoCluster();
+        cluster.runDir = runDir;
         cluster.queryPort = queryPort;
         cluster.frontend = PseudoFrontend.getInstance();
+
+        BasicDataSource dataSource = new BasicDataSource();
+        dataSource.setUrl(
+                "jdbc:mysql://localhost:" + queryPort + "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false");
+        dataSource.setUsername("root");
+        dataSource.setPassword("");
+        cluster.dataSource = dataSource;
 
         ClientPool.heartbeatPool = cluster.heartBeatPool;
         ClientPool.backendPool = cluster.backendThriftPool;

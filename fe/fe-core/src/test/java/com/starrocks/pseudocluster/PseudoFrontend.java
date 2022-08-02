@@ -10,12 +10,18 @@ import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
+import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalException;
+import com.starrocks.journal.JournalFactory;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.thrift.FrontendService;
+import com.starrocks.utframe.MockJournal;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 
@@ -164,7 +170,7 @@ public class PseudoFrontend {
 
                 // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
                 if (!JdkUtils.checkJavaVersion()) {
-                    //                    throw new IllegalArgumentException("Java version doesn't match");
+                    throw new IllegalArgumentException("Java version doesn't match");
                 }
 
                 Log4jConfig.initLogging();
@@ -174,6 +180,14 @@ public class PseudoFrontend {
 
                 FrontendOptions.init(new String[0]);
                 ExecuteEnv.setup();
+
+                new MockUp<JournalFactory>() {
+                    @Mock
+                    public Journal create(String name) throws JournalException {
+                        GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
+                        return new MockJournal();
+                    }
+                };
 
                 GlobalStateMgr.getCurrentState().initialize(args);
                 StateChangeExecutor.getInstance().setMetaContext(

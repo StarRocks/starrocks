@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
+#include <util/time.h>
+
 #include "column/chunk.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
@@ -305,7 +307,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.workgroup = _workgroup;
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
-    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id](int worker_id) {
+    const auto io_task_start_nano = MonotonicNanos();
+    task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
+                          io_task_start_nano](int worker_id) {
         if (auto sp = wp.lock()) {
             // Set driver_id here to share some driver-local contents.
             // Current it's used by ExprContext's driver-local state
@@ -318,6 +322,14 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
+
+            DeferOp timer_defer([chunk_source]() {
+                COUNTER_SET(chunk_source->scan_timer(),
+                            chunk_source->io_task_wait_timer()->value() + chunk_source->io_task_exec_timer()->value());
+            });
+            COUNTER_UPDATE(chunk_source->io_task_wait_timer(), MonotonicNanos() - io_task_start_nano);
+            SCOPED_TIMER(chunk_source->io_task_exec_timer());
+
             int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();

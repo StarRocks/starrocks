@@ -79,13 +79,7 @@ public:
     template <class U>
     TraceAlloc(TraceAlloc<U> const&) noexcept {}
 
-    value_type* allocate(std::size_t n) {
-        if (n >= large_mem_alloc_threhold / phmap_hash_table_shard / sizeof(value_type)) {
-            LOG(INFO) << "primary_index large alloc " << n << "*" << sizeof(value_type) << "="
-                      << n * sizeof(value_type);
-        }
-        return static_cast<value_type*>(::operator new(n * sizeof(value_type)));
-    }
+    value_type* allocate(std::size_t n) { return static_cast<value_type*>(::operator new(n * sizeof(value_type))); }
 
     void deallocate(value_type* p, std::size_t) noexcept { ::operator delete(p); }
 };

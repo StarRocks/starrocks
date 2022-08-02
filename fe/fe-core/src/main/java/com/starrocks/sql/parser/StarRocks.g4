@@ -83,7 +83,6 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
-    | SET setVarList                                                                        #setStmt
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -101,17 +100,18 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createResourceGroupStatement                                                              #createResourceGroup
-    | dropResourceGroupStatement                                                                #dropResourceGroup
-    | alterResourceGroupStatement                                                               #alterResourceGroup
-    | showResourceGroupStatement                                                                #showResourceGroup
+    | createResourceGroupStatement                                                          #createResourceGroup
+    | dropResourceGroupStatement                                                            #dropResourceGroup
+    | alterResourceGroupStatement                                                           #alterResourceGroup
+    | showResourceGroupStatement                                                            #showResourceGroup
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
     | dropFunctionStatement                                                                 #dropFunctionst
     | createFunctionStatement                                                               #createFunction
 
-
+    // Load Statement
+    | loadStatement                                                                         #load
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -125,6 +125,7 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | setStatement                                                                          #setStmt
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -624,6 +625,55 @@ typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
 
+// ------------------------------------------- Load Statement ----------------------------------------------------------
+
+loadStatement
+    : LOAD LABEL label=labelName
+        data=dataDescList?
+        broker=brokerDesc?
+        (BY system=identifierOrString)?
+        (PROPERTIES props=propertyList)?
+    | LOAD LABEL label=labelName
+        data=dataDescList?
+        resource=resourceDesc
+        (PROPERTIES props=propertyList)?
+    ;
+
+labelName
+    : (db=identifier '.')? label=identifier
+    ;
+
+dataDescList
+    : '(' dataDesc (',' dataDesc)* ')'
+    ;
+
+dataDesc
+    : DATA INFILE srcFiles=stringList
+        NEGATIVE?
+        INTO TABLE dstTableName=identifier
+        partitions=partitionNames?
+        (COLUMNS TERMINATED BY colSep=string)?
+        format=fileFormat?
+        colList=columnAliases?
+        (COLUMNS FROM PATH AS colFromPath=identifierList)?
+        (SET colMappingList=classifier)?
+        (WHERE where=expression)?
+    | DATA FROM TABLE srcTableName=identifier
+        NEGATIVE?
+        INTO TABLE dstTableName=identifier
+        partitions=partitionNames?
+        (SET colMappingList=classifier)?
+        (WHERE where=expression)?
+    ;
+
+brokerDesc
+    : WITH BROKER name=identifierOrString props=propertyList?
+    ;
+
+resourceDesc
+    : WITH RESOURCE name=identifierOrString props=propertyList?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -668,18 +718,21 @@ showBrokerStatement
     : SHOW BROKER
     ;
 
-varType
-    : GLOBAL
-    | LOCAL
-    | SESSION
+setStatement
+    : SET setVar (',' setVar)*
     ;
 
 setVar
-    : varType? IDENTIFIER '=' expression
+    : varType? identifier '=' setExprOrDefault
+    | AT identifierOrString '=' expression
+    | AT AT (varType '.')? identifier '=' setExprOrDefault
     ;
 
-setVarList
-    : setVar (',' setVar)*
+setExprOrDefault
+    : DEFAULT
+    | ON
+    | ALL
+    | expression
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -808,7 +861,7 @@ outerAndSemiJoinType
     ;
 
 bracketHint
-    : '[' IDENTIFIER (',' IDENTIFIER)* ']'
+    : '[' identifier (',' identifier)* ']'
     ;
 
 setVarHint
@@ -816,7 +869,7 @@ setVarHint
     ;
 
 hintMap
-    : k=IDENTIFIER '=' v=literalExpression
+    : k=identifierOrString '=' v=literalExpression
     ;
 
 joinCriteria
@@ -969,7 +1022,7 @@ aggregationFunction
     ;
 
 variable
-    : AT AT ((GLOBAL | SESSION | LOCAL) '.')? identifier
+    : AT AT (varType '.')? identifier
     ;
 
 columnReference
@@ -1132,6 +1185,12 @@ property
     : key=string '=' value=string
     ;
 
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
+    ;
+
 comment
     : COMMENT string
     ;
@@ -1215,10 +1274,10 @@ qualifiedName
     ;
 
 identifier
-    : IDENTIFIER             #unquotedIdentifier
+    : LETTER_IDENTIFIER      #unquotedIdentifier
     | nonReserved            #unquotedIdentifier
-    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
+    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     ;
 
 identifierList

@@ -1030,7 +1030,11 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                 continue;
             }
 
-            std::vector<std::tuple<Counter*, Counter*, Counter*>> counters;
+            std::vector<Counter*> counters;
+
+            int64_t min_value = std::numeric_limits<int64_t>::max();
+            int64_t max_value = std::numeric_limits<int64_t>::min();
+            bool already_merged = false;
             for (auto j = 0; j < profiles.size(); j++) {
                 auto* profile = profiles[j];
                 auto* counter = profile->get_counter(name);
@@ -1049,13 +1053,28 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                 }
 
                 auto* min_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name));
+                if (min_counter != nullptr) {
+                    already_merged = true;
+                    if (min_counter->value() < min_value) {
+                        min_value = min_counter->value();
+                    }
+                }
                 auto* max_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name));
-                counters.push_back(std::make_tuple(counter, min_counter, max_counter));
+                if (max_counter != nullptr) {
+                    already_merged = true;
+                    if (max_counter->value() > max_value) {
+                        max_value = max_counter->value();
+                    }
+                }
+                counters.push_back(counter);
             }
+
             const auto merged_info = merge_isomorphic_counters(type, counters);
             const auto merged_value = std::get<0>(merged_info);
-            const auto min_value = std::get<1>(merged_info);
-            const auto max_value = std::get<2>(merged_info);
+            if (!already_merged) {
+                min_value = std::get<1>(merged_info);
+                max_value = std::get<2>(merged_info);
+            }
 
             auto* counter0 = profile0->get_counter(name);
             // As memtioned before, some counters may only attach to one of the isomorphic profiles
@@ -1065,26 +1084,28 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             }
             counter0->set(merged_value);
 
-            // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-            const auto diff = max_value - min_value;
-            if (is_average_type(counter0->type())) {
-                if ((diff > 5'000'000L && diff > merged_value / 5)) {
-                    auto* min_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name),
-                                                              type, name);
-                    auto* max_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name),
-                                                              type, name);
-                    min_counter->set(min_value);
-                    max_counter->set(max_value);
-                }
+            bool update_min_max = false;
+            if (already_merged) {
+                update_min_max = true;
             } else {
-                if (diff > min_value) {
-                    auto* min_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name),
-                                                              type, name);
-                    auto* max_counter = profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name),
-                                                              type, name);
-                    min_counter->set(min_value);
-                    max_counter->set(max_value);
+                // If the values vary greatly, we need to save extra info (min value and max value) of this counter
+                const auto diff = max_value - min_value;
+                if (is_average_type(counter0->type())) {
+                    if ((diff > 5'000'000L && diff > merged_value / 5.0)) {
+                        update_min_max = true;
+                    }
+                } else {
+                    // All sum type counters will have extra info (min value and max value)
+                    update_min_max = true;
                 }
+            }
+            if (update_min_max) {
+                auto* min_counter =
+                        profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name), type, name);
+                auto* max_counter =
+                        profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name), type, name);
+                min_counter->set(min_value);
+                max_counter->set(max_value);
             }
         }
     }
@@ -1113,28 +1134,18 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
     }
 }
 
-RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(
-        TUnit::type type, std::vector<std::tuple<Counter*, Counter*, Counter*>>& counters) {
+RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(TUnit::type type,
+                                                                     std::vector<Counter*>& counters) {
     DCHECK_GE(counters.size(), 0);
     int64_t merged_value = 0;
     int64_t min_value = std::numeric_limits<int64_t>::max();
     int64_t max_value = std::numeric_limits<int64_t>::min();
 
-    for (auto& triple : counters) {
-        Counter* counter = std::get<0>(triple);
-        Counter* min_counter = std::get<1>(triple);
-        Counter* max_counter = std::get<2>(triple);
-
-        if (min_counter != nullptr && min_counter->value() < min_value) {
-            min_value = min_counter->value();
-        }
+    for (auto& counter : counters) {
         if (counter->value() < min_value) {
             min_value = counter->value();
         }
 
-        if (max_counter != nullptr && max_counter->value() > max_value) {
-            max_value = max_counter->value();
-        }
         if (counter->value() > max_value) {
             max_value = counter->value();
         }

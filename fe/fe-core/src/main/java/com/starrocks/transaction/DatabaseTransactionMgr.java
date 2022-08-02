@@ -1652,6 +1652,7 @@ public class DatabaseTransactionMgr {
                 transactionState.setNewFinish();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 unprotectUpsertTransactionState(transactionState, false);
+                transactionState.notifyVisible();
                 txnOperated = true;
             } finally {
                 writeUnlock();
