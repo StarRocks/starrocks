@@ -19,7 +19,7 @@ ALTER RESOURCE 'resource_name' SET PROPERTIES ("key"="value", ...)
     - `iceberg.catalog.hive.metastore.uris`：Hive metastore 地址。
   - Apache Hive™ 和 Apache Hudi 资源支持修改 `hive.metastore.uris`，即 Hive metastore 地址。
 
-## 使用说明
+## 注意事项
 
 引用一个资源创建外部表后，如果修改了该资源的 Hive metastore 地址会导致该外部表不可用。若仍想使用该外部表查询数据，需保证新 Hive metastore 中存在与原 Hive metastore 中名称和表结构相同的数据表。
 
