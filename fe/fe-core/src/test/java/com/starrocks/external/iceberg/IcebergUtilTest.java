@@ -2,6 +2,7 @@
 
 package com.starrocks.external.iceberg;
 
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.external.hive.HdfsFileFormat;
@@ -59,10 +60,11 @@ public class IcebergUtilTest {
         Assert.assertEquals(resType, stringType);
     }
 
-    @Test(expected = RuntimeException.class)
+    @Test
     public void testUnsupported() {
         org.apache.iceberg.types.Type icebergType = Types.MapType.ofRequired(1, 2,
                 Types.StringType.get(), Types.StringType.get());
-        convertColumnType(icebergType);
+        Type resType = convertColumnType(icebergType);
+        Assert.assertEquals(resType, ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
     }
 }
