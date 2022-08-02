@@ -265,8 +265,6 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
         starrocks::shutdown_logging();
         exit(1);
-    } else {
-        LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
 #ifdef USE_STAROS
