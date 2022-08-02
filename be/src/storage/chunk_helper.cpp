@@ -388,4 +388,39 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
     original_chunk.swap_chunk(reordered_chunk);
 }
 
+ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}
+
+void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
+    if (_tmp_chunk == nullptr) {
+        _tmp_chunk = std::move(chunk);
+    } else if (_tmp_chunk->num_rows() == _desired_size) {
+        DCHECK(_output == nullptr);
+        _output = std::move(_tmp_chunk);
+        _tmp_chunk = std::move(chunk);
+    } else if (_tmp_chunk->num_rows() < _desired_size) {
+        int left_rows = std::min(_desired_size - _tmp_chunk->num_rows(), chunk->num_rows());
+        _tmp_chunk->append(*chunk, 0, left_rows);
+        if (_tmp_chunk->num_rows() >= _desired_size) {
+            _output = std::move(_tmp_chunk);
+        }
+
+        int right_rows = chunk->num_rows() - left_rows;
+        if (right_rows > 0) {
+            _tmp_chunk = chunk->clone_empty(_desired_size);
+            _tmp_chunk->append(*chunk, left_rows, right_rows);
+        }
+    }
+}
+
+vectorized::ChunkPtr ChunkAccumulator::pull() {
+    vectorized::ChunkPtr res;
+    std::swap(res, _output);
+    return res;
+}
+
+vectorized::ChunkPtr ChunkAccumulator::finalize() {
+    std::swap(_output, _tmp_chunk);
+    return _output;
+}
+
 } // namespace starrocks

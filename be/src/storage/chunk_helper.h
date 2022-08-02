@@ -69,4 +69,18 @@ public:
     static void reorder_chunk(const std::vector<SlotDescriptor*>& slots, vectorized::Chunk* chunk);
 };
 
+// Accumulate small chunk into desired size
+class ChunkAccumulator {
+public:
+    ChunkAccumulator(size_t desired_size);
+    void push(vectorized::ChunkPtr chunk);
+    vectorized::ChunkPtr pull();
+    vectorized::ChunkPtr finalize();
+
+private:
+    const size_t _desired_size;
+    vectorized::ChunkPtr _tmp_chunk;
+    vectorized::ChunkPtr _output;
+};
+
 } // namespace starrocks

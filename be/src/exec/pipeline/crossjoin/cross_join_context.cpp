@@ -10,6 +10,7 @@
 #include "exec/vectorized/cross_join_node.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -52,33 +53,21 @@ Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
     if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
         RETURN_IF_ERROR(_init_runtime_filter(state));
 
-        // Merge chunks
-        ChunkPtr chunk = nullptr;
+        // Accumulate chunks
+        ChunkAccumulator accumulator(state->chunk_size());
         for (auto& sink_chunks : _tmp_chunks) {
             for (auto& tmp_chunk : sink_chunks) {
                 _num_build_rows += tmp_chunk->num_rows();
-                if (tmp_chunk == nullptr || tmp_chunk->is_empty()) {
-                    continue;
-                } else if (chunk == nullptr) {
-                    std::swap(chunk, tmp_chunk);
-                } else if (chunk->num_rows() == state->chunk_size()) {
-                    _build_chunks.emplace_back(std::move(chunk));
-                    chunk.reset();
-                } else if (chunk->num_rows() < state->chunk_size()) {
-                    int left_rows = std::min(state->chunk_size() - chunk->num_rows(), tmp_chunk->num_rows());
-                    chunk->append(*tmp_chunk, 0, left_rows);
-                    _build_chunks.emplace_back(std::move(chunk));
-
-                    int right_rows = tmp_chunk->num_rows() - left_rows;
-                    if (right_rows > 0) {
-                        chunk = tmp_chunk->clone_empty(state->chunk_size());
-                        chunk->append(*tmp_chunk, left_rows, right_rows);
+                if (tmp_chunk && !tmp_chunk->is_empty()) {
+                    accumulator.push(tmp_chunk);
+                    if (ChunkPtr output = accumulator.pull()) {
+                        _build_chunks.emplace_back(std::move(output));
                     }
                 }
             }
         }
-        if (chunk) {
-            _build_chunks.emplace_back(std::move(chunk));
+        if (ChunkPtr output = accumulator.finalize()) {
+            _build_chunks.emplace_back(std::move(output));
         }
         _tmp_chunks.clear();
         _tmp_chunks.shrink_to_fit();
