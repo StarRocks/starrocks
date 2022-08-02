@@ -21,7 +21,6 @@ import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
@@ -52,11 +51,6 @@ public class AlterTableStatementAnalyzer {
                     "The '%s' cannot be alter by 'ALTER TABLE', because '%s' is a materialized view," +
                             "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
                     tbl.getTbl(), tbl.getTbl());
-        }
-        try {
-            CatalogUtils.checkIsLakeTable(tbl.getDb(), tbl.getTbl());
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
         }
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {

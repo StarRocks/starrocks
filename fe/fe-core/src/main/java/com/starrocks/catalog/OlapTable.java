@@ -77,6 +77,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -725,9 +726,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         nameToPartition.put(partition.getName(), partition);
     }
 
-    // This is a private methid.
+    // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
-    private Partition dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
+    private Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         // 1. If "isForceDrop" is false, the partition will be added to the GlobalStateMgr Recyle bin, and all tablets of this
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
@@ -735,6 +736,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
+        Set<Long> tabletIds = new HashSet<Long>();
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
@@ -750,20 +752,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getReplicationNum(partition.getId()),
                         rangePartitionInfo.getIsInMemory(partition.getId()));
             } else if (!reserveTablets) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
         }
-        return partition;
+        return tabletIds;
     }
 
-    public Partition dropPartitionAndReserveTablet(String partitionName) {
+    public Set<Long> dropPartitionAndReserveTablet(String partitionName) {
         return dropPartition(-1, partitionName, true, true);
     }
 
-    public Partition dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+    public Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         return dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
     }
 
