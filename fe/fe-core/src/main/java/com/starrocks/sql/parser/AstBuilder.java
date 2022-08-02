@@ -1027,7 +1027,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null && asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() != null) {
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null &&
+                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() != null) {
                 String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
                 if (!("SECOND".equalsIgnoreCase(description) || "MINUTE".equalsIgnoreCase(description) ||
                         "HOUR".equalsIgnoreCase(description) || "DAY".equalsIgnoreCase(description))) {
@@ -1108,7 +1109,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null && asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() != null) {
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null &&
+                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() != null) {
                 String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
                 if (!("SECOND".equalsIgnoreCase(description) || "MINUTE".equalsIgnoreCase(description) ||
                         "HOUR".equalsIgnoreCase(description) || "DAY".equalsIgnoreCase(description))) {
