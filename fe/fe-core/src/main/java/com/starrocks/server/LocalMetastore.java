@@ -1903,7 +1903,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = Config.storage_cooldown_second;
+                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
                 }
 
                 // get service shard storage info from StarMgr
