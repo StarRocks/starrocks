@@ -53,7 +53,16 @@ public class Scope {
         if (matchFields.size() > 1) {
             throw new SemanticException("Column '%s' is ambiguous", expression.getColumnName());
         } else if (matchFields.size() == 1) {
+<<<<<<< HEAD
             return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
+=======
+            if (matchFields.get(0).getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE)) {
+                throw new SemanticException("Datatype of external table column [" + matchFields.get(0).getName()
+                        + "] is not supported!");
+            } else {
+                return Optional.of(asResolvedField(matchFields.get(0), fieldIndexOffset));
+            }
+>>>>>>> b2b532eeb (Fix code typos (#9466))
         } else {
             if (parent != null
                     //Correlated subqueries currently only support accessing properties in the first level outer layer

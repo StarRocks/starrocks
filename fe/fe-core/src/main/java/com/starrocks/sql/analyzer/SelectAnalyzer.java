@@ -191,6 +191,16 @@ public class SelectAnalyzer {
                 List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
                         : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
                         .stream().filter(Field::isVisible).collect(Collectors.toList());
+<<<<<<< HEAD
+=======
+                List<String> unknownTypeFields = fields.stream()
+                        .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
+                        .map(Field::getName).collect(Collectors.toList());
+                if (!unknownTypeFields.isEmpty()) {
+                    throw new SemanticException("Datatype of external table column " + unknownTypeFields
+                            + " is not supported!");
+                }
+>>>>>>> b2b532eeb (Fix code typos (#9466))
                 if (fields.isEmpty()) {
                     if (item.getTblName() != null) {
                         throw new SemanticException("Table %s not found", item.getTblName());
