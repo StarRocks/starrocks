@@ -157,8 +157,11 @@ public class CTEUtils {
                                               boolean collectCosts) {
         GroupExpression expression = root.getFirstLogicalExpression();
 
-        if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType()) &&
-                ((LogicalCTEConsumeOperator) expression.getOp()).getCteId() == cteId) {
+        if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType())) {
+            if (((LogicalCTEConsumeOperator) expression.getOp()).getCteId() != cteId) {
+                // not ask children
+                return;
+            }
             // consumer
             LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) expression.getOp();
             context.getCteContext().addCTEConsume(consume.getCteId());
