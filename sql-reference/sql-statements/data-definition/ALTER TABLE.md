@@ -2,12 +2,7 @@
 
 ## 功能
 
-该语句用于对已有的 table 进行修改。分为三种操作类型：**schema change** 、**rollup** 、**partition**。
-这三种操作类型 **不能同时** 出现在一条 `ALTER TABLE` 语句中。
-
-其中 schema change 和 rollup 是 **异步** 操作，任务提交成功则返回。之后可使用 [SHOW ALTER](../data-manipulation/SHOW%20ALTER.md) 命令查看进度。
-
-partition 是 **同步** 操作，命令返回表示执行完毕。
+该语句用于对已有的 table 进行修改。
 
 ## 语法
 
@@ -23,10 +18,14 @@ alter_clause1[, alter_clause2, ...];
 * partition: 修改分区属性，删除分区，增加分区。
 * rollup: 创建或删除 rollup index，
 * schema change: 增加列，删除列，调整列顺序，修改列类型。
-* rename: 修改表名，rollup index 名称，修改
-partition 名称，注意字段名称不支持修改。
+* rename: 修改表名，rollup index 名称，修改 partition 名称，注意列名不支持修改。
 * index: 修改索引(目前支持 bitmap 索引)，
 * swap: 原子替换两张表。
+
+> 说明：
+>
+> * partition、rollup 和schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
+> * rollup、schema change 和 swap 是异步操作，可使用 [SHOW ALTER](../data-manipulation/SHOW%20ALTER.md) 语句查看进度。partition、rename 和 index 是同步操作，命令返回表示执行完毕。
 
 ### 操作 partition 相关语法
 
