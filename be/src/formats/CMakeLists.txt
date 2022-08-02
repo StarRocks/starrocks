@@ -15,6 +15,7 @@ add_library(Formats STATIC
         csv/decimalv2_converter.cpp
         csv/decimalv3_converter.cpp
         csv/float_converter.cpp
+        csv/json_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
         json/nullable_column.cpp

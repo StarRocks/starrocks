@@ -10,6 +10,7 @@
 #include "formats/csv/decimalv2_converter.h"
 #include "formats/csv/decimalv3_converter.h"
 #include "formats/csv/float_converter.h"
+#include "formats/csv/json_converter.h"
 #include "formats/csv/nullable_converter.h"
 #include "formats/csv/numeric_converter.h"
 #include "runtime/types.h"
@@ -62,6 +63,7 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_TIME:
     case TYPE_OBJECT:
     case TYPE_JSON:
+        return std::make_unique<JsonConverter>();
         break;
     }
     return nullptr;
