@@ -617,20 +617,28 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
                "processed";
         return Status::InvalidArgument(msg.str());
     }
-    TupleDescriptor* tuple_desc = desc_tbl->get_tuple_descriptor(0);
-    if (tuple_desc == nullptr) {
-        LOG(WARNING) << "open context error: extract TupleDescriptor failure";
-        std::stringstream msg;
-        msg << "query_plan_info: " << query_plan_info
-            << " get  TupleDescriptor error, should not be modified after returned StarRocks FE "
-               "processed";
-        return Status::InvalidArgument(msg.str());
-    }
-    // process selected columns form slots
-    for (const SlotDescriptor* slot : tuple_desc->slots()) {
+
+    for (const auto& expr : t_query_plan_info.plan_fragment.output_exprs) {
+        const auto& nodes = expr.nodes;
+        if (nodes.empty() || nodes[0].node_type != TExprNodeType::SLOT_REF) {
+            LOG(WARNING) << "output expr is not slot ref";
+            return Status::InvalidArgument("output expr is not slot ref");
+        }
+        const auto& slot_ref = nodes[0].slot_ref;
+        auto* tuple_desc = desc_tbl->get_tuple_descriptor(slot_ref.tuple_id);
+        if (tuple_desc == nullptr) {
+            LOG(WARNING) << "tuple descriptor is null. id: " << slot_ref.tuple_id;
+            return Status::InvalidArgument("tuple descriptor is null");
+        }
+        auto* slot_desc = desc_tbl->get_slot_descriptor(slot_ref.slot_id);
+        if (slot_desc == nullptr) {
+            LOG(WARNING) << "slot descriptor is null. id: " << slot_ref.slot_id;
+            return Status::InvalidArgument("slot descriptor is null");
+        }
+
         TScanColumnDesc col;
-        col.__set_name(slot->col_name());
-        col.__set_type(to_thrift(slot->type().type));
+        col.__set_name(slot_desc->col_name());
+        col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));
     }
 
