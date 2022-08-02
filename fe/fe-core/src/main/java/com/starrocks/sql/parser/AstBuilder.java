@@ -1025,6 +1025,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
         }
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+            if (!("SECOND".equalsIgnoreCase(description) || "MINUTE".equalsIgnoreCase(description) ||
+                    "HOUR".equalsIgnoreCase(description) || "DAY".equalsIgnoreCase(description))) {
+                throw new IllegalArgumentException(
+                        "CreateMaterializedView UnitIdentifier do not support:'" + description +
+                                "',you can use 'SECOND','MINUTE','HOUR' or 'DAY'");
+            }
+        }
         if (!Config.enable_experimental_mv) {
             throw new ParsingException("The experimental mv is disabled");
         }
@@ -1093,6 +1103,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         RefreshSchemeDesc refreshSchemeDesc = null;
         if (context.refreshSchemeDesc() != null) {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        }
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+            if (!("SECOND".equalsIgnoreCase(description) || "MINUTE".equalsIgnoreCase(description) ||
+                    "HOUR".equalsIgnoreCase(description) || "DAY".equalsIgnoreCase(description))) {
+                throw new IllegalArgumentException(
+                        "AlterMaterializedView UnitIdentifier do not support:'" + description +
+                                "',you can use 'SECOND','MINUTE','HOUR' or 'DAY'");
+            }
         }
         return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
     }
