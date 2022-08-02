@@ -125,3 +125,7 @@ mysql> select connection_id();
 mysql> kill 114;
 Query OK, 0 rows affected (0.02 sec)
 ```
+
+> 说明
+>
+> `Info` 列中展示对应的 SQL 语句。如果因为 SQL 语句较长而导致被截断，您可以使用 `SHOW FULL processlist;` 来查看完整的 SQL 语句。
