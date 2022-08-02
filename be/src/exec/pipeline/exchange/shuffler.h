@@ -9,13 +9,6 @@
 #include "util/hash_util.hpp"
 
 namespace starrocks::pipeline {
-struct ModuloOp {
-    uint32_t operator()(uint32_t l, uint32_t r) { return l % r; }
-};
-struct ReduceOp {
-    uint32_t operator()(uint32_t l, uint32_t r) { return ((uint64_t)l * (uint64_t)r) >> 32; }
-};
-
 class Shuffler {
 public:
     Shuffler(bool compatibility, bool is_two_level_shuffle, TPartitionType::type partition_type, size_t num_channels,
@@ -33,7 +26,7 @@ public:
             if (is_two_level_shuffle) {
                 _exchange_shuffle = &Shuffler::exchange_shuffle<true, ModuloOp>;
             } else {
-                _exchange_shuffle = &Shuffler::exchange_shuffle<true, ModuloOp>;
+                _exchange_shuffle = &Shuffler::exchange_shuffle<false, ModuloOp>;
             }
         }
 
