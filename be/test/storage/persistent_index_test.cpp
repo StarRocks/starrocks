@@ -252,7 +252,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     }
     vector<IndexValue> get_values(N);
     size_t num_found = 0;
-    auto st_get = idx_loaded->get(N, keys.data(), keys_info, get_values.data(), &num_found);
+    auto st_get = idx_loaded->get(N, keys.data(), keys_info, get_values.data(), &num_found, sizeof(Key));
     if (!st_get.ok()) {
         LOG(WARNING) << st_get;
     }
@@ -261,13 +261,13 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     for (size_t i = 0; i < N; i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
-    ASSERT_TRUE(idx_loaded->check_not_exist(N, keys.data()).is_already_exist());
+    ASSERT_TRUE(idx_loaded->check_not_exist(N, keys.data(), sizeof(Key)).is_already_exist());
 
     vector<Key> check_not_exist_keys(10);
     for (int i = 0; i < 10; i++) {
         check_not_exist_keys[i] = N + i;
     }
-    ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_keys.data()).ok());
+    ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_keys.data(), sizeof(Key)).ok());
 }
 
 TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
@@ -534,6 +534,64 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
         }
         ASSERT_TRUE(find_target >= target);
     }
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_flush_varlen_to_immutable) {
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_varlen_to_immutable";
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+    PersistentIndex index(kPersistentIndexDir);
+    using Key = std::string;
+    int N = 200000;
+    EditVersion version(1, 0);
+    vector<Key> keys(N);
+    vector<Slice> keys_slice(N);
+    vector<IndexValue> values(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values[i] = i;
+        keys_slice[i] = Slice(keys[i].data(), keys[i].size());
+    }
+    auto flush_st = index.test_flush_varlen_to_immutable_index(kPersistentIndexDir, version, N, keys_slice.data(),
+                                                               values.data());
+    if (!flush_st.ok()) {
+        LOG(WARNING) << flush_st;
+    }
+    ASSERT_TRUE(flush_st.ok());
+
+    std::string l1_file_path = kPersistentIndexDir + "/index.l1.1.0";
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(l1_file_path));
+    auto st_load = ImmutableIndex::load(std::move(rf));
+    if (!st_load.ok()) {
+        LOG(WARNING) << st_load.status();
+    }
+    ASSERT_TRUE(st_load.ok());
+    auto& idx_loaded = st_load.value();
+    KeysInfo keys_info;
+    for (size_t i = 0; i < N; i++) {
+        keys_info.key_idxes.emplace_back(i);
+        uint64_t h = key_index_hash(keys[i].data(), keys[i].size());
+        keys_info.hashes.emplace_back(h);
+    }
+    vector<IndexValue> get_values(N);
+    size_t num_found = 0;
+    auto st_get = idx_loaded->get(N, keys_slice.data(), keys_info, get_values.data(), &num_found, 0);
+    if (!st_get.ok()) {
+        LOG(WARNING) << st_get;
+    }
+    ASSERT_TRUE(st_get.ok());
+    ASSERT_EQ(N, num_found);
+    for (size_t i = 0; i < N; i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+
+    auto st_check = idx_loaded->check_not_exist(N, keys_slice.data(), 0);
+    LOG(WARNING) << "check status is " << st_check;
+    ASSERT_TRUE(idx_loaded->check_not_exist(N, keys_slice.data(), 0).is_already_exist());
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 } // namespace starrocks

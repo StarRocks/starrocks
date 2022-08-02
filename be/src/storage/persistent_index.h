@@ -186,10 +186,11 @@ public:
     // |not_found|: information of keys not found in upper level, which needs to be checked in this level
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
-    Status get(size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found) const;
+    Status get(size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+               size_t key_size) const;
 
     // batch check key existence
-    Status check_not_exist(size_t n, const void* keys);
+    Status check_not_exist(size_t n, const void* keys, size_t key_size);
 
     // get Immutable index file size;
     void file_size(uint64_t* file_size) {
@@ -365,6 +366,9 @@ public:
                        std::vector<uint32_t>* failed);
 
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
+
+    Status test_flush_varlen_to_immutable_index(const std::string& dir, const EditVersion& version, size_t num_entry,
+                                                const void* keys, const IndexValue* values);
 
 private:
     size_t _dump_bound();
