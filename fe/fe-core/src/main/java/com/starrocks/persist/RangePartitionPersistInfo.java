@@ -8,6 +8,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 
@@ -30,8 +31,9 @@ public class RangePartitionPersistInfo extends PartitionPersistInfoV2
     public RangePartitionPersistInfo(Long dbId, Long tableId, Partition partition,
                                      DataProperty dataProperty, short replicationNum,
                                      boolean isInMemory, boolean isTempPartition,
-                                     Range<PartitionKey> range) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition);
+                                     Range<PartitionKey> range,
+                                     StorageInfo storageInfo) {
+        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, storageInfo);
         this.range = range;
     }
 

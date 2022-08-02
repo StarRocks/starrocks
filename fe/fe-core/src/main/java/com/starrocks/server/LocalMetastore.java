@@ -1086,7 +1086,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 PartitionPersistInfoV2 info = new RangePartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                         partitionDescs.get(0).getPartitionDataProperty(), partitionInfo.getReplicationNum(partition.getId()),
                         partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
-                        ((RangePartitionInfo) partitionInfo).getRange(partition.getId()));
+                        ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
+                        ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageInfo());
                 editLog.logAddPartition(info);
             } else {
                 PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
@@ -1113,7 +1114,8 @@ public class LocalMetastore implements ConnectorMetadata {
                                 partition, partitionDescs.get(i).getPartitionDataProperty(), 
                                 partitionInfo.getReplicationNum(partition.getId()),
                                 partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
-                                ((RangePartitionInfo) partitionInfo).getRange(partition.getId()));
+                                ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
+                                ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageInfo());
 
                         partitionInfoListV2.add(info);
                     } else {
