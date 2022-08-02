@@ -30,6 +30,8 @@ export_env_from_conf $STARROCKS_HOME/conf/be.conf
 
 pidfile=$PID_DIR/be.pid
 
+sig=9
+
 if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`
