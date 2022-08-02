@@ -402,7 +402,7 @@ public:
 
     uint64_t value() const override {
         uint64_t val = 0;
-#if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(LEAK_SANITIZER)
+#if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(USE_JEMALLOC)
         MallocExtension::instance()->GetNumericProperty(_tcmalloc_var.c_str(), reinterpret_cast<size_t*>(&val));
 #endif
         return val;
