@@ -9,6 +9,7 @@
 #include "column/schema.h"
 #include "column/type_traits.h"
 #include "runtime/descriptors.h"
+#include "simd/simd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
@@ -387,6 +388,20 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
         reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
     }
     original_chunk.swap_chunk(reordered_chunk);
+}
+
+void ChunkHelper::build_selective(const std::vector<uint8_t>& filter, std::vector<uint32_t>& selective) {
+    size_t n = SIMD::count_nonzero(filter);
+    if (n == 0) {
+        return;
+    }
+    selective.resize(0);
+    selective.reserve(n);
+    for (int i = 0; i < filter.size(); i++) {
+        if (filter[i]) {
+            selective.push_back(i);
+        }
+    }
 }
 
 ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}

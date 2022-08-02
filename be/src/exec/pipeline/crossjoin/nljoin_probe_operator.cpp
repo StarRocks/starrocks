@@ -79,7 +79,7 @@ bool NLJoinProbeOperator::is_finished() const {
 Status NLJoinProbeOperator::set_finishing(RuntimeState* state) {
     if (_is_right_join() && !_output_right_join) {
         ChunkPtr chunk = _init_output_chunk(state);
-        _permute_build_rows_right_join(state, chunk);
+        _permute_right_join(state, chunk);
         _output_accumulator.push(chunk);
         _output_accumulator.finalize();
         _output_right_join = true;
@@ -141,17 +141,16 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
             DCHECK_GE(filter->size(), num_build_rows);
             for (size_t i = 0; i < filter->size(); i += num_build_rows) {
                 bool probe_matched = SIMD::contain_nonzero(*filter, i, num_build_rows);
-
                 if (!probe_matched) {
                     size_t probe_row_index = _probe_row_index + i / num_build_rows;
-                    _permute_probe_row_left_join(state, chunk, probe_row_index);
+                    _permute_left_join(state, chunk, probe_row_index);
                 }
             }
         } else {
             _probe_row_matched = _probe_row_matched || SIMD::contain_nonzero(*filter);
             bool probe_row_finished = _curr_build_chunk_index >= _num_build_chunks();
             if (!_probe_row_matched && probe_row_finished) {
-                _permute_probe_row_left_join(state, chunk, _probe_row_index);
+                _permute_left_join(state, chunk, _probe_row_index);
             }
         }
     }
@@ -179,6 +178,7 @@ void NLJoinProbeOperator::_permute_chunk(RuntimeState* state, ChunkPtr chunk) {
         _probe_row_matched = false;
         _move_build_chunk(0);
     }
+    _probe_chunk.reset();
 }
 
 // Permute one probe row with current build chunk
@@ -201,7 +201,7 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
 }
 
 // Permute probe side for left join
-void NLJoinProbeOperator::_permute_probe_row_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index) {
+void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index) {
     for (size_t i = 0; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
@@ -216,24 +216,27 @@ void NLJoinProbeOperator::_permute_probe_row_left_join(RuntimeState* state, Chun
 }
 
 // Permute build side for right join
-void NLJoinProbeOperator::_permute_build_rows_right_join(RuntimeState* state, ChunkPtr chunk) {
-    if (_is_right_join()) {
-        for (int i = 0; i < _build_match_flag.size(); i++) {
-            if (_build_match_flag[i]) {
-                continue;
-            }
-            for (size_t col = 0; col < _col_types.size(); col++) {
-                SlotDescriptor* slot = _col_types[col];
-                ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
-                bool is_probe = col < _probe_column_count;
-                if (is_probe) {
-                    dst_col->append_nulls(1);
-                } else {
-                    ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
-                    dst_col->append(*src_col, i, 1);
+void NLJoinProbeOperator::_permute_right_join(RuntimeState* state, ChunkPtr chunk) {
+    size_t match_flag_index = 0;
+    for (int chunk_index = 0; chunk_index < _num_build_chunks(); chunk_index++) {
+        size_t chunk_size = _curr_build_chunk->num_rows();
+        _move_build_chunk(chunk_index);
+        for (size_t col = 0; col < _col_types.size(); col++) {
+            SlotDescriptor* slot = _col_types[col];
+            ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
+            bool is_probe = col < _probe_column_count;
+            if (is_probe) {
+                dst_col->append_nulls(chunk_size);
+            } else {
+                ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
+                for (int i = 0; i < chunk_size; i++) {
+                    if (!_build_match_flag[match_flag_index + i]) {
+                        dst_col->append(*src_col, i, 1);
+                    }
                 }
             }
         }
+        match_flag_index += chunk_size;
     }
 }
 

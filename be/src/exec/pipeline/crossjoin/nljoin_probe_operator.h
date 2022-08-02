@@ -30,9 +30,9 @@ public:
 
     // Control flow
     bool is_ready() const override;
+    bool is_finished() const override;
     bool has_output() const override;
     bool need_input() const override;
-    bool is_finished() const override;
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
@@ -47,8 +47,8 @@ private:
     Status _probe(RuntimeState* state, ChunkPtr chunk);
     void _permute_probe_row(RuntimeState* state, ChunkPtr chunk);
     void _permute_chunk(RuntimeState* state, ChunkPtr chunk);
-    void _permute_build_rows_right_join(RuntimeState* state, ChunkPtr chunk);
-    void _permute_probe_row_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index);
+    void _permute_right_join(RuntimeState* state, ChunkPtr chunk);
+    void _permute_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index);
     bool _is_curr_probe_chunk_finished() const;
     bool _is_left_join() const;
     bool _is_right_join() const;
