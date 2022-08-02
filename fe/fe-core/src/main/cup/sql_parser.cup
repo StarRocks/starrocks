@@ -898,27 +898,7 @@ opt_dup_keys ::=
     ;
 
 alter_table_clause ::=
-    KW_ADD KW_COLUMN column_definition:col opt_col_pos:col_pos opt_to_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new AddColumnClause(col, col_pos, rollup, properties);
-    :}
-    | KW_ADD KW_COLUMN LPAREN column_definition_list:cols RPAREN opt_to_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new AddColumnsClause(cols, rollup, properties);
-    :}
-    | KW_DROP KW_COLUMN ident:col opt_from_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new DropColumnClause(col, rollup, properties);
-    :}
-    | KW_MODIFY KW_COLUMN column_definition:col opt_col_pos:col_pos opt_from_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new ModifyColumnClause(col, col_pos, rollup, properties);
-    :}
-    | KW_ORDER KW_BY LPAREN ident_list:cols RPAREN opt_from_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new ReorderColumnsClause(cols, rollup, properties);
-    :}
-    | KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
+    KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
     {:
         RESULT = new ReplacePartitionClause(partitions, tempPartitions, properties);
     :}
@@ -929,10 +909,6 @@ alter_table_clause ::=
     | KW_RENAME KW_PARTITION ident:partitionName ident:newPartitionName
     {:
         RESULT = new PartitionRenameClause(partitionName, newPartitionName);
-    :}
-    | KW_RENAME KW_COLUMN ident:colName ident:newColName
-    {:
-        RESULT = new ColumnRenameClause(colName, newColName);
     :}
     | KW_ADD index_definition:indexDef
     {:

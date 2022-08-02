@@ -7,6 +7,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AddBackendClause;
+import com.starrocks.analysis.AddColumnClause;
+import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddComputeNodeClause;
 import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
@@ -40,6 +42,8 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateDbStmt;
@@ -59,6 +63,7 @@ import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.DropBackendClause;
+import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.DropComputeNodeClause;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFollowerClause;
@@ -96,6 +101,7 @@ import com.starrocks.analysis.ListPartitionDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
@@ -115,6 +121,7 @@ import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
@@ -482,41 +489,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private List<ColumnDef> getColumnDefs(List<StarRocksParser.ColumnDescContext> columnDesc) {
-        List<ColumnDef> columnDefList = new ArrayList<>();
-        for (StarRocksParser.ColumnDescContext context : columnDesc) {
-            String columnName = ((Identifier) visit(context.identifier())).getValue();
-            TypeDef typeDef = new TypeDef(getType(context.type()));
-            String charsetName = context.charsetName() != null ?
-                    ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
-            boolean isKey = context.KEY() != null;
-            AggregateType aggregateType =
-                    context.aggDesc() != null ? AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
-            Boolean isAllowNull = null;
-            if (context.NOT() != null && context.NULL() != null) {
-                isAllowNull = false;
-            } else if (context.NULL() != null) {
-                isAllowNull = true;
-            }
-            ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
-            final StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
-            if (defaultDescContext != null) {
-                if (defaultDescContext.string() != null) {
-                    String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
-                    defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
-                } else if (defaultDescContext.NULL() != null) {
-                    defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
-                } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
-                    defaultValueDef = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
-                }
-            }
-            String comment = context.comment() == null ? "" :
-                    ((StringLiteral) visit(context.comment().string())).getStringValue();
-            ColumnDef columnDef =
-                    new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
-                            comment);
-            columnDefList.add(columnDef);
+        return columnDesc.stream().map(context -> getColumnDef(context)).collect(toList());
+    }
+
+    private ColumnDef getColumnDef(StarRocksParser.ColumnDescContext context) {
+        String columnName = ((Identifier) visit(context.identifier())).getValue();
+        TypeDef typeDef = new TypeDef(getType(context.type()));
+        String charsetName = context.charsetName() != null ?
+                ((Identifier) visit(context.charsetName().identifier())).getValue() : null;
+        boolean isKey = context.KEY() != null;
+        AggregateType aggregateType =
+                context.aggDesc() != null ? AggregateType.valueOf(context.aggDesc().getText().toUpperCase()) : null;
+        Boolean isAllowNull = null;
+        if (context.NOT() != null && context.NULL() != null) {
+            isAllowNull = false;
+        } else if (context.NULL() != null) {
+            isAllowNull = true;
         }
-        return columnDefList;
+        ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
+        final StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
+        if (defaultDescContext != null) {
+            if (defaultDescContext.string() != null) {
+                String value = ((StringLiteral) visit(defaultDescContext.string())).getStringValue();
+                defaultValueDef = new ColumnDef.DefaultValueDef(true, new StringLiteral(value));
+            } else if (defaultDescContext.NULL() != null) {
+                defaultValueDef = ColumnDef.DefaultValueDef.NULL_DEFAULT_VALUE;
+            } else if (defaultDescContext.CURRENT_TIMESTAMP() != null) {
+                defaultValueDef = ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
+            }
+        }
+        String comment = context.comment() == null ? "" :
+                ((StringLiteral) visit(context.comment().string())).getStringValue();
+        return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
+                comment);
     }
 
     @Override
@@ -913,6 +918,88 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitShowOpenTableStatement(StarRocksParser.ShowOpenTableStatementContext context) {
         return new ShowOpenTableStmt();
+    }
+
+    @Override
+    public ParseNode visitAddColumnClause(StarRocksParser.AddColumnClauseContext context) {
+        ColumnDef columnDef = getColumnDef(context.columnDesc());
+        ColumnPosition columnPosition = null;
+        if (context.FIRST() != null) {
+            columnPosition = ColumnPosition.FIRST;
+        } else if (context.AFTER() != null) {
+            String afterColumnName = getIdentifierName(context.identifier(0));
+            columnPosition = new ColumnPosition(afterColumnName);
+        }
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
+        return new AddColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()));
+    }
+
+    @Override
+    public ParseNode visitAddColumnsClause(StarRocksParser.AddColumnsClauseContext context) {
+        List<ColumnDef> columnDefs = getColumnDefs(context.columnDesc());
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
+        return new AddColumnsClause(columnDefs, rollupName, getProperties(context.properties()));
+    }
+
+    @Override
+    public ParseNode visitDropColumnClause(StarRocksParser.DropColumnClauseContext context) {
+        String columnName = getIdentifierName(context.identifier(0));
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
+        return new DropColumnClause(columnName, rollupName, getProperties(context.properties()));
+    }
+
+    @Override
+    public ParseNode visitModifyColumnClause(StarRocksParser.ModifyColumnClauseContext context) {
+        ColumnDef columnDef = getColumnDef(context.columnDesc());
+        ColumnPosition columnPosition = null;
+        if (context.FIRST() != null) {
+            columnPosition = ColumnPosition.FIRST;
+        } else if (context.AFTER() != null) {
+            String afterColumnName = getIdentifierName(context.identifier(0));
+            columnPosition = new ColumnPosition(afterColumnName);
+        }
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
+        return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()));
+    }
+
+    @Override
+    public ParseNode visitColumnRenameClause(StarRocksParser.ColumnRenameClauseContext context) {
+        String oldColumnName = getIdentifierName(context.oldColumn);
+        String newColumnName = getIdentifierName(context.newColumn);
+        return new ColumnRenameClause(oldColumnName, newColumnName);
+    }
+
+    @Override
+    public ParseNode visitReorderColumnsClause(StarRocksParser.ReorderColumnsClauseContext context) {
+        List<String> cols = context.identifierList().identifier().stream().map(this::getIdentifierName).collect(toList());
+        String rollupName = null;
+        if (context.rollupName != null) {
+            rollupName = getIdentifierName(context.rollupName);
+        }
+        return new ReorderColumnsClause(cols, rollupName, getProperties(context.properties()));
+    }
+
+    private Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context != null && context.property() != null) {
+            List<Property> propertyList = visit(context.property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return properties;
     }
     // ------------------------------------------- View Statement ------------------------------------------------------
 
@@ -3598,6 +3685,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         boolean isVariadic = typeList.DOTDOTDOT() != null;
         return new FunctionArgsDef(typeDefList, isVariadic);
+    }
+
+    private String getIdentifierName(StarRocksParser.IdentifierContext context) {
+        return ((Identifier) visit(context)).getValue();
     }
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
