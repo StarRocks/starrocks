@@ -58,7 +58,7 @@ class DeleteLakeTableAction implements DeleteTableAction {
         LakeServiceClient client = new LakeServiceClient(address);
         try {
             client.dropTable(request);
-            GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShards(tabletIds);
+            GlobalStateMgr.getCurrentStarOSAgent().deleteShards(tabletIds);
         } catch (RpcException | DdlException e) {
             Log.warn(e);
             return false;
