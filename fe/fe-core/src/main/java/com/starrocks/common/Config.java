@@ -953,7 +953,7 @@ public class Config extends ConfigBase {
     /**
      * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a Backend storage path.
      * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a Backend storage path.
-     * If both limitations are reached, this storage path can not be chose as tablet balance destination.
+     * If both limitations are reached, this storage path can not be chosen as tablet balance destination.
      * But for tablet recovery, we may exceed these limit for keeping data integrity as much as possible.
      */
     @ConfField(mutable = true)

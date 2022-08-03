@@ -780,7 +780,7 @@ public class ReportHandler extends Daemon {
         DropReplicaTask task =
                 new DropReplicaTask(backendId, tabletId, schemaHash, false);
         batchTask.addTask(task);
-        LOG.warn("delete tablet[{}] from backend[{}] because {}",
+        LOG.info("delete tablet[{}] from backend[{}] because {}",
                 tabletId, backendId, reason);
     }
 
@@ -822,7 +822,7 @@ public class ReportHandler extends Daemon {
                             // update counter
                             ++addToMetaCounter;
                         } catch (MetaNotFoundException e) {
-                            LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                            LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                     tabletId, backendId, e.getMessage());
                             needDelete = true;
                         }
