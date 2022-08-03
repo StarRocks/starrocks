@@ -2,8 +2,7 @@
 
 ## description
 
-1. RESTORE
-该语句用于将之前通过 BACKUP 命令备份的数据，恢复到指定数据库下。该命令为异步操作。提交成功后，需通过 SHOW RESTORE 命令查看进度。仅支持恢复 OLAP 类型的表。
+将通过 [BACKUP](/sql-reference/sql-statements/data-definition/BACKUP.md) 命令备份的数据，恢复到指定数据库下。该命令为 **异步** 操作。提交成功后，需通过 `SHOW RESTORE;` 命令查看进度。当前，仅支持恢复 OLAP 类型表，且表的数据模型需为明细模型、聚合模型或更新模型，暂不支持恢复数据模型为主键模型的表。
 
 语法：
 
