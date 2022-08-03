@@ -82,7 +82,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
      *   );
      *
      * Transfer to:
-     *   SELECT t0.*
+     *   SELECT t0.*, assert_true((t1a.countRows IS NULL) OR (t1a.countRows <= 1))
      *   FROM t0 LEFT OUTER JOIN
      *   (
      *       SELECT t1.v1, count(1) as countRows, any_value(t1.v2) as anyValue
@@ -90,8 +90,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
      *       GROUP BY t1.v1
      *   ) as t1a
      *   ON t0.v1 = t1a.v1
-     *   WHERE t0.v2 > t1a.anyValue
-     *   AND assert_true(t1a.countRows <= 1);
+     *   WHERE t0.v2 > t1a.anyValue;
      */
     private List<OptExpression> transformCorrelateWithCheckOneRows(OptExpression input, LogicalApplyOperator apply,
                                                                    OptimizerContext context) {
@@ -137,13 +136,23 @@ public class ScalarApply2JoinRule extends TransformationRule {
          * Step2: build left outer join
          * t0 LEFT OUTER JOIN t1a
          * ON t0.v1 = t1a.v1
-         *
-         * If there exist subquery predicate, i.e. t0.v2 > ${subquery_output}
-         * we should put assert predicate above the subquery predicate to avoid filtering
-         * rows that shouldn't be filtered.
-         * But it is guaranteed that the subquery predicate will be push down
-         * to the left outer join operator, so we can safely put assert predicate right here.
          */
+        LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
+                .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
+                .setOnPredicate(Utils.compoundAnd(correlationPredicatePair.first))
+                .build();
+        OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
+
+        // Step3: build project
+        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        // Other columns
+        projectMap.put(countRows, countRows);
+        projectMap.put(anyValue, anyValue);
+        Arrays.stream(input.inputAt(0).getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef)
+                .forEach(i -> projectMap.put(i, i));
+        // Mapping subquery's output to anyValue
+        projectMap.put(apply.getOutput(), anyValue);
+        // Add assertion column
         IsNullPredicateOperator countRowsIsNullPredicate = new IsNullPredicateOperator(countRows);
         BinaryPredicateOperator countRowsLEOneRowPredicate =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, countRows,
@@ -157,20 +166,19 @@ public class ScalarApply2JoinRule extends TransformationRule {
                 new CallOperator(FunctionSet.ASSERT_TRUE, Type.BOOLEAN,
                         Collections.singletonList(countRowsPredicate),
                         assertTrueFn);
-        LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
-                .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
-                .setOnPredicate(Utils.compoundAnd(correlationPredicatePair.first))
-                .setPredicate(assertTrueCallOp)
-                .build();
-        OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
+        ColumnRefOperator assertion =
+                factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
+        projectMap.put(assertion, assertTrueCallOp);
+        OptExpression assertProjectOpt =
+                OptExpression.create(new LogicalProjectOperator(projectMap), newLeftOuterJoinOpt);
 
-        // Step3: build project, mapping subquery's output to anyValue
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        columnRefMap.put(apply.getOutput(), anyValue);
-        OptExpression newProjectOpt =
-                OptExpression.create(new LogicalProjectOperator(columnRefMap), newLeftOuterJoinOpt);
+        // Step4: prune the assertion column
+        Map<ColumnRefOperator, ScalarOperator> prunedProjectMap = Maps.newHashMap(projectMap);
+        prunedProjectMap.remove(assertion);
+        OptExpression finalProjectOpt =
+                OptExpression.create(new LogicalProjectOperator(prunedProjectMap), assertProjectOpt);
 
-        return Collections.singletonList(newProjectOpt);
+        return Collections.singletonList(finalProjectOpt);
     }
 
     private List<OptExpression> transformCorrelateWithoutCheckOneRows(OptExpression input, LogicalApplyOperator apply,
