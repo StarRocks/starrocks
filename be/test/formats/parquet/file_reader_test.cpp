@@ -45,6 +45,7 @@ private:
     HdfsScannerContext* _create_context_for_skip_group();
 
     HdfsScannerContext* _create_file3_base_context();
+<<<<<<< HEAD
     HdfsScannerContext* _create_context_for_multi_filter();
     HdfsScannerContext* _create_context_for_late_materialization();
 
@@ -55,6 +56,10 @@ private:
                                    std::vector<ExprContext*>* conjunct_ctxs);
     void _create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                       std::vector<ExprContext*>* conjunct_ctxs);
+=======
+    HdfsScannerContext* _create_context_for_multi_filter(HdfsScannerContext* base_ctx);
+    HdfsScannerContext* _create_context_for_multi_page(HdfsScannerContext* base_ctx);
+>>>>>>> 9f538f4c1 ([BugFix] fix empty scan ranges in ConnectorScanNode (#9458))
 
     static vectorized::ChunkPtr _create_chunk();
     static vectorized::ChunkPtr _create_struct_chunk();
@@ -345,11 +350,15 @@ HdfsScannerContext* FileReaderTest::_create_context_for_late_materialization() {
     return ctx;
 }
 
+<<<<<<< HEAD
 HdfsScannerContext* FileReaderTest::_create_file4_base_context() {
     auto ctx = _create_scan_context();
 
     // tuple desc and conjuncts
     // struct columns are not supported now, so we skip reading them
+=======
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter(HdfsScannerContext* base_ctx) {
+>>>>>>> 9f538f4c1 ([BugFix] fix empty scan ranges in ConnectorScanNode (#9458))
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             // {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
@@ -388,6 +397,7 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     node0.use_vectorized = true;
     nodes.emplace_back(node0);
 
+<<<<<<< HEAD
     TExprNode node1;
     node1.node_type = TExprNodeType::SLOT_REF;
     node1.type = gen_type_desc(TPrimitiveType::INT);
@@ -399,6 +409,16 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     node1.use_vectorized = true;
     node1.is_nullable = true;
     nodes.emplace_back(node1);
+=======
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_page(HdfsScannerContext* base_ctx) {
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {""},
+    };
+>>>>>>> 9f538f4c1 ([BugFix] fix empty scan ranges in ConnectorScanNode (#9458))
 
     TExprNode node2;
     node2.node_type = TExprNodeType::INT_LITERAL;
@@ -420,6 +440,7 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
 }
 
+<<<<<<< HEAD
 void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
                                                   std::vector<ExprContext*>* conjunct_ctxs) {
     std::vector<TExprNode> nodes;
@@ -468,6 +489,9 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
 }
 
 THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path, size_t scan_length) {
+=======
+THdfsScanRange* FileReaderTest::_create_scan_range() {
+>>>>>>> 9f538f4c1 ([BugFix] fix empty scan ranges in ConnectorScanNode (#9458))
     auto* scan_range = _pool.add(new THdfsScanRange());
 
     scan_range->relative_path = file_path;
