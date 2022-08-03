@@ -499,30 +499,28 @@ void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
 
 DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders,
                                                           int32_t degree_of_parallism)
-        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders) {
+        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders), _unpluging(degree_of_parallism, false) {
     for (int i = 0; i < degree_of_parallism; i++) {
         _chunk_queues.emplace_back(std::move(ChunkQueue()));
     }
 }
 
 Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence) {
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return Status::Cancelled("Cancelled SenderQueueForPipeline::get_chunk");
     }
+    size_t index = _is_pipeline_level_shuffle ? driver_sequence: 0;
+    auto& chunk_queue = _chunk_queues[index];
 
-    auto& chunk_queue = _is_pipeline_level_shuffle ? _chunk_queues[driver_sequence] : _chunk_queues[0];
-
-    if (chunk_queue.empty()) {
-        return Status::OK();
-    }
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
+        _unpluging[index] = false;
+        VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
 
     *chunk = item.chunk_ptr.release();
     auto* closure = item.closure;
-    _recvr->_num_buffered_bytes -= item.chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     if (closure != nullptr) {
 #ifndef BE_TEST
@@ -533,34 +531,30 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         closure->Run();
     }
     _total_chunks--;
+    _recvr->_num_buffered_bytes -= item.chunk_bytes;
     return Status::OK();
 }
 
 bool DataStreamRecvr::PipelineSenderQueue::has_chunk() {
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return true;
     }
-    if (_chunk_queues[0].empty() && _num_remaining_senders.load() > 0) {
+    if (_chunk_queues[0].size_approx() == 0 && _num_remaining_senders > 0) {
         return false;
     }
     return true;
 }
 
 bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return false;
     }
     auto& chunk_queue = _chunk_queues[0];
-    if (chunk_queue.empty()) {
-        DCHECK_EQ(_num_remaining_senders.load(), 0);
-        return false;
-    }
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         return false;
     }
     *chunk = item.chunk_ptr.release();
-    _recvr->_num_buffered_bytes -= item.chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     auto* closure = item.closure;
     if (closure != nullptr) {
@@ -568,6 +562,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
         closure->Run();
     }
     _total_chunks--;
+    _recvr->_num_buffered_bytes -= item.chunk_bytes;
     return true;
 }
 
@@ -575,10 +570,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                                                         ::google::protobuf::Closure** done) {
     bool use_pass_through = request.use_pass_through();
     DCHECK(request.chunks_size() > 0 || use_pass_through);
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return Status::OK();
     }
-    if (_num_remaining_senders.load() <= 0) {
+    if (_num_remaining_senders <= 0) {
         return Status::OK();
     }
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
@@ -638,7 +633,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
     }
 
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return Status::OK();
     }
 
@@ -662,10 +657,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         }
         for (auto& chunk : chunks) {
             int index = _is_pipeline_level_shuffle ? chunk.driver_sequence : 0;
+            size_t chunk_bytes = chunk.chunk_bytes;
             _chunk_queues[index].enqueue(std::move(chunk));
             _total_chunks++;
+            _recvr->_num_buffered_bytes += chunk_bytes;
         }
-        _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
     return Status::OK();
 }
@@ -676,7 +672,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return Status::OK();
     }
 
@@ -691,10 +687,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
             _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkList>();
         }
     }
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return Status::OK();
     }
-    if (_num_remaining_senders.load() <= 0) {
+    if (_num_remaining_senders <= 0) {
         return Status::OK();
     }
 
@@ -758,7 +754,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
         COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
     }
 
-    if (_is_cancelled.load()) {
+    if (_is_cancelled) {
         return Status::OK();
     }
 
@@ -804,19 +800,21 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
                         }
                         continue;
                     }
+                    size_t chunk_bytes = item.chunk_bytes;
                     _chunk_queues[item.driver_sequence].enqueue(std::move(item));
                     _total_chunks++;
+                    _recvr->_num_buffered_bytes += chunk_bytes;
                 } else {
+                    size_t chunk_bytes = item.chunk_bytes;
                     _chunk_queues[0].enqueue(std::move(item));
                     _total_chunks++;
+                    _recvr->_num_buffered_bytes += chunk_bytes;
                 }
             }
 
             chunk_queues.erase(it);
             ++max_processed_sequence;
         }
-
-        _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
     return Status::OK();
 }
@@ -847,13 +845,14 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
     std::lock_guard<Mutex> l(_lock);
     for (auto& chunk_queue : _chunk_queues) {
         ChunkItem item;
-        while (!chunk_queue.empty()) {
+        while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
                     _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
                 --_total_chunks;
+                _recvr->_num_buffered_bytes -= item.chunk_bytes;
             }
         }
     }
@@ -879,13 +878,14 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
         ChunkItem item;
-        while (!chunk_queue.empty()) {
+        while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
                     _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
                 }
                 --_total_chunks;
+                _recvr->_num_buffered_bytes -= item.chunk_bytes;
             }
         }
     }
@@ -895,14 +895,34 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
     if (_is_cancelled.load()) {
         return false;
     }
-    if (_is_pipeline_level_shuffle) {
-        return !_chunk_queues[driver_sequence].empty();
+    size_t chunk_num = _is_pipeline_level_shuffle ? _chunk_queues[driver_sequence].size_approx() : _total_chunks.load();
+    size_t index = _is_pipeline_level_shuffle ? driver_sequence : 0;
+    bool is_buffer_full = _recvr->exceeds_limit(0);
+
+    if (_unpluging[index]) {
+        if (chunk_num > 0) {
+            return true;
+        }
+        _unpluging[index] = false;
+        return false;
     }
-    return _total_chunks.load() > 0;
+    // @TODO need an adaptive strategy to determin this threshold
+    if (chunk_num >= kUnplugBufferThreshold) {
+        COUNTER_UPDATE(_recvr->_buffer_unplug_counter, 1);
+        _unpluging[index] = true;
+        return true;
+    }
+    if (is_buffer_full && chunk_num > 0) {
+        return true;
+    }
+    if (_num_remaining_senders == 0) {
+        return chunk_num > 0;
+    }
+    return false;
 }
 
 bool DataStreamRecvr::PipelineSenderQueue::is_finished() const {
-    return _is_cancelled.load() || (_num_remaining_senders.load() == 0 && _total_chunks.load() == 0);
+    return _is_cancelled || (_num_remaining_senders == 0 && _total_chunks == 0);
 }
 
 } // namespace starrocks

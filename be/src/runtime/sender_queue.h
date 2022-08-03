@@ -167,47 +167,7 @@ private:
         int64_t queue_enter_time;
     };
 
-    class ChunkQueue {
-    public:
-        ChunkQueue() {}
-        ~ChunkQueue() {}
-
-        ChunkQueue(const ChunkQueue&) = delete;
-        ChunkQueue& operator=(const ChunkQueue&) = delete;
-
-        ChunkQueue(ChunkQueue&& rhs) {
-            _chunks.swap(rhs._chunks);
-            _size.store(rhs._size);
-        }
-
-        ChunkQueue& operator=(ChunkQueue&& rhs) {
-            _chunks.swap(rhs._chunks);
-            _size.store(rhs._size);
-            return *this;
-        }
-
-        inline bool empty() const { return _size.load() == 0; }
-
-        inline bool size() const { return _size.load(); }
-
-        void enqueue(ChunkItem&& item) {
-            _chunks.enqueue(std::move(item));
-            _size += 1;
-        }
-
-        bool try_dequeue(ChunkItem& item) {
-            if (!_chunks.try_dequeue(item)) {
-                return false;
-            }
-            _size -= 1;
-            return true;
-        }
-
-    private:
-        moodycamel::ConcurrentQueue<ChunkItem> _chunks;
-        // ConcurrentQueue doesn't provide an interface to get accurate size, so we maintain it ourselves
-        std::atomic<size_t> _size{0};
-    };
+    typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
 
     std::atomic<bool> _is_cancelled{false};
     std::atomic<int> _num_remaining_senders;
@@ -218,6 +178,7 @@ private:
     // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
     // otherwise, we will only use the first item
     std::vector<ChunkQueue> _chunk_queues;
+    std::vector<bool> _unpluging;
     std::atomic<size_t> _total_chunks{0};
     bool _is_pipeline_level_shuffle = false;
 
@@ -234,6 +195,8 @@ private:
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
 
     std::unordered_set<int32_t> _short_circuit_driver_sequences;
+
+    static constexpr size_t kUnplugBufferThreshold = 64;
 };
 
 } // namespace starrocks

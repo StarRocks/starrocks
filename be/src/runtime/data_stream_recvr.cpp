@@ -165,6 +165,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
     _sender_wait_lock_timer = ADD_TIMER(_profile, "SenderWaitLockTime");
 
+    _buffer_unplug_counter = ADD_COUNTER(_profile, "BufferUnplugCount", TUnit::UNIT);
+
     _pass_through_context.init();
 }
 
