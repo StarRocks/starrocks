@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/file_result_writer.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
@@ -327,6 +328,10 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     flags |= O_CREAT;
 
     int hdfs_write_buffer_size = 0;
+    // result_file_options and export_sink can't both to be non-nullptr at the same time
+    if (_options.result_file_options != nullptr) {
+        hdfs_write_buffer_size = _options.result_file_options->write_buffer_size_kb;
+    }
     if (_options.export_sink != nullptr && _options.export_sink->__isset.hdfs_write_buffer_size_kb) {
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
     }
