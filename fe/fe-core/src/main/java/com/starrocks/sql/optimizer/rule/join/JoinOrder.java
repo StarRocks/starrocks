@@ -27,6 +27,7 @@ import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public abstract class JoinOrder {
     /**
@@ -57,6 +58,11 @@ public abstract class JoinOrder {
 
         double cost = -1L;
         double rowCount = -1L;
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(expr.getOp().hashCode(), leftChildExpr, rightChildExpr);
+        }
     }
 
     /**
@@ -70,6 +76,11 @@ public abstract class JoinOrder {
         final BitSet atoms;
         ExpressionInfo bestExprInfo = null;
         double lowestExprCost = Double.MAX_VALUE;
+
+        @Override
+        public int hashCode() {
+            return atoms.hashCode();
+        }
     }
 
     /**
