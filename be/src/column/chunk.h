@@ -230,6 +230,8 @@ public:
 
     std::string debug_row(uint32_t index) const;
 
+    std::string debug_columns() const;
+
     bool capacity_limit_reached(std::string* msg = nullptr) const {
         for (const auto& column : _columns) {
             if (column->capacity_limit_reached(msg)) {

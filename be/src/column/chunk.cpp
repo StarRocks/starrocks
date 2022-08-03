@@ -345,6 +345,23 @@ std::string Chunk::debug_row(uint32_t index) const {
     return os.str();
 }
 
+std::string Chunk::debug_columns() const {
+    std::stringstream os;
+    os << "nullable[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->is_nullable();
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->is_nullable() << "]";
+    os << " const[";
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->is_constant();
+        os << ", ";
+    }
+    os << _columns[_columns.size() - 1]->is_constant() << "]";
+    return os.str();
+}
+
 void Chunk::merge(Chunk&& src) {
     DCHECK_EQ(src.num_rows(), num_rows());
     for (auto& it : src._slot_id_to_index) {
