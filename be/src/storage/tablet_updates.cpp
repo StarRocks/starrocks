@@ -1322,18 +1322,16 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
 
     // Since value stored in info->inputs of CompactInfo is rowset id
     // we should get the real max rssid here by segment number
-    int64_t max_src_rssid = -1;
-    for (auto rowsetid : info->inputs) {
-        auto itr = _rowsets.find(rowsetid);
-        if (itr == _rowsets.end()) {
-            string msg = Substitute("rowset not found tablet=$0 rowset=$1", _tablet.tablet_id(), rowsetid);
-            DCHECK(false) << msg;
-            LOG(WARNING) << msg;
-            continue;
-        }
-        uint32_t rowset_max_rssid = rowsetid + itr->second->num_segments() - 1;
-        max_src_rssid = std::max(max_src_rssid, (int64_t) rowset_max_rssid);
+    uint32_t max_rowsetid = *std::max_element(info->inputs.begin(), info->inputs.end());
+    auto itr = _rowsets.find(max_rowsetid);
+    if (itr == _rowsets.end()) {
+        string msg = Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
+                                _tablet.tablet_id(), max_rowsetid);
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
     }
+    uint32_t max_src_rssid = max_rowsetid + itr->second->num_segments() - 1;
 
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         auto& pk_col = _compaction_state->pk_cols[i];
