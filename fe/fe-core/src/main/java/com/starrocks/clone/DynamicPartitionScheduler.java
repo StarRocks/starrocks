@@ -135,11 +135,27 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         DynamicPartitionProperty dynamicPartitionProperty = olapTable.getTableProperty().getDynamicPartitionProperty();
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
         ZonedDateTime now = ZonedDateTime.now(dynamicPartitionProperty.getTimeZone().toZoneId());
-        for (int i = 0; i <= dynamicPartitionProperty.getEnd(); i++) {
-            String prevBorder =
-                    DynamicPartitionUtil.getPartitionRangeString(dynamicPartitionProperty, now, i, partitionFormat);
-            String nextBorder =
-                    DynamicPartitionUtil.getPartitionRangeString(dynamicPartitionProperty, now, i + 1, partitionFormat);
+
+        boolean createHistoryPartition = dynamicPartitionProperty.isCreateHistoryPartition();
+        int idx;
+        int start = dynamicPartitionProperty.getStart();
+        int historyPartitionNum = dynamicPartitionProperty.getHistoryPartitionNum();
+
+        // When enable create_history_partition, will check the valid value from start and history_partition_num.
+        if (createHistoryPartition) {
+            if (historyPartitionNum == DynamicPartitionProperty.NOT_SET_HISTORY_PARTITION_NUM) {
+                idx = start;
+            } else {
+                idx = Math.max(start, -historyPartitionNum);
+            }
+        } else {
+            idx = 0;
+        }
+        for (; idx <= dynamicPartitionProperty.getEnd(); idx++) {
+            String prevBorder = DynamicPartitionUtil.getPartitionRangeString(
+                    dynamicPartitionProperty, now, idx, partitionFormat);
+            String nextBorder = DynamicPartitionUtil.getPartitionRangeString(
+                    dynamicPartitionProperty, now, idx + 1, partitionFormat);
             PartitionValue lowerValue = new PartitionValue(prevBorder);
             PartitionValue upperValue = new PartitionValue(nextBorder);
 
