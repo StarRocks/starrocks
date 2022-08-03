@@ -3,6 +3,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -248,6 +249,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -990,6 +992,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
+    public static final ImmutableList<String> MATERIALIZEDVIEW_REFRESHSCHEME_SUPPORT_UNIT_IDENTIFIERS =
+            new ImmutableList.Builder<String>()
+                    .add("SECOND").add("MINUTE").add("HOUR").add("DAY")
+                    .build();
+
+    private boolean checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc) {
+        if (asyncRefreshSchemeDesc.getIntervalLiteral() == null ||
+                asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() == null) {
+            return true;
+        }
+        String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+        if (StringUtils.isEmpty(description)) {
+            return true;
+        }
+        return MATERIALIZEDVIEW_REFRESHSCHEME_SUPPORT_UNIT_IDENTIFIERS.contains(description);
+    }
+
     @Override
     public ParseNode visitCreateMaterializedViewStatement(
             StarRocksParser.CreateMaterializedViewStatementContext context) {
@@ -1027,16 +1047,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null &&
-                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() != null) {
-                String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
-                if (!("SECOND".equalsIgnoreCase(description) || "MINUTE".equalsIgnoreCase(description) ||
-                        "HOUR".equalsIgnoreCase(description) || "DAY".equalsIgnoreCase(description))) {
-                    throw new IllegalArgumentException(
-                            "CreateMaterializedView UnitIdentifier do not support:'" + description +
-                                    "',you can use 'SECOND','MINUTE','HOUR' or 'DAY'");
-                }
+            if (!checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc)) {
+                throw new IllegalArgumentException(
+                        "CreateMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
             }
+
         }
         if (!Config.enable_experimental_mv) {
             throw new ParsingException("The experimental mv is disabled");
@@ -1109,15 +1124,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null &&
-                    asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() != null) {
-                String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
-                if (!("SECOND".equalsIgnoreCase(description) || "MINUTE".equalsIgnoreCase(description) ||
-                        "HOUR".equalsIgnoreCase(description) || "DAY".equalsIgnoreCase(description))) {
-                    throw new IllegalArgumentException(
-                            "AlterMaterializedView UnitIdentifier do not support:'" + description +
-                                    "',you can use 'SECOND','MINUTE','HOUR' or 'DAY'");
-                }
+            if (!checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc)) {
+                throw new IllegalArgumentException(
+                        "AlterMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
             }
         }
         return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
