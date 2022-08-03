@@ -357,14 +357,18 @@ public class RuntimeProfile {
         List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
 
         // Keep MIN/MAX metrics head of other child counters
-        List<String> reorderedChildNames = Lists.newArrayList();
+        List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
+        List<String> otherChildNames = Lists.newArrayListWithCapacity(childNames.size());
         for (String childName : childNames) {
             if (childName.startsWith(MERGED_INFO_PREFIX_MIN) || childName.startsWith(MERGED_INFO_PREFIX_MAX)) {
-                reorderedChildNames.add(0, childName);
+                minMaxChildNames.add(childName);
             } else {
-                reorderedChildNames.add(childName);
+                otherChildNames.add(childName);
             }
         }
+        List<String> reorderedChildNames = Lists.newArrayListWithCapacity(childNames.size());
+        reorderedChildNames.addAll(minMaxChildNames);
+        reorderedChildNames.addAll(otherChildNames);
 
         for (String childName : reorderedChildNames) {
             Pair<Counter, String> pair = this.counterMap.get(childName);
