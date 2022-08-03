@@ -1616,9 +1616,9 @@ public class PlanFragmentBuilder {
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
 
             // 2. Get eqJoinConjuncts
+            List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
-                    leftChildColumns, rightChildColumns,
-                    Utils.extractConjuncts(node.getOnPredicate()));
+                    leftChildColumns, rightChildColumns, onPredicates);
 
             if (node.getJoinType().isCrossJoin()
                     || (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())
@@ -1627,14 +1627,14 @@ public class PlanFragmentBuilder {
                         .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                 new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                         .collect(Collectors.toList());
-                List<Expr> eqJoinConjuncts =
-                        eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                List<Expr> joinOnConjuncts =
+                        onPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                                 .collect(Collectors.toList());
 
                 NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                        null, node.getJoinType(), eqJoinConjuncts, Lists.newArrayList());
+                        null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
 
                 joinNode.setLimit(node.getLimit());
                 joinNode.computeStatistics(optExpr.getStatistics());
