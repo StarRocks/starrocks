@@ -647,8 +647,8 @@ public class RuntimeProfile {
             for (int j = 1; j < profiles.size(); j++) {
                 RuntimeProfile profile = profiles.get(j);
                 if (i >= profile.childList.size()) {
-                    LOG.warn("find non-isomorphic children, profileName={}, childCounterNames={}" +
-                                    ", another profileName={}, another childCounterNames={}",
+                    LOG.warn("find non-isomorphic children, profileName={}, childProfileNames={}" +
+                                    ", another profileName={}, another childProfileNames={}",
                             profile0.name,
                             profile0.childList.stream().map(p -> p.first.getName()).collect(Collectors.toList()),
                             profile.name,
