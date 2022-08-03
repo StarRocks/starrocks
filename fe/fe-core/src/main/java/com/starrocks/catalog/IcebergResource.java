@@ -66,7 +66,6 @@ public class IcebergResource extends Resource {
             if (StringUtils.isBlank(catalogType)) {
                 throw new DdlException(ICEBERG_CATALOG + " must be set in properties");
             }
-            LOG.warn(ICEBERG_CATALOG_LEGACY + " will be deprecated, using " + ICEBERG_CATALOG + " instead.");
         }
 
         switch (IcebergCatalogType.fromString(catalogType)) {

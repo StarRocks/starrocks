@@ -30,7 +30,6 @@ public class IcebergConnector implements Connector {
     public ConnectorMetadata getMetadata() throws DdlException {
         if (metadata == null) {
             if (null == properties.get(ICEBERG_CATALOG) || properties.get(ICEBERG_CATALOG).length() == 0) {
-                LOG.warn("Catalog {} has been deprecated, use {} instead.", ICEBERG_CATALOG_LEGACY, ICEBERG_CATALOG);
                 properties.put(ICEBERG_CATALOG, properties.get(ICEBERG_CATALOG_LEGACY));
             }
             try {
