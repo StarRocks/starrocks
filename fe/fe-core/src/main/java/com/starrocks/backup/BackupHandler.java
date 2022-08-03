@@ -61,7 +61,6 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mortbay.log.Log;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -561,7 +560,7 @@ public class BackupHandler extends LeaderDaemon implements Writable {
             job.replayRun();
         }
         if (isJobExpired(job, System.currentTimeMillis())) {
-            Log.warn("skip expired job {}", job);
+            LOG.warn("skip expired job {}", job);
             return;
         }
         dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
