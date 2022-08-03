@@ -45,6 +45,26 @@ Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     return Status::OK();
 }
 
+bool CrossJoinContext::enter_post_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
+    bool is_last = (_num_probers - 1) == _num_post_probers.fetch_add(1);
+
+    // Merge all build_match_flag from all probers
+    std::lock_guard guard(_build_match_mutex);
+    if (_shared_build_match_flag.empty()) {
+        _shared_build_match_flag.resize(build_match_flags.size(), 0);
+    }
+    DCHECK_EQ(build_match_flags.size(), _shared_build_match_flag.size());
+    vectorized::ColumnHelper::or_two_filters(_shared_build_match_flag.size(), _shared_build_match_flag.data(),
+                                             build_match_flags.data());
+
+    return is_last;
+}
+
+const std::vector<uint8_t> CrossJoinContext::get_shared_build_match_flag() const {
+    DCHECK_EQ(_num_post_probers, _num_probers) << "all probers should share their states";
+    return _shared_build_match_flag;
+}
+
 void CrossJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
     _tmp_chunks[sinker_id].push_back(chunk);
 }

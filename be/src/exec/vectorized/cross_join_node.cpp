@@ -34,6 +34,7 @@ static bool _support_join_type(TJoinOp::type join_type) {
     case TJoinOp::INNER_JOIN:
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::RIGHT_OUTER_JOIN:
+    case TJoinOp::FULL_OUTER_JOIN:
         return true;
     default:
         return false;
@@ -48,7 +49,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.__isset.nestloop_join_node) {
         _join_op = tnode.nestloop_join_node.join_op;
         if (!_support_join_type(_join_op)) {
-            std::string type_string = std::to_string(_join_op);
+            std::string type_string = starrocks::to_string(_join_op);
             return Status::NotSupported("nestloop join not supoort: " + type_string);
         }
         

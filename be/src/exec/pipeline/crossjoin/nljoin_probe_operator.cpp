@@ -19,7 +19,7 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
                                          const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                                          size_t build_column_count,
                                          const std::shared_ptr<CrossJoinContext>& cross_join_context)
-        : OperatorWithDependency(factory, id, "nljoin_probe", plan_node_id, driver_sequence),
+        : OperatorWithDependency(factory, id, "nestloop_join_probe", plan_node_id, driver_sequence),
           _join_op(join_op),
           _col_types(col_types),
           _probe_column_count(probe_column_count),
@@ -77,7 +77,8 @@ bool NLJoinProbeOperator::is_finished() const {
 
 Status NLJoinProbeOperator::set_finishing(RuntimeState* state) {
     // TODO: optimize for parallel permute right join
-    if (!_is_finished && _is_right_join() && _build_match_flag.size() > 0 && _cross_join_context->enter_post_probe()) {
+    if (!_is_finished && _is_right_join() && _self_build_match_flag.size() > 0 &&
+        _cross_join_context->enter_post_probe(_driver_sequence, _self_build_match_flag)) {
         ChunkPtr chunk = _init_output_chunk(state);
         _permute_right_join(state, chunk);
         _output_accumulator.push(chunk);
@@ -123,7 +124,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
 }
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
-    if (_conjunct_ctxs.empty() || !chunk || chunk->is_empty()) {
+    if ((_join_conjuncts.empty() && _conjunct_ctxs.empty()) || !chunk || chunk->is_empty()) {
         return Status::OK();
     }
     vectorized::FilterPtr filter;
@@ -133,8 +134,6 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
 
     bool multi_probe_rows = _num_build_chunks() == 1;
     if (_is_left_join()) {
-        // If single build chunk, there would multiple probe rows
-        // Else multiple build chunks, there would be only one probe row
         if (multi_probe_rows) {
             size_t num_build_rows = _cross_join_context->num_build_rows();
             DCHECK_GE(filter->size(), num_build_rows);
@@ -160,12 +159,13 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
             size_t num_build_rows = _cross_join_context->num_build_rows();
             DCHECK_GE(filter->size(), num_build_rows);
             for (size_t i = 0; i < filter->size(); i += num_build_rows) {
-                vectorized::ColumnHelper::or_two_filters(&_build_match_flag, filter->data() + i);
+                vectorized::ColumnHelper::or_two_filters(&_self_build_match_flag, filter->data() + i);
             }
         } else {
             int flag_start = _cross_join_context->get_build_chunk_start(_curr_build_chunk_index);
             int flag_count = _curr_build_chunk->num_rows();
-            vectorized::ColumnHelper::or_two_filters(flag_count, _build_match_flag.data() + flag_start, filter->data());
+            vectorized::ColumnHelper::or_two_filters(flag_count, _self_build_match_flag.data() + flag_start,
+                                                     filter->data());
         }
     }
 
@@ -229,9 +229,10 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
 
 // Permute build side for right join
 void NLJoinProbeOperator::_permute_right_join(RuntimeState* state, ChunkPtr chunk) {
-    if (!SIMD::contain_zero(_build_match_flag)) {
+    if (!SIMD::contain_zero(_self_build_match_flag)) {
         return;
     }
+    const std::vector<uint8_t>& build_match_flag = _cross_join_context->get_shared_build_match_flag();
     size_t match_flag_index = 0;
     for (int chunk_index = 0; chunk_index < _num_build_chunks(); chunk_index++) {
         _move_build_chunk(chunk_index);
@@ -241,14 +242,14 @@ void NLJoinProbeOperator::_permute_right_join(RuntimeState* state, ChunkPtr chun
             ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
             bool is_probe = col < _probe_column_count;
             if (is_probe) {
-                size_t nonmatched_count = SIMD::count_zero(_build_match_flag.data() + match_flag_index, chunk_size);
+                size_t nonmatched_count = SIMD::count_zero(build_match_flag.data() + match_flag_index, chunk_size);
                 if (nonmatched_count > 0) {
                     dst_col->append_nulls(nonmatched_count);
                 }
             } else {
                 ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
                 for (int i = 0; i < chunk_size; i++) {
-                    if (!_build_match_flag[match_flag_index + i]) {
+                    if (!build_match_flag[match_flag_index + i]) {
                         dst_col->append(*src_col, i, 1);
                     }
                 }
@@ -284,8 +285,9 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
 void NLJoinProbeOperator::_init_build_match() {
     // Init build_match_flag
     if (_is_right_join() && _cross_join_context->is_right_finished() &&
-        _build_match_flag.size() < _cross_join_context->num_build_rows()) {
-        _build_match_flag.resize(_cross_join_context->num_build_rows(), 0);
+        _self_build_match_flag.size() < _cross_join_context->num_build_rows()) {
+        _self_build_match_flag.resize(_cross_join_context->num_build_rows(), 0);
+        _cross_join_context->enter_probe_state(_driver_sequence);
     }
 }
 

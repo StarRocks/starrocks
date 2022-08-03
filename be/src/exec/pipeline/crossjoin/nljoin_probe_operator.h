@@ -75,7 +75,7 @@ private:
     // Build states
     int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
-    std::vector<uint8_t> _build_match_flag; // Whether this build row matched by probe
+    std::vector<uint8_t> _self_build_match_flag; // Whether this build row matched by probe
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;

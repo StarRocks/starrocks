@@ -10,6 +10,7 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 class RuntimeFilterBuildDescriptor;
@@ -53,11 +54,14 @@ public:
     Status finish_one_right_sinker(RuntimeState* state);
 
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
-    
-    bool enter_post_probe() {
-        bool value = false;
-        return _post_probe.compare_exchange_strong(value, true);
-    }
+
+    void enter_probe_state(int32_t driver_seq) { _num_probers++; }
+
+    // Return true if it's the last prober, which need to perform the right join task
+    bool enter_post_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);
+
+    const std::vector<uint8_t> get_shared_build_match_flag() const;
+
 private:
     Status _init_runtime_filter(RuntimeState* state);
 
@@ -69,15 +73,18 @@ private:
     // of _build_chunks, when it sees all the CrossJoinRightSinkOperators are finished.
     std::atomic<int32_t> _num_finished_right_sinkers = 0;
 
-    // _build_chunks[i] contains all the rows from i-th CrossJoinRightSinkOperator.
-    std::vector<std::vector<vectorized::ChunkPtr>> _tmp_chunks;
-    std::vector<vectorized::ChunkPtr> _build_chunks;
-    int _build_chunk_desired_size = 0;
-
     // finished flags
     std::atomic_bool _all_right_finished = false;
     std::atomic_int64_t _num_build_rows = 0;
-    std::atomic_bool _post_probe = false; // Enter the post-probe state
+
+    // Join states
+    std::vector<std::vector<vectorized::ChunkPtr>> _tmp_chunks;
+    std::vector<vectorized::ChunkPtr> _build_chunks;
+    int _build_chunk_desired_size = 0;
+    std::atomic_int64_t _num_probers = 0;
+    std::atomic_int64_t _num_post_probers = 0;
+    std::mutex _build_match_mutex; // Protects the _shared_build_match_flag
+    std::vector<uint8_t> _shared_build_match_flag;
 
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _conjuncts_ctx;
