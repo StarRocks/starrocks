@@ -3,6 +3,6 @@
 package com.starrocks.catalog;
 
 public interface DeleteTableAction {
-    // @return: true if the associated table can be removed from the CatalogRecycleBin, false otherwise.
+    // @return: true on success, false otherwise.
     boolean execute();
 }

@@ -387,7 +387,6 @@ public class Database extends MetaObject implements Writable {
         table.onDrop(this, isForceDrop, isReplay);
 
         dropTable(table.getName());
-
         GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table, isForceDrop);
         if (isForceDrop) {
             GlobalStateMgr.getCurrentState().getRecycleBin().wakeup();

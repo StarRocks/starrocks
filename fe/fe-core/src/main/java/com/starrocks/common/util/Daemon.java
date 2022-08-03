@@ -88,8 +88,22 @@ public class Daemon extends Thread {
 
     public void wakeup() {
         lock.lock();
-        this.ready.signal();
-        lock.unlock();
+        try {
+            this.ready.signal();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void await() {
+        lock.lock();
+        try {
+            ready.await(intervalMs, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ignored) {
+            // do nothing
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -108,12 +122,10 @@ public class Daemon extends Thread {
         while (!isStop.get()) {
             try {
                 runOneCycle();
-                lock.lock();
-                ready.await(intervalMs, TimeUnit.MILLISECONDS); // Ignore the result intentionally
-                lock.unlock();
             } catch (Throwable e) {
                 LOG.error("daemon thread got exception. name: {}", getName(), e);
             }
+            await();
         }
 
         if (metaContext != null) {

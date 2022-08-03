@@ -8,6 +8,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RecoverInfo;
@@ -116,16 +117,14 @@ public class CatalogRecycleBinTest {
     @Test
     public void testReplayEraseTableEx(@Mocked GlobalStateMgr globalStateMgr) {
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState();
+            result = globalStateMgr;
 
-                globalStateMgr.getEditLog().logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
-                result = null;
-            }
-        };
+            globalStateMgr.getEditLog().logEraseMultiTables((List<Long>) any);
+            minTimes = 0;
+            result = null;
+        }};
 
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Table table = new Table(1L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
@@ -135,9 +134,7 @@ public class CatalogRecycleBinTest {
         Table table3 = new Table(3L, "tbl", Table.TableType.HIVE, Lists.newArrayList());
         bin.recycleTable(13, table3);
 
-        List<CatalogRecycleBin.RecycleTableInfo> tableInfos =
-                bin.pickTablesToErase(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
-        bin.eraseTables(tableInfos);
+        bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
 
         Assert.assertEquals(0, bin.getTables(11L).size());
         Assert.assertEquals(0, bin.getTables(12L).size());
@@ -196,12 +193,10 @@ public class CatalogRecycleBinTest {
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentInvertedIndex();
-                result = invertedIndex;
-            }
-        };
+        new Expectations() {{
+            GlobalStateMgr.getCurrentInvertedIndex();
+            result = invertedIndex;
+        }};
 
         CatalogRecycleBin bin = new CatalogRecycleBin();
         bin.recycleTable(dbId, table);
@@ -268,28 +263,22 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(db1.getId(), expireFromNow - 1000);
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.onEraseDatabase(anyLong);
-                minTimes = 0;
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseDb(anyLong);
-                minTimes = 0;
-            }
-        };
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState();
+            minTimes = 0;
+            result = globalStateMgr;
+        }};
+        new Expectations() {{
+            globalStateMgr.onEraseDatabase(anyLong);
+            minTimes = 0;
+            globalStateMgr.getEditLog();
+            minTimes = 0;
+            result = editLog;
+        }};
+        new Expectations() {{
+            editLog.logEraseDb(anyLong);
+            minTimes = 0;
+        }};
 
         recycleBin.eraseDatabase(now);
 
@@ -329,26 +318,20 @@ public class CatalogRecycleBinTest {
         Table table2SameName = new Table(22, "dos", Table.TableType.VIEW, null);
         Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logEraseMultiTables((List<Long>) any);
-                minTimes = 0;
-            }
-        };
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState();
+            minTimes = 0;
+            result = globalStateMgr;
+        }};
+        new Expectations() {{
+            globalStateMgr.getEditLog();
+            minTimes = 0;
+            result = editLog;
+        }};
+        new Expectations() {{
+            editLog.logEraseMultiTables((List<Long>) any);
+            minTimes = 0;
+        }};
 
         // 1. add 2 tables
         long DB_ID = 1;
@@ -400,28 +383,8 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testRecycleTableWithRetry(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+    public void testDeleteActionFailed(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
         Table table = new Table(111, "uno", Table.TableType.VIEW, null);
-
-        new Expectations(table) {{
-            table.delete(false);
-            minTimes = 1;
-            maxTimes = 1;
-            result = new DeleteTableAction() {
-                @Override
-                public boolean execute() {
-                    return false;
-                }
-            };
-        }};
-
-        long DB_ID = 1;
-        CatalogRecycleBin bin = new CatalogRecycleBin();
-        bin.recycleTable(DB_ID, table, true);
-        bin.runAfterCatalogReady();
-        Assert.assertNotNull(bin.getTable(DB_ID, table.getId()));
-        Assert.assertSame(table, bin.getTable(DB_ID, table.getId()));
-        Assert.assertSame(table, bin.pickTablesToErase(System.currentTimeMillis()).get(0).getTable());
 
         new Expectations() {{
             GlobalStateMgr.getCurrentState();
@@ -444,13 +407,15 @@ public class CatalogRecycleBinTest {
             result = new DeleteTableAction() {
                 @Override
                 public boolean execute() {
-                    return true;
+                    return false;
                 }
             };
         }};
+        long DB_ID = 1;
+        CatalogRecycleBin bin = new CatalogRecycleBin();
+        bin.recycleTable(DB_ID, table, true);
         bin.runAfterCatalogReady();
         Assert.assertNull(bin.getTable(DB_ID, table.getId()));
-        Assert.assertTrue(bin.pickTablesToErase(System.currentTimeMillis()).isEmpty());
     }
 
     @Test
@@ -489,34 +454,97 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
+    public void testRecoverDatabase() throws DdlException {
+        Database db = new Database(10, "db_test");
+        // table0 has the same name with table1
+        Table table0 = new Table(110, "uno", Table.TableType.VIEW, null);
+        Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
+        Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
+
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        recycleBin.recycleTable(db.getId(), table0, false);
+        recycleBin.recycleTable(db.getId(), table1, false);
+        recycleBin.recycleTable(db.getId(), table2, false);
+        recycleBin.recycleDatabase(db, Sets.newHashSet(table1.getName(), table2.getName()));
+
+        Database newDb = recycleBin.recoverDatabase(db.getFullName());
+        Assert.assertNotNull(newDb);
+        Assert.assertEquals(2, newDb.getTables().size());
+        Assert.assertSame(table1, newDb.getTable(table1.getId()));
+        Assert.assertSame(table2, newDb.getTable(table2.getId()));
+        Assert.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
+        Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
+        Assert.assertFalse(recycleBin.recoverTable(db, table1.getName()));
+        Assert.assertFalse(recycleBin.recoverTable(db, table2.getName()));
+    }
+
+    @Test
+    public void testRecoverDatabaseFailed(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+        Database db = new Database(10, "db_test");
+        Table table1 = new Table(111, "uno", Table.TableType.VIEW, null);
+        Table table2 = new Table(222, "dos", Table.TableType.VIEW, null);
+
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+
+        recycleBin.recycleTable(db.getId(), table1, false);
+        recycleBin.recycleTable(db.getId(), table2, false);
+        recycleBin.recycleDatabase(db, Sets.newHashSet(table1.getName(), table2.getName()));
+
+        recycleBin.idToRecycleTime.put(table1.getId(), 0L);
+
+        Exception exception = Assert.assertThrows(DdlException.class, () -> {
+            recycleBin.recoverDatabase(db.getFullName());
+        });
+        Assert.assertTrue(exception.getMessage().contains(table1.getName()));
+
+        Assert.assertSame(table1, recycleBin.getTable(db.getId(), table1.getId()));
+        Assert.assertSame(table2, recycleBin.getTable(db.getId(), table2.getId()));
+
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState();
+            minTimes = 1;
+            maxTimes = 1;
+            result = globalStateMgr;
+        }};
+        new Expectations() {{
+            globalStateMgr.getEditLog();
+            minTimes = 1;
+            maxTimes = 1;
+            result = editLog;
+        }};
+        new Expectations() {{
+            editLog.logRecoverTable((RecoverInfo) any);
+            minTimes = 1;
+            maxTimes = 1;
+        }};
+        Assert.assertTrue(recycleBin.recoverTable(db, table2.getName()));
+        Assert.assertSame(table2, db.getTable(table2.getId()));
+    }
+
+    @Test
     public void testRecyclePartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
         Partition p1 = new Partition(111, "uno", null, null);
         Partition p2SameName = new Partition(22, "dos", null, null);
         Partition p2 = new Partition(222, "dos", null, null);
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-            }
-        };
-        new Expectations() {
-            {
-                globalStateMgr.onErasePartition((Partition) any);
-                minTimes = 0;
+        new Expectations() {{
+            GlobalStateMgr.getCurrentState();
+            minTimes = 0;
+            result = globalStateMgr;
+        }};
+        new Expectations() {{
+            globalStateMgr.onErasePartition((Partition) any);
+            minTimes = 0;
 
-                globalStateMgr.getEditLog();
-                minTimes = 0;
-                result = editLog;
-            }
-        };
-        new Expectations() {
-            {
-                editLog.logErasePartition(anyLong);
-                minTimes = 0;
-            }
-        };
+            globalStateMgr.getEditLog();
+            minTimes = 0;
+            result = editLog;
+        }};
+        new Expectations() {{
+            editLog.logErasePartition(anyLong);
+            minTimes = 0;
+        }};
 
         // 1. add 2 partitions
         long DB_ID = 1;
