@@ -52,7 +52,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
             std::string type_string = starrocks::to_string(_join_op);
             return Status::NotSupported("nestloop join not supoort: " + type_string);
         }
-        
+
         if (tnode.nestloop_join_node.__isset.join_conjuncts) {
             RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts));
         }
@@ -638,8 +638,8 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            _sql_join_conjuncts,
-            std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(cross_join_context), _join_op);
+            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(cross_join_context),
+            _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));

@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/pipeline/crossjoin/nljoin_build_operator.h"
 #include "runtime/current_thread.h"
 
 using namespace starrocks::vectorized;
@@ -20,6 +21,10 @@ Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectori
     }
 
     return Status::OK();
+}
+
+OperatorPtr CrossJoinRightSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    return std::make_shared<NLJoinBuildOperator>(this, _id, _plan_node_id, driver_sequence, _cross_join_context);
 }
 
 } // namespace starrocks::pipeline

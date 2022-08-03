@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #pragma once
 
@@ -10,17 +10,16 @@
 
 namespace starrocks::pipeline {
 
-class CrossJoinRightSinkOperator final : public Operator {
+class NLJoinBuildOperator final : public Operator {
 public:
-    CrossJoinRightSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                               const int32_t driver_sequence,
-                               const std::shared_ptr<CrossJoinContext>& cross_join_context)
-            : Operator(factory, id, "cross_join_right_sink", plan_node_id, driver_sequence),
+    NLJoinBuildOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, const int32_t driver_sequence,
+                        const std::shared_ptr<CrossJoinContext>& cross_join_context)
+            : Operator(factory, id, "nestloop_join_build", plan_node_id, driver_sequence),
               _cross_join_context(cross_join_context) {
         _cross_join_context->ref();
     }
 
-    ~CrossJoinRightSinkOperator() override = default;
+    ~NLJoinBuildOperator() override = default;
 
     void close(RuntimeState* state) override {
         _cross_join_context->unref(state);
@@ -48,21 +47,6 @@ private:
     bool _is_finished = false;
 
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
-};
-
-class CrossJoinRightSinkOperatorFactory final : public OperatorFactory {
-public:
-    CrossJoinRightSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                      std::shared_ptr<CrossJoinContext> cross_join_context)
-            : OperatorFactory(id, "cross_join_right_sink", plan_node_id),
-              _cross_join_context(std::move(cross_join_context)) {}
-
-    ~CrossJoinRightSinkOperatorFactory() override = default;
-
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
-
-private:
-    std::shared_ptr<CrossJoinContext> _cross_join_context;
 };
 
 } // namespace starrocks::pipeline
