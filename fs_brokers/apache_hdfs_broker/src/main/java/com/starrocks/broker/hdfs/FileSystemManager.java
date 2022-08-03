@@ -857,7 +857,7 @@ public class FileSystemManager {
             } catch (IOException e) {
                 logger.error("errors while read data from stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
-                        e, "errors while write data to output stream");
+                        e, "errors while read data from stream");
             }
         }
     }

@@ -916,7 +916,7 @@ public class HdfsFsManager {
                 }
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
-                throw new UserException("errors while write data to output stream");
+                throw new UserException("errors while read data from stream");
             }
         }
     }
