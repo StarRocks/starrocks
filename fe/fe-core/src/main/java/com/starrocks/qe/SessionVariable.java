@@ -523,8 +523,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
-    private boolean enableColumnExprPredicate = false;
+    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE, flag = VariableMgr.INVISIBLE)
+    private boolean enableColumnExprPredicate = true;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
