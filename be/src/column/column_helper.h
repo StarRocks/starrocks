@@ -13,6 +13,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "util/phmap/phmap.h"
 
 namespace starrocks {
 struct TypeDescriptor;
@@ -286,7 +287,9 @@ public:
         constexpr size_t kBatchNums = 256 / (8 * sizeof(uint8_t));
         const __m256i all0 = _mm256_setzero_si256();
 
-        while (start_offset + kBatchNums < to) {
+        // batch nums is kBatchNums
+        // we will process filter at start_offset, start_offset + 1, ..., start_offset + kBatchNums - 1 in one batch
+        while (start_offset + kBatchNums <= to) {
             __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + start_offset));
             uint32_t mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
 
@@ -298,16 +301,9 @@ public:
                 result_offset += kBatchNums;
 
             } else {
-                // skip not hit row, it's will reduce compare when filter layout is sparse,
-                // like "00010001...", but is ineffective when the filter layout is dense.
-                int zero_count = Bits::CountTrailingZerosNonZero32(mask);
-                int i = zero_count;
-                while (i < kBatchNums) {
-                    mask = zero_count < 31 ? mask >> (zero_count + 1u) : 0;
-                    *(data + result_offset) = *(data + start_offset + i);
-                    zero_count = Bits::CountTrailingZeros32(mask);
-                    result_offset += 1;
-                    i += (zero_count + 1);
+                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                for (auto idx : bitmask) {
+                    *(data + result_offset++) = *(data + start_offset + idx);
                 }
             }
 
