@@ -117,7 +117,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
-    public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
     public static final String STREAMING_PREAGGREGATION_MODE = "streaming_preaggregation_mode";
     public static final String DISABLE_COLOCATE_JOIN = "disable_colocate_join";
     public static final String DISABLE_BUCKET_JOIN = "disable_bucket_join";
@@ -227,23 +226,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
     public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
-
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
     public static final String GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE = "global_runtime_filter_build_max_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
-
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
-
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
-
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
-
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
-
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
@@ -251,9 +244,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
-
     public static final String ENABLE_SHOW_ALL_VARIABLES = "enable_show_all_variables";
-
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
@@ -274,6 +265,57 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+
+    // ***************** Some variables only to keep compatibility start ***************** //
+    @VariableMgr.VarAttr(name = AUTO_COMMIT)
+    private boolean autoCommit = true;
+    @VariableMgr.VarAttr(name = TX_ISOLATION)
+    private String txIsolation = "REPEATABLE-READ";
+    @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
+    private String charsetClient = "utf8";
+    @VariableMgr.VarAttr(name = CHARACTER_SET_CONNNECTION)
+    private String charsetConnection = "utf8";
+    @VariableMgr.VarAttr(name = CHARACTER_SET_RESULTS)
+    private String charsetResults = "utf8";
+    @VariableMgr.VarAttr(name = CHARACTER_SET_SERVER)
+    private String charsetServer = "utf8";
+    @VariableMgr.VarAttr(name = COLLATION_CONNECTION)
+    private String collationConnection = "utf8_general_ci";
+    @VariableMgr.VarAttr(name = COLLATION_DATABASE)
+    private String collationDatabase = "utf8_general_ci";
+    @VariableMgr.VarAttr(name = COLLATION_SERVER)
+    private String collationServer = "utf8_general_ci";
+    @VariableMgr.VarAttr(name = SQL_AUTO_IS_NULL)
+    private boolean sqlAutoIsNull = false;
+    // this is used to make c3p0 library happy
+    @VariableMgr.VarAttr(name = MAX_ALLOWED_PACKET)
+    private int maxAllowedPacket = 1048576;
+    @VariableMgr.VarAttr(name = AUTO_INCREMENT_INCREMENT)
+    private int autoIncrementIncrement = 1;
+    // this is used to make c3p0 library happy
+    @VariableMgr.VarAttr(name = QUERY_CACHE_TYPE)
+    private int queryCacheType = 0;
+    // The number of seconds the server waits for activity on an interactive connection before closing it
+    @VariableMgr.VarAttr(name = INTERACTIVE_TIMTOUT)
+    private int interactiveTimeout = 3600;
+    // The number of seconds to wait for a block to be written to a connection before aborting the write
+    @VariableMgr.VarAttr(name = NET_WRITE_TIMEOUT)
+    private int netWriteTimeout = 60;
+    // The number of seconds to wait for a block to be written to a connection before aborting the write
+    @VariableMgr.VarAttr(name = NET_READ_TIMEOUT)
+    private int netReadTimeout = 60;
+    @VariableMgr.VarAttr(name = SQL_SAFE_UPDATES)
+    private int sqlSafeUpdates = 0;
+    @VariableMgr.VarAttr(name = NET_BUFFER_LENGTH, flag = VariableMgr.READ_ONLY)
+    private int netBufferLength = 16384;
+    // compatible with some mysql client connect, say DataGrip of JetBrains
+    @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
+    private String eventScheduler = "OFF";
+    @VariableMgr.VarAttr(name = STORAGE_ENGINE)
+    private String storageEngine = "olap";
+    @VariableMgr.VarAttr(name = DIV_PRECISION_INCREMENT)
+    private int divPrecisionIncrement = 4;
+    // ***************** Some variables only to keep compatibility end ***************** //
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -348,67 +390,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // The specified resource group of this session
     @VariableMgr.VarAttr(name = RESOURCE_GROUP, flag = VariableMgr.SESSION_ONLY)
     private String resourceGroup = "";
-
-    // this is used to make mysql client happy
-    @VariableMgr.VarAttr(name = AUTO_COMMIT)
-    private boolean autoCommit = true;
-
-    // this is used to make c3p0 library happy
-    @VariableMgr.VarAttr(name = TX_ISOLATION)
-    private String txIsolation = "REPEATABLE-READ";
-
-    // this is used to compatible mysql 5.8
-    @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
-    private String transactionIsolation = "REPEATABLE-READ";
-    // this is used to make c3p0 library happy
-    @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
-    private String charsetClient = "utf8";
-    @VariableMgr.VarAttr(name = CHARACTER_SET_CONNNECTION)
-    private String charsetConnection = "utf8";
-    @VariableMgr.VarAttr(name = CHARACTER_SET_RESULTS)
-    private String charsetResults = "utf8";
-    @VariableMgr.VarAttr(name = CHARACTER_SET_SERVER)
-    private String charsetServer = "utf8";
-    @VariableMgr.VarAttr(name = COLLATION_CONNECTION)
-    private String collationConnection = "utf8_general_ci";
-    @VariableMgr.VarAttr(name = COLLATION_DATABASE)
-    private String collationDatabase = "utf8_general_ci";
-    @VariableMgr.VarAttr(name = COLLATION_SERVER)
-    private String collationServer = "utf8_general_ci";
-
-    // this is used to make c3p0 library happy
-    @VariableMgr.VarAttr(name = SQL_AUTO_IS_NULL)
-    private boolean sqlAutoIsNull = false;
-
+    
     public static final long DEFAULT_SELECT_LIMIT = 9223372036854775807L;
     @VariableMgr.VarAttr(name = SQL_SELECT_LIMIT)
     private long sqlSelectLimit = DEFAULT_SELECT_LIMIT;
 
-    // this is used to make c3p0 library happy
-    @VariableMgr.VarAttr(name = MAX_ALLOWED_PACKET)
-    private int maxAllowedPacket = 1048576;
-    @VariableMgr.VarAttr(name = AUTO_INCREMENT_INCREMENT)
-    private int autoIncrementIncrement = 1;
-
-    // this is used to make c3p0 library happy
-    @VariableMgr.VarAttr(name = QUERY_CACHE_TYPE)
-    private int queryCacheType = 0;
-
-    // The number of seconds the server waits for activity on an interactive connection before closing it
-    @VariableMgr.VarAttr(name = INTERACTIVE_TIMTOUT)
-    private int interactiveTimeout = 3600;
-
     // The number of seconds the server waits for activity on a noninteractive connection before closing it.
     @VariableMgr.VarAttr(name = WAIT_TIMEOUT)
     private int waitTimeout = 28800;
-
-    // The number of seconds to wait for a block to be written to a connection before aborting the write
-    @VariableMgr.VarAttr(name = NET_WRITE_TIMEOUT)
-    private int netWriteTimeout = 60;
-
-    // The number of seconds to wait for a block to be written to a connection before aborting the write
-    @VariableMgr.VarAttr(name = NET_READ_TIMEOUT)
-    private int netReadTimeout = 60;
 
     // The current time zone
     @VariableMgr.VarAttr(name = TIME_ZONE)
@@ -416,21 +405,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PARALLEL_EXCHANGE_INSTANCE_NUM)
     private int exchangeInstanceParallel = -1;
-
-    @VariableMgr.VarAttr(name = SQL_SAFE_UPDATES)
-    private int sqlSafeUpdates = 0;
-
-    // only
-    @VariableMgr.VarAttr(name = NET_BUFFER_LENGTH, flag = VariableMgr.READ_ONLY)
-    private int netBufferLength = 16384;
-
     @VariableMgr.VarAttr(name = CHUNK_SIZE, flag = VariableMgr.INVISIBLE)
     private int chunkSize = 4096;
-
     public static final int PIPELINE_BATCH_SIZE = 4096;
-
-    @VariableMgr.VarAttr(name = DISABLE_STREAMING_PREAGGREGATIONS)
-    private boolean disableStreamPreaggregations = false;
 
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
     private String streamingPreaggregationMode = "auto"; // auto, force_streaming, force_preaggregation
@@ -469,7 +446,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PROFILE_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int profileTimeout = 2;
 
-    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
+    @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL, flag = VariableMgr.INVISIBLE)
     private int pipelineProfileLevel = 1;
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, flag = VariableMgr.INVISIBLE)
@@ -480,14 +457,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
-
-    // compatible with some mysql client connect, say DataGrip of JetBrains
-    @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
-    private String eventScheduler = "OFF";
-    @VariableMgr.VarAttr(name = STORAGE_ENGINE)
-    private String storageEngine = "olap";
-    @VariableMgr.VarAttr(name = DIV_PRECISION_INCREMENT)
-    private int divPrecisionIncrement = 4;
 
     // -1 means unset, BE will use its config value
     @VariableMgr.VarAttr(name = MAX_SCAN_KEY_NUM)
@@ -501,11 +470,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER)
+    @VariableMgr.VarAttr(name = ENABLE_PREDICATE_REORDER, flag = VariableMgr.INVISIBLE)
     private boolean enablePredicateReorder = false;
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
-    private boolean enableFilterUnusedColumnsInScanStage = false;
+    private boolean enableFilterUnusedColumnsInScanStage = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -580,7 +549,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //the alias will be used as the groupby column if set to true.
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
-
+    
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE, flag = VariableMgr.INVISIBLE)
     private boolean enableColumnExprPredicate = true;
 
@@ -1097,6 +1066,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeFilterOnExchangeNode;
     }
 
+<<<<<<< HEAD
     public boolean isEnableQueryDebugTrace() {
         return enableQueryDebugTrace;
     }
@@ -1113,6 +1083,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.parseTokensLimit = parseTokensLimit;
     }
 
+=======
+>>>>>>> Enable filter_unused_columns in storage variable by default
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1132,7 +1104,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setIs_report_success(isReportSucc);
         tResult.setCodegen_level(0);
         tResult.setBatch_size(chunkSize);
-        tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
 
         if (maxScanKeyNum > -1) {
@@ -1259,7 +1230,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_38) {
                 int batchSize = in.readInt();
-                disableStreamPreaggregations = in.readBoolean();
+                boolean disableStreamAgg = in.readBoolean();
                 parallelExecInstanceNum = in.readInt();
             }
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_62) {

@@ -254,8 +254,6 @@ public:
 
     int64_t max_reservation() const { return _query_options.max_reservation; }
 
-    bool disable_stream_preaggregations() const { return _query_options.disable_stream_preaggregations; }
-
     bool enable_spill() const { return _query_options.enable_spilling; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
