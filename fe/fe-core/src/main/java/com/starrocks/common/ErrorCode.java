@@ -263,12 +263,8 @@ public enum ErrorCode {
             "Unknown resource group '%s' "),
     ERR_BAD_CATALOG_AND_DB_ERROR(5080, new byte[] {'4', '2', '0', '0', '0'},
             "Unknown catalog.db '%s'"),
-    ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
-            "Only support like 'function_pattern' syntax."),
-    ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5082, new byte[] {'4', '2', '0', '0', '0'},
-            "Dynamic history partition num must greater than 0"),
-    ERROR_DYNAMIC_PARTITION_CREATE_HISTORY_PARTITION(5083, new byte[] {'4', '2', '0', '0', '0'},
-            "Invalid dynamic partition create history partition: %s. Expected true or false");
+    ERR_UNSUPPORTED_SQL_PATTERN(
+            5081, new byte[] {'4', '2', '0', '0', '0'}, "Only support like 'function_pattern' syntax.");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
