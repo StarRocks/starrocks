@@ -126,6 +126,8 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
+            RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
+                      Status::InternalError("segment number not equal to partial_rowset_footers size"));
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
@@ -893,9 +895,15 @@ Status VerticalBetaRowsetWriter::final_flush() {
     }
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
-        if (auto st = segment_writer->finalize_footer(&segment_size); !st.ok()) {
+        uint64_t footer_position = 0;
+        if (auto st = segment_writer->finalize_footer(&segment_size, &footer_position); !st.ok()) {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
+        }
+        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+            auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
+            partial_rowset_footer->set_position(footer_position);
+            partial_rowset_footer->set_size(segment_size - footer_position);
         }
         {
             std::lock_guard<std::mutex> l(_lock);
