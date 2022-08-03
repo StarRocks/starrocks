@@ -305,20 +305,19 @@ public:
 
     // Add a counter with 'name'/'type'.  Returns a counter object that the caller can
     // update.  The counter is owned by the RuntimeProfile object.
-    // If parent_counter_name is a non-empty string, the counter is added as a child of
-    // parent_counter_name.
+    // If parent_name is a non-empty string, the counter is added as a child of
+    // parent_name.
     // If the counter already exists, the existing counter object is returned.
-    Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
+    Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_name);
     Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
-    // If parent_counter_name is a non-empty string, the counter is added as a child of
-    // parent_counter_name.
+    // If parent_name is a non-empty string, the counter is added as a child of
+    // parent_name.
     // Returns NULL if the counter already exists.
     DerivedCounter* add_derived_counter(const std::string& name, TUnit::type type,
-                                        const DerivedCounterFunction& counter_fn,
-                                        const std::string& parent_counter_name);
+                                        const DerivedCounterFunction& counter_fn, const std::string& parent_name);
 
     // Add a set of thread counters prefixed with 'prefix'. Returns a ThreadCounters object
     // that the caller can update.  The counter is owned by the RuntimeProfile object.
@@ -338,8 +337,8 @@ public:
     // Remove the counter object with 'name', and it will remove all the child counters recursively
     void remove_counter(const std::string& name);
 
-    // Clean all the counters except saved_counter_names
-    void remove_counters(const std::set<std::string>& saved_counter_names);
+    // Clean all the counters except saved_names
+    void remove_counters(const std::set<std::string>& saved_names);
 
     // Helper to append to the "ExecOption" info string.
     void append_exec_option(const std::string& option) { add_info_string("ExecOption", option); }
@@ -433,13 +432,13 @@ public:
 
     // Add a bucket of counters to store the sampled value of src_counter.
     // The src_counter is sampled periodically and the buckets are updated.
-    void add_bucketing_counters(const std::string& name, const std::string& parent_counter_name, Counter* src_counter,
+    void add_bucketing_counters(const std::string& name, const std::string& parent_name, Counter* src_counter,
                                 int max_buckets, std::vector<Counter*>* buckets);
 
     /// Adds a high water mark counter to the runtime profile. Otherwise, same behavior
     /// as AddCounter().
     HighWaterMarkCounter* AddHighWaterMarkCounter(const std::string& name, TUnit::type unit,
-                                                  const std::string& parent_counter_name = "");
+                                                  const std::string& parent_name = "");
 
     // stops updating the value of 'rate_counter'. Rate counters are updated
     // periodically so should be removed as soon as the underlying counter is
@@ -471,7 +470,7 @@ private:
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
-    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name);
 
     RuntimeProfile* _parent;
 
