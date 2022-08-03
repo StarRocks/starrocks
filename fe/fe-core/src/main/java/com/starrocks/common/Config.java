@@ -558,6 +558,15 @@ public class Config extends ConfigBase {
     public static int max_mysql_service_task_threads_num = 4096;
 
     /**
+     * modifies the version string returned by following situations:
+     *  select version();
+     *  handshake packet version.
+     *  global variable version.
+     */
+    @ConfField
+    public static String mysql_server_version = "5.1.0";
+
+    /**
      * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
      * Cluster id is usually a random integer generated when master FE start at first time.
      * You can also sepecify one.
