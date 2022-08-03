@@ -655,6 +655,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(resultBuilder.toString());
     }
 
+    @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)
+    public static ConstantOperator version() {
+        return ConstantOperator.createVarchar(Config.mysql_server_version);
+    }
+
     private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
