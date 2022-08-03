@@ -25,7 +25,7 @@
 
    评审阶段分为自动检查和人工评审。
 
-   1. 自动检查：提交人是否已经签署CLA，提交文档是否符合markdown语法。
+   1. 自动检查：提交人是否已经签署[CLA](https://cla-assistant.io/StarRocks/starrocks)，提交文档是否符合markdown语法。
    2. 人工评审：Commiter会阅读并沟通文档内容。最终合入至StarRocks文档仓库，并更新官网。
 
 ## 文档模板
