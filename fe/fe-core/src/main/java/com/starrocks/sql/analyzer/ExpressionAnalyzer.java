@@ -29,8 +29,10 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
+import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -54,6 +56,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.SetUserDefineVar;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -341,7 +344,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -354,7 +357,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -540,7 +543,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
@@ -836,6 +839,47 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitSysVariableDesc(SysVariableDesc node, Scope context) {
             try {
+                if (node.getSetType().equals(SetType.USER)) {
+                    SetUserDefineVar setUserDefineVar = session.getUserDefineVariables(node.getName());
+                    if (setUserDefineVar == null) {
+                        node.setType(Type.STRING);
+                        node.setIsNull();
+                        return null;
+                    }
+
+                    Type variableType = setUserDefineVar.getResolvedExpression().getType();
+                    String variableValue = setUserDefineVar.getResolvedExpression().getStringValue();
+
+                    if (setUserDefineVar.getResolvedExpression() instanceof NullLiteral) {
+                        node.setType(variableType);
+                        node.setIsNull();
+                        return null;
+                    }
+
+                    node.setType(variableType);
+                    switch (variableType.getPrimitiveType()) {
+                        case BOOLEAN:
+                            node.setBoolValue(Boolean.parseBoolean(variableValue));
+                            break;
+                        case TINYINT:
+                        case SMALLINT:
+                        case INT:
+                        case BIGINT:
+                            node.setIntValue(Long.parseLong(variableValue));
+                        case FLOAT:
+                        case DOUBLE:
+                            node.setFloatValue(Double.parseDouble(variableValue));
+                            break;
+                        case CHAR:
+                        case VARCHAR:
+                            node.setStringValue(variableValue);
+                            break;
+                        default:
+                            break;
+                    }
+                    return null;
+                }
+
                 VariableMgr.fillValue(session.getSessionVariable(), node);
                 if (!Strings.isNullOrEmpty(node.getName()) &&
                         node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {

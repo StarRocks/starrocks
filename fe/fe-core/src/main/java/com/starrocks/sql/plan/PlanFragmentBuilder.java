@@ -194,6 +194,22 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
+    public ExecPlan createVariablePhysicalPlan(OptExpression plan,
+                                                ConnectContext connectContext,
+                                                List<ColumnRefOperator> outputColumns,
+                                                ColumnRefFactory columnRefFactory, boolean isStatistic) {
+        ExecPlan execPlan = new ExecPlan(connectContext, new ArrayList<>(), plan, outputColumns);
+        createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan), execPlan,
+                outputColumns);
+
+        List<PlanFragment> fragments = execPlan.getFragments();
+        for (PlanFragment fragment : fragments) {
+            fragment.finalizeForVariable(isStatistic);
+        }
+        Collections.reverse(fragments);
+        return execPlan;
+    }
+
     private void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
                                       List<ColumnRefOperator> outputColumns) {
         if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned()) {

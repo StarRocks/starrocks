@@ -82,7 +82,7 @@ public class AST2SQL {
                 if (! setVar.getType().equals(SetType.DEFAULT)) {
                     sb.append(setVar.getType().toString() + " ");
                 }
-                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
+                sb.append(setVar.getVariable() + " = " + setVar.getResolvedExpression().toSql());
                 idx++;
             }
             return sb.toString();

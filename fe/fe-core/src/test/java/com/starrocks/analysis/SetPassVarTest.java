@@ -81,7 +81,7 @@ public class SetPassVarTest {
         stmt.analyze();
         SetVar setVars = stmt.getSetVars().get(0);
 
-        Assert.assertTrue(setVars.getValue().getStringValue().contains("STRICT_TRANS_TABLES"));
+        Assert.assertTrue(setVars.getResolvedExpression().getStringValue().contains("STRICT_TRANS_TABLES"));
     }
 
     @Test(expected = SemanticException.class)

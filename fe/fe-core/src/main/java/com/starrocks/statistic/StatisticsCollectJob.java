@@ -84,7 +84,6 @@ public abstract class StatisticsCollectJob {
     }
 
     public void collectStatisticSync(String sql) throws Exception {
-
         LOG.debug("statistics collect sql : " + sql);
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());

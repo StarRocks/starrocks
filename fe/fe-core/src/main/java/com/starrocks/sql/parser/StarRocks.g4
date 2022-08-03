@@ -724,8 +724,8 @@ setStatement
 
 setVar
     : varType? identifier '=' setExprOrDefault
-    | AT identifierOrString '=' expression
-    | AT AT (varType '.')? identifier '=' setExprOrDefault
+    | userDefineVariable '=' expression
+    | systemVariable '=' setExprOrDefault
     ;
 
 setExprOrDefault
@@ -971,7 +971,8 @@ valueExpression
     ;
 
 primaryExpression
-    : variable                                                                            #var
+    : userDefineVariable                                                                  #udfVar
+    | systemVariable                                                                      #sysVar
     | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
@@ -1021,7 +1022,11 @@ aggregationFunction
     | SUM '(' DISTINCT? expression ')'
     ;
 
-variable
+userDefineVariable
+    : AT identifierOrString
+    ;
+
+systemVariable
     : AT AT (varType '.')? identifier
     ;
 

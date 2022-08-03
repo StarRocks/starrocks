@@ -341,6 +341,34 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+
+    public void finalizeForVariable(boolean isStatistic) {
+        if (sink != null) {
+            return;
+        }
+        if (destNode != null) {
+            // we're streaming to an exchange node
+            DataStreamSink streamSink = new DataStreamSink(destNode.getId());
+            streamSink.setPartition(outputPartition);
+            streamSink.setMerge(destNode.isMerge());
+            streamSink.setFragment(this);
+            sink = streamSink;
+        } else {
+            if (planRoot == null) {
+                // only output expr, no FROM clause
+                // "select 1 + 2"
+                return;
+            }
+            // add ResultSink
+            // we're streaming to an result sink
+            if (isStatistic) {
+                sink = new ResultSink(planRoot.getId(), TResultSinkType.VARIABLE);
+            } else {
+                sink = new ResultSink(planRoot.getId(), TResultSinkType.MYSQL_PROTOCAL);
+            }
+        }
+    }
+
     /**
      * Return the number of nodes on which the plan fragment will execute.
      * invalid: -1

@@ -104,3 +104,7 @@ struct TStatisticData {
     13: optional i64 meta_version
 }
 
+// Statistic data for new planner
+struct TVariableData {
+    1: optional string result
+}

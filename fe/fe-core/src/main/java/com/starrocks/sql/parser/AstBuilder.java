@@ -220,6 +220,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetUserDefineVar;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -2427,19 +2428,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetVar(StarRocksParser.SetVarContext context) {
-        if (context.AT().isEmpty()) {
-            Expr expr = (Expr) visit(context.setExprOrDefault());
-            String variable = ((Identifier) visit(context.identifier())).getValue();
-            if (context.varType() != null) {
-                return new SetVar(getVariableType(context.varType()), variable, expr);
-            } else {
-                return new SetVar(variable, expr);
-            }
-        } else if (context.AT().size() == 1) {
+        if (context.userDefineVariable() != null) {
+            SysVariableDesc variableDesc = (SysVariableDesc) visit(context.userDefineVariable());
             Expr expr = (Expr) visit(context.expression());
-            String variable = ((Identifier) visit(context.identifierOrString())).getValue();
-            return new SetVar(variable, expr);
-        } else if (context.AT().size() == 2) {
+            return new SetUserDefineVar(variableDesc.getName(), expr);
+        } else if (context.systemVariable() != null) {
+            SysVariableDesc variableDesc = (SysVariableDesc) visit(context.systemVariable());
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            return new SetVar(variableDesc.getSetType(), variableDesc.getName(), expr);
+        } else {
             Expr expr = (Expr) visit(context.setExprOrDefault());
             String variable = ((Identifier) visit(context.identifier())).getValue();
             if (context.varType() != null) {
@@ -2447,8 +2444,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 return new SetVar(variable, expr);
             }
-        } else {
-            throw new StarRocksPlannerException("Not support set var type", ErrorType.INTERNAL_ERROR);
         }
     }
 
@@ -3236,7 +3231,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitVariable(StarRocksParser.VariableContext context) {
+    public ParseNode visitUserDefineVariable(StarRocksParser.UserDefineVariableContext context) {
+        String variable = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new SysVariableDesc(variable, SetType.USER);
+    }
+
+    @Override
+    public ParseNode visitSystemVariable(StarRocksParser.SystemVariableContext context) {
         SetType setType = getVariableType(context.varType());
         return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
     }

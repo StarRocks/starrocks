@@ -108,7 +108,7 @@ public class VariableMgr {
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
-    private static ImmutableMap<String, VarContext> ctxByVarName;
+    private static final ImmutableMap<String, VarContext> ctxByVarName;
 
     private static ImmutableMap<String, String> aliases;
 
@@ -277,8 +277,8 @@ public class VariableMgr {
         VarAttr attr = ctx.getField().getAnnotation(VarAttr.class);
         String value;
         // If value is null, this is `set variable = DEFAULT`
-        if (setVar.getValue() != null) {
-            value = setVar.getValue().getStringValue();
+        if (setVar.getResolvedExpression() != null) {
+            value = setVar.getResolvedExpression().getStringValue();
         } else {
             value = ctx.getDefaultValue();
             if (value == null) {

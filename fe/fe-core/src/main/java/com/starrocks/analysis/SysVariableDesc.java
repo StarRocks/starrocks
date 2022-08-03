@@ -37,6 +37,7 @@ import java.util.Objects;
 public class SysVariableDesc extends Expr {
     private final String name;
     private final SetType setType;
+    private boolean isNull;
     private boolean boolValue;
     private long intValue;
     private double floatValue;
@@ -76,6 +77,14 @@ public class SysVariableDesc extends Expr {
 
     public SetType getSetType() {
         return setType;
+    }
+
+    public void setIsNull() {
+        isNull = true;
+    }
+
+    public boolean isNull() {
+        return isNull;
     }
 
     public void setBoolValue(boolean value) {
@@ -137,9 +146,16 @@ public class SysVariableDesc extends Expr {
 
     @Override
     public String toSqlImpl() {
-        StringBuilder sb = new StringBuilder("@@");
-        if (setType == SetType.GLOBAL) {
-            sb.append("GLOBAL.");
+        StringBuilder sb = new StringBuilder();
+        if (setType == SetType.USER) {
+            sb.append("@");
+        } else {
+            sb.append("@@");
+            if (setType == SetType.GLOBAL) {
+                sb.append("GLOBAL.");
+            } else {
+                sb.append("SESSION.");
+            }
         }
         sb.append(name);
         return sb.toString();

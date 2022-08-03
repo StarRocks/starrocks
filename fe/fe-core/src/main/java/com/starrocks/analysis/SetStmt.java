@@ -51,11 +51,13 @@ public class SetStmt extends StatementBase {
         analyze();
     }
 
-    public void analyze()  {
+    public void analyze() {
         if (setVars == null || setVars.isEmpty()) {
             throw new SemanticException("Empty set statement.");
         }
         for (SetVar var : setVars) {
+
+
             var.analyze();
         }
     }

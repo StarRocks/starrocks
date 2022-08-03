@@ -38,6 +38,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -261,6 +262,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public boolean isFilter() {
         return isFilter;
     }
+
     public boolean isAuxExpr() {
         return isAuxExpr;
     }
@@ -618,6 +620,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public String toJDBCSQL(boolean isMySQL) {
         return toSql();
     }
+
     /**
      * Return a column label for the expression
      */
@@ -1334,11 +1337,15 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public static Expr analyzeAndCastFold(Expr expr) {
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(expr, ConnectContext.get());
         // Translating expr to scalar in order to do some rewrites
-        ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
-        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
-        // Add cast and constant fold
-        scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
-                new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+        try {
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expr);
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // Add cast and constant fold
+            scalarOperator = scalarRewriter.rewrite(scalarOperator, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            return ScalarOperatorToExpr.buildExprIgnoreSlot(scalarOperator,
+                    new ScalarOperatorToExpr.FormatterContext(Maps.newHashMap()));
+        } catch (UnsupportedException e) {
+            return expr;
+        }
     }
 }

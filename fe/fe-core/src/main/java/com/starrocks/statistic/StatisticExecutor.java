@@ -305,10 +305,8 @@ public class StatisticExecutor {
         return execPlan;
     }
 
-    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan)
-            throws Exception {
-        Coordinator coord =
-                new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+    private static Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan) throws Exception {
+        Coordinator coord = new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
         List<TResultBatch> sqlResult = Lists.newArrayList();
         try {
@@ -320,8 +318,6 @@ public class StatisticExecutor {
                     sqlResult.add(batch.getBatch());
                 }
             } while (!batch.isEos());
-        } catch (Exception e) {
-            LOG.warn(e);
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
