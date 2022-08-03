@@ -18,27 +18,11 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class MergeTwoProjectRule extends TransformationRule {
     public MergeTwoProjectRule() {
         super(RuleType.TF_MERGE_TWO_PROJECT, Pattern.create(OperatorType.LOGICAL_PROJECT)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
-    }
-
-    @Override
-    public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalProjectOperator secondProject = (LogicalProjectOperator) input.getInputs().get(0).getOp();
-        Optional<ScalarOperator> assertColumn = secondProject.getColumnRefMap().values()
-                .stream()
-                .filter((op) -> {
-                    if (!(op instanceof CallOperator)) {
-                        return false;
-                    }
-                    return FunctionSet.ASSERT_TRUE.equals(((CallOperator) op).getFnName());
-                })
-                .findAny();
-        return !assertColumn.isPresent();
     }
 
     @Override
@@ -50,6 +34,16 @@ public class MergeTwoProjectRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : firstProject.getColumnRefMap().entrySet()) {
             resultMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+        }
+
+        // ASSERT_TRUE must be executed in the runtime, so it should be kept anyway.
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : secondProject.getColumnRefMap().entrySet()) {
+            if (entry.getValue() instanceof CallOperator) {
+                CallOperator callOp = entry.getValue().cast();
+                if (FunctionSet.ASSERT_TRUE.equals(callOp.getFnName())) {
+                    resultMap.put(entry.getKey(), entry.getValue());
+                }
+            }
         }
 
         OptExpression optExpression = new OptExpression(

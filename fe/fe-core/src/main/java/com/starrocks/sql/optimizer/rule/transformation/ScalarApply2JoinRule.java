@@ -169,16 +169,10 @@ public class ScalarApply2JoinRule extends TransformationRule {
         ColumnRefOperator assertion =
                 factory.create("subquery_assertion", assertTrueCallOp.getType(), assertTrueCallOp.isNullable());
         projectMap.put(assertion, assertTrueCallOp);
-        OptExpression assertProjectOpt =
+        OptExpression newProjectOpt =
                 OptExpression.create(new LogicalProjectOperator(projectMap), newLeftOuterJoinOpt);
 
-        // Step4: prune the assertion column
-        Map<ColumnRefOperator, ScalarOperator> prunedProjectMap = Maps.newHashMap(projectMap);
-        prunedProjectMap.remove(assertion);
-        OptExpression finalProjectOpt =
-                OptExpression.create(new LogicalProjectOperator(prunedProjectMap), assertProjectOpt);
-
-        return Collections.singletonList(finalProjectOpt);
+        return Collections.singletonList(newProjectOpt);
     }
 
     private List<OptExpression> transformCorrelateWithoutCheckOneRows(OptExpression input, LogicalApplyOperator apply,

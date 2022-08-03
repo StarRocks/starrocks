@@ -395,13 +395,13 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  \n" +
                     "  6:SELECT\n" +
-                    "  |  predicates: 2: v2 > 9: anyValue\n" +
+                    "  |  predicates: 2: v2 > 7: expr\n" +
                     "  |  \n" +
                     "  5:Project\n" +
                     "  |  <slot 1> : 1: v1\n" +
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
-                    "  |  <slot 9> : 9: anyValue\n" +
+                    "  |  <slot 7> : 9: anyValue\n" +
                     "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
@@ -427,7 +427,6 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 2> : 2: v2\n" +
                     "  |  <slot 3> : 3: v3\n" +
                     "  |  <slot 7> : 9: anyValue\n" +
-                    "  |  <slot 9> : 9: anyValue\n" +
                     "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
                     "  |  \n" +
                     "  4:HASH JOIN\n" +
@@ -455,12 +454,12 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  <slot 4> : 4: sum\n" +
                     "  |  \n" +
                     "  8:SELECT\n" +
-                    "  |  predicates: 4: sum > 10: anyValue\n" +
+                    "  |  predicates: 4: sum > 8: expr\n" +
                     "  |  \n" +
                     "  7:Project\n" +
                     "  |  <slot 1> : 1: v1\n" +
                     "  |  <slot 4> : 4: sum\n" +
-                    "  |  <slot 10> : 10: anyValue\n" +
+                    "  |  <slot 8> : 10: anyValue\n" +
                     "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1))\n" +
                     "  |  \n" +
                     "  6:HASH JOIN\n" +
