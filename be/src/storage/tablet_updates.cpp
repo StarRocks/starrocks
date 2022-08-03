@@ -1319,7 +1319,10 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
-    uint32_t max_src_rssid = -1;
+
+    // Since value stored in info->inputs of CompactInfo is rowset id
+    // we should get the real max rssid here by segment number
+    int64_t max_src_rssid = -1;
     for (int i = 0; i < info->inputs.size(); ++i) {
         uint32_t rowsetid = info->inputs[i];
         auto itr = _rowsets.find(rowsetid);
@@ -1330,8 +1333,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             continue;
         }
         uint32_t rowset_max_rssid = rowsetid + itr->second->num_segments() - 1;
-        max_src_rssid = std::max(max_src_rssid, rowset_max_rssid);
+        max_src_rssid = std::max(max_src_rssid, (int64_t) rowset_max_rssid);
     }
+
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         auto& pk_col = _compaction_state->pk_cols[i];
         total_rows += pk_col->size();
