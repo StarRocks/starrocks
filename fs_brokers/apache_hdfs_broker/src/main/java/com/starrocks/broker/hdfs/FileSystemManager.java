@@ -729,8 +729,12 @@ public class FileSystemManager {
                     e, "file not found");
         } catch (Exception e) {
             logger.error("errors while get file status ", e);
+<<<<<<< HEAD
             fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
+=======
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+>>>>>>> 6f12e478e ([BugFix] shouldn't close file system when broker encounters excecption)
                     e, "unknown error when get file status");
         }
         return resultFileStatus;
@@ -744,8 +748,12 @@ public class FileSystemManager {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (IOException e) {
             logger.error("errors while delete path " + path);
+<<<<<<< HEAD
             fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
+=======
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+>>>>>>> 6f12e478e ([BugFix] shouldn't close file system when broker encounters excecption)
                     e, "delete path {} error", path);
         }
     }
@@ -768,8 +776,12 @@ public class FileSystemManager {
             }
         } catch (IOException e) {
             logger.error("errors while rename path from " + srcPath + " to " + destPath);
+<<<<<<< HEAD
             fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
+=======
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+>>>>>>> 6f12e478e ([BugFix] shouldn't close file system when broker encounters excecption)
                     e, "errors while rename {} to {}", srcPath, destPath);
         }
     }
@@ -783,8 +795,12 @@ public class FileSystemManager {
             return isPathExist;
         } catch (IOException e) {
             logger.error("errors while check path exist: " + path);
+<<<<<<< HEAD
             fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
+=======
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+>>>>>>> 6f12e478e ([BugFix] shouldn't close file system when broker encounters excecption)
                     e, "errors while check if path {} exist", path);
         }
     }
@@ -802,8 +818,12 @@ public class FileSystemManager {
             return fd;
         } catch (IOException e) {
             logger.error("errors while open path", e);
+<<<<<<< HEAD
             fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
+=======
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+>>>>>>> 6f12e478e ([BugFix] shouldn't close file system when broker encounters excecption)
                     e, "could not open file {}", path);
         }
     }
@@ -889,8 +909,12 @@ public class FileSystemManager {
             return fd;
         } catch (IOException e) {
             logger.error("errors while open path", e);
+<<<<<<< HEAD
             fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
+=======
+            throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
+>>>>>>> 6f12e478e ([BugFix] shouldn't close file system when broker encounters excecption)
                     e, "could not open file {}", path);
         }
     }
