@@ -42,10 +42,8 @@ private:
     HdfsScannerContext* _create_context_for_skip_group();
 
     HdfsScannerContext* _create_file3_base_context();
-    HdfsScannerContext* _create_context_for_multi_filter(
-            HdfsScannerContext* base_ctx);
-    HdfsScannerContext* _create_context_for_multi_page(
-            HdfsScannerContext* base_ctx);
+    HdfsScannerContext* _create_context_for_multi_filter(HdfsScannerContext* base_ctx);
+    HdfsScannerContext* _create_context_for_multi_page(HdfsScannerContext* base_ctx);
 
     static vectorized::ChunkPtr _create_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
@@ -625,8 +623,7 @@ HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
     return ctx;
 }
 
-HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter(
-        HdfsScannerContext* base_ctx) {
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter(HdfsScannerContext* base_ctx) {
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -649,8 +646,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter(
     return base_ctx;
 }
 
-HdfsScannerContext* FileReaderTest::_create_context_for_multi_page(
-        HdfsScannerContext* base_ctx) {
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_page(HdfsScannerContext* base_ctx) {
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -669,7 +665,6 @@ HdfsScannerContext* FileReaderTest::_create_context_for_multi_page(
 
     return base_ctx;
 }
-
 
 THdfsScanRange* FileReaderTest::_create_scan_range() {
     auto* scan_range = _pool.add(new THdfsScanRange());
