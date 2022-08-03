@@ -354,9 +354,19 @@ public class RuntimeProfile {
         if (childCounterMap.get(counterName) == null) {
             return;
         }
-        Set<String> childCounterSet = new TreeSet<>(childCounterMap.get(counterName));
+        List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
 
-        for (String childName : childCounterSet) {
+        // Keep MIN/MAX metrics head of other child counters
+        List<String> reorderedChildNames = Lists.newArrayList();
+        for (String childName : childNames) {
+            if (childName.startsWith(MERGED_INFO_PREFIX_MIN) || childName.startsWith(MERGED_INFO_PREFIX_MAX)) {
+                reorderedChildNames.add(0, childName);
+            } else {
+                reorderedChildNames.add(childName);
+            }
+        }
+
+        for (String childName : reorderedChildNames) {
             Pair<Counter, String> pair = this.counterMap.get(childName);
             Preconditions.checkState(pair != null);
             builder.append(prefix).append("   - ").append(childName).append(": ")
