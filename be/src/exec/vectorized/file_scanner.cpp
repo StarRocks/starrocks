@@ -187,25 +187,6 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
                     _state->append_error_msg_to_file(src->debug_row(i), error_msg.str());
                 }
             }
-
-            if (!slot->is_nullable()) {
-                for (int i = 0; i < col->size(); ++i) {
-                    if (!col->is_null(i) || !filter[i]) {
-                        continue;
-                    }
-
-                    filter[i] = 0;
-                    _error_counter++;
-
-                    // avoid print too many debug log
-                    if (_error_counter > 50) {
-                        continue;
-                    }
-                    _state->append_error_msg_to_file(
-                            src->debug_row(i),
-                            strings::Substitute("NULL value in non-nullable column '$0'", slot->col_name()));
-                }
-            }
         }
     }
 
