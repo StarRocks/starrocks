@@ -1809,6 +1809,11 @@ public class Coordinator {
             });
         }
 
+        // Remove redundant MIN/MAX metrics if MIN and MAX are identical
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
+        }
+
         // Set backend number
         for (int i = 0; i < fragments.size(); i++) {
             PlanFragment fragment = fragments.get(i);
