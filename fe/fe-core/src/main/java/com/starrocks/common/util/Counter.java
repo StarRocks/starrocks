@@ -97,4 +97,12 @@ public class Counter {
             this.maxValue = maxValue;
         }
     }
+
+    @Override
+    public String toString() {
+        return "Counter{" +
+                "value=" + value +
+                ", type=" + type +
+                '}';
+    }
 }
