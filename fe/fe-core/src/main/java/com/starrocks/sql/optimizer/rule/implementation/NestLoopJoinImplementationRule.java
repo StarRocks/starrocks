@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -20,6 +21,14 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
 
     public static NestLoopJoinImplementationRule getInstance() {
         return instance;
+    }
+
+    @Override
+    public boolean check(final OptExpression input, OptimizerContext context) {
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+        JoinOperator joinType = joinOperator.getJoinType();
+        // TODO: support other join types
+        return joinType.isInnerJoin() || joinType.isOuterJoin();
     }
 
     @Override
