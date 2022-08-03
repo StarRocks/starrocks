@@ -81,8 +81,9 @@ public class RuntimeProfile {
     }
 
     public RuntimeProfile() {
-        this.counterTotalTime = addCounter("TotalTime", TUnit.TIME_NS);
+        this.counterTotalTime = new Counter(TUnit.TIME_NS, 0);
         this.localTimePercent = 0;
+        this.counterMap.put("TotalTime", Pair.create(counterTotalTime, ROOT_COUNTER));
     }
 
     public Counter getCounterTotalTime() {

@@ -69,8 +69,9 @@ RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
           _name(std::move(name)),
           _metadata(-1),
           _is_averaged_profile(is_averaged_profile),
+          _counter_total_time(TUnit::TIME_NS, 0),
           _local_time_percent(0) {
-    _counter_total_time = add_counter("TotalTime", TUnit::TIME_NS);
+    _counter_map["TotalTime"] = std::make_pair(&_counter_total_time, ROOT_COUNTER);
 }
 
 RuntimeProfile::~RuntimeProfile() {

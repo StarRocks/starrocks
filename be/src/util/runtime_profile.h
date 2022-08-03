@@ -361,7 +361,7 @@ public:
     void copy_all_info_strings_from(RuntimeProfile* src_profile);
 
     // Returns the counter for the total elapsed time.
-    Counter* total_time_counter() { return _counter_total_time; }
+    Counter* total_time_counter() { return &_counter_total_time; }
 
     // Prints the counters in a name: value format.
     // Does not hold locks when it makes any function calls.
@@ -530,7 +530,7 @@ private:
     EventSequenceMap _event_sequence_map;
     mutable std::mutex _event_sequences_lock;
 
-    Counter* _counter_total_time;
+    Counter _counter_total_time;
     // Time spent in just in this profile (i.e. not the children) as a fraction
     // of the total time in the entire profile tree.
     double _local_time_percent;
