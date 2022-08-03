@@ -45,6 +45,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/union_iterator.h"
+#include "storage/update_manager.h"
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
@@ -606,6 +607,8 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
 
     ASSERT_TRUE(tablet->rowset_commit(2, rowset).ok());
     EXPECT_EQ(rows_per_segment * 2, read_tablet_and_compare(tablet, partial_schema, 2, rows_per_segment * 2));
+    ASSERT_OK(starrocks::ExecEnv::GetInstance()->storage_engine()->update_manager()->on_rowset_finished(tablet.get(),
+                                                                                                        rowset.get()));
 }
 
 TEST_F(RowsetTest, VerticalWriteTest) {
