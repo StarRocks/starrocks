@@ -15,6 +15,21 @@ public class SubqueryTest extends PlanTestBase {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
+    public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
+        String sql = "select t0.v1 from t0 where (t0.v2 in (select t1.v4 from t1 where t0.v3 + t1.v5 = 1)) is NULL";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("17:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: 3: v3 + 14: v5 = 13: expr, CASE WHEN (15: countRows IS NULL) OR (15: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL WHEN 9: v4 IS NOT NULL THEN TRUE WHEN 16: countNulls < 15: countRows THEN NULL ELSE FALSE END IS NULL"));
+        Assert.assertTrue(plan.contains("10:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 9: v4 = 2: v2\n" +
+                "  |  other join predicates: 3: v3 + 11: v5 = 10: expr"));
+    }
+
+    @Test
     public void testCountConstantWithSubquery() throws Exception {
         String sql = "SELECT 1 FROM (SELECT COUNT(1) FROM t0 WHERE false) t;";
         String thriftPlan = getThriftPlan(sql);

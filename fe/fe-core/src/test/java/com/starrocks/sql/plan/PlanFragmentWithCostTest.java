@@ -821,8 +821,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
-                    "  |  cardinality: 400000"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]"));
             Assert.assertTrue(intersectPlan.contains("  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
                     "     preAggregation: on\n" +
