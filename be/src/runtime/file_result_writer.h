@@ -43,6 +43,9 @@ struct ResultFileOptions {
     size_t max_file_size_bytes = 1 * 1024 * 1024 * 1024; // 1GB
     std::vector<TNetworkAddress> broker_addresses;
     std::map<std::string, std::string> broker_properties;
+    int write_buffer_size_kb;
+    const THdfsProperties* hdfs_properties;
+    bool use_broker;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
@@ -55,6 +58,16 @@ struct ResultFileOptions {
         if (t_opt.__isset.broker_addresses) {
             broker_addresses = t_opt.broker_addresses;
             is_local_file = false;
+        }
+        if (t_opt.__isset.hdfs_write_buffer_size_kb) {
+            write_buffer_size_kb = t_opt.hdfs_write_buffer_size_kb;
+        }
+        if (t_opt.__isset.hdfs_properties) {
+            hdfs_properties = &t_opt.hdfs_properties;
+            is_local_file = false;
+        }
+        if (t_opt.__isset.use_broker) {
+            use_broker = t_opt.use_broker;
         }
         if (t_opt.__isset.broker_properties) {
             broker_properties = t_opt.broker_properties;
@@ -73,6 +86,7 @@ public:
     Status init(RuntimeState* state) override;
     Status append_chunk(vectorized::Chunk* chunk) override;
     Status close() override;
+    Status open(RuntimeState* state) override;
 
 private:
     void _init_profile();
@@ -90,8 +104,7 @@ private:
     const ResultFileOptions* _file_opts;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 
-    FileSystem* _fs;
-    std::unique_ptr<FileSystem> _owned_fs;
+    std::unique_ptr<FileSystem> _fs;
     std::unique_ptr<FileBuilder> _file_builder;
 
     // the suffix idx of export file name, start at 0
