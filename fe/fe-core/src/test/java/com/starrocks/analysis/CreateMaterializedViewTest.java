@@ -222,7 +222,7 @@ public class CreateMaterializedViewTest {
         stmtExecutor.execute();
     }
 
-    private List<TaskRunStatus> waitingTaskFinish(){
+    private List<TaskRunStatus> waitingTaskFinish() {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         int retryCount = 0, maxRetry = 5;
@@ -339,6 +339,55 @@ public class CreateMaterializedViewTest {
         waitingTaskFinish();
         Assert.assertEquals(2, mvPartitions.size());
         Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+    }
+
+    @Test
+    public void testCreateAsync() {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 MONTH)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+
+    }
+
+    @Test
+    public void testCreateAsyncNormal() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 DAY)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+    }
+
+    @Test
+    public void testCreateAsyncLowercase() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 day)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
     }
 
     @Test
@@ -910,7 +959,9 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("The function date_trunc used by the materialized view for partition does not support week formatting", e.getMessage());
+            Assert.assertEquals(
+                    "The function date_trunc used by the materialized view for partition does not support week formatting",
+                    e.getMessage());
         }
     }
 
