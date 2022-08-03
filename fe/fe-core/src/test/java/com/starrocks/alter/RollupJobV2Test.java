@@ -43,7 +43,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -88,7 +87,6 @@ public class RollupJobV2Test extends DDLTestBase {
         clause2.analyze(analyzer);
 
         AgentTaskQueue.clearAllTasks();
-        FeConstants.runningUnitTest = true;
     }
 
     @After
@@ -182,7 +180,6 @@ public class RollupJobV2Test extends DDLTestBase {
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
-        materializedViewHandler.exit();
 
         // add a rollup job
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
