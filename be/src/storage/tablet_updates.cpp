@@ -1325,8 +1325,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     uint32_t max_rowsetid = *std::max_element(info->inputs.begin(), info->inputs.end());
     auto itr = _rowsets.find(max_rowsetid);
     if (itr == _rowsets.end()) {
-        string msg = Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
-                                _tablet.tablet_id(), max_rowsetid);
+        string msg = Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1", _tablet.tablet_id(),
+                                max_rowsetid);
         LOG(ERROR) << msg;
         _set_error(msg);
         return;
