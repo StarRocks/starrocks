@@ -1323,8 +1323,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // Since value stored in info->inputs of CompactInfo is rowset id
     // we should get the real max rssid here by segment number
     int64_t max_src_rssid = -1;
-    for (int i = 0; i < info->inputs.size(); ++i) {
-        uint32_t rowsetid = info->inputs[i];
+    for (auto rowsetid : info->inputs) {
         auto itr = _rowsets.find(rowsetid);
         if (itr == _rowsets.end()) {
             string msg = Substitute("rowset not found tablet=$0 rowset=$1", _tablet.tablet_id(), rowsetid);
