@@ -9,10 +9,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.DdlException;
@@ -119,13 +117,6 @@ public class LakeTable extends OlapTable {
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         dropAllTempPartitions();
-        for (long mvId : getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId);
-            if (tmpTable != null) {
-                MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setActive(false);
-            }
-        }
     }
 
     @Override
