@@ -313,4 +313,10 @@ public class GlobalStateMgrTest {
         // this case will occur [can not modify current master node] exception
         globalStateMgr.modifyFrontendHost(clause);
     }
+
+    @Test(expected = DdlException.class)
+    public void testAddRepeatedFe() throws Exception {
+        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+        globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
+    }
 }
