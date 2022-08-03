@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
+#include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 
@@ -19,7 +20,10 @@ namespace starrocks::pipeline {
 class NLJoinProbeOperator final : public OperatorWithDependency {
 public:
     NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                        TJoinOp::type join_op, const std::vector<ExprContext*>& conjunct_ctxs,
+                        TJoinOp::type join_op, 
+                        const std::string& sql_join_conjuncts,
+                        const std::vector<ExprContext*>& join_conjuncts,
+                        const std::vector<ExprContext*>& conjunct_ctxs,
                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                         size_t build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context);
 
@@ -60,6 +64,8 @@ private:
     const size_t _probe_column_count;
     const size_t _build_column_count;
 
+    const std::string& _sql_join_conjuncts;
+    const std::vector<ExprContext*>& _join_conjuncts;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
 

@@ -13,6 +13,8 @@ namespace starrocks::pipeline {
 
 NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                          int32_t driver_sequence, TJoinOp::type join_op,
+                                         const std::string& sql_join_conjuncts,
+                                         const std::vector<ExprContext*>& join_conjuncts,
                                          const std::vector<ExprContext*>& conjunct_ctxs,
                                          const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                                          size_t build_column_count,
@@ -22,6 +24,8 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
           _col_types(col_types),
           _probe_column_count(probe_column_count),
           _build_column_count(build_column_count),
+          _sql_join_conjuncts(sql_join_conjuncts),
+          _join_conjuncts(join_conjuncts),
           _conjunct_ctxs(conjunct_ctxs),
           _cross_join_context(cross_join_context) {
     _cross_join_context->ref();
@@ -29,6 +33,8 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
 
 Status NLJoinProbeOperator::prepare(RuntimeState* state) {
     _output_accumulator.set_desired_size(state->chunk_size());
+    
+    _unique_metrics->add_info_string("join_conjuncts", _sql_join_conjuncts);
     return Operator::prepare(state);
 }
 
@@ -121,7 +127,8 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
         return Status::OK();
     }
     vectorized::FilterPtr filter;
-    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get(), &filter));
+    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
+    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get(), nullptr));
     DCHECK(!!filter);
 
     bool multi_probe_rows = _num_build_chunks() == 1;

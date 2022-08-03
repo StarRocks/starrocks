@@ -71,6 +71,9 @@ private:
     void _init_chunk(ChunkPtr* chunk);
 
     TJoinOp::type _join_op;
+    std::vector<ExprContext*> _join_conjuncts;
+    std::string _sql_join_conjuncts;
+    
     // previsou saved chunk.
     ChunkPtr _pre_output_chunk = nullptr;
     // used as right table's chunk.

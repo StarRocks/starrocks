@@ -491,6 +491,8 @@ struct TMergeJoinNode {
 struct TNestLoopJoinNode {
     1: optional TJoinOp join_op
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+    3: optional list<Exprs.TExpr> join_conjuncts
+    4: optional string sql_join_conjuncts
 }
 
 enum TAggregationOp {
