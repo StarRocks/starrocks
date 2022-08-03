@@ -80,8 +80,7 @@ public class DynamicPartitionUtil {
 
     private static void checkStart(String start) throws DdlException {
         try {
-            int startInt = Integer.parseInt(start);
-            if (startInt >= 0) {
+            if (Integer.parseInt(start) >= 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_START_ZERO, start);
             }
         } catch (NumberFormatException e) {
@@ -94,8 +93,7 @@ public class DynamicPartitionUtil {
             ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_END_EMPTY);
         }
         try {
-            int endInt = Integer.parseInt(end);
-            if (endInt <= 0) {
+            if (Integer.parseInt(end) <= 0) {
                 ErrorReport.reportDdlException(ErrorCode.ERROR_DYNAMIC_PARTITION_END_ZERO, end);
             }
         } catch (NumberFormatException e) {
@@ -264,6 +262,7 @@ public class DynamicPartitionUtil {
             analyzedProperties.put(DynamicPartitionProperty.ENABLE, enableValue);
         }
 
+        // If dynamic property is not specified.Use Integer.MIN_VALUE as default
         if (properties.containsKey(DynamicPartitionProperty.START)) {
             String startValue = properties.get(DynamicPartitionProperty.START);
             checkStart(startValue);

@@ -43,7 +43,6 @@ public class DynamicPartitionProperty {
     public static final String REPLICATION_NUM = "dynamic_partition.replication_num";
 
     public static final int MIN_START_OFFSET = Integer.MIN_VALUE;
-    public static final int MAX_END_OFFSET = Integer.MAX_VALUE;
     public static final int NOT_SET_REPLICATION_NUM = -1;
 
     private boolean exist;
