@@ -241,7 +241,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     return Status::OK();
 }
 
-Status SegmentWriter::finalize_footer(uint64_t* segment_file_size) {
+Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position) {
+    if (footer_position != nullptr) {
+        *footer_position = _wblock->bytes_appended();
+    }
     RETURN_IF_ERROR(_write_footer());
     RETURN_IF_ERROR(_wblock->finalize());
     *segment_file_size = _wblock->bytes_appended();
