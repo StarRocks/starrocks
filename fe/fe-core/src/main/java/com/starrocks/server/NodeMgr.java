@@ -668,7 +668,8 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            if (hasSameHostFe(host)) {
+            Frontend fe = getFeByHost(host);
+            if (null != fe) {
                 throw new DdlException("frontend use host [" + host + "] already exists ");
             }
 
@@ -678,7 +679,7 @@ public class NodeMgr {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            Frontend fe = new Frontend(role, nodeName, host, editLogPort);
+            fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
             if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
@@ -830,15 +831,6 @@ public class NodeMgr {
         } finally {
             unlock();
         }
-    }
-
-    public boolean hasSameHostFe(String host) {
-        for (Frontend fe : frontends.values()) {
-            if (fe.getHost().equals(host)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     public Frontend checkFeExist(String host, int port) {
