@@ -112,7 +112,7 @@ public:
     // finalize columns data and index
     Status finalize_columns(uint64_t* index_size);
     // finalize footer
-    Status finalize_footer(uint64_t* segment_file_size);
+    Status finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position = nullptr);
 
     uint32_t segment_id() const { return _segment_id; }
 
