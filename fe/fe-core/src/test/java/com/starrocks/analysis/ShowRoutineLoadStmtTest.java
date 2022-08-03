@@ -22,7 +22,7 @@ public class ShowRoutineLoadStmtTest {
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW ROUTINE LOAD FOR `testDb`.`label`", stmt.toString());
-        Assert.assertEquals("default_cluster:testDb", stmt.getDbFullName());
+        Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
         Assert.assertEquals(18, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
