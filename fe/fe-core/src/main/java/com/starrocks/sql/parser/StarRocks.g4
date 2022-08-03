@@ -478,7 +478,7 @@ dropIndexClause
     ;
 
 dropPartitionClause
-    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    : (DROP | TRUNCATE) TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
     ;
 
 tableRenameClause
