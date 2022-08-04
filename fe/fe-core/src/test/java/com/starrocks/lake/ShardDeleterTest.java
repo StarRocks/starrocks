@@ -4,8 +4,8 @@ package com.starrocks.lake;
 
 import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.proto.DropTabletRequest;
-import com.starrocks.lake.proto.DropTabletResponse;
+import com.starrocks.lake.proto.DeleteTabletRequest;
+import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
@@ -87,12 +87,12 @@ public class ShardDeleterTest {
     @Test
     public void testNormal() throws Exception {
 
-        DropTabletResponse response = new DropTabletResponse();
+        DeleteTabletResponse response = new DeleteTabletResponse();
         response.failedTablets = new ArrayList<>();
 
         new Expectations() {
             {
-                lakeService.dropTablet((DropTabletRequest) any, (RpcCallback<DropTabletResponse>) any).get();
+                lakeService.deleteTablet((DeleteTabletRequest) any, (RpcCallback<DeleteTabletResponse>) any).get();
                 minTimes = 0;
                 result = response;
 

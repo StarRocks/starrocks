@@ -9,8 +9,8 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.proto.DropTabletRequest;
-import com.starrocks.lake.proto.DropTabletResponse;
+import com.starrocks.lake.proto.DeleteTabletRequest;
+import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.persist.ShardInfo;
 import com.starrocks.rpc.LakeServiceClient;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,12 +76,12 @@ public class ShardDeleter extends LeaderDaemon {
             address.setPort(backend.getBrpcPort());
 
             LakeServiceClient client = new LakeServiceClient(address);
-            DropTabletRequest request = new DropTabletRequest();
+            DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
             try {
-                Future<DropTabletResponse> responseFuture = client.dropTablet(request);
-                DropTabletResponse response = responseFuture.get();
+                Future<DeleteTabletResponse> responseFuture = client.deleteTablet(request);
+                DeleteTabletResponse response = responseFuture.get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.info("failedTablets is {}", response.failedTablets);
                     response.failedTablets.forEach(shards::remove);
