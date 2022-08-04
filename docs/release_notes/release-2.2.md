@@ -29,7 +29,6 @@ The following bugs are fixed:
 - Thrift server exits when the number of threads is insufficient. [#7974](https://github.com/StarRocks/starrocks/pull/7974)
 - In some scenarios, join reorder in CBO returns no results. [#7099](https://github.com/StarRocks/starrocks/pull/7099) [#7831](https://github.com/StarRocks/starrocks/pull/7831) [#6866](https://github.com/StarRocks/starrocks/pull/6866)
 
-
 ## 2.2.2
 
 Release date: June 29, 2022
