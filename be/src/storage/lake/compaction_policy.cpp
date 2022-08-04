@@ -23,6 +23,7 @@ private:
     double get_base_score();
     StatusOr<std::vector<RowsetPtr>> pick_cumulative_rowsets();
     StatusOr<std::vector<RowsetPtr>> pick_base_rowsets();
+    void debug_rowsets(CompactionType type, const std::vector<uint32_t>& input_rowset_ids);
 
     TabletPtr _tablet;
     TabletMetadataPtr _tablet_metadata;
@@ -36,7 +37,7 @@ double BaseAndCumulativeCompactionPolicy::get_cumulative_score() {
     uint32_t segment_num_score = 0;
     size_t rowsets_size = 0;
     for (uint32_t i = _tablet_metadata->cumulative_point(), size = _tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto& rowset = _tablet_metadata->rowsets(i);
+        const auto& rowset = _tablet_metadata->rowsets(i);
         segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
         rowsets_size += rowset.data_size();
     }
@@ -59,7 +60,7 @@ double BaseAndCumulativeCompactionPolicy::get_base_score() {
     uint32_t segment_num_score = 0;
     size_t rowsets_size = 0;
     for (uint32_t i = 1; i < cumulative_point; ++i) {
-        auto& rowset = _tablet_metadata->rowsets(i);
+        const auto& rowset = _tablet_metadata->rowsets(i);
         DCHECK(!rowset.overlapped());
         ++segment_num_score;
         rowsets_size += rowset.data_size();
@@ -90,27 +91,36 @@ double BaseAndCumulativeCompactionPolicy::get_base_score() {
     return score;
 }
 
-// TODO: support delete
 StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_cumulative_rowsets() {
     std::vector<RowsetPtr> input_rowsets;
     std::vector<uint32_t> input_rowset_ids;
     uint32_t cumulative_point = _tablet_metadata->cumulative_point();
     uint32_t segment_num_score = 0;
     for (uint32_t i = cumulative_point, size = _tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto& rowset = _tablet_metadata->rowsets(i);
-        segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
-        if (segment_num_score >= config::max_cumulative_compaction_num_singleton_deltas) {
-            break;
+        const auto& rowset = _tablet_metadata->rowsets(i);
+        if (rowset.has_delete_predicate()) {
+            if (!input_rowsets.empty()) {
+                break;
+            } else {
+                DCHECK(input_rowset_ids.empty());
+                DCHECK(segment_num_score == 0);
+                continue;
+            }
         }
 
         input_rowset_ids.emplace_back(rowset.id());
         auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(metadata_ptr)));
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(metadata_ptr), i));
+
+        segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
+        if (segment_num_score >= config::max_cumulative_compaction_num_singleton_deltas) {
+            break;
+        }
     }
     // TODO: need check min_cumulative_compaction_num_singleton_deltas?
-    LOG(INFO) << "pick cumulative compaction input rowsets. tablet: " << _tablet->id()
-              << ", cumulative point: " << cumulative_point << ", rowset size: " << input_rowsets.size()
-              << ", rowset: " << JoinInts(input_rowset_ids, ",");
+
+    debug_rowsets(CUMULATIVE_COMPACTION, input_rowset_ids);
+
     return input_rowsets;
 }
 
@@ -120,20 +130,39 @@ StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_base_ro
     uint32_t cumulative_point = _tablet_metadata->cumulative_point();
     uint32_t segment_num_score = 0;
     for (uint32_t i = 0; i < cumulative_point; ++i) {
-        auto& rowset = _tablet_metadata->rowsets(i);
+        const auto& rowset = _tablet_metadata->rowsets(i);
         DCHECK(!rowset.overlapped());
+        input_rowset_ids.emplace_back(rowset.id());
+        auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(metadata_ptr), i));
+
         if (++segment_num_score >= config::max_base_compaction_num_singleton_deltas) {
             break;
         }
-
-        input_rowset_ids.emplace_back(rowset.id());
-        auto metadata_ptr = std::make_shared<RowsetMetadata>(rowset);
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet.get(), std::move(metadata_ptr)));
     }
-    LOG(INFO) << "pick base compaction input rowsets. tablet: " << _tablet->id()
-              << ", cumulative point: " << cumulative_point << ", rowset size: " << input_rowsets.size()
-              << ", rowset: " << JoinInts(input_rowset_ids, ",");
+
+    debug_rowsets(BASE_COMPACTION, input_rowset_ids);
+
     return input_rowsets;
+}
+
+void BaseAndCumulativeCompactionPolicy::debug_rowsets(CompactionType type,
+                                                      const std::vector<uint32_t>& input_rowset_ids) {
+    std::vector<uint32_t> rowset_ids;
+    std::vector<uint32_t> delete_rowset_ids;
+    for (const auto& rowset : _tablet_metadata->rowsets()) {
+        rowset_ids.emplace_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            delete_rowset_ids.emplace_back(rowset.id());
+        }
+    }
+    LOG(INFO) << "pick compaction input rowsets. tablet: " << _tablet->id() << ", type: " << to_string(type)
+              << ", version: " << _tablet_metadata->version()
+              << ", cumulative point: " << _tablet_metadata->cumulative_point()
+              << ", input rowsets size: " << input_rowset_ids.size() << ", input rowsets: ["
+              << JoinInts(input_rowset_ids, ",") + "]"
+              << ", rowsets: [" << JoinInts(rowset_ids, ",") << "]"
+              << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
 }
 
 StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets(int64_t version) {
