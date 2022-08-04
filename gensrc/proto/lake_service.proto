@@ -55,6 +55,8 @@ message DropTableRequest {
 }
 
 message DropTableResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
 }
 
 message DeleteDataRequest {
