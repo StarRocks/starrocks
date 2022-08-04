@@ -778,7 +778,7 @@ public class ShowExecutorTest {
     public void testShowRoutineLoadNonExisted() throws AnalysisException, DdlException {
         ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb", "non-existed-job-name"), false);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        // AnalysisException("There is no job named...") is  expected.
+        // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
     }
 }
