@@ -20,10 +20,8 @@ namespace starrocks::pipeline {
 class NLJoinProbeOperator final : public OperatorWithDependency {
 public:
     NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                        TJoinOp::type join_op, 
-                        const std::string& sql_join_conjuncts,
-                        const std::vector<ExprContext*>& join_conjuncts,
-                        const std::vector<ExprContext*>& conjunct_ctxs,
+                        TJoinOp::type join_op, const std::string& sql_join_conjuncts,
+                        const std::vector<ExprContext*>& join_conjuncts, const std::vector<ExprContext*>& conjunct_ctxs,
                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
                         size_t build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context);
 

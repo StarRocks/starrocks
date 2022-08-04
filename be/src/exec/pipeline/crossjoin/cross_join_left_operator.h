@@ -156,8 +156,7 @@ class CrossJoinLeftOperatorFactory final : public OperatorWithDependencyFactory 
 public:
     CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                  const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                                 const std::string& sql_join_conjuncts,
-                                 std::vector<ExprContext*>&& join_conjuncts,
+                                 const std::string& sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
                                  std::vector<ExprContext*>&& conjunct_ctxs,
                                  std::shared_ptr<CrossJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),

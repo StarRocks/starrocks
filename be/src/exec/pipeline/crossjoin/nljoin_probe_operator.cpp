@@ -33,7 +33,7 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
 
 Status NLJoinProbeOperator::prepare(RuntimeState* state) {
     _output_accumulator.set_desired_size(state->chunk_size());
-    
+
     _unique_metrics->add_info_string("join_conjuncts", _sql_join_conjuncts);
     return Operator::prepare(state);
 }
