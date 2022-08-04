@@ -7,30 +7,25 @@ import com.starrocks.analysis.TableName;
 import java.util.List;
 
 public class CTERelation extends Relation {
-    // @Note: don't join hash method, maybe multi-change
-    private int cteId;
+    private final int cteMouldId;
     private final String name;
     private List<String> columnOutputNames;
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
 
-    public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
-        this.cteId = cteId;
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
+        this.cteMouldId = cteMouldId;
         this.name = name;
         this.columnOutputNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
     }
 
-    public void setCteId(int cteId) {
-        this.cteId = cteId;
+    public int getCteMouldId() {
+        return cteMouldId;
     }
 
     public QueryStatement getCteQueryStatement() {
         return cteQueryStatement;
-    }
-
-    public int getCteId() {
-        return cteId;
     }
 
     public String getName() {
@@ -55,7 +50,7 @@ public class CTERelation extends Relation {
 
     @Override
     public String toString() {
-        return name == null ? String.valueOf(cteId) : name;
+        return name == null ? String.valueOf(cteMouldId) : name;
     }
 
     @Override

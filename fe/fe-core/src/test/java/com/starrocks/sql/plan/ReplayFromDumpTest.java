@@ -246,9 +246,6 @@ public class ReplayFromDumpTest {
     public void testTPCDS23_1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
-        System.out.println(replayPair.first.getOriginStmt());
-
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains(" MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 51\n" +

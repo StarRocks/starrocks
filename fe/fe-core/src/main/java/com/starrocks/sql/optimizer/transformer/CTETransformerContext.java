@@ -12,12 +12,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CTETransformerContext {
     private final Map<Integer, ExpressionMapping> cteExpressions;
 
-    private final Map<Integer, Integer> cteRefId;
+    // cteMould -> current cte ref
+    private final Map<Integer, Integer> cteRefIdMapping;
     private final AtomicInteger uniqueId;
 
     public CTETransformerContext() {
         this.cteExpressions = new HashMap<>();
-        this.cteRefId = new HashMap<>();
+        this.cteRefIdMapping = new HashMap<>();
         this.uniqueId = new AtomicInteger();
     }
 
@@ -26,7 +27,7 @@ public class CTETransformerContext {
         // and the internal cte with the same name will overwrite the original mapping
         this.cteExpressions = Maps.newHashMap(other.cteExpressions);
         // must use one instance
-        this.cteRefId = other.cteRefId;
+        this.cteRefIdMapping = other.cteRefIdMapping;
         this.uniqueId = other.uniqueId;
     }
 
@@ -70,12 +71,13 @@ public class CTETransformerContext {
      *  CTEAnchor2 and CTEAnchor2-1 is from same CTE (with x2), but has different cteID
      *  So, modify the cteID everytime on one CTE instance.
      */
-    public void registerCteRef(int cteId) {
-        cteRefId.put(cteId, uniqueId.incrementAndGet());
+    public int registerCteRef(int cteMouldId) {
+        cteRefIdMapping.put(cteMouldId, uniqueId.incrementAndGet());
+        return cteRefIdMapping.get(cteMouldId);
     }
 
-    public int getCteRefId(int cteId) {
-        Preconditions.checkState(cteRefId.containsKey(cteId));
-        return cteRefId.get(cteId);
+    public int getCurrentCteRefId(int cteMouldId) {
+        Preconditions.checkState(cteRefIdMapping.containsKey(cteMouldId));
+        return cteRefIdMapping.get(cteMouldId);
     }
 }

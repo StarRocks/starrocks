@@ -157,8 +157,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder root = null;
         OptExprBuilder anchorOptBuilder = null;
         for (CTERelation cteRelation : node.getCteRelations()) {
-            cteContext.registerCteRef(cteRelation.getCteId());
-            int cteId = cteContext.getCteRefId(cteRelation.getCteId());
+            int cteId = cteContext.registerCteRef(cteRelation.getCteMouldId());
             LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteId);
             LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteId);
             LogicalPlan producerPlan =
@@ -480,7 +479,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
-        int cteId = cteContext.getCteRefId(node.getCteId());
+        int cteId = cteContext.getCurrentCteRefId(node.getCteMouldId());
         ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
         Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
         LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
