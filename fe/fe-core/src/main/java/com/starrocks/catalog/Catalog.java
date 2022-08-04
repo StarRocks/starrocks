@@ -7638,5 +7638,10 @@ public class Catalog {
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
         }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
+        }
     }
 }
