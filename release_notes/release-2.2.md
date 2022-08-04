@@ -1,5 +1,22 @@
 # StarRocks version 2.2
 
+## 2.2.4
+
+发布日期： 2022 年 8 月 3 日
+
+### 功能优化
+
+- Hive 外表支持 Schema Change 同步。[#9010](https://github.com/StarRocks/starrocks/pull/9010)
+- Broker Load 支持导入 Parquet 文件中的 ARRAY 类型数据。[#9131](https://github.com/StarRocks/starrocks/pull/9131)
+
+### 问题修复
+
+修复了如下 Bug：
+
+- 通过 Kerberos 认证使用 Broker Load 时无法使用多个 keytab 文件。[#8820](https://github.com/StarRocks/starrocks/pull/8820) [#8837](https://github.com/StarRocks/starrocks/pull/8837)
+- 执行 **stop_be.sh** 后立刻退出进程，Supervisor 重新拉起服务可能失败。[#9175](https://github.com/StarRocks/starrocks/pull/9175)
+- 错误的 Join Reorder 优先级导致 Join 字段报错 “Column cannot be resolved”。[#9063](https://github.com/StarRocks/starrocks/pull/9063) [#9487](https://github.com/StarRocks/starrocks/pull/9487)
+
 ## 2.2.3
 
 发布日期： 2022 年 7 月 24 日
