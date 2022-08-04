@@ -117,18 +117,13 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                     .build();
             root = OptExpression.create(nestLoop, input.getInputs());
         } else {
-            LogicalJoinOperator newJoin;
-            if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(JoinOperator.INNER_JOIN)
-                        .setOnPredicate(Utils.compoundAnd(joinEqPredicate, postJoinPredicate))
-                        .build();
-            } else {
-                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(join.getJoinType())
-                        .setOnPredicate(Utils.compoundAnd(joinEqPredicate, postJoinPredicate))
-                        .build();
-            }
+            JoinOperator joinType = (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) ?
+                    JoinOperator.INNER_JOIN : join.getJoinType();
+            LogicalJoinOperator newJoin =
+                    new LogicalJoinOperator.Builder().withOperator(join)
+                            .setJoinType(joinType)
+                            .setOnPredicate(Utils.compoundAnd(joinEqPredicate, postJoinPredicate))
+                            .build();
             root = OptExpression.create(newJoin, input.getInputs());
         }
 

@@ -372,7 +372,7 @@ public class SubqueryTest extends PlanTestBase {
                 "  6:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 5: v5 > 7: v7\n" +
+                "  |  other join predicates: 5: v5 > 7: v7\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE\n" +
                 "  |    \n" +

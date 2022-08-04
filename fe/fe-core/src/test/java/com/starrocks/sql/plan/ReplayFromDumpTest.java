@@ -400,7 +400,7 @@ public class ReplayFromDumpTest {
     public void testMultiCountDistinct() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
     }
