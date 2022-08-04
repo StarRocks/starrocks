@@ -76,7 +76,7 @@ public class CTETransformerContext {
         return cteRefIdMapping.get(cteMouldId);
     }
 
-    public int getCurrentCteRefId(int cteMouldId) {
+    public int getCurrentCteRef(int cteMouldId) {
         Preconditions.checkState(cteRefIdMapping.containsKey(cteMouldId));
         return cteRefIdMapping.get(cteMouldId);
     }

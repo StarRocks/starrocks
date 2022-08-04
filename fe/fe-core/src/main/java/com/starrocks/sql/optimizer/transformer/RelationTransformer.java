@@ -479,7 +479,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
-        int cteId = cteContext.getCurrentCteRefId(node.getCteMouldId());
+        int cteId = cteContext.getCurrentCteRef(node.getCteMouldId());
         ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
         Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
         LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
