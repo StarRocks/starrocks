@@ -316,7 +316,6 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         snapshot_rowsets.emplace_back(std::move(rowset));
     }
     tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
-    snapshot_tablet_meta->delete_alter_task();
     rdlock.unlock();
 
     // 2. Create snapshot directory.
@@ -397,7 +396,6 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
     tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
-    snapshot_tablet_meta->delete_alter_task();
     rdlock.unlock();
 
     // 2. Create snapshot directory.
