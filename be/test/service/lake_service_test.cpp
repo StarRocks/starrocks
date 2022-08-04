@@ -298,12 +298,12 @@ TEST_F(LakeServiceTest, test_abort) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeServiceTest, test_drop_tablet) {
+TEST_F(LakeServiceTest, test_delete_tablet) {
     brpc::Controller cntl;
-    lake::DropTabletRequest request;
-    lake::DropTabletResponse response;
+    lake::DeleteTabletRequest request;
+    lake::DeleteTabletResponse response;
     request.add_tablet_ids(_tablet_id);
-    _lake_service.drop_tablet(&cntl, &request, &response, nullptr);
+    _lake_service.delete_tablet(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_EQ(0, response.failed_tablets_size());
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));

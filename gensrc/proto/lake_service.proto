@@ -31,13 +31,11 @@ message AbortTxnResponse {
     repeated int64 failed_tablets = 1;
 }
 
-// TODO: Rename to DeleteTabletRequest
-message DropTabletRequest {
+message DeleteTabletRequest {
     repeated int64 tablet_ids = 1;
 }
 
-// TODO: Rename to DeleteTabletResponse
-message DropTabletResponse {
+message DeleteTabletResponse {
     repeated int64 failed_tablets = 1;
 }
 
@@ -73,8 +71,7 @@ service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
-    // TODO: Rename to delete_tablet
-    rpc drop_tablet(DropTabletRequest) returns (DropTabletResponse);
+    rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
     rpc drop_table(DropTableRequest) returns (DropTableResponse);
     rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
 }
