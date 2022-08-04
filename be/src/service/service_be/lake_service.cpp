@@ -161,9 +161,10 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     }
 }
 
-void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::lake::DropTabletRequest* request,
-                                  ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) {
+void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controller,
+                                    const ::starrocks::lake::DeleteTabletRequest* request,
+                                    ::starrocks::lake::DeleteTabletResponse* response,
+                                    ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 

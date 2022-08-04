@@ -10,8 +10,8 @@ import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
 import com.starrocks.lake.proto.DeleteDataRequest;
 import com.starrocks.lake.proto.DeleteDataResponse;
-import com.starrocks.lake.proto.DropTabletRequest;
-import com.starrocks.lake.proto.DropTabletResponse;
+import com.starrocks.lake.proto.DeleteTabletRequest;
+import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.thrift.TNetworkAddress;
@@ -56,9 +56,9 @@ public class LakeServiceClient {
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).compact(request, callback));
     }
 
-    public Future<DropTabletResponse> dropTablet(DropTabletRequest request) throws RpcException {
-        RpcCallback<DropTabletResponse> callback = new EmptyRpcCallback<DropTabletResponse>();
-        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).dropTablet(request, callback));
+    public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) throws RpcException {
+        RpcCallback<DeleteTabletResponse> callback = new EmptyRpcCallback<DeleteTabletResponse>();
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteTablet(request, callback));
     }
 
     public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) throws RpcException {
