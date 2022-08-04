@@ -169,16 +169,12 @@ public class DynamicPartitionUtil {
         if (properties == null) {
             return false;
         }
-        return properties.containsKey(DynamicPartitionProperty.TIME_UNIT) ||
-                properties.containsKey(DynamicPartitionProperty.TIME_ZONE) ||
-                properties.containsKey(DynamicPartitionProperty.START) ||
-                properties.containsKey(DynamicPartitionProperty.END) ||
-                properties.containsKey(DynamicPartitionProperty.PREFIX) ||
-                properties.containsKey(DynamicPartitionProperty.BUCKETS) ||
-                properties.containsKey(DynamicPartitionProperty.REPLICATION_NUM) ||
-                properties.containsKey(DynamicPartitionProperty.ENABLE) ||
-                properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK) ||
-                properties.containsKey(DynamicPartitionProperty.START_DAY_OF_MONTH);
+        for (String key : properties.keySet()) {
+            if (key.startsWith(DynamicPartitionProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean checkInputDynamicPartitionProperties(Map<String, String> properties,
@@ -196,13 +192,10 @@ public class DynamicPartitionUtil {
         String end = properties.get(DynamicPartitionProperty.END);
         String buckets = properties.get(DynamicPartitionProperty.BUCKETS);
         String enable = properties.get(DynamicPartitionProperty.ENABLE);
-        if (!((Strings.isNullOrEmpty(enable) &&
-                Strings.isNullOrEmpty(timeUnit) &&
-                Strings.isNullOrEmpty(timeZone) &&
-                Strings.isNullOrEmpty(prefix) &&
-                Strings.isNullOrEmpty(start) &&
-                Strings.isNullOrEmpty(end) &&
-                Strings.isNullOrEmpty(buckets)))) {
+
+        if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
+                    && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
+                    && Strings.isNullOrEmpty(buckets))) {
             if (Strings.isNullOrEmpty(enable)) {
                 properties.put(DynamicPartitionProperty.ENABLE, "true");
             }
@@ -256,12 +249,6 @@ public class DynamicPartitionUtil {
             properties.remove(DynamicPartitionProperty.PREFIX);
             analyzedProperties.put(DynamicPartitionProperty.PREFIX, prefixValue);
         }
-        if (properties.containsKey(DynamicPartitionProperty.END)) {
-            String endValue = properties.get(DynamicPartitionProperty.END);
-            checkEnd(endValue);
-            properties.remove(DynamicPartitionProperty.END);
-            analyzedProperties.put(DynamicPartitionProperty.END, endValue);
-        }
         if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
             String bucketsValue = properties.get(DynamicPartitionProperty.BUCKETS);
             checkBuckets(bucketsValue);
@@ -274,12 +261,20 @@ public class DynamicPartitionUtil {
             properties.remove(DynamicPartitionProperty.ENABLE);
             analyzedProperties.put(DynamicPartitionProperty.ENABLE, enableValue);
         }
+
         // If dynamic property is not specified.Use Integer.MIN_VALUE as default
         if (properties.containsKey(DynamicPartitionProperty.START)) {
             String startValue = properties.get(DynamicPartitionProperty.START);
             checkStart(startValue);
             properties.remove(DynamicPartitionProperty.START);
             analyzedProperties.put(DynamicPartitionProperty.START, startValue);
+        }
+
+        if (properties.containsKey(DynamicPartitionProperty.END)) {
+            String endValue = properties.get(DynamicPartitionProperty.END);
+            checkEnd(endValue);
+            properties.remove(DynamicPartitionProperty.END);
+            analyzedProperties.put(DynamicPartitionProperty.END, endValue);
         }
 
         if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_MONTH)) {
