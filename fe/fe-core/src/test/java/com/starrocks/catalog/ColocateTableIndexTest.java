@@ -9,11 +9,14 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class ColocateTableIndexTest {
@@ -125,5 +128,55 @@ public class ColocateTableIndexTest {
         Assert.assertTrue(infos.get(1).get(1).contains("group2"));
         Assert.assertEquals(String.format("%d*", table2_1.getId()), infos.get(1).get(2));
         LOG.info("after drop db2: {}", infos);
-      }
+    }
+
+    @Test
+    public void testCleanUp(@Mocked GlobalStateMgr globalStateMgr, @Mocked Database database) {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        List<Column> cols = new ArrayList<>();
+        cols.add(new Column("col", Type.INT));
+        HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(8, cols);
+
+        long goodDbId = 1;
+        OlapTable goodTable = new OlapTable(2, "goodTable", cols, null, null, hashDistributionInfo);
+        ColocateTableIndex.GroupId goodGroup = new ColocateTableIndex.GroupId(goodDbId, 3);
+        colocateTableIndex.addTableToGroup(goodDbId, goodTable, "goodGroup", goodGroup);
+        long badDbId = 11;
+        OlapTable goodTableOfBadDb = new OlapTable(12, "goodTableOfBadDb", cols, null, null, hashDistributionInfo);
+        colocateTableIndex.addTableToGroup(
+                badDbId, goodTableOfBadDb, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 13));
+        long goodDbIdOfBadTable = 21;
+        OlapTable badTable = new OlapTable(22, "badTable", cols, null, null, hashDistributionInfo);
+        colocateTableIndex.addTableToGroup(
+                goodDbIdOfBadTable, badTable, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDbIdOfBadTable, 23));
+        Assert.assertEquals(3, colocateTableIndex.getAllGroupIds().size());
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getDbIncludeRecycleBin(goodDbId);
+                times = 1;
+                result = database;
+                globalStateMgr.getTableIncludeRecycleBin((Database)any, goodTable.getId());
+                times = 1;
+                result = goodTable;
+            }
+            {
+                globalStateMgr.getDbIncludeRecycleBin(badDbId);
+                times = 1;
+                result = null;
+            }
+            {
+                globalStateMgr.getDbIncludeRecycleBin(goodDbIdOfBadTable);
+                times = 1;
+                result = database;
+                globalStateMgr.getTableIncludeRecycleBin((Database)any, badTable.getId());
+                times = 1;
+                result = null;
+            }
+        };
+        colocateTableIndex.cleanupInvalidDbOrTable(globalStateMgr);
+        Assert.assertEquals(1, colocateTableIndex.getAllGroupIds().size());
+    }
+
 }
