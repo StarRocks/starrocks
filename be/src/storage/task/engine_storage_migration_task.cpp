@@ -289,14 +289,6 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
             res = Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
             break;
         }
-        AlterTabletTaskSharedPtr alter_task = tablet->alter_task();
-        if (alter_task != nullptr) {
-            if (alter_task->alter_state() == ALTER_FINISHED) {
-                new_tablet->set_alter_state(ALTER_FINISHED);
-            } else {
-                new_tablet->delete_alter_task();
-            }
-        }
     } while (false);
 
     // 4. clear
