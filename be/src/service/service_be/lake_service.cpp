@@ -280,4 +280,45 @@ void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
     }
 }
 
+void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::TabletStatRequest* request,
+                                       ::starrocks::lake::TabletStatResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_infos_size() == 0) {
+        cntl->SetFailed("missing tablet_infos");
+        return;
+    }
+
+    for (const auto& tablet_info : request->tablet_infos()) {
+        int64_t tablet_id = tablet_info.tablet_id();
+        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        if (!tablet.ok()) {
+            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
+            continue;
+        }
+
+        int64_t version = tablet_info.version();
+        auto tablet_metadata = tablet->get_metadata(version);
+        if (!tablet_metadata.ok()) {
+            LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
+                         << ", error: " << tablet.status();
+            continue;
+        }
+
+        int64_t num_rows = 0;
+        int64_t data_size = 0;
+        for (const auto& rowset : (*tablet_metadata)->rowsets()) {
+            num_rows += rowset.num_rows();
+            data_size += rowset.data_size();
+        }
+        auto tablet_stat = response->add_tablet_stats();
+        tablet_stat->set_tablet_id(tablet_id);
+        tablet_stat->set_num_rows(num_rows);
+        tablet_stat->set_data_size(data_size);
+    }
+}
+
 } // namespace starrocks

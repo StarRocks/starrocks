@@ -13,6 +13,8 @@ import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
+import com.starrocks.lake.proto.TabletStatRequest;
+import com.starrocks.lake.proto.TabletStatResponse;
 
 public interface LakeService {
     @BrpcMeta(serviceName = "LakeService", methodName = "publish_version")
@@ -29,5 +31,8 @@ public interface LakeService {
 
     @BrpcMeta(serviceName = "LakeService", methodName = "delete_data")
     DeleteDataResponse deleteData(DeleteDataRequest request);
+
+    @BrpcMeta(serviceName = "LakeService", methodName = "get_tablet_stats")
+    TabletStatResponse getTabletStats(TabletStatRequest request);
 }
 
