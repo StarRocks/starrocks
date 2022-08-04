@@ -136,7 +136,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
         return Status::InternalError("PAUSE: failed to create kafka consumer: " + errstr);
     }
 
-    VLOG(3) << "finished to init kafka consumer. " << ctx->brief();
+    LOG(INFO) << "finished to init kafka consumer. " << ctx->brief();
 
     _init = true;
     return Status::OK();
