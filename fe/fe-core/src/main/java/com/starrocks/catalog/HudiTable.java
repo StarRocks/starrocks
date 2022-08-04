@@ -348,7 +348,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             }
             // for each column in hudi schema, we should transfer hudi column type to starrocks type
             // after that, we should check column type whether is same
-            if (!validColumnType(hudiColumn.schema(), column.getType())) {
+            // Only internal catalog like hive external table need to validate column type
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
+                    !validColumnType(hudiColumn.schema(), column.getType())) {
                 throw new DdlException("Can not convert hudi column type [" + hudiColumn.schema().toString() + "] " +
                         "to starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName()
                         + ", starrocks type should be "
