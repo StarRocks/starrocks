@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-package com.starrocks.connector.hive;
+package com.starrocks.connector.hudi;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -14,13 +14,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class HiveMetadata implements ConnectorMetadata {
-    private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
+public class HudiMetadata implements ConnectorMetadata {
+    private static final Logger LOG = LogManager.getLogger(HudiMetadata.class);
 
     private HiveMetaCache metaCache = null;
     private final String resourceName;
 
-    public HiveMetadata(String resourceName) {
+    public HudiMetadata(String resourceName) {
         this.resourceName = resourceName;
     }
 
