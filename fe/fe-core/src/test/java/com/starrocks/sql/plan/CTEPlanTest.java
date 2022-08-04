@@ -24,8 +24,6 @@ public class CTEPlanTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setCboCteReuse(true);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
