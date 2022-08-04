@@ -131,52 +131,46 @@ public class ColocateTableIndexTest {
     }
 
     @Test
-    public void testCleanUp(@Mocked GlobalStateMgr globalStateMgr, @Mocked Database database) {
-        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+    public void testCleanUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        int n = colocateTableIndex.getAllGroupIds().size();
 
-        List<Column> cols = new ArrayList<>();
-        cols.add(new Column("col", Type.INT));
-        HashDistributionInfo hashDistributionInfo = new HashDistributionInfo(8, cols);
+        // create goodDb
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database goodDb;", connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        Database goodDb = GlobalStateMgr.getCurrentState().getDb("goodDb");
+        // create goodtable
+        String sql = "CREATE TABLE " +
+                "goodDb.goodTable (k1 int, k2 int, k3 varchar(32))\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1)\n" +
+                "BUCKETS 4\n" +
+                "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        OlapTable table = (OlapTable)goodDb.getTable("goodTable");
+        ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentColocateIndex().getGroup(table.getId());
+        Assert.assertEquals(n + 1, colocateTableIndex.getAllGroupIds().size());
 
-        long goodDbId = 1;
-        OlapTable goodTable = new OlapTable(2, "goodTable", cols, null, null, hashDistributionInfo);
-        ColocateTableIndex.GroupId goodGroup = new ColocateTableIndex.GroupId(goodDbId, 3);
-        colocateTableIndex.addTableToGroup(goodDbId, goodTable, "goodGroup", goodGroup);
-        long badDbId = 11;
-        OlapTable goodTableOfBadDb = new OlapTable(12, "goodTableOfBadDb", cols, null, null, hashDistributionInfo);
+        // create a bad db
+        long badDbId = 100;
+        table.id = 101;
+        table.name = "goodTableOfBadDb";
         colocateTableIndex.addTableToGroup(
-                badDbId, goodTableOfBadDb, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 13));
-        long goodDbIdOfBadTable = 21;
-        OlapTable badTable = new OlapTable(22, "badTable", cols, null, null, hashDistributionInfo);
+                badDbId, table, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 102));
+        // create a bad table in good db
+        table.id = 200;
+        table.name = "badTable";
         colocateTableIndex.addTableToGroup(
-                goodDbIdOfBadTable, badTable, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDbIdOfBadTable, 23));
-        Assert.assertEquals(3, colocateTableIndex.getAllGroupIds().size());
+                goodDb.getId(), table, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDb.getId(), 201));
 
-        new Expectations(globalStateMgr) {
-            {
-                globalStateMgr.getDbIncludeRecycleBin(goodDbId);
-                times = 1;
-                result = database;
-                globalStateMgr.getTableIncludeRecycleBin((Database)any, goodTable.getId());
-                times = 1;
-                result = goodTable;
-            }
-            {
-                globalStateMgr.getDbIncludeRecycleBin(badDbId);
-                times = 1;
-                result = null;
-            }
-            {
-                globalStateMgr.getDbIncludeRecycleBin(goodDbIdOfBadTable);
-                times = 1;
-                result = database;
-                globalStateMgr.getTableIncludeRecycleBin((Database)any, badTable.getId());
-                times = 1;
-                result = null;
-            }
-        };
-        colocateTableIndex.cleanupInvalidDbOrTable(globalStateMgr);
-        Assert.assertEquals(1, colocateTableIndex.getAllGroupIds().size());
+        Assert.assertEquals(n + 3, colocateTableIndex.getAllGroupIds().size());
+
+        colocateTableIndex.cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
+
+        Assert.assertEquals(n + 1, colocateTableIndex.getAllGroupIds().size());
     }
 
 }
