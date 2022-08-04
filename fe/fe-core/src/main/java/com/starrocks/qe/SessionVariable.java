@@ -339,12 +339,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean autoCommit = true;
 
     // this is used to make c3p0 library happy
-    @VariableMgr.VarAttr(name = TX_ISOLATION)
+    @VariableMgr.VarAttr(name = TX_ISOLATION, alias = TRANSACTION_ISOLATION)
     private String txIsolation = "REPEATABLE-READ";
 
-    // this is used to compatible mysql 5.8
-    @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
-    private String transactionIsolation = "REPEATABLE-READ";
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
