@@ -41,7 +41,7 @@ private:
 
     static void _append_null(Column* column);
 
-    Status _append_value_from_json_val(Column* column, PrimitiveType type, const rapidjson::Value& col,
+    Status _append_value_from_json_val(Column* column, const TypeDescriptor& type_desc, const rapidjson::Value& col,
                                        bool pure_doc_value);
 
     Slice _json_val_to_slice(const rapidjson::Value& val);
@@ -56,6 +56,9 @@ private:
 
     template <PrimitiveType type, typename T = RunTimeCppType<type>>
     Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
+
+    Status _append_array_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
+                             bool pure_doc_value);
 
 private:
     const TupleDescriptor* _tuple_desc;
