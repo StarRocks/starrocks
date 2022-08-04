@@ -14,6 +14,8 @@ import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
+import com.starrocks.lake.proto.TabletStatRequest;
+import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,6 +66,13 @@ public class LakeServiceClient {
     public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) throws RpcException {
         RpcCallback<DeleteDataResponse> callback = new EmptyRpcCallback<DeleteDataResponse>();
         return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).deleteData(request, callback));
+    }
+
+    public Future<TabletStatResponse> getTabletStats(TabletStatRequest request) throws RpcException {
+        RpcCallback<TabletStatResponse> callback = new EmptyRpcCallback<>();
+        RpcContext rpcContext = RpcContext.getContext();
+        rpcContext.setReadTimeoutMillis(600000);
+        return run(() -> BrpcProxy.getInstance().getLakeService(serverAddress).getTabletStats(request, callback));
     }
 
     private <T> T run(Supplier<T> function) throws RpcException {

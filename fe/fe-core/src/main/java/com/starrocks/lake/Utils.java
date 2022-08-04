@@ -31,7 +31,7 @@ public class Utils {
             LOG.info("Ignored error {}", ex.getMessage());
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds.isEmpty()) {
+        if (backendIds == null || backendIds.isEmpty()) {
             return null;
         }
         return backendIds.get(0);
