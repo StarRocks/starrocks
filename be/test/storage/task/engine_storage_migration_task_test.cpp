@@ -53,7 +53,7 @@ public:
         const TabletSchema& tablet_schema = tablet->tablet_schema();
 
         // create rowset
-        RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema);
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());

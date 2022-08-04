@@ -6,9 +6,7 @@
 
 namespace starrocks {
 
-// `int8_t` should be enough, using `int16_t` because `config::storage_format_version`
-// is `int16_t`.
-using DataFormatVersion = int16_t;
+using DataFormatVersion = int8_t;
 
 const DataFormatVersion kDataFormatUnknown = 0;
 const DataFormatVersion kDataFormatV1 = 1;

@@ -190,7 +190,7 @@ public:
         _mem_tracker.reset(new MemTracker(-1, "root"));
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
         _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         RowsetId rowset_id;
         rowset_id.init(rand() % 1000000000);
         writer_context.rowset_id = rowset_id;

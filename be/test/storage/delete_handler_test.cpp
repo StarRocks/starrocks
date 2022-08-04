@@ -59,7 +59,6 @@ void set_up() {
     config::tablet_map_shard_size = 1;
     config::txn_map_shard_size = 1;
     config::txn_shard_size = 1;
-    config::storage_format_version = 2;
 
     k_tablet_meta_mem_tracker = new MemTracker();
     k_schema_change_mem_tracker = new MemTracker();

@@ -32,8 +32,6 @@ namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(TabletMetaTest, test_create) {
-    config::storage_format_version = 2;
-
     TCreateTabletReq request;
     request.__set_tablet_id(1000001);
     request.__set_partition_id(1);

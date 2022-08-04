@@ -34,8 +34,7 @@ enum RowsetWriterType { kHorizontal = 0, kVertical = 1 };
 
 class RowsetWriterContext {
 public:
-    RowsetWriterContext(DataFormatVersion mem_format_version, DataFormatVersion store_format_version)
-            : memory_format_version(mem_format_version), storage_format_version(store_format_version) {
+    RowsetWriterContext() {
         load_id.set_hi(0);
         load_id.set_lo(0);
     }
@@ -66,11 +65,6 @@ public:
     // the default is set to INT32_MAX to avoid overflow issue when casting from uint32_t to int.
     // test cases can change this value to control flush timing
     uint32_t max_rows_per_segment = INT32_MAX;
-
-    // In-memory data format.
-    DataFormatVersion memory_format_version;
-    // On-disk data format.
-    DataFormatVersion storage_format_version;
 
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 

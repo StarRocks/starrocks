@@ -340,7 +340,7 @@ TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
 
 RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                               vectorized::Column* one_delete = nullptr) {
-    RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+    RowsetWriterContext writer_context;
     RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
     writer_context.rowset_id = rowset_id;
     writer_context.tablet_id = tablet->tablet_id();
