@@ -241,15 +241,15 @@ sh bin/start_broker.sh --daemon
 升级开始前，您需要关闭 Clone。
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0"); 
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0"); 
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ```
 
 升级结束后，开启 Clone。
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000"); 
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "2000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "100");
 ```
 
 ### 关于 StarRocks 2.0.x 灰度升级至 2.1.x

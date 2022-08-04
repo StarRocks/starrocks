@@ -16,8 +16,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 示例
 
-1. 设置 'disable_balance' 为 true
+1. 设置 'tablet_sched_disable_balance' 为 true
 
     ```sql
-    ADMIN SET FRONTEND CONFIG ("disable_balance" = "true");
+    ADMIN SET FRONTEND CONFIG ("tablet_sched_disable_balance" = "true");
     ```

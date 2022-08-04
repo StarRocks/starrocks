@@ -152,7 +152,7 @@ StarRocks 会将 Colocation 表的分片尽可能均匀地分布在所有 BE 节
 > 注意
 >
 > * 当前的 Colocation 副本均衡和修复算法，对于异构部署的 StarRocks 集群效果并不理想。所谓异构部署，即 BE 节点的磁盘容量、数量、磁盘类型（SSD 和 HDD）不一致。在异构部署情况下，可能出现小容量的 BE 节点和大容量的 BE 节点存储了相同的副本数量的情况。
-> * 当一个 Group 处于 Unstable 状态时，其中的表的 Colocate Join 将退化为普通 Join。此时集群的查询性能可能会极大降低。如果不希望系统自动均衡，您可以设置 FE 的配置项 `disable_colocate_balance` 来禁止自动均衡。然后在合适的时间打开即可。具体参阅 [高级操作](#高级操作) 小节。
+> * 当一个 Group 处于 Unstable 状态时，其中的表的 Colocate Join 将退化为普通 Join。此时集群的查询性能可能会极大降低。如果不希望系统自动均衡，您可以设置 FE 的配置项 `tablet_sched_disable_colocate_balance` 来禁止自动均衡。然后在合适的时间打开即可。具体参阅 [高级操作](#高级操作) 小节。
 
 ## 查询
 
@@ -302,12 +302,12 @@ EXPLAIN SELECT * FROM tbl1 INNER JOIN tbl2 ON (tbl1.k2 = tbl2.k2);
 
 ### FE 配置项
 
-`disable_colocate_balance`：是否关闭自动 Colocation 副本均衡功能。默认为 `false`，即不关闭。该参数只影响 Colocation 表的副本均衡，不影响普通表。
+`tablet_sched_disable_colocate_balance`：是否关闭自动 Colocation 副本均衡功能。默认为 `false`，即不关闭。该参数只影响 Colocation 表的副本均衡，不影响普通表。
 
 以上参数支持动态修改，您可以通过以下命令关闭。
 
 ~~~sql
-ADMIN SET FRONTEND CONFIG ("disable_colocate_balance" = "TRUE");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_disable_colocate_balance" = "TRUE");
 ~~~
 
 ### Session 变量
@@ -408,7 +408,7 @@ StarRocks 提供了多个与 Colocation Join 有关的 HTTP Restful API，用于
     该接口可以强制设置某一 Group 的数据分布。
 
     > 注意
-    > 使用该命令，需要将 FE 的配置 `disable_colocate_balance` 设为 `true`，即关闭系统自动 Colocation 副本修复和均衡。否则在修改数据分布设置后可能会被系统自动重置。
+    > 使用该命令，需要将 FE 的配置 `tablet_sched_disable_colocate_balance` 设为 `true`，即关闭系统自动 Colocation 副本修复和均衡。否则在修改数据分布设置后可能会被系统自动重置。
 
     ~~~shell
     curl -u<user>:<password> -X POST "http://<fe_host>:<fe_http_port>/api/colocate/bucketseq?db_id=10005&group_id=10008"
@@ -423,4 +423,4 @@ StarRocks 提供了多个与 Colocation Join 有关的 HTTP Restful API，用于
     其中 Body 是以嵌套数组表示的 Bucket Seq 以及每个分桶中分片所在 BE 的 ID。
 
     > 注意
-    > 使用该命令，需要将 FE 的配置 `disable_colocate_balance` 设为 `true`，即关闭系统自动 Colocation 副本修复和均衡。否则在修改数据分布设置后可能会被系统自动重置。
+    > 使用该命令，需要将 FE 的配置 `tablet_sched_disable_colocate_balance` 设为 `true`，即关闭系统自动 Colocation 副本修复和均衡。否则在修改数据分布设置后可能会被系统自动重置。

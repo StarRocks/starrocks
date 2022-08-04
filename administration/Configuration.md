@@ -117,21 +117,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |storage_min_left_capacity_bytes|2 \* 1024 \* 1024 \* 1024|BE 存储目录下剩余空间的最小值，单位为 Byte。|
 |catalog_trash_expire_second|86400|删表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
-|balance_load_disk_safe_threshold|0.5|disk_and_tablet 策略有效。如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。|
-|balance_load_score_threshold|0.1|对于 be_load_score 策略，负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。<br/>对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。|
-|disable_balance|FALSE|是否禁用 Tablet 调度。|
-|max_scheduling_tablets|2000|如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡检查。|
-|max_balancing_tablets|100|如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。|
-|disable_colocate_balance|FALSE|禁用 Colocate Table 的副本均衡。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，使用空的 tablet 代替它。这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。|
-|min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
-|max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。|
 |tablet_create_timeout_second|1|建表超时时长，单位为秒。|
 |tablet_delete_timeout_second|2|删除表的超时时间，单位为秒。|
-|tablet_repair_delay_factor_second|60|FE 控制进行副本修复的间隔，单位为秒。|
 |consistency_check_start_time|23|FE 发起副本一致性检测的起始时间。|
 |consistency_check_end_time|4|FE 发起副本一致性检测的终止时间。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
+|tablet_sched_slot_num_per_path|2|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。|
+|tablet_sched_max_scheduling_tablets|2000|如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
+|tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。|
+|tablet_sched_disable_colocate_balance|FALSE|禁用 Colocate Table 的副本均衡。|
+|tablet_sched_max_balancing_tablets|100|如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。|
+|tablet_sched_balance_load_disk_safe_threshold|0.5|disk_and_tablet 策略有效。如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。|
+|tablet_sched_balance_load_score_threshold|0.1|对于 be_load_score 策略，负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。<br/>对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。|
+|tablet_sched_repair_delay_factor_second|60|FE 控制进行副本修复的间隔，单位为秒。|
+|tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
+|tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。|
 
 #### 其他动态参数
 
@@ -248,10 +249,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|描述|
 |---|---|---|
-|storage_cooldown_second|-1|从 Table 创建时间点开始计算，自动降冷（从 SSD 介质迁移到 HDD 介质）的时延。单位为秒。默认为 `-1` 表示不进行自动降冷，如需启用该功能请显式设置大于 0 的值。|
 |default_storage_medium|HDD|默认的存储介质，值为 HDD/SSD。在创建表/分区时，如果没有指定存储介质，那么会使用该值。|
-|schedule_slot_num_per_path|2|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。|
-|tablet_balancer_strategy|disk_and_tablet|Tablet 均衡策略，值为 disk_and_tablet 或 be_load_score。|
+|tablet_sched_balancer_strategy|disk_and_tablet|Tablet 均衡策略，值为 disk_and_tablet 或 be_load_score。|
+|tablet_sched_storage_cooldown_second|-1|从 Table 创建时间点开始计算，自动降冷（从 SSD 介质迁移到 HDD 介质）的时延。单位为秒。默认为 `-1` 表示不进行自动降冷，如需启用该功能请显式设置大于 0 的值。|
 |tablet_stat_update_interval_second |300 |FE 向每个 BE 请求收集 tablet 信息的时间间隔，单位为秒。|
 
 #### 其他静态参数
