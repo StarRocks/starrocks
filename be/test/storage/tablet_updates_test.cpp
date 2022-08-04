@@ -1754,7 +1754,6 @@ void TabletUpdatesTest::snapshot_prepare(const TabletSharedPtr& tablet, const st
     }
 
     tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
-    snapshot_tablet_meta->delete_alter_task();
     rdlock.unlock();
 
     *snapshot_id_path = SnapshotManager::instance()->calc_snapshot_id_path(tablet, 3600);
