@@ -19,7 +19,7 @@ public class NestLoopJoinTest extends PlanTestBase {
         Assert.assertTrue(planFragment, planFragment.contains(" 3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 3: v3 = 6: v3\n" +
+                "  |  other join predicates: 3: v3 < 6: v3\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
                 "  |    \n" +

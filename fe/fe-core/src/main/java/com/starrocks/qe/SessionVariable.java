@@ -582,7 +582,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableHiveColumnStats = true;
 
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
-    private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
+    private String joinImplementationMode = "hash"; // auto, merge, hash, nestloop
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
