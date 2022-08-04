@@ -1,5 +1,6 @@
-on: check_run
-  type: [completed]
+on: 
+  check_run:
+    types: ['completed']
 name: success-check
 jobs:
   checkForSuccess:
