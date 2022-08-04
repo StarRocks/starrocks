@@ -11,15 +11,10 @@ namespace starrocks::vectorized::csv {
 
 Status JsonConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                    const Options& options) const {
-    auto date_column = down_cast<const JsonColumn*>(&column);
-    std::vector<JsonValue>& pool = const_cast<std::vector<JsonValue>&>(date_column->get_pool());
-    Slice s;
-    s.init();
-    Status status = os->write(s);
-    if (status.ok()) {
-        pool.emplace_back(s);
-    }
-    return status;
+    auto data_column = down_cast<const JsonColumn*>(&column);
+    std::vector<JsonValue>& pool = const_cast<std::vector<JsonValue>&>(data_column->get_pool());
+    JsonValue b = pool.at(row_num);
+    return os->write(b.get_slice());
 }
 
 Status JsonConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,

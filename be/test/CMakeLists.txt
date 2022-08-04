@@ -112,6 +112,7 @@ set(EXEC_FILES
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
         ./formats/csv/float_converter_test.cpp
+        ./formats/csv/json_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/json/binary_column_test.cpp
