@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
@@ -164,5 +165,42 @@ public class HudiTableTest {
         columns1.add(new Column("col3", Type.INT, false));
         new HudiTable(1000, "hudi_table", columns1, properties);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testInputFormat() {
+        Assert.assertEquals(HudiTable.HoodieTableType.COW,
+                HudiTable.fromInputFormat("org.apache.hudi.hadoop.HoodieParquetInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.COW,
+                HudiTable.fromInputFormat("com.uber.hoodie.hadoop.HoodieInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.MOR,
+                HudiTable.fromInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.MOR,
+                HudiTable.fromInputFormat("com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat"));
+        Assert.assertEquals(HudiTable.HoodieTableType.UNKNOWN,
+                HudiTable.fromInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat"));
+    }
+
+    @Test
+    public void testColumnTypeConvert() throws DdlException {
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.create(Schema.Type.BOOLEAN)),
+                ScalarType.createType(PrimitiveType.BOOLEAN));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.create(Schema.Type.INT)),
+                ScalarType.createType(PrimitiveType.INT));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.create(Schema.Type.FLOAT)),
+                ScalarType.createType(PrimitiveType.FLOAT));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.create(Schema.Type.DOUBLE)),
+                ScalarType.createType(PrimitiveType.DOUBLE));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.create(Schema.Type.STRING)),
+                ScalarType.createDefaultString());
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createArray(Schema.create(Schema.Type.INT))),
+                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createFixed("FIXED", "FIXED", "F",1)),
+                ScalarType.createType(PrimitiveType.VARCHAR));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createUnion(Schema.create(Schema.Type.INT)))
+                ,ScalarType.createType(PrimitiveType.INT));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createMap(Schema.create(Schema.Type.INT)))
+                ,ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
     }
 }
