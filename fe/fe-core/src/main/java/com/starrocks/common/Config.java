@@ -564,7 +564,7 @@ public class Config extends ConfigBase {
      *  global variable version.
      */
     @ConfField
-    public static String mysql_server_version = "8.0.23";
+    public static String mysql_server_version = "5.1.0";
 
     /**
      * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
