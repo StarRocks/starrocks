@@ -1347,10 +1347,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         Schema base_schema;
         if (config::enable_schema_change_v2) {
-            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
-                    base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs()));
+            base_schema = ChunkHelper::convert_schema_to_format_v2(
+                    base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs());
         } else {
-            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema()));
+            base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
         }
 
         for (auto& version : versions_to_be_changed) {
