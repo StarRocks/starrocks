@@ -68,6 +68,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,7 +90,7 @@ public class BackupHandler extends MasterDaemon implements Writable {
     // If the last job is finished, user can get the job info from repository. If the last job is cancelled,
     // user can get the error message before submitting the next one.
     // Use ConcurrentMap to get rid of locks.
-    private Map<Long, AbstractJob> dbIdToBackupOrRestoreJob = Maps.newConcurrentMap();
+    protected Map<Long, AbstractJob> dbIdToBackupOrRestoreJob = Maps.newConcurrentMap();
 
     // this lock is used for handling one backup or restore request at a time.
     private ReentrantLock seqlock = new ReentrantLock();
@@ -555,6 +556,10 @@ public class BackupHandler extends MasterDaemon implements Writable {
             // for example: In restore job, PENDING will transfer to SNAPSHOTING, not DOWNLOAD.
             job.replayRun();
         }
+        if (isJobExpired(job, System.currentTimeMillis())) {
+            LOG.warn("skip expired job {}", job);
+            return;
+        }
         dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
     }
 
@@ -594,12 +599,60 @@ public class BackupHandler extends MasterDaemon implements Writable {
     public void readFields(DataInput in) throws IOException {
         repoMgr = RepositoryMgr.read(in);
 
+        long currentTimeMs = System.currentTimeMillis();
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             AbstractJob job = AbstractJob.read(in);
+            if (isJobExpired(job, currentTimeMs)) {
+                LOG.warn("skip expired job {}", job);
+                continue;
+            }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
         }
+        LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
     }
+<<<<<<< HEAD
+=======
+
+    public long saveBackupHandler(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
+    public long loadBackupHandler(DataInputStream dis, long checksum, GlobalStateMgr globalStateMgr) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_42) {
+            readFields(dis);
+        }
+        setGlobalStateMgr(globalStateMgr);
+        LOG.info("finished replay backupHandler from image");
+        return checksum;
+    }
+
+    /**
+     * will remove finished/cancelled job periodically
+     */
+    private boolean isJobExpired(AbstractJob job, long currentTimeMs) {
+        return (job.isDone() || job.isCancelled())
+                && (currentTimeMs - job.getFinishedTime()) / 1000 > Config.history_job_keep_max_second;
+    }
+
+    public void removeOldJobs() throws DdlException {
+        tryLock();
+        try {
+            long currentTimeMs = System.currentTimeMillis();
+            Iterator<Map.Entry<Long, AbstractJob>> iterator = dbIdToBackupOrRestoreJob.entrySet().iterator();
+            while (iterator.hasNext()) {
+                AbstractJob job = iterator.next().getValue();
+                if (isJobExpired(job, currentTimeMs)) {
+                    LOG.warn("discard expired job {}", job);
+                    iterator.remove();
+                }
+            }
+        } finally {
+            seqlock.unlock();
+        }
+    }
+>>>>>>> 6f77f4a75 ([BugFix] Discard expired backup/restore job (#9531))
 }
 
 
