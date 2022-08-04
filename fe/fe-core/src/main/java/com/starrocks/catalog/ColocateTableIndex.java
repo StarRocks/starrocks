@@ -114,7 +114,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     // group_name -> group_id
-    protected Map<String, GroupId> groupName2Id = Maps.newHashMap();
+    private Map<String, GroupId> groupName2Id = Maps.newHashMap();
     // group_id -> table_ids
     private Multimap<GroupId, Long> group2Tables = ArrayListMultimap.create();
     // table_id -> group_id
