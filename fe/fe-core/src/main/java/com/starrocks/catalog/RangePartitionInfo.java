@@ -246,6 +246,7 @@ public class RangePartitionInfo extends PartitionInfo {
      * @TODO This method may be used in future
      */
     public void unprotectHandleNewSinglePartitionDesc(RangePartitionPersistInfo info) {
+        
         Partition partition = info.getPartition();
         long partitionId = partition.getId();
         setRangeInternal(partitionId, info.isTempPartition(), info.getRange());

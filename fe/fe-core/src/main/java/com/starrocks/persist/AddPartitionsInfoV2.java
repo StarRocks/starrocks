@@ -2,8 +2,10 @@
 
 package com.starrocks.persist;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -12,6 +14,7 @@ import java.util.List;
 
 public class AddPartitionsInfoV2 implements Writable {
 
+    @SerializedName("infos")
     private final List<PartitionPersistInfoV2> infos;
 
     public AddPartitionsInfoV2(List<PartitionPersistInfoV2> infos) {
@@ -20,18 +23,12 @@ public class AddPartitionsInfoV2 implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        for (PartitionPersistInfoV2 info : infos) {
-            info.write(out);
-        }
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     public static AddPartitionsInfoV2 read(DataInput in) throws IOException {
-        int size = in.readInt();
-        List<PartitionPersistInfoV2> infos = Lists.newArrayList();
-        for (int i = 0; i < size; i++) {
-            infos.add(PartitionPersistInfoV2.read(in));
-        }
-        return new AddPartitionsInfoV2(infos);
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, AddPartitionsInfoV2.class);
     }
 
     public List<PartitionPersistInfoV2> getAddPartitionInfos() {
