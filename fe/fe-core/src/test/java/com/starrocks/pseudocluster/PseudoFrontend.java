@@ -42,6 +42,9 @@ public class PseudoFrontend {
     // the running dir of this mocked frontend.
     // log/ starrocks-meta/ and conf/ dirs will be created under this dir.
     private String runningDir;
+
+    private boolean fakeJournal = true;
+
     // the min set of fe.conf.
     private static final Map<String, String> MIN_FE_CONF;
 
@@ -60,14 +63,6 @@ public class PseudoFrontend {
         context.start();
     }
 
-    private static class SingletonHolder {
-        private static final PseudoFrontend INSTANCE = new PseudoFrontend();
-    }
-
-    public static PseudoFrontend getInstance() {
-        return SingletonHolder.INSTANCE;
-    }
-
     private boolean isInit = false;
 
     private final Lock initLock = new ReentrantLock();
@@ -77,7 +72,8 @@ public class PseudoFrontend {
     // 2. clear and create 3 dirs: runningDir/log/, runningDir/starrocks-meta/, runningDir/conf/
     // 3. init fe.conf
     //      The content of "fe.conf" is a merge set of input `feConf` and MIN_FE_CONF
-    public void init(String runningDir, Map<String, String> feConf) throws EnvVarNotSetException, IOException {
+    public void init(boolean fakeJournal, String runningDir, Map<String, String> feConf)
+            throws EnvVarNotSetException, IOException {
         initLock.lock();
         if (isInit) {
             return;
@@ -89,6 +85,7 @@ public class PseudoFrontend {
         }
 
         this.runningDir = runningDir;
+        this.fakeJournal = fakeJournal;
         System.out.println("mocked frontend running in dir: " + this.runningDir);
 
         // root running dir
@@ -181,13 +178,15 @@ public class PseudoFrontend {
                 FrontendOptions.init(new String[0]);
                 ExecuteEnv.setup();
 
-                new MockUp<JournalFactory>() {
-                    @Mock
-                    public Journal create(String name) throws JournalException {
-                        GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
-                        return new MockJournal();
-                    }
-                };
+                if (frontend.fakeJournal) {
+                    new MockUp<JournalFactory>() {
+                        @Mock
+                        public Journal create(String name) throws JournalException {
+                            GlobalStateMgr.getCurrentState().setHaProtocol(new MockJournal.MockProtocol());
+                            return new MockJournal();
+                        }
+                    };
+                }
 
                 GlobalStateMgr.getCurrentState().initialize(args);
                 StateChangeExecutor.getInstance().setMetaContext(
