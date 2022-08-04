@@ -115,6 +115,11 @@ public class MaterializedViewAnalyzer {
                             "Materialized view only supports olap table, but the type of table: " +
                                     table.getName() + " is: " + table.getType().name());
                 }
+                if (table instanceof MaterializedView) {
+                    throw new SemanticException(
+                            "Creating a materialized view from materialized view is not supported now. The type of table: " +
+                                    table.getName() + " is: Materialized View");
+                }
                 baseTableIds.add(table.getId());
             });
             statement.setBaseTableIds(baseTableIds);

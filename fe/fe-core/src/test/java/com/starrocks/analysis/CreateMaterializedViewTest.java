@@ -1189,6 +1189,39 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testAsTableOnMV() {
+        String sql1 = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        String sql2 = "create materialized view mv2 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from mv1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.assertEquals("Creating a materialized view from materialized view is not supported now." +
+                    " The type of table: mv1 is: Materialized View", e.getMessage());
+        }
+    }
+
+    @Test
     public void testAsHasStar() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
