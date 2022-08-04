@@ -420,6 +420,9 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + mvName.getDb());
             }
             Table table = db.getTable(mvName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+            }
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
