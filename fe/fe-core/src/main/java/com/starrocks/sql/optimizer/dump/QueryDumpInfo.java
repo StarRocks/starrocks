@@ -20,8 +20,8 @@ public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
     // tableId-><dbName, table>
     private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
-    // viewId->view
-    private final Map<Long, View> viewMap = new LinkedHashMap<>();
+    // viewId-><dbName, view>
+    private final Map<Long, Pair<String, View>> viewMap = new LinkedHashMap<>();
     // tableName->partitionName->partitionRowCount
     private final Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
     // tableName->columnName->column statistics
@@ -70,8 +70,9 @@ public class QueryDumpInfo implements DumpInfo {
         addPartitionRowCount(tableName, partition, rowCount);
     }
 
-    public void addView(View view) {
-        viewMap.put(view.getId(), view);
+    @Override
+    public void addView(String dbName, View view) {
+        viewMap.put(view.getId(), new Pair<>(dbName, view));
     }
 
     @Override
@@ -115,7 +116,7 @@ public class QueryDumpInfo implements DumpInfo {
         return tableMap;
     }
 
-    public Map<Long, View> getViewMap() {
+    public Map<Long, Pair<String, View>> getViewMap() {
         return viewMap;
     }
 
