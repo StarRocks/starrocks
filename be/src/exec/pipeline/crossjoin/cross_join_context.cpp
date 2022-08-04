@@ -46,18 +46,18 @@ Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     return Status::OK();
 }
 
-void CrossJoinContext::enter_probe_state(int32_t driver_seq) {
-    VLOG(3) << "CrossJoin operator " << driver_seq << " enter probe_state";
-    _num_probers++;
-}
+bool CrossJoinContext::finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
+    std::lock_guard guard(_join_stage_mutex);
 
-bool CrossJoinContext::enter_post_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
-    VLOG(3) << fmt::format("CrossJoin operator {} enter post_probe_state: {}", driver_seq,
-                           fmt::join(build_match_flags, ","));
-    bool is_last = (_num_probers - 1) == _num_post_probers.fetch_add(1);
+    ++_num_post_probers;
+    VLOG(3) << fmt::format("CrossJoin operator {} finish probe {}/{}: {}", driver_seq, _num_post_probers,
+                           _num_left_probers, fmt::join(build_match_flags, ","));
+    bool is_last = _num_post_probers == _num_left_probers;
 
     // Merge all build_match_flag from all probers
-    std::lock_guard guard(_build_match_mutex);
+    if (build_match_flags.empty()) {
+        return is_last;
+    }
     if (_shared_build_match_flag.empty()) {
         _shared_build_match_flag.resize(build_match_flags.size(), 0);
     }
@@ -68,7 +68,7 @@ bool CrossJoinContext::enter_post_probe(int32_t driver_seq, const std::vector<ui
 }
 
 const std::vector<uint8_t> CrossJoinContext::get_shared_build_match_flag() const {
-    DCHECK_EQ(_num_post_probers, _num_probers) << "all probers should share their states";
+    DCHECK_EQ(_num_post_probers, _num_left_probers) << "all probers should share their states";
     return _shared_build_match_flag;
 }
 

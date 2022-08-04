@@ -21,6 +21,7 @@ namespace starrocks::pipeline {
 class RuntimeFilterHub;
 
 struct CrossJoinContextParams {
+    int32_t num_left_probers;
     int32_t num_right_sinkers;
     int32_t plan_node_id;
     std::vector<ExprContext*> filters;
@@ -31,7 +32,8 @@ struct CrossJoinContextParams {
 class CrossJoinContext final : public ContextWithDependency {
 public:
     explicit CrossJoinContext(CrossJoinContextParams params)
-            : _num_right_sinkers(params.num_right_sinkers),
+            : _num_left_probers(params.num_left_probers),
+              _num_right_sinkers(params.num_right_sinkers),
               _plan_node_id(params.plan_node_id),
               _tmp_chunks(_num_right_sinkers),
               _conjuncts_ctx(std::move(params.filters)),
@@ -55,16 +57,15 @@ public:
 
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
-    void enter_probe_state(int32_t driver_seq);
-
     // Return true if it's the last prober, which need to perform the right join task
-    bool enter_post_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);
+    bool finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);
 
     const std::vector<uint8_t> get_shared_build_match_flag() const;
 
 private:
     Status _init_runtime_filter(RuntimeState* state);
 
+    const int32_t _num_left_probers;
     const int32_t _num_right_sinkers;
     const int32_t _plan_node_id;
     // A CrossJoinLeftOperator waits for all the CrossJoinRightSinkOperators to be finished,
@@ -78,12 +79,11 @@ private:
     std::atomic_int64_t _num_build_rows = 0;
 
     // Join states
+    std::mutex _join_stage_mutex; // Protects join states
     std::vector<std::vector<vectorized::ChunkPtr>> _tmp_chunks;
     std::vector<vectorized::ChunkPtr> _build_chunks;
     int _build_chunk_desired_size = 0;
-    std::atomic_int64_t _num_probers = 0;
-    std::atomic_int64_t _num_post_probers = 0;
-    std::mutex _build_match_mutex; // Protects the _shared_build_match_flag
+    int _num_post_probers = 0;
     std::vector<uint8_t> _shared_build_match_flag;
 
     // conjuncts in cross join, used for generate runtime_filter

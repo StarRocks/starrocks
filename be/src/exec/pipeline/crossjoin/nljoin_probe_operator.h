@@ -43,10 +43,19 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
+    enum JoinStage {
+        Probe,         // Start probing left table
+        RightJoin,     // The last proober need to perform the right join
+        PostRightJoin, // Finish right join, and has some data to pull
+        Finished,      // Finish all job
+    };
+
     int _num_build_chunks() const;
     vectorized::Chunk* _move_build_chunk_index(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
     Status _probe(RuntimeState* state, ChunkPtr chunk);
+    void _advance_join_stage(JoinStage stage) const;
+    void _check_post_probe() const;
     void _init_build_match();
     void _permute_probe_row(RuntimeState* state, ChunkPtr chunk);
     void _permute_chunk(RuntimeState* state, ChunkPtr chunk);
@@ -67,7 +76,9 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
 
-    bool _is_finished = false;
+    RuntimeState* _runtime_state;
+    bool _input_finished = false;
+    mutable JoinStage _join_stage = JoinStage::Probe;
     ChunkAccumulator _output_accumulator;
 
     // Build states

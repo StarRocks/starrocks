@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
@@ -32,6 +33,7 @@ NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, i
 }
 
 Status NLJoinProbeOperator::prepare(RuntimeState* state) {
+    _runtime_state = state;
     _output_accumulator.set_desired_size(state->chunk_size());
 
     _unique_metrics->add_info_string("join_conjuncts", _sql_join_conjuncts);
@@ -51,8 +53,44 @@ bool NLJoinProbeOperator::_is_curr_probe_chunk_finished() const {
     return _probe_chunk == nullptr || _probe_row_current >= _probe_chunk->num_rows();
 }
 
+void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
+    DCHECK_LE(_join_stage, stage) << "current=" << _join_stage << ", advance to " << stage;
+    if (_join_stage != stage) {
+        _join_stage = stage;
+        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, stage);
+    }
+}
+
+void NLJoinProbeOperator::_check_post_probe() const {
+    bool output_finished = _is_curr_probe_chunk_finished() && _output_accumulator.empty();
+    if (_input_finished && output_finished) {
+        switch (_join_stage) {
+        case Probe: {
+            if (!_is_right_join() || !_cross_join_context->finish_probe(_driver_sequence, _self_build_match_flag)) {
+                _advance_join_stage(JoinStage::Finished);
+            } else {
+                _advance_join_stage(JoinStage::RightJoin);
+            }
+            break;
+        }
+        case RightJoin:
+            // It should be advanced to PostRightJoin
+            break;
+        case PostRightJoin: {
+            if (output_finished) {
+                _advance_join_stage(JoinStage::Finished);
+            }
+            break;
+        }
+        case Finished:
+            break;
+        }
+    }
+}
+
 bool NLJoinProbeOperator::has_output() const {
-    return !_output_accumulator.empty() || (_probe_chunk != nullptr && !_is_curr_probe_chunk_finished());
+    _check_post_probe();
+    return _join_stage != JoinStage::Finished;
 }
 
 bool NLJoinProbeOperator::need_input() const {
@@ -72,17 +110,12 @@ bool NLJoinProbeOperator::is_finished() const {
         return true;
     }
 
-    return _is_finished && !has_output();
+    return _input_finished && !has_output();
 }
 
 Status NLJoinProbeOperator::set_finishing(RuntimeState* state) {
-    // TODO: optimize for parallel permute right join
-    if (!_is_finished && _is_right_join() && _self_build_match_flag.size() > 0 &&
-        _cross_join_context->enter_post_probe(_driver_sequence, _self_build_match_flag)) {
-        RETURN_IF_ERROR(_permute_right_join(state));
-    }
-    _output_accumulator.finalize();
-    _is_finished = true;
+    _check_post_probe();
+    _input_finished = true;
 
     return Status::OK();
 }
@@ -271,6 +304,23 @@ Status NLJoinProbeOperator::_permute_right_join(RuntimeState* state) {
 // 2. Apply the conjuncts, and append it to output buffer
 // 3. Maintain match index and implement left join and right join
 StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    switch (_join_stage) {
+    case Probe:
+        break;
+    case RightJoin: {
+        DCHECK(_is_right_join());
+        VLOG(3) << fmt::format("operator {} permute right_join", _driver_sequence);
+        RETURN_IF_ERROR(_permute_right_join(state));
+        _output_accumulator.finalize();
+        _advance_join_stage(JoinStage::PostRightJoin);
+        break;
+    }
+    case PostRightJoin:
+        break;
+    case Finished:
+        return nullptr;
+    }
+
     while (ChunkPtr chunk = _output_accumulator.pull()) {
         return chunk;
     }
@@ -291,13 +341,11 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
 }
 
 void NLJoinProbeOperator::_init_build_match() {
-    // Init build_match_flag
     if (_is_right_join() && _cross_join_context->is_right_finished() &&
         _self_build_match_flag.size() < _cross_join_context->num_build_rows()) {
         VLOG(3) << fmt::format("NLJoin operator {} init_build_match with rows {}", _driver_sequence,
                                _cross_join_context->num_build_rows());
         _self_build_match_flag.resize(_cross_join_context->num_build_rows(), 0);
-        _cross_join_context->enter_probe_state(_driver_sequence);
     }
 }
 
