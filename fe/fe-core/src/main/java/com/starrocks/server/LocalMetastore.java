@@ -4562,6 +4562,21 @@ public class LocalMetastore implements ConnectorMetadata {
         return tabletIdSet;
     }
 
+    // for test only
+    @VisibleForTesting
+    public void clear() {
+        if (idToDb != null) {
+            idToDb.clear();
+        }
+        if (fullNameToDb != null) {
+            fullNameToDb.clear();
+        }
+
+        stateMgr.getRollupHandler().unprotectedGetAlterJobs().clear();
+        stateMgr.getSchemaChangeHandler().unprotectedGetAlterJobs().clear();
+        System.gc();
+    }
+
     @VisibleForTesting
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
                                     Map<Long, String> origPartitions) {
