@@ -53,6 +53,7 @@ import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -60,7 +61,6 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -73,6 +73,7 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,7 @@ public class BackupHandlerTest {
 
     private BackupHandler handler;
 
+<<<<<<< HEAD
     @Mocked
     private Catalog catalog;
     @Mocked
@@ -88,6 +90,8 @@ public class BackupHandlerTest {
     @Mocked
     private EditLog editLog;
 
+=======
+>>>>>>> 6f77f4a75 ([BugFix] Discard expired backup/restore job (#9531))
     private Database db;
 
     private long idGen = 0;
@@ -98,8 +102,7 @@ public class BackupHandlerTest {
 
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
 
-    @Before
-    public void setUp() {
+    public void setUpMocker(GlobalStateMgr globalStateMgr, BrokerMgr brokerMgr, EditLog editLog) {
         Config.tmp_dir = tmpPath;
         rootDir = new File(Config.tmp_dir);
         rootDir.mkdirs();
@@ -163,8 +166,14 @@ public class BackupHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInit() {
         handler = new BackupHandler(catalog);
+=======
+    public void testInit(@Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
+        handler = new BackupHandler(globalStateMgr);
+>>>>>>> 6f77f4a75 ([BugFix] Discard expired backup/restore job (#9531))
         handler.runAfterCatalogReady();
 
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
@@ -172,7 +181,9 @@ public class BackupHandlerTest {
     }
 
     @Test
-    public void testCreateAndDropRepository() {
+    public void testCreateAndDropRepository(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
         new Expectations() {
             {
                 editLog.logCreateRepository((Repository) any);
@@ -386,4 +397,50 @@ public class BackupHandlerTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testExpired() throws Exception {
+        UtFrameUtils.setUpForPersistTest();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        handler = new BackupHandler(globalStateMgr);
+        Assert.assertEquals(0, handler.dbIdToBackupOrRestoreJob.size());
+        long now = System.currentTimeMillis();
+
+        // 1. create 3 jobs
+        // running jobs, won't expire
+        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
+        // just finished job, won't expire
+        BackupJob goodJob = new BackupJob("good_job", 2, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        goodJob.finishedTime = now;
+        goodJob.state = BackupJob.BackupJobState.FINISHED;
+        handler.dbIdToBackupOrRestoreJob.put(goodJob.getDbId(), goodJob);
+        // expired job
+        BackupJob badJob = new BackupJob("bad_job", 3, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        badJob.finishedTime = now - (Config.history_job_keep_max_second + 10) * 1000;
+        badJob.state = BackupJob.BackupJobState.FINISHED;
+        handler.dbIdToBackupOrRestoreJob.put(badJob.getDbId(), badJob);
+        Assert.assertEquals(3, handler.dbIdToBackupOrRestoreJob.size());
+
+        // 2. save image & reload
+        UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
+        handler.write(pseudoImage.getDataOutputStream());
+        BackupHandler reloadHandler = BackupHandler.read(pseudoImage.getDataInputStream());
+        // discard expired job
+        Assert.assertEquals(2, reloadHandler.dbIdToBackupOrRestoreJob.size());
+        Assert.assertNotNull(reloadHandler.getJob(1));
+        Assert.assertNotNull(reloadHandler.getJob(2));
+        Assert.assertNull(reloadHandler.getJob(3));
+
+        // 3. clean expire
+        handler.removeOldJobs();
+        Assert.assertEquals(2, handler.dbIdToBackupOrRestoreJob.size());
+        Assert.assertNotNull(handler.getJob(1));
+        Assert.assertNotNull(handler.getJob(2));
+        Assert.assertNull(handler.getJob(3));
+
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
 }
