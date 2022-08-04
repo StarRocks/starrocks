@@ -563,7 +563,9 @@ void* metadata_gc_trigger(void* arg) {
     while (!bthread_stopped(bthread_self())) {
         // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
         // configured value, which is ok now.
-        (void)bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000);
+        if (bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000) != 0) {
+            continue;
+        }
 
         std::set<std::string> roots;
         auto st = lp->list_root_locations(&roots);
@@ -576,8 +578,12 @@ void* metadata_gc_trigger(void* arg) {
                 auto r = metadata_gc(root, tablet_mgr);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
             });
-            LOG_IF(WARNING, !st.ok()) << "Fail to submit task to threadpool: " << st;
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+                break;
+            }
         }
+        // TODO: wait until all tasks finished.
     }
     return nullptr;
 }
@@ -590,7 +596,9 @@ void* segment_gc_trigger(void* arg) {
     while (!bthread_stopped(bthread_self())) {
         // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
         // configured value, which is ok now.
-        (void)bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000);
+        if (bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000) != 0) {
+            continue;
+        }
 
         std::set<std::string> roots;
         auto st = lp->list_root_locations(&roots);
@@ -603,8 +611,12 @@ void* segment_gc_trigger(void* arg) {
                 auto r = segment_gc(root, tablet_mgr);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do segment gc in " << root << ": " << r;
             });
-            LOG_IF(WARNING, !st.ok()) << "Fail to submit task to threadpool: " << st;
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+                break;
+            }
         }
+        // TODO: wait until all tasks finished.
     }
     return nullptr;
 }
