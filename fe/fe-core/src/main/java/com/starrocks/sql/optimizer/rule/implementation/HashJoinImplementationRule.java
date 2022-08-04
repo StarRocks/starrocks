@@ -28,7 +28,7 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
         ScalarOperator predicate = joinOperator.getOnPredicate();
-        return Utils.isEqualBinaryPredicate(predicate);
+        return Utils.containsEqualBinaryPredicate(predicate);
     }
 
     @Override

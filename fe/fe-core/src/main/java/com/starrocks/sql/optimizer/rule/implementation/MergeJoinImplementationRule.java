@@ -24,12 +24,12 @@ public class MergeJoinImplementationRule extends JoinImplementationRule {
         return instance;
     }
 
-    // TODO: support non-equal predicate
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
         ScalarOperator predicate = joinOperator.getOnPredicate();
-        return Utils.isEqualBinaryPredicate(predicate);
+        // TODO: support non-equal predicate
+        return Utils.containsEqualBinaryPredicate(predicate);
     }
 
     @Override

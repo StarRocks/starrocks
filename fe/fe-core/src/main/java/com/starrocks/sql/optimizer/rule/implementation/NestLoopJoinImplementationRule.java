@@ -28,7 +28,7 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
         JoinOperator joinType = joinOperator.getJoinType();
         // TODO: support other join types
-        return joinType.isInnerJoin() || joinType.isOuterJoin();
+        return joinType.isCrossJoin() || joinType.isInnerJoin() || joinType.isOuterJoin();
     }
 
     @Override

@@ -318,7 +318,7 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "  16:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
+                "  |  other join predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
 
         sql = "select * from t0 where exists (select v4 from t1) or (1=0 and exists (select v7 from t2));";
         plan = getFragmentPlan(sql);
@@ -335,7 +335,7 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "  6:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 5: v5 > 7: v7\n" +
+                "  |  other join predicates: 5: v5 > 7: v7\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE\n" +
                 "  |    \n" +
@@ -360,7 +360,7 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "  12:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 4: v4 < 11: v10\n" +
+                "  |  other join predicates: 4: v4 < 11: v10\n" +
                 "  |  \n" +
                 "  |----11:EXCHANGE\n" +
                 "  |    \n" +
