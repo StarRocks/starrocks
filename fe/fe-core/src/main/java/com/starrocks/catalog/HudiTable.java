@@ -431,12 +431,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                     return validColumnType(nonNullMembers.get(0), srType);
                 } else {
                     // UNION type is not supported in Starrocks
-                    return false;
+                    return primitiveType == PrimitiveType.UNKNOWN_TYPE;
                 }
             case ENUM:
             case MAP:
             default:
-                return false;
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
     }
 

@@ -305,7 +305,7 @@ public class HiveMetaStoreTableUtils {
         }
 
         if (isConvertedFailed) {
-            throw new DdlException(String.format(COLUMN_CONVERTED_FAILED_MSG, avroSchema.getType()));
+            primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
 
         return ScalarType.createType(primitiveType);
