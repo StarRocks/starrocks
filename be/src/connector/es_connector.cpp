@@ -235,7 +235,7 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
             _rows_read_number += before;
             _bytes_read += ck->bytes_usage();
 
-            ExecNode::eval_conjuncts(_conjunct_ctxs, ck);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, ck));
 
             int64_t after = ck->num_rows();
             _rows_return_number += after;

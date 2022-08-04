@@ -287,11 +287,6 @@ public class SubqueryTransformer {
             LogicalPlan subqueryPlan =
                     getLogicalPlan(queryRelation, session, context.builder.getExpressionMapping(),
                             context.cteContext);
-            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation
-                    && !((SelectRelation) queryRelation).hasAggregation()) {
-                throw new SemanticException("Correlated scalar subquery should aggregation query");
-            }
-
             if (subqueryPlan.getOutputColumn().size() != 1) {
                 throw new SemanticException("Scalar subquery should output one column");
             }

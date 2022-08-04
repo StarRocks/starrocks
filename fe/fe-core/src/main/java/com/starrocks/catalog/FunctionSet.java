@@ -198,6 +198,7 @@ public class FunctionSet {
     public static final String UUID = "uuid";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
+    public static final String ASSERT_TRUE = "assert_true";
 
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
