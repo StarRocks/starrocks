@@ -548,7 +548,7 @@ public class LimitTest extends PlanTestBase {
         Assert.assertTrue(plan, plan.contains("3:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: 2: v2 != 5: v5\n" +
+                "  |  other join predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
