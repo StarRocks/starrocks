@@ -1497,6 +1497,57 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testGroupByConstantWithAggPrune() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY)\n" +
+                "  |  group by: 18: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY");
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY)\n" +
+                "  |  group by: 18: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY");
+
+        sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY), count(20: count)\n" +
+                "  |  group by: 18: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  <slot 20> : 20: count\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  output: count(2: L_PARTKEY)\n" +
+                "  |  group by: 1: L_ORDERKEY");
+        FeConstants.runningUnitTest = false;
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
     public void testAggregateDuplicatedExprs() throws Exception {
         String plan = getFragmentPlan("SELECT " +
                 "sum(arrays_overlap(v3, [1])) as q1, " +
