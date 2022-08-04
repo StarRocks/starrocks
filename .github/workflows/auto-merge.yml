@@ -1,4 +1,4 @@
-name: Automerge
+name: automerge
 
 on:
   # Try enabling auto-merge for all open pull requests. (Only recommended for testing.)
@@ -25,7 +25,7 @@ on:
   workflow_dispatch:
     inputs:
       pull-request:
-        description: Pull Request Number
+        description: ${{ github.event.number }}
         required: false
 
 jobs:
