@@ -346,4 +346,46 @@ public class RuntimeProfileTest {
         Assert.assertNotNull(profile1.getCounter("__MIN_OF_count2"));
         Assert.assertNotNull(profile1.getCounter("__MAX_OF_count2"));
     }
+
+    @Test
+    public void testMissingCounter() {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+
+        RuntimeProfile profile1 = new RuntimeProfile("profile");
+        {
+            Counter count1 = profile1.addCounter("count1", TUnit.UNIT);
+            count1.setValue(1);
+
+            Counter count2 = profile1.addCounter("count2", TUnit.UNIT);
+            count2.setValue(5);
+            Counter count2_sub = profile1.addCounter("count2_sub", TUnit.UNIT, "count2");
+            count2_sub.setValue(6);
+            profiles.add(profile1);
+        }
+
+        RuntimeProfile profile2 = new RuntimeProfile("profile");
+        {
+            Counter count1 = profile2.addCounter("count1", TUnit.UNIT);
+            count1.setValue(1);
+            Counter count1_sub = profile2.addCounter("count1_sub", TUnit.UNIT, "count1");
+            count1_sub.setValue(2);
+
+            profiles.add(profile2);
+        }
+
+        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+
+        RuntimeProfile mergedProfile = profiles.get(0);
+        Assert.assertEquals(13, mergedProfile.getCounterMap().size());
+        RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
+        Assert.assertEquals(5, mergedProfile.getCounterMap().size());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1"));
+        Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
+        Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2"));
+        Assert.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2_sub"));
+        Assert.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
+    }
 }
