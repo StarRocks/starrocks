@@ -157,14 +157,37 @@ private:
         int64_t chunk_bytes = 0;
         // Invalid if SenderQueue::_is_pipeline_level_shuffle is false
         int32_t driver_sequence = -1;
-        ChunkUniquePtr chunk_ptr;
         // When the memory of the ChunkQueue exceeds the limit,
         // we have to hold closure of the request, so as not to let the sender continue to send data.
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
-        // the callback is closed- >run() Let the sender continue to send data
+        // the callback is closed->run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
+        // if pass_through is used, the chunk will be stored in chunk_ptr.
+        // otherwise, the chunk that has not been deserialized will be stored in pchunk and deserialized lazily during get_chunk
+        ChunkUniquePtr chunk_ptr;
+        ChunkPB pchunk;
         // Time in nano of saving closure
         int64_t queue_enter_time;
+
+        inline static ChunkItem create(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
+                                       ChunkUniquePtr&& chunk_ptr) {
+            ChunkItem result;
+            result.chunk_bytes = chunk_bytes;
+            result.driver_sequence = driver_sequence;
+            result.closure = closure;
+            result.chunk_ptr = std::move(chunk_ptr);
+            return result;
+        }
+
+        inline static ChunkItem create(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
+                                       const ChunkPB& pchunk) {
+            ChunkItem result;
+            result.chunk_bytes = chunk_bytes;
+            result.driver_sequence = driver_sequence;
+            result.closure = closure;
+            result.pchunk = std::move(pchunk);
+            return result;
+        }
     };
 
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
@@ -178,7 +201,12 @@ private:
     // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
     // otherwise, we will only use the first item
     std::vector<ChunkQueue> _chunk_queues;
+    // Record whether the queue is in the unplug state.
+    // In the unplug state, has_output will return true directly if there is a chunk in the queue.
+    // Otherwise, it will try to batch enough chunks to reduce the scheduling overhead.
     std::vector<bool> _unpluging;
+    // Record the number of blocked closure in the queue
+    std::vector<std::atomic_int32_t> _blocked_closure_num;
     std::atomic<size_t> _total_chunks{0};
     bool _is_pipeline_level_shuffle = false;
 
@@ -196,7 +224,7 @@ private:
 
     std::unordered_set<int32_t> _short_circuit_driver_sequences;
 
-    static constexpr size_t kUnplugBufferThreshold = 64;
+    static constexpr size_t kUnplugBufferThreshold = 16;
 };
 
 } // namespace starrocks

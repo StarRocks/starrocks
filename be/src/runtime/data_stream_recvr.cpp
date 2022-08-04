@@ -158,6 +158,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _bytes_pass_through_counter = ADD_COUNTER(_profile, "BytesPassThrough", TUnit::BYTES);
     _request_received_counter = ADD_COUNTER(_profile, "RequestReceived", TUnit::UNIT);
     _closure_block_timer = ADD_TIMER(_profile, "ClosureBlockTime");
+    _closure_block_counter = ADD_COUNTER(_profile, "ClosureBlockCount", TUnit::UNIT);
     _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
     _decompress_chunk_timer = ADD_TIMER(_profile, "DecompressChunkTime");
     _process_total_timer = ADD_TIMER(_profile, "ReceiverProcessTotalTime");

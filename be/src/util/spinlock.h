@@ -65,7 +65,7 @@ private:
     // To try to get the best of everything, we will busy spin for a while before
     // yielding to another thread.
     // TODO: how do we set this.
-    static const int NUM_SPIN_CYCLES = 4000;
+    static const int NUM_SPIN_CYCLES = 70;
     // TODO: pad this to be a cache line?
     bool _locked{false};
 };

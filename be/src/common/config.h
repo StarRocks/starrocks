@@ -660,7 +660,7 @@ CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
-CONF_Int64(pipeline_sink_brpc_dop, "8");
+CONF_Int64(pipeline_sink_brpc_dop, "64");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");

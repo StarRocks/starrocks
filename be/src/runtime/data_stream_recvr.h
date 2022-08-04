@@ -194,6 +194,7 @@ private:
     // Formula is: cumulative_time / _degree_of_parallelism, so the estimation may
     // not be that accurate, but enough to expose problems in profile analysis
     RuntimeProfile::Counter* _closure_block_timer;
+    RuntimeProfile::Counter* _closure_block_counter;
     RuntimeProfile::Counter* _process_total_timer = nullptr;
 
     // Total spent for senders putting data in the queue
