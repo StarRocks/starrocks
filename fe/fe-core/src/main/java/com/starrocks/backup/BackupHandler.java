@@ -637,15 +637,20 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                 && (currentTimeMs - job.getFinishedTime()) / 1000 > Config.history_job_keep_max_second;
     }
 
-    public void removeOldJobs() {
-        long currentTimeMs = System.currentTimeMillis();
-        Iterator<Map.Entry<Long, AbstractJob>> iterator = dbIdToBackupOrRestoreJob.entrySet().iterator();
-        while (iterator.hasNext()) {
-            AbstractJob job = iterator.next().getValue();
-            if (isJobExpired(job, currentTimeMs)) {
-                LOG.warn("discard expired job {}", job);
-                iterator.remove();
+    public void removeOldJobs() throws DdlException {
+        tryLock();
+        try {
+            long currentTimeMs = System.currentTimeMillis();
+            Iterator<Map.Entry<Long, AbstractJob>> iterator = dbIdToBackupOrRestoreJob.entrySet().iterator();
+            while (iterator.hasNext()) {
+                AbstractJob job = iterator.next().getValue();
+                if (isJobExpired(job, currentTimeMs)) {
+                    LOG.warn("discard expired job {}", job);
+                    iterator.remove();
+                }
             }
+        } finally {
+            seqlock.unlock();
         }
     }
 }
