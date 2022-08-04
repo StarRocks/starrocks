@@ -170,7 +170,7 @@ public class Utils {
         if (matcher.find()) {
             itemType = new ArrayType(convertToArrayType(matcher.group(1)));
         } else {
-            itemType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
+            itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }
         return itemType;
     }
@@ -192,4 +192,5 @@ public class Utils {
         }
         throw new DdlException("Failed to get varchar length at " + typeStr);
     }
+
 }
