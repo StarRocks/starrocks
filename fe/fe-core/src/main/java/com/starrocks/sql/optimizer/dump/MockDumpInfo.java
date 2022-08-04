@@ -20,7 +20,7 @@ public class MockDumpInfo implements DumpInfo {
     }
 
     @Override
-    public void addView(View view) {
+    public void addView(String dbName, View view) {
     }
 
     @Override

@@ -56,8 +56,9 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // 4. view meta
         if (!dumpInfo.getViewMap().isEmpty()) {
             JsonObject viewMetaData = new JsonObject();
-            for (View view : dumpInfo.getViewMap().values()) {
-                viewMetaData.addProperty(view.getName(), view.getInlineViewDef());
+            for (Pair<String, View> entry : dumpInfo.getViewMap().values()) {
+                String viewName = entry.first + "." + entry.second.getName();
+                viewMetaData.addProperty(viewName, entry.second.getInlineViewDef());
             }
             dumpJson.add("view_meta", viewMetaData);
         }
