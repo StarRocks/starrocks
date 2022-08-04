@@ -232,7 +232,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                         // We should also check if the tablet is ready to be repaired like
                                         // `TabletChecker` did. Slightly delay the repair action can avoid unnecessary
                                         // clone in situation like temporarily restart BE Nodes.
-                                        if (tablet.readyToBeRepaired(colocateUnhealthyPrio)) {
+                                        if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
                                             LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
                                                     tablet.getId(),
                                                     st);
