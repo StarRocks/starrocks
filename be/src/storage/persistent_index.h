@@ -84,7 +84,7 @@ public:
     // |values|: value array for return values
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    virtual Status get(size_t n, const void* keys, IndexValue* values, KeysInfo* not_found,
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values, KeysInfo* not_found,
                        size_t* num_found) const = 0;
 
     // batch upsert and get old value
@@ -94,7 +94,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    virtual Status upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values,
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                           KeysInfo* not_found, size_t* num_found) = 0;
 
     // batch upsert
@@ -103,14 +103,14 @@ public:
     // |values|: value array
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found(or already exist) to this argument
-    virtual Status upsert(size_t n, const void* keys, const IndexValue* values, KeysInfo* not_found,
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, KeysInfo* not_found,
                           size_t* num_found) = 0;
 
     // load wals
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    virtual Status load_wals(size_t n, const void* keys, const IndexValue* values) = 0;
+    virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
     virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
@@ -122,7 +122,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    virtual Status insert(size_t n, const void* keys, const IndexValue* values) = 0;
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // batch erase(delete)
     // |n|: size of key/value array
@@ -130,20 +130,20 @@ public:
     // |old_values|: return old values for updates, or set to NullValue if not exists
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
 
     // batch replace
     // |keys|: key array as raw buffer
     // |values|: new value array
     // |replace_idxes|: the idx array of the kv needed to be replaced
-    virtual Status replace(const void* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
+    virtual Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
 
     virtual Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) = 0;
 
-    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values) = 0;
+    virtual Status append_wal(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
-    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values,
+    virtual Status append_wal(size_t n, const Slice* keys, const IndexValue* values,
                               const std::vector<size_t>& idxes) = 0;
 
     // get dump size of hashmap
@@ -183,10 +183,10 @@ public:
     // |not_found|: information of keys not found in upper level, which needs to be checked in this level
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
-    Status get(size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found) const;
+    Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found) const;
 
     // batch check key existence
-    Status check_not_exist(size_t n, const void* keys);
+    Status check_not_exist(size_t n, const Slice* keys);
 
     // get Immutable index file size;
     void file_size(uint64_t* file_size) {
@@ -214,10 +214,10 @@ private:
     Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t pow,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
+    Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
 
-    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
+    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info) const;
 
     std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
@@ -296,27 +296,27 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    Status get(size_t n, const void* keys, IndexValue* values);
+    Status get(size_t n, const Slice* keys, IndexValue* values);
 
     // batch upsert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
-    Status upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values);
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    Status insert(size_t n, const void* keys, const IndexValue* values, bool check_l1);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    Status erase(size_t n, const void* keys, IndexValue* old_values);
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -325,7 +325,7 @@ public:
     // |values|: value array
     // |src_rssid|: rssid array
     // |failed|: return not match rowid
-    [[maybe_unused]] Status try_replace(size_t n, const void* keys, const IndexValue* values,
+    [[maybe_unused]] Status try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                         const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed);
 
     // batch replace
@@ -334,7 +334,7 @@ public:
     // |values|: value array
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
-    Status try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
+    Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
@@ -351,7 +351,7 @@ private:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array, if operation is erase, |values| is nullptr
-    Status _append_wal(size_t n, const void* key, const IndexValue* values);
+    Status _append_wal(size_t n, const Slice* key, const IndexValue* values);
 
     Status _check_and_flush_l0();
 
