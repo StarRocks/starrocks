@@ -1073,9 +1073,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // Forward compatible with previous log formats
         // Version 1.15 is compatible if users only use single-partition syntax.
         // Otherwise, the followers will be crash when reading the new log
+        List<PartitionPersistInfoV2> partitionInfoListV2 = Lists.newArrayListWithCapacity(partitionLen);
         if (partitionLen == 1) {
-            // for debug
-            LOG.info("enter partitionLen == 1 if");
             Partition partition = partitionList.get(0);
             if (existPartitionNameSet.contains(partition.getName())) {
                 LOG.info("add partition[{}] which already exists", partition.getName());
@@ -1088,7 +1087,9 @@ public class LocalMetastore implements ConnectorMetadata {
                         partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                         ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
                         ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageInfo());
-                editLog.logAddPartition(info);
+                partitionInfoListV2.add(info);
+                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoListV2);
+                editLog.logAddPartitions(infos);
             } else {
                 PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                         ((RangePartitionInfo) partitionInfo).getRange(partitionId),
@@ -1102,10 +1103,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("succeed in creating partition[{}], name: {}, temp: {}", partitionId,
                     partition.getName(), isTempPartition);
         } else {
-            // for debug
-            LOG.info("enter multi partitions if");
             List<PartitionPersistInfo> partitionInfoList = Lists.newArrayListWithCapacity(partitionLen);
-            List<PartitionPersistInfoV2> partitionInfoListV2 = Lists.newArrayListWithCapacity(partitionLen);
             for (int i = 0; i < partitionLen; i++) {
                 Partition partition = partitionList.get(i);
                 if (!existPartitionNameSet.contains(partition.getName())) {
@@ -1420,8 +1418,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
-        // for debug
-        LOG.info("enter dropPartition in LocalMetaStore");
         OlapTable olapTable = (OlapTable) table;
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
 
@@ -1449,8 +1445,6 @@ public class LocalMetastore implements ConnectorMetadata {
         // drop
         Set<Long> tabletIdSet = new HashSet<Long>(); 
         if (isTempPartition) {
-            // for debug
-            LOG.info("isTempPartition");
             olapTable.dropTempPartition(partitionName, true);
         } else {
             if (!clause.isForceDrop()) {
