@@ -75,11 +75,19 @@ public class MaterializedViewAnalyzer {
                                                          ConnectContext context) {
             statement.getTableName().normalization(context);
             QueryStatement queryStatement = statement.getQueryStatement();
-            //check query relation is select relation
+            // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
             }
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+            // check cte
+            if (selectRelation.hasWithClause()) {
+                throw new SemanticException("Materialized view query statement not support cte");
+            }
+            // check subquery
+            if (!AnalyzerUtils.collectAllSubQueryRelation(queryStatement).isEmpty()) {
+                throw new SemanticException("Materialized view query statement not support subquery");
+            }
             // check alias except * and SlotRef
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
             for (SelectListItem selectListItem : selectListItems) {
@@ -103,6 +111,9 @@ public class MaterializedViewAnalyzer {
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
+            }
+            if (tableNameTableMap.isEmpty()) {
+                throw new SemanticException("Can not find base table in query statement");
             }
             tableNameTableMap.forEach((tableName, table) -> {
                 if (db.getTable(table.getId()) == null) {
