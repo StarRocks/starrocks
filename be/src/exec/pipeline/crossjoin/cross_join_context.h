@@ -55,7 +55,7 @@ public:
 
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
-    void enter_probe_state(int32_t driver_seq) { _num_probers++; }
+    void enter_probe_state(int32_t driver_seq);
 
     // Return true if it's the last prober, which need to perform the right join task
     bool enter_post_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);

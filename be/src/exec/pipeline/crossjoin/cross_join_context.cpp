@@ -9,6 +9,7 @@
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/vectorized/cross_join_node.h"
 #include "exprs/expr.h"
+#include "fmt/format.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
@@ -45,7 +46,14 @@ Status CrossJoinContext::_init_runtime_filter(RuntimeState* state) {
     return Status::OK();
 }
 
+void CrossJoinContext::enter_probe_state(int32_t driver_seq) {
+    VLOG(3) << "CrossJoin operator " << driver_seq << " enter probe_state";
+    _num_probers++;
+}
+
 bool CrossJoinContext::enter_post_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags) {
+    VLOG(3) << fmt::format("CrossJoin operator {} enter post_probe_state: {}", driver_seq,
+                           fmt::join(build_match_flags, ","));
     bool is_last = (_num_probers - 1) == _num_post_probers.fetch_add(1);
 
     // Merge all build_match_flag from all probers
@@ -54,8 +62,7 @@ bool CrossJoinContext::enter_post_probe(int32_t driver_seq, const std::vector<ui
         _shared_build_match_flag.resize(build_match_flags.size(), 0);
     }
     DCHECK_EQ(build_match_flags.size(), _shared_build_match_flag.size());
-    vectorized::ColumnHelper::or_two_filters(_shared_build_match_flag.size(), _shared_build_match_flag.data(),
-                                             build_match_flags.data());
+    vectorized::ColumnHelper::or_two_filters(&_shared_build_match_flag, build_match_flags.data());
 
     return is_last;
 }

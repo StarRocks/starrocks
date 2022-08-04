@@ -128,6 +128,10 @@ public:
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
                                          vectorized::FilterPtr* filter = nullptr);
 
+    // Evaluate conjuncts without cache
+    Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
+                          vectorized::FilterPtr* filter = nullptr);
+
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
     void eval_runtime_bloom_filters(vectorized::Chunk* chunk);
 
@@ -198,7 +202,6 @@ protected:
     RuntimeProfile::Counter* _conjuncts_timer = nullptr;
     RuntimeProfile::Counter* _conjuncts_input_counter = nullptr;
     RuntimeProfile::Counter* _conjuncts_output_counter = nullptr;
-    RuntimeProfile::Counter* _conjuncts_eval_counter = nullptr;
 
     // Some extra cpu cost of this operator that not accounted by pipeline driver,
     // such as OlapScanOperator( use separated IO thread to execute the IO task)
