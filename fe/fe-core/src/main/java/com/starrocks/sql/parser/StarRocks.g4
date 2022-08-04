@@ -135,6 +135,9 @@ statement
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
     | setStatement                                                                          #setStmt
+    | exportStatement                                                                       #export
+    | cancelExportStatement                                                                 #cancelExport
+    | showExportStatement                                                                   #showExport
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -150,6 +153,26 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+    ;
+
+
+// ---------------------------------------- export related-statement ---------------------------------------------------------
+exportStatement
+    : EXPORT TABLE qualifiedName (PARTITION (partitionNames)? (columnAliases)?)? TO exportPath (PROPERTIES properties)? WITH BROKER brokerDesc
+    ;
+
+
+cancelExportStatement
+    : CANCEL EXPORT ((FROM | IN) db=qualifiedName)? (WHERE expression)
+    ;
+
+showExportStatement
+    : SHOW EXPORT ((FROM | IN) db=qualifiedName)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
+
+exportPath:
+    | string
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------

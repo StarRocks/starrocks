@@ -62,6 +62,15 @@ public class ShowExportStmt extends ShowStmt {
 
     private ArrayList<OrderByPair> orderByPairs;
 
+    public ShowExportStmt(String db, Expr whereExpr) {
+        this.dbName = db;
+        this.whereClause = whereExpr;
+    }
+
+    public ShowExportStmt(String db) {
+        this.dbName = db;
+    }
+
     public ShowExportStmt(String db, Expr whereExpr, List<OrderByElement> orderByElements, LimitElement limitElement) {
         this.dbName = db;
         this.whereClause = whereExpr;
@@ -86,6 +95,10 @@ public class ShowExportStmt extends ShowStmt {
 
     public long getJobId() {
         return this.jobId;
+    }
+
+    public Expr getWhereClause() {
+        return this.whereClause;
     }
 
     public JobState getJobState() {
@@ -208,7 +221,7 @@ public class ShowExportStmt extends ShowStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("SHOW EXPORT ");
         if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("FROM `").append(dbName).append("`");
+            sb.append("FROM ").append(dbName);
         }
 
         if (whereClause != null) {
@@ -237,6 +250,10 @@ public class ShowExportStmt extends ShowStmt {
         return toSql();
     }
 
+    public void setDbName(String db) {
+        this.dbName = db;
+    }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
@@ -249,5 +266,10 @@ public class ShowExportStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

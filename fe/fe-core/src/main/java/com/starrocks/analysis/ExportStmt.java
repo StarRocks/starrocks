@@ -193,16 +193,14 @@ public class ExportStmt extends StatementBase {
         if (brokerDesc == null) {
             throw new AnalysisException("broker is not provided");
         }
-        
-        if (brokerDesc.hasBroker()) {
-            if (!analyzer.getCatalog().getBrokerMgr().containsBroker(brokerDesc.getName())) {
-                throw new AnalysisException("broker " + brokerDesc.getName() + " does not exist");
-            }
 
-            FsBroker broker = analyzer.getCatalog().getBrokerMgr().getAnyBroker(brokerDesc.getName());
-            if (broker == null) {
-                throw new AnalysisException("failed to get alive broker");
-            }
+        if (!analyzer.getCatalog().getBrokerMgr().containsBroker(brokerDesc.getName())) {
+            throw new AnalysisException("broker " + brokerDesc.getName() + " does not exist");
+        }
+
+        FsBroker broker = analyzer.getCatalog().getBrokerMgr().getAnyBroker(brokerDesc.getName());
+        if (broker == null) {
+            throw new AnalysisException("failed to get alive broker");
         }
 
         // check properties
@@ -226,7 +224,6 @@ public class ExportStmt extends StatementBase {
             switch (tblType) {
                 case MYSQL:
                 case OLAP:
-                case LAKE:
                     break;
                 case BROKER:
                 case SCHEMA:
