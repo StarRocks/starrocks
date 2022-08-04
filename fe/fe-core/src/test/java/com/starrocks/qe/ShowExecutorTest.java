@@ -22,25 +22,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescribeStmt;
-import com.starrocks.analysis.HelpStmt;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAuthorStmt;
-import com.starrocks.analysis.ShowBackendsStmt;
-import com.starrocks.analysis.ShowColumnStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowEnginesStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcedureStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowUserStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
-import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -790,5 +772,13 @@ public class ShowExecutorTest {
         Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
         Assert.assertEquals("10", resultSet.getString(4));
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowRoutineLoadNonExisted() throws AnalysisException, DdlException {
+        ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb", "non-existed-job-name"), false);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        // AnalysisException("There is no job named...") is expected.
+        Assert.assertThrows(AnalysisException.class, () -> executor.execute());
     }
 }
