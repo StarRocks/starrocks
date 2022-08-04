@@ -46,6 +46,8 @@ public class CreateTableTest {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

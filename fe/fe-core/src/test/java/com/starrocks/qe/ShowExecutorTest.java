@@ -49,6 +49,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.utframe.UtFrameUtils;
+
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -57,6 +59,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -76,6 +79,13 @@ public class ShowExecutorTest {
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+    }
+    
     @Before
     public void setUp() throws Exception {
         ctx = new ConnectContext(null);
