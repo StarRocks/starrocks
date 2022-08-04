@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
-import com.baidu.brpc.client.RpcCallback;
 import com.baidu.brpc.RpcContext;
+import com.baidu.brpc.client.RpcCallback;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -34,7 +34,6 @@ import com.starrocks.proto.PTriggerProfileReportRequest;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
-import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PBackendServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -87,6 +86,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletStatResult;
+import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTransmitDataParams;
 import com.starrocks.thrift.TTransmitDataResult;
 import com.starrocks.thrift.TUniqueId;
@@ -98,10 +98,13 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -127,11 +130,15 @@ public class PseudoBackend {
     private AtomicLong reportVersion = new AtomicLong(0);
     private final BeTabletManager tabletManager = new BeTabletManager(this);
     private final BeTxnManager txnManager = new BeTxnManager(this);
-
+    private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
+    private final Map<TTaskType, Set<Long>> taskSignatures = new EnumMap(TTaskType.class);
     private volatile boolean stopped = false;
     private Thread reportTabletsWorker;
     private Thread reportDisksWorker;
     private Thread reportTasksWorker;
+
+    private volatile float writeFailureRate = 0.0f;
+    private volatile float publishFailureRate = 0.0f;
 
     Backend be;
     HeartBeatClient heatBeatClient;
@@ -139,6 +146,8 @@ public class PseudoBackend {
     PseudoPBackendService pBackendService;
 
     private AtomicLong nextRowsetId = new AtomicLong(0);
+
+    private Random random;
 
     String genRowsetId() {
         return String.format("rowset-%d-%d", be.getId(), nextRowsetId.incrementAndGet());
@@ -155,6 +164,7 @@ public class PseudoBackend {
         this.beThriftPort = beThriftPort;
         this.httpPort = httpPort;
         this.frontendService = frontendService;
+        this.random = new Random(backendId);
 
         this.be = new Backend(backendId, host, heartBeatPort);
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
@@ -270,6 +280,22 @@ public class PseudoBackend {
         return tabletManager;
     }
 
+    public void setWriteFailureRate(float rate) {
+        writeFailureRate = rate;
+    }
+
+    public float getWriteFailureRate() {
+        return writeFailureRate;
+    }
+
+    public void setPublishFailureRate(float rate) {
+        publishFailureRate = rate;
+    }
+
+    public float getPublishFailureRate() {
+        return publishFailureRate;
+    }
+
     private void reportTablets() {
         // report tablets
         TReportRequest request = new TReportRequest();
@@ -320,6 +346,15 @@ public class PseudoBackend {
         request.setTasks(new HashMap<>());
         request.setBackend(tBackend);
         request.setReport_version(reportVersion.get());
+        Map<TTaskType, Set<Long>> tasks = new HashMap<>();
+        synchronized (taskSignatures) {
+            for (TTaskType type : taskSignatures.keySet()) {
+                HashSet<Long> ts = new HashSet<>();
+                ts.addAll(taskSignatures.get(type));
+                tasks.put(type, ts);
+            }
+        }
+        request.setTasks(tasks);
         TMasterResult result;
         try {
             result = frontendService.report(request);
@@ -383,6 +418,12 @@ public class PseudoBackend {
         } catch (TException e) {
             LOG.warn("error call finishTask", e);
         }
+        synchronized (taskSignatures) {
+            Set<Long> signatures = taskSignatures.get(request.task_type);
+            if (signatures != null) {
+                signatures.remove(request.getSignature());
+            }
+        }
     }
 
     private class HeartBeatClient extends HeartbeatService.Client {
@@ -399,7 +440,6 @@ public class PseudoBackend {
     }
 
     private class BeThriftClient extends BackendService.Client {
-        private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
 
         BeThriftClient() {
             super(null);
@@ -417,6 +457,12 @@ public class PseudoBackend {
 
         @Override
         public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) {
+            synchronized (taskSignatures) {
+                for (TAgentTaskRequest task : tasks) {
+                    Set<Long> signatures = taskSignatures.computeIfAbsent(task.getTask_type(), k -> new HashSet<>());
+                    signatures.add(task.getSignature());
+                }
+            }
             taskQueue.addAll(tasks);
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
@@ -647,7 +693,7 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PFetchDataResult> fetchData(PFetchDataRequest request,  RpcCallback<PFetchDataResult> callback) {
+        public Future<PFetchDataResult> fetchData(PFetchDataRequest request, RpcCallback<PFetchDataResult> callback) {
             return executor.submit(() -> {
                 PFetchDataResult result = new PFetchDataResult();
                 StatusPB pStatus = new StatusPB();
@@ -669,12 +715,12 @@ public class PseudoBackend {
 
         @Override
         public Future<PTriggerProfileReportResult> triggerProfileReport(
-                PTriggerProfileReportRequest request,  RpcCallback<PTriggerProfileReportResult> callback) {
+                PTriggerProfileReportRequest request, RpcCallback<PTriggerProfileReportResult> callback) {
             return null;
         }
 
         @Override
-        public Future<PProxyResult> getInfo(PProxyRequest request,  RpcCallback<PProxyResult> callback) {
+        public Future<PProxyResult> getInfo(PProxyRequest request, RpcCallback<PProxyResult> callback) {
             return null;
         }
     }
@@ -746,12 +792,17 @@ public class PseudoBackend {
         PseudoOlapTableSink sink = new PseudoOlapTableSink(cluster, tDataSink);
         if (!sink.open()) {
             sink.cancel();
-            report.setDone(false);
+            report.status.status_code = TStatusCode.INTERNAL_ERROR;
+            report.status.error_msgs =
+                    Lists.newArrayList(String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
             return;
         }
         if (!sink.close()) {
-            report.setDone(false);
             sink.cancel();
+            report.status.status_code = TStatusCode.INTERNAL_ERROR;
+            report.status.error_msgs =
+                    Lists.newArrayList(String.format("close sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId,
+                            sink.getErrorMessage()));
             return;
         }
         List<TTabletCommitInfo> commitInfos = sink.getTabletCommitInfos();
@@ -776,12 +827,11 @@ public class PseudoBackend {
             }
 
             void buildAndCommitRowset(long txnId, Tablet tablet) throws UserException {
-                Rowset rowset = new Rowset(genRowsetId());
+                Rowset rowset = new Rowset(txnId, genRowsetId());
                 txnManager.commit(txnId, tablet.partitionId, tablet, rowset);
             }
 
             void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
-                result.tabletVec = new ArrayList<>();
                 for (PTabletWithPartition tabletWithPartition : tablets) {
                     Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
                     if (tablet == null) {
@@ -837,6 +887,7 @@ public class PseudoBackend {
         PTabletWriterOpenResult result = new PTabletWriterOpenResult();
         result.status = new StatusPB();
         result.status.statusCode = 0;
+        result.status.errorMsgs = new ArrayList<>();
         String loadIdString = String.format("%d-%d", request.id.hi, request.id.lo);
         LoadChannel loadChannel = loadChannels.computeIfAbsent(loadIdString, k -> new LoadChannel(request.id));
         loadChannel.open(request, result);
@@ -857,10 +908,20 @@ public class PseudoBackend {
         PTabletWriterAddBatchResult result = new PTabletWriterAddBatchResult();
         result.status = new StatusPB();
         result.status.statusCode = 0;
+        result.status.errorMsgs = new ArrayList<>();
+        result.tabletVec = new ArrayList<>();
         if (request.eos) {
             String loadIdString = String.format("%d-%d", request.id.hi, request.id.lo);
             LoadChannel channel = loadChannels.get(loadIdString);
             if (channel != null) {
+                if (random.nextFloat() < writeFailureRate) {
+                    channel.cancel();
+                    loadChannels.remove(loadIdString);
+                    result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
+                    result.status.errorMsgs.add("inject error writeFailureRate:" + writeFailureRate);
+                    LOG.info("inject write failure txn:{} backend:{}", request.txnId, be.getId());
+                    return result;
+                }
                 try {
                     channel.close(request, result);
                 } catch (UserException e) {
