@@ -93,8 +93,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .build();
 
     private final LabelName labelName;
-    private String dbFullName; // optional
-    private String name; // optional
     private boolean includeHistory = false;
     private RoutineLoadFunctionalExprProvider functionalExprProvider;
     private Expr whereClause;
@@ -115,11 +113,11 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     }
 
     public String getDbFullName() {
-        return dbFullName;
+        return labelName.getDbName();
     }
 
     public String getName() {
-        return name;
+        return labelName.getLabelName();
     }
 
     public boolean isIncludeHistory() {
@@ -152,14 +150,13 @@ public class ShowRoutineLoadStmt extends ShowStmt {
 
     @Deprecated
     private void checkLabelName(Analyzer analyzer) throws AnalysisException {
-        dbFullName = labelName == null ? null : labelName.getDbName();
-        if (Strings.isNullOrEmpty(dbFullName)) {
-            dbFullName = analyzer.getContext().getDatabase();
-            if (Strings.isNullOrEmpty(dbFullName)) {
+        if (Strings.isNullOrEmpty(labelName.getDbName())) {
+            String dbName = analyzer.getContext().getDatabase();
+            if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
+            labelName.setDbName(dbName);
         }
-        name = labelName == null ? null : labelName.getLabelName();
     }
 
     public static List<String> getTitleNames() {
@@ -213,7 +210,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     }
 
     public void setDb(String db) {
-        this.dbFullName = db;
+        this.labelName.setDbName(db);
     }
 
     @Override
