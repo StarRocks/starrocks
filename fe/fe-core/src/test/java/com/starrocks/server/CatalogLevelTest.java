@@ -73,7 +73,7 @@ public class CatalogLevelTest {
     public void testQueryIcebergCatalog(@Mocked MetadataMgr metadataMgr,
                                         @Mocked HiveTableOperations hiveTableOperations) throws Exception {
         String createCatalog = "CREATE EXTERNAL CATALOG iceberg_catalog PROPERTIES(\"type\"=\"iceberg\"," +
-                " \"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"starrocks.catalog-type\" = \"hive\")";
+                " \"iceberg.catalog.hive.metastore.uris\"=\"thrift://127.0.0.1:9083\", \"iceberg.catalog.type\" = \"hive\")";
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.withCatalog(createCatalog);
         Configuration conf = new Configuration();

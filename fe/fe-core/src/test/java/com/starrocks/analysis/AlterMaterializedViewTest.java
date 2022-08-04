@@ -68,8 +68,29 @@ public class AlterMaterializedViewTest {
         final RefreshSchemeDesc asyncRefreshSchemeDesc = alterMvStmt.getRefreshSchemeDesc();
         assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
         Assert.assertEquals(asyncRefreshSchemeDesc.getType(), RefreshType.ASYNC);
-        assertNotNull(((AsyncRefreshSchemeDesc)asyncRefreshSchemeDesc).getStartTime());
-        assertEquals(((IntLiteral) ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getValue()).getValue(), 1);
-        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getUnitIdentifier().getDescription(), "HOUR");
+        assertNotNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime());
+        assertEquals(((IntLiteral) ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral()
+                .getValue()).getValue(), 1);
+        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getUnitIdentifier()
+                .getDescription(), "HOUR");
+    }
+
+    @Test
+    public void testAlterAsyncRefreshMonth() {
+        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 MONTH)";
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
+    }
+
+    @Test
+    public void testAlterAsyncRefreshNormal() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 DAY)";
+        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+    }
+
+    @Test
+    public void testAlterAsyncRefreshLowercase() throws Exception {
+        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 day)";
+        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
     }
 }

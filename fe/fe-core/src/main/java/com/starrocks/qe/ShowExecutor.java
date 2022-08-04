@@ -931,7 +931,7 @@ public class ShowExecutor {
         }
 
         if (routineLoadJobList != null) {
-            RoutineLoadFunctionalExprProvider fProvider = showRoutineLoadStmt.getFunctionalExprProvider();
+            RoutineLoadFunctionalExprProvider fProvider = showRoutineLoadStmt.getFunctionalExprProvider(this.ctx);
             rows = routineLoadJobList.parallelStream()
                     .filter(fProvider.getPredicateChain())
                     .sorted(fProvider.getOrderComparator())

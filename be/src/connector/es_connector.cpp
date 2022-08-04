@@ -174,7 +174,8 @@ Status ESDataSource::_create_scanner() {
             std::to_string(std::min(config::es_index_max_result_window, _runtime_state->chunk_size()));
     _properties[ESScanReader::KEY_HOST_PORT] = get_host_port(es_scan_range.es_hosts);
     // push down limit to Elasticsearch
-    if (_read_limit != -1 && _read_limit <= _runtime_state->chunk_size()) {
+    // if have conjunct ES can not process, then must not push down limit operator
+    if (_conjunct_ctxs.size() == 0 && _read_limit != -1 && _read_limit <= _runtime_state->chunk_size()) {
         _properties[ESScanReader::KEY_TERMINATE_AFTER] = std::to_string(_read_limit);
     }
 
@@ -234,7 +235,7 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
             _rows_read_number += before;
             _bytes_read += ck->bytes_usage();
 
-            ExecNode::eval_conjuncts(_conjunct_ctxs, ck);
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, ck));
 
             int64_t after = ck->num_rows();
             _rows_return_number += after;

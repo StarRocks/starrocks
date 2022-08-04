@@ -1,5 +1,22 @@
 # StarRocks version 2.2
 
+## 2.2.4
+
+Release date: August 3, 2022
+
+### Improvements
+
+- Supports synchronizing schema changes on Hive table to the corresponding external table. [#9010](https://github.com/StarRocks/starrocks/pull/9010)
+- Supports loading ARRAY data in Parquet files via Broker Load. [#9131](https://github.com/StarRocks/starrocks/pull/9131)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Broker Load cannot handle Kerberos logins with multiple keytab files. [#8820](https://github.com/StarRocks/starrocks/pull/8820) [#8837](https://github.com/StarRocks/starrocks/pull/8837)
+- Supervisor may fail to restart services if **stop_be.sh** exits immediately after it is executed. [#9175](https://github.com/StarRocks/starrocks/pull/9175)
+- Incorrect Join Reorder precedence causes error "Column cannot be resolved". [#9063](https://github.com/StarRocks/starrocks/pull/9063) [#9487](https://github.com/StarRocks/starrocks/pull/9487)
+
 ## 2.2.3
 
 Release date: July 24, 2022

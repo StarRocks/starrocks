@@ -25,6 +25,7 @@ import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
@@ -72,10 +73,12 @@ import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReorderColumnsClause;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAlterStmt;
@@ -89,11 +92,14 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -102,6 +108,7 @@ import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
@@ -310,6 +317,18 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowLoadStmt(ShowLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitCancelLoadStmt(CancelLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitDropTableStmt(DropTableStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -356,6 +375,22 @@ public abstract class AstVisitor<R, C> {
 
 
     public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
 

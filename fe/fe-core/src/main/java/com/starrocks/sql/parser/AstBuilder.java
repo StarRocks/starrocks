@@ -3,6 +3,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -37,6 +38,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
@@ -116,6 +118,7 @@ import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.PartitionValue;
+import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RangePartitionDesc;
 import com.starrocks.analysis.RecoverDbStmt;
@@ -123,6 +126,7 @@ import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.ResourceDesc;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
@@ -142,11 +146,14 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowProcesslistStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStatusStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -157,6 +164,7 @@ import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
@@ -255,6 +263,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -1077,6 +1086,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
 
+    public static final ImmutableList<String> MATERIALIZEDVIEW_REFRESHSCHEME_SUPPORT_UNIT_IDENTIFIERS =
+            new ImmutableList.Builder<String>()
+                    .add("SECOND").add("MINUTE").add("HOUR").add("DAY")
+                    .build();
+
+    private boolean checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc) {
+        if (asyncRefreshSchemeDesc.getIntervalLiteral() == null ||
+                asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier() == null) {
+            return true;
+        }
+        String description = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+        if (StringUtils.isEmpty(description)) {
+            return true;
+        }
+        return MATERIALIZEDVIEW_REFRESHSCHEME_SUPPORT_UNIT_IDENTIFIERS.contains(description);
+    }
+
     @Override
     public ParseNode visitCreateMaterializedViewStatement(
             StarRocksParser.CreateMaterializedViewStatementContext context) {
@@ -1111,6 +1138,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "Distribution by is not supported by SYNC refresh type in materialized view");
             }
             return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
+        }
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            if (!checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc)) {
+                throw new IllegalArgumentException(
+                        "CreateMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
+            }
+
         }
         if (!Config.enable_experimental_mv) {
             throw new ParsingException("The experimental mv is disabled");
@@ -1180,6 +1215,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         RefreshSchemeDesc refreshSchemeDesc = null;
         if (context.refreshSchemeDesc() != null) {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
+        }
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            if (!checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc)) {
+                throw new IllegalArgumentException(
+                        "AlterMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
+            }
         }
         return new AlterMaterializedViewStatement(mvName, newMvName, refreshSchemeDesc);
     }
@@ -1411,6 +1453,73 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
         return ret;
+    }
+    // ------------------------------------------- Routine Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitStopRoutineLoadStatement(StarRocksParser.StopRoutineLoadStatementContext context) {
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        return new StopRoutineLoadStmt(new LabelName(database, name));
+    }
+
+    @Override
+    public ParseNode visitResumeRoutineLoadStatement(StarRocksParser.ResumeRoutineLoadStatementContext context) {
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        return new ResumeRoutineLoadStmt(new LabelName(database, name));
+    }
+
+    @Override
+    public ParseNode visitPauseRoutineLoadStatement(StarRocksParser.PauseRoutineLoadStatementContext context) {
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        return new PauseRoutineLoadStmt(new LabelName(database, name));
+    }
+
+    @Override
+    public ParseNode visitShowRoutineLoadStatement(StarRocksParser.ShowRoutineLoadStatementContext context) {
+        boolean isVerbose = context.ALL() != null;
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowRoutineLoadStmt(new LabelName(database, name), isVerbose, where, orderByElements, limitElement);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------
@@ -2401,6 +2510,62 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ResourceDesc(brokerName, properties);
         }
         return null;
+    }
+
+    @Override
+    public ParseNode visitShowLoadStatement(StarRocksParser.ShowLoadStatementContext context) {
+        String db = null;
+        if (context.identifier() != null) {
+            db = ((Identifier) visit(context.identifier())).getValue();
+        }
+        Expr labelExpr = null;
+        if (context.expression() != null) {
+            labelExpr = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowLoadStmt(db, labelExpr, orderByElements, limitElement);
+    }
+
+    @Override
+    public ParseNode visitShowLoadWarningsStatement(StarRocksParser.ShowLoadWarningsStatementContext context) {
+        if (context.ON() != null) {
+            String url = ((StringLiteral) visit(context.string())).getValue();
+            return new ShowLoadWarningsStmt(null, url, null, null);
+        }
+        String db = null;
+        if (context.identifier() != null) {
+            db = ((Identifier) visit(context.identifier())).getValue();
+        }
+        Expr labelExpr = null;
+        if (context.expression() != null) {
+            labelExpr = (Expr) visit(context.expression());
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowLoadWarningsStmt(db, null, labelExpr, limitElement);
+    }
+
+    @Override
+    public ParseNode visitCancelLoadStatement(StarRocksParser.CancelLoadStatementContext context) {
+        String db = null;
+        if (context.identifier() != null) {
+            db = ((Identifier) visit(context.identifier())).getValue();
+        }
+        Expr labelExpr = null;
+        if (context.expression() != null) {
+            labelExpr = (Expr) visit(context.expression());
+        }
+        return new CancelLoadStmt(db, labelExpr);
     }
 
     // ------------------------------------------- Other Statement -----------------------------------------------------

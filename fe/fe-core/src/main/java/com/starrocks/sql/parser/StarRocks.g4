@@ -76,6 +76,12 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    //Routine Statement
+    | stopRoutineLoadStatement                                                              #stopRoutineLoad
+    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
+    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
+    | showRoutineLoadStatement                                                              #showRoutineLoad
+
     // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
@@ -112,6 +118,9 @@ statement
 
     // Load Statement
     | loadStatement                                                                         #load
+    | showLoadStatement                                                                     #showLoad
+    | showLoadWarningsStatement                                                             #showLoadWarnings
+    | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -568,6 +577,25 @@ deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
     ;
 
+// ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+stopRoutineLoadStatement
+    : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+resumeRoutineLoadStatement
+    : RESUME ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+pauseRoutineLoadStatement
+    : PAUSE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+showRoutineLoadStatement
+    : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
@@ -701,6 +729,19 @@ brokerDesc
 
 resourceDesc
     : WITH RESOURCE name=identifierOrString props=propertyList?
+    ;
+
+showLoadStatement
+    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+showLoadWarningsStatement
+    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
+    | SHOW LOAD WARNINGS ON string
+    ;
+
+cancelLoadStatement
+    : CANCEL LOAD (FROM identifier)? (WHERE expression)?
     ;
 
 // ------------------------------------------- Other Statement ---------------------------------------------------------

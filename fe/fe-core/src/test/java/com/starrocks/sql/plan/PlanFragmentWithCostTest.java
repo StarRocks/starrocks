@@ -78,7 +78,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Before
     public void before() {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
-        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     private static final String V1 = "v1";
@@ -877,7 +876,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testNotPushDownRuntimeFilterAcrossCTE() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
@@ -892,7 +890,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    select * from cte union all\n" +
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
-
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
@@ -913,8 +910,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (7: v7), remote = false\n" +
                 "  |  output columns: 10\n" +
                 "  |  cardinality: 360000");
-
-        connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
     }
 
@@ -1031,10 +1026,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         sql = "with xx as (select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6) " +
                 "select x1.v1, x2.v2 from xx x1 join xx x2 on x1.v1 = x2.v1;";
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        connectContext.getSessionVariable().setCboCteReuse(true);
         plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.2);
-        connectContext.getSessionVariable().setCboCteReuse(false);
 
         assertContains(plan, "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +

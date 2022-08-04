@@ -56,7 +56,7 @@ public class IcebergTableTest {
         Resource icebergResource = new IcebergResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
         resourceProperties.put("iceberg.catalog.hive.metastore.uris", "thrift://127.0.0.1:9083");
-        resourceProperties.put("starrocks.catalog-type", "hive");
+        resourceProperties.put("iceberg.catalog.type", "hive");
         icebergResource.setProperties(resourceProperties);
 
         List<Types.NestedField> fields = new ArrayList<>();
@@ -103,7 +103,7 @@ public class IcebergTableTest {
                                            @Mocked Table iTable) throws DdlException {
         Resource icebergResource = new IcebergResource(resourceName);
         Map<String, String> resourceProperties = Maps.newHashMap();
-        resourceProperties.put("starrocks.catalog-type", "custom");
+        resourceProperties.put("iceberg.catalog.type", "custom");
         resourceProperties.put("iceberg.catalog-impl",
                 IcebergCustomCatalogTest.IcebergCustomTestingCatalog.class.getName());
         icebergResource.setProperties(resourceProperties);
