@@ -1363,7 +1363,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         invertedIndex.addTablet(tabletId, tabletMeta);
                         // modify some logic
                         if (tablet instanceof LocalTablet) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
                         }
@@ -4558,6 +4558,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     tabletIdSet.add(tabletId);
                 }
                 invertedIndex.deleteTablet(tabletId);
+            }
         }
         return tabletIdSet;
     }
