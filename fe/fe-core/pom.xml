@@ -828,15 +828,15 @@ under the License.
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
                                 </exec>
-                                <exec executable="python">
+                                <exec executable="${PYTHON}">
                                     <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
                                     <arg value="--cpp"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                     <arg value="--java"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
-                                <mkdir dir="${starrocks.home}gensrc/build/python/vectorized"/>
-                                <exec executable="python" dir="${starrocks.home}gensrc/build/python/vectorized">
+                                <mkdir dir="${starrocks.home}/gensrc/build/python/vectorized"/>
+                                <exec executable="${PYTHON}" dir="${starrocks.home}/gensrc/build/python/vectorized">
                                     <arg value="${starrocks.home}/gensrc/script/vectorized/gen_vectorized_functions.py"/>
                                 </exec>
                             </tasks>
