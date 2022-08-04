@@ -36,7 +36,7 @@ public class CTETransformerContext {
     }
 
     /*
-     * Regenerate cteID, we do inline CTE in transform phase, needs
+     * Regenerate cteId, we do inline CTE in transform phase, needs
      * to be promised that the cteId generated each time is different
      *
      * e.g.
@@ -68,8 +68,8 @@ public class CTETransformerContext {
      *               /             \               /             \
      *          Scan(t0)        Scan(t0)      Scan(t0)           Scan(t0)
      *
-     *  CTEAnchor2 and CTEAnchor2-1 is from same CTE (with x2), but has different cteID
-     *  So, modify the cteID everytime on one CTE instance.
+     *  CTEAnchor2 and CTEAnchor2-1 are from same CTE (with x2), but have different cteID
+     *  So, generate the cteID everytime on one CTE instance.
      */
     public int registerCteRef(int cteMouldId) {
         cteRefIdMapping.put(cteMouldId, uniqueId.incrementAndGet());
