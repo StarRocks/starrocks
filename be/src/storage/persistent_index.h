@@ -26,6 +26,7 @@ class Column;
 enum PersistentIndexFileVersion {
     UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
+    PERSISTENT_INDEX_VERSION_2,
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -63,8 +64,9 @@ struct KeysInfo {
 struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
+    uint16_t size;
     KVRef() {}
-    KVRef(const uint8_t* kv_pos, uint64_t hash) : kv_pos(kv_pos), hash(hash) {}
+    KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
 class PersistentIndex;
@@ -179,14 +181,16 @@ class ImmutableIndex {
 public:
     // batch get
     // |n|: size of key/value array
-    // |keys|: key array as raw buffer
+    // |keys|: key array as slice array
     // |not_found|: information of keys not found in upper level, which needs to be checked in this level
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
-    Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found) const;
+    // |key_size|: the key size of keys array
+    Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+               size_t key_size) const;
 
     // batch check key existence
-    Status check_not_exist(size_t n, const Slice* keys);
+    Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
 
     // get Immutable index file size;
     void file_size(uint64_t* file_size) {
@@ -208,14 +212,34 @@ public:
 private:
     friend class PersistentIndex;
 
+    Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                     uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_varlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                     uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
+
     // get all the kv refs of a single shard by `shard_idx`, and add them to `kvs_by_shard`, the shard number of
     // kvs_by_shard may be different from this object's own shard number
     // NOTE: used by PersistentIndex only
-    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t pow,
+    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                IndexValue* values, size_t* num_found,
+                                std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                IndexValue* values, size_t* num_found,
+                                std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
+
+    Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
 
     Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info) const;
 
@@ -230,9 +254,13 @@ private:
         uint64_t bytes;
         uint32_t npage;
         uint32_t size;
+        uint32_t key_size;
+        uint32_t value_size;
+        uint32_t nbucket;
     };
 
     std::vector<ShardInfo> _shards;
+    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
@@ -338,6 +366,9 @@ public:
                        std::vector<uint32_t>* failed);
 
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
+
+    Status test_flush_varlen_to_immutable_index(const std::string& dir, const EditVersion& version, size_t num_entry,
+                                                const Slice* keys, const IndexValue* values);
 
 private:
     size_t _dump_bound();
