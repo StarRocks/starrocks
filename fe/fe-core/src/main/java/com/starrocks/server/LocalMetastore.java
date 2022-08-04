@@ -827,7 +827,7 @@ public class LocalMetastore implements ConnectorMetadata {
             try {
                 Table table = db.getTable(tableName);
                 CatalogUtils.checkTableExist(db, tableName);
-                CatalogUtils.checkTableTypeOLAP(db, table);
+                CatalogUtils.checkNativeTable(db, table);
                 OlapTable olapTable = (OlapTable) table;
                 tableProperties = olapTable.getTableProperty().getProperties();
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -868,7 +868,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private OlapTable checkTable(Database db, String tableName) throws DdlException {
         CatalogUtils.checkTableExist(db, tableName);
         Table table = db.getTable(tableName);
-        CatalogUtils.checkTableTypeOLAP(db, table);
+        CatalogUtils.checkNativeTable(db, table);
         OlapTable olapTable = (OlapTable) table;
         CatalogUtils.checkTableState(olapTable, tableName);
         return olapTable;
