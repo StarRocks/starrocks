@@ -30,6 +30,7 @@ jobs:
           MERGE_LABELS: "automerge,!work in progress"
           MERGE_REMOVE_LABELS: "automerge"
           MERGE_METHOD: "squash"
+          MERGE_REQUIRED_APPROVALS: 1
 
       - name: feedback
         if: steps.automerge.outputs.mergeResult == "merged"
