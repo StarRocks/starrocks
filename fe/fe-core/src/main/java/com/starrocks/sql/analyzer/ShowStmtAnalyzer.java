@@ -22,6 +22,8 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
@@ -577,5 +579,15 @@ public class ShowStmtAnalyzer {
             return orderByPairs;
         }
 
+        public Void visitShowLoadStmt(ShowLoadStmt statement, ConnectContext context) {
+            ShowLoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, ConnectContext context) {
+            ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
     }
 }

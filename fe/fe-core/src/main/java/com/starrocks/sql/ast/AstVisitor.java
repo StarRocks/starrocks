@@ -25,6 +25,7 @@ import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
@@ -91,6 +92,8 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowOpenTableStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
@@ -311,6 +314,18 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitLoadStmt(LoadStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowLoadStmt(ShowLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitCancelLoadStmt(CancelLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
