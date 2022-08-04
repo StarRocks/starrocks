@@ -37,6 +37,7 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/merge_iterator.h"
+#include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
@@ -57,6 +58,15 @@ BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
           _total_index_size(0) {}
 
 Status BetaRowsetWriter::init() {
+    DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
+             _context.tablet_schema->contains_format_v2_column()));
+    // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
+    // When loading data into a tablet created by Apache Doris, the real data format will
+    // be different from the tablet schema, so here we create a new schema matched with the
+    // real data format to init `SegmentWriter`.
+    if (_context.tablet_schema->contains_format_v1_column()) {
+        _rowset_schema = _context.tablet_schema->convert_to_format(kDataFormatV2);
+    }
     _rowset_meta = std::make_shared<RowsetMeta>();
     _rowset_meta->set_rowset_id(_context.rowset_id);
     _rowset_meta->set_partition_id(_context.partition_id);
