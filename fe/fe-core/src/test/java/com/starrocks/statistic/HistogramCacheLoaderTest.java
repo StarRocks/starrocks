@@ -58,7 +58,7 @@ public class HistogramCacheLoaderTest {
         statisticData.setColumnName("v1");
         statisticData.setHistogram("{ \"buckets\" : [[\"2\",\"7\",\"6\",\"1\"],[\"8\",\"13\",\"12\",\"1\"]," +
                 "[\"14\",\"21\",\"18\",\"1\"],[\"22\",\"28\",\"24\",\"1\"],[\"29\",\"35\",\"30\",\"1\"]], " +
-                "\"top-n\" : [[\"27\",\"8\"],[\"19\",\"5\"],[\"20\",\"4\"]] }");
+                "\"mcv\" : [[\"27\",\"8\"],[\"19\",\"5\"],[\"20\",\"4\"]] }");
 
         Histogram histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
         Assert.assertEquals(5, histogram.getBuckets().size());
@@ -68,13 +68,13 @@ public class HistogramCacheLoaderTest {
         Assert.assertEquals(6, bucket.getCount(), 0.1);
         Assert.assertEquals(1, bucket.getUpperRepeats(), 0.1);
 
-        Assert.assertEquals(3, histogram.getTopN().size());
-        Assert.assertEquals("{19.0=5, 20.0=4, 27.0=8}", histogram.getTopN().toString());
+        Assert.assertEquals(3, histogram.getMCV().size());
+        Assert.assertEquals("{19.0=5, 20.0=4, 27.0=8}", histogram.getMCV().toString());
 
         statisticData.setColumnName("v4");
         statisticData.setHistogram("{ \"buckets\" : [[\"20220102\",\"20220107\",\"6\",\"1\"],[\"20220108\",\"20220113\",\"12\",\"1\"]," +
                 "[\"20220114\",\"20220121\",\"18\",\"1\"],[\"20220122\",\"20220128\",\"24\",\"1\"],[\"20220129\",\"20220130\",\"30\",\"1\"]], " +
-                "\"top-n\" : [[\"20220127\",\"8\"],[\"20220119\",\"5\"],[\"20220120\",\"4\"]] }");
+                "\"mcv\" : [[\"20220127\",\"8\"],[\"20220119\",\"5\"],[\"20220120\",\"4\"]] }");
 
         histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);
         bucket = histogram.getBuckets().get(0);
@@ -82,6 +82,6 @@ public class HistogramCacheLoaderTest {
         Assert.assertEquals(1.6414848E9, bucket.getUpper(), 0.1);
         Assert.assertEquals(6, bucket.getCount(), 0.1);
         Assert.assertEquals(1, bucket.getUpperRepeats(), 0.1);
-        Assert.assertEquals("{1.6425216E9=5, 1.6432128E9=8, 1.642608E9=4}", histogram.getTopN().toString());
+        Assert.assertEquals("{1.6425216E9=5, 1.6432128E9=8, 1.642608E9=4}", histogram.getMCV().toString());
     }
 }

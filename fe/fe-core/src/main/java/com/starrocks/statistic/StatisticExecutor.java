@@ -12,6 +12,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.qe.ConnectContext;
@@ -128,6 +129,22 @@ public class StatisticExecutor {
             ExecPlan execPlan = getExecutePlan(Maps.newHashMap(), context, parsedStmt, true, true);
             List<TResultBatch> sqlResult = executeStmt(context, execPlan).first;
             return deserializerStatisticData(sqlResult);
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table query fail.", e);
+            throw e;
+        }
+    }
+
+    public List<TStatisticData> queryTopN(String sql) throws Exception {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        try {
+            ExecPlan execPlan = getExecutePlan(Maps.newHashMap(), context, parsedStmt, true, true);
+            Pair<List<TResultBatch>, Status> result = executeStmt(context, execPlan);
+            if (!result.second.ok()) {
+                throw new DdlException(result.second.getErrorMsg());
+            }
+            return deserializerStatisticData(result.first);
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
@@ -322,6 +339,7 @@ public class StatisticExecutor {
             } while (!batch.isEos());
         } catch (Exception e) {
             LOG.warn(e);
+            coord.getExecStatus().setStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
