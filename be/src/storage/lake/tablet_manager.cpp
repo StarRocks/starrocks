@@ -578,34 +578,34 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
 }
 
-Status TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
-    Status res;
+void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
     // TODO: batch deletion
     for (int i = 0; i < txns_size; i++) {
         auto txn_id = txns[i];
         auto txn_log_or = get_txn_log(tablet_id, txn_id);
-        if (txn_log_or.status().is_not_found()) {
-            continue;
-        } else if (!txn_log_or.ok()) {
-            res.update(txn_log_or.status());
+        if (!txn_log_or.ok()) {
+            LOG_IF(WARNING, !txn_log_or.status().is_not_found())
+                    << "Fail to get txn log " << txn_log_location(tablet_id, txn_id) << ": " << txn_log_or.status();
             continue;
         }
 
-        DCHECK(txn_log_or.ok());
         TxnLogPtr txn_log = std::move(txn_log_or).value();
         if (txn_log->has_op_write()) {
             for (const auto& segment : txn_log->op_write().rowset().segments()) {
-                res.update(delete_segment(tablet_id, segment));
+                auto st = delete_segment(tablet_id, segment);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
             }
         }
         if (txn_log->has_op_compaction()) {
             for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
-                res.update(delete_segment(tablet_id, segment));
+                auto st = delete_segment(tablet_id, segment);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
             }
         }
-        res.update(delete_txn_log(tablet_id, txn_id));
+        auto st = delete_txn_log(tablet_id, txn_id);
+        LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                << "Fail to delete " << txn_log_location(tablet_id, txn_id) << ": " << st;
     }
-    return res;
 }
 
 void TabletManager::start_gc() {

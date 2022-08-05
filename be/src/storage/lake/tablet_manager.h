@@ -50,7 +50,7 @@ public:
     Status publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
                            int txns_size);
 
-    Status abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
+    void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 

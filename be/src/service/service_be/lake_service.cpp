@@ -147,8 +147,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     // TODO: move the execution to TaskWorkerPool
     auto tablet_mgr = _env->lake_tablet_manager();
     for (auto tablet_id : request->tablet_ids()) {
-        auto st = tablet_mgr->abort_txn(tablet_id, request->txn_ids().data(), request->txn_ids_size());
-        LOG_IF(ERROR, !st.ok()) << st;
+        tablet_mgr->abort_txn(tablet_id, request->txn_ids().data(), request->txn_ids_size());
     }
 }
 
