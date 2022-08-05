@@ -100,6 +100,7 @@ jobs:
           #echo "script run over-----"
           thrift --version
           whereis thrift
+          export STARROCKS_HOME=${{ github.workspace }}
           source env.sh
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
