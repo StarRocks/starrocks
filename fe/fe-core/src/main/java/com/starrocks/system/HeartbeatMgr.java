@@ -152,11 +152,14 @@ public class HeartbeatMgr extends MasterDaemon {
             }
         } // end for all results
 
-        // we also add a 'mocked' master Frontends heartbeat response to synchronize master info to other Frontends.
+        // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
+        Map<Long, Integer> backendId2cpuCores = Maps.newHashMap();
+        nodeMgr.getIdToBackend().values().forEach(
+                backend -> backendId2cpuCores.put(backend.getId(), BackendCoreStat.getCoresOfBe(backend.getId())));
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getEditLog().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
-                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
+                Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH, backendId2cpuCores));
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
@@ -166,6 +169,17 @@ public class HeartbeatMgr extends MasterDaemon {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
+
+                // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
+                // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
+                hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
+                    Backend be = nodeMgr.getBackend(backendId);
+                    if (be != null && be.getCpuCores() != cpuCores) {
+                        be.setCpuCores(cpuCores);
+                        BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);
+                    }
+                });
+
                 Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
