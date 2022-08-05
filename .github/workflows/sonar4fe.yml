@@ -49,6 +49,7 @@ jobs:
         run: |
           thrift --version
           whereis thrift
+          source env.sh
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
