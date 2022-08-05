@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 public class SubqueryTransformer {
     private final ConnectContext session;
@@ -43,7 +42,7 @@ public class SubqueryTransformer {
     }
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
-                                           Map<Integer, ExpressionMapping> cteContext) {
+                                           CTETransformerContext cteContext) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
@@ -56,7 +55,7 @@ public class SubqueryTransformer {
 
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
-                                                 Expr expression, Map<Integer, ExpressionMapping> cteContext) {
+                                                 Expr expression, CTETransformerContext cteContext) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
@@ -105,10 +104,11 @@ public class SubqueryTransformer {
     private static class SubqueryContext {
         public OptExprBuilder builder;
         public boolean useSemiAnti;
-        public Map<Integer, ExpressionMapping> cteContext;
+        public CTETransformerContext cteContext;
+        public List<Expr> outerExprs;
 
         public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
-                               Map<Integer, ExpressionMapping> cteContext) {
+                               CTETransformerContext cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -125,7 +125,7 @@ public class SubqueryTransformer {
         }
 
         private LogicalPlan getLogicalPlan(QueryRelation relation, ConnectContext session, ExpressionMapping outer,
-                                           Map<Integer, ExpressionMapping> cteContext) {
+                                           CTETransformerContext cteContext) {
             if (!(relation instanceof SelectRelation)) {
                 throw new SemanticException("Currently only subquery of the Select type are supported");
             }
