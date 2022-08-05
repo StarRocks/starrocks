@@ -275,13 +275,13 @@ public class Alter {
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
-        }
 
-        if (newRefreshType == MaterializedView.RefreshType.MANUAL) {
-            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-            task.setType(Constants.TaskType.EVENT_TRIGGERED);
-            taskManager.createTask(task, false);
-            taskManager.executeTask(task.getName());
+            if (newRefreshType == MaterializedView.RefreshType.MANUAL) {
+                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+                task.setType(Constants.TaskType.EVENT_TRIGGERED);
+                taskManager.createTask(task, false);
+                taskManager.executeTask(task.getName());
+            }
         }
 
         if (newRefreshType == MaterializedView.RefreshType.ASYNC) {
