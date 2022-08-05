@@ -121,7 +121,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processAddColumn(AddColumnClause alterClause, OlapTable olapTable,
-                                  Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                  Map<Long, List<Column>> indexSchemaMap) throws DdlException {
         Column column = alterClause.getColumn();
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
@@ -142,7 +142,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processAddColumns(AddColumnsClause alterClause, OlapTable olapTable,
-                                   Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                   Map<Long, List<Column>> indexSchemaMap) throws DdlException {
         List<Column> columns = alterClause.getColumns();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -168,7 +168,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processDropColumn(DropColumnClause alterClause, OlapTable olapTable,
-                                   Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes)
+                                   Map<Long, List<Column>> indexSchemaMap, List<Index> indexes)
             throws DdlException {
         String dropColName = alterClause.getColName();
         String targetIndexName = alterClause.getRollupName();
@@ -268,7 +268,7 @@ public class SchemaChangeHandler extends AlterHandler {
         long baseIndexId = olapTable.getBaseIndexId();
         if (targetIndexName == null) {
             // if not specify rollup index, column should be dropped from both base and rollup indexes.
-            List<Long> indexIds = new ArrayList<Long>();
+            List<Long> indexIds = new ArrayList<>();
             indexIds.add(baseIndexId);
             indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
 
@@ -323,7 +323,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // User can modify column type and column position
     private void processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
-                                     Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                     Map<Long, List<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -345,7 +345,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
-                modColumn.getName());
+                        modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
@@ -353,7 +353,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
-                modColumn.getName());
+                        modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
@@ -448,7 +448,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // handle other indices
             // 1 find other indices which contain this column
-            List<Long> otherIndexIds = new ArrayList<Long>();
+            List<Long> otherIndexIds = new ArrayList<>();
             for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
                 if (entry.getKey() == indexIdForFindingColumn) {
                     // skip the index we used to find column. it has been handled before
@@ -523,7 +523,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processReorderColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
-                                      Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                      Map<Long, List<Column>> indexSchemaMap) throws DdlException {
         List<String> orderedColNames = alterClause.getColumnsByPos();
         String targetIndexName = alterClause.getRollupName();
         checkIndexExists(olapTable, targetIndexName);
@@ -537,8 +537,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
         long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
 
-        LinkedList<Column> newSchema = new LinkedList<Column>();
-        LinkedList<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
+        List<Column> newSchema = new LinkedList<>();
+        List<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
 
         // check and create new ordered column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -573,7 +573,7 @@ public class SchemaChangeHandler extends AlterHandler {
      */
     private void addColumnInternal(OlapTable olapTable, Column newColumn, ColumnPosition columnPos,
                                    long targetIndexId, long baseIndexId,
-                                   Map<Long, LinkedList<Column>> indexSchemaMap,
+                                   Map<Long, List<Column>> indexSchemaMap,
                                    Set<String> newColNameSet) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
@@ -691,7 +691,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (newColumn.isKey()) {
                 // add key column to unique key table
                 // add to all indexes including base and rollup
-                for (Map.Entry<Long, LinkedList<Column>> entry : indexSchemaMap.entrySet()) {
+                for (Map.Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
                     modIndexSchema = entry.getValue();
                     boolean isBaseIdex = entry.getKey() == baseIndexId;
                     checkAndAddColumn(modIndexSchema, newColumn, columnPos, newColNameSet, isBaseIdex);
@@ -713,7 +713,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 List<Column> modIndexSchema = indexSchemaMap.get(baseIndexId);
                 checkAndAddColumn(modIndexSchema, newColumn, columnPos, newColNameSet, true);
                 // no specified target index. return
-                return;
             } else {
                 // add to rollup index
                 List<Column> modIndexSchema = indexSchemaMap.get(targetIndexId);
@@ -833,7 +832,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private void createJob(long dbId, OlapTable olapTable, Map<Long, LinkedList<Column>> indexSchemaMap,
+    private void createJob(long dbId, OlapTable olapTable, Map<Long, List<Column>> indexSchemaMap,
                            Map<String, String> propertyMap, List<Index> indexes) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
@@ -852,7 +851,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // eg.
         //     "indexname1#short_key" = "3"
         //     "indexname2#short_key" = "4"
-        Map<Long, Map<String, String>> indexIdToProperties = new HashMap<Long, Map<String, String>>();
+        Map<Long, Map<String, String>> indexIdToProperties = new HashMap<>();
         if (propertyMap.size() > 0) {
             for (String key : propertyMap.keySet()) {
                 if (key.endsWith(PropertyAnalyzer.PROPERTIES_SHORT_KEY)) {
@@ -995,15 +994,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (Column alterColumn : alterSchema) {
                     String columnName = alterColumn.getName();
 
-                    boolean isOldBfColumn = false;
-                    if (oriBfColumns != null && oriBfColumns.contains(columnName)) {
-                        isOldBfColumn = true;
-                    }
-
-                    boolean isNewBfColumn = false;
-                    if (bfColumns != null && bfColumns.contains(columnName)) {
-                        isNewBfColumn = true;
-                    }
+                    boolean isOldBfColumn = oriBfColumns != null && oriBfColumns.contains(columnName);
+                    boolean isNewBfColumn = bfColumns != null && bfColumns.contains(columnName);
 
                     if (isOldBfColumn != isNewBfColumn) {
                         // bf column change
@@ -1380,7 +1372,7 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, schemaChangeJobInfos);
 
         // sort by "JobId", "PartitionName", "CreateTime", "FinishTime", "IndexName", "IndexState"
-        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2, 3, 4, 5);
+        ListComparator<List<Comparable>> comparator = new ListComparator<>(0, 1, 2, 3, 4, 5);
         schemaChangeJobInfos.sort(comparator);
         return schemaChangeJobInfos;
     }
@@ -1448,10 +1440,7 @@ public class SchemaChangeHandler extends AlterHandler {
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws UserException {
         // index id -> index schema
-        Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
-        for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
-            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
-        }
+        Map<Long, List<Column>> indexSchemaMap = olapTable.getIndexIdToSchema();
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
         for (AlterClause alterClause : alterClauses) {
@@ -1598,8 +1587,8 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
                 if (!olapTable.checkPersistentIndex()) {
-                    throw new DdlException("PrimaryKey table using persistent index don't support " + 
-                         "varchar(char) as key so far, and key length should be no more than 64 Bytes");
+                    throw new DdlException("PrimaryKey table using persistent index don't support " +
+                            "varchar(char) as key so far, and key length should be no more than 64 Bytes");
                 }
             }
         } else {

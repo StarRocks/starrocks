@@ -387,8 +387,7 @@ public class Alter {
             OlapTable olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException(
-                        "Table[" + table.getName() + "]'s state is not NORMAL. Do not allow doing ALTER ops");
+                throw new DdlException("Table[" + table.getName() + "]'s state is not NORMAL. Do not allow doing ALTER ops");
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
@@ -405,8 +404,7 @@ public class Alter {
                     }
                     GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, ((DropPartitionClause) alterClause));
                 } else if (alterClause instanceof ReplacePartitionClause) {
-                    GlobalStateMgr.getCurrentState()
-                            .replaceTempPartition(db, tableName, (ReplacePartitionClause) alterClause);
+                    GlobalStateMgr.getCurrentState().replaceTempPartition(db, tableName, (ReplacePartitionClause) alterClause);
                 } else if (alterClause instanceof ModifyPartitionClause) {
                     ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                     // expand the partition names if it is 'Modify Partition(*)'
