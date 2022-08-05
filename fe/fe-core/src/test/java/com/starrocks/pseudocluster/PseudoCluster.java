@@ -1,9 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
@@ -24,6 +31,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class PseudoCluster {
@@ -82,11 +90,46 @@ public class PseudoCluster {
     }
 
     public PseudoBackend getBackend(long beId) {
-        return backends.get(backendIdToHost.get(beId));
+        String host = backendIdToHost.get(beId);
+        if (host == null) {
+            return null;
+        }
+        return backends.get(host);
+    }
+
+    public PseudoBackend getBackendByHost(String host) {
+        return backends.get(host);
     }
 
     public Connection getQueryConnection() throws SQLException {
         return dataSource.getConnection();
+    }
+
+    public List<Long> listTablets(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                return null;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            List<Long> ret = Lists.newArrayList();
+            for (Partition partition : olapTable.getPartitions()) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(
+                        MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        ret.add(tablet.getId());
+                    }
+                }
+            }
+            return ret;
+        } finally {
+            db.readUnlock();
+        }
     }
 
     public void runSql(String db, String sql) throws SQLException {

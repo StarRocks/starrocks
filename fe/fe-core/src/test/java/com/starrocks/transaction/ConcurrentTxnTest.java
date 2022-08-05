@@ -27,7 +27,7 @@ public class ConcurrentTxnTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(false);
+        PseudoCluster.getInstance().shutdown(true);
     }
 
     class TableLoad {
