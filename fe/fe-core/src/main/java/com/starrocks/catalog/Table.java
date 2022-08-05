@@ -45,6 +45,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -450,9 +451,10 @@ public class Table extends MetaObject implements Writable {
      * Delete this table. this method is called with the protection of the database's writer lock.
      *
      * @param replay is this a log replay operation.
-     * @return a Runnable object to be invoked after persisted the edit log and released the
-     * database's lock, null if no task need to run.
+     * @return a {@link Runnable} object that will be invoked after the table has been deleted from
+     * catalog, or null if no action need to be performed.
      */
+    @Nullable
     public Runnable delete(boolean replay) {
         return null;
     }

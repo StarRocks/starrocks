@@ -690,6 +690,10 @@ public class GlobalStateMgr {
         return getCurrentState().getClusterInfo();
     }
 
+    public static StarOSAgent getCurrentStarOSAgent() {
+        return getCurrentState().getStarOSAgent();
+    }
+
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
         return getCurrentState().getHeartbeatMgr();
     }

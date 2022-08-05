@@ -380,9 +380,8 @@ public class Database extends MetaObject implements Writable {
                 isForce);
     }
 
-    public Runnable unprotectDropTable(long tableId, boolean isForceDrop,
-                                       boolean isReplay) {
-        Runnable runnable = null;
+    public Runnable unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
+        Runnable runnable;
         Table table = getTable(tableId);
         // delete from db meta
         if (table == null) {
@@ -395,9 +394,7 @@ public class Database extends MetaObject implements Writable {
 
         if (!isForceDrop) {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
-            if (oldTable != null) {
-                runnable = oldTable.delete(isReplay);
-            }
+            runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
         } else {
             runnable = table.delete(isReplay);
         }

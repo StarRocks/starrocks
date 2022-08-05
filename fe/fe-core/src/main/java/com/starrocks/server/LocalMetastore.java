@@ -397,6 +397,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
+        List<Runnable> runnableList;
         try {
             if (!fullNameToDb.containsKey(dbName)) {
                 throw new MetaNotFoundException("Database not found");
@@ -404,7 +405,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // 2. drop tables in db
             Database db = this.fullNameToDb.get(dbName);
-            Runnable runnable;
             db.writeLock();
             try {
                 if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
@@ -416,7 +416,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
                 // save table names for recycling
                 Set<String> tableNames = db.getTableNamesWithLock();
-                runnable = unprotectDropDb(db, isForceDrop, false);
+                runnableList = unprotectDropDb(db, isForceDrop, false);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -424,10 +424,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             } finally {
                 db.writeUnlock();
-            }
-
-            if (runnable != null) {
-                runnable.run();
             }
 
             // 3. remove db from globalStateMgr
@@ -442,39 +438,33 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             unlock();
         }
+
+        for (Runnable runnable : runnableList) {
+            runnable.run();
+        }
     }
 
-    public Runnable unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        List<Runnable> runnableList = null;
+    @NotNull
+    public List<Runnable> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
+        List<Runnable> runnableList = new ArrayList<>();
         for (Table table : db.getTables()) {
             Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (runnable != null && runnableList == null) {
-                runnableList = new ArrayList<>();
-                runnableList.add(runnable);
-            } else if (runnable != null) {
+            if (runnable != null) {
                 runnableList.add(runnable);
             }
         }
-        if (runnableList == null) {
-            return null;
-        }
-
-        List<Runnable> finalRunnableList = runnableList;
-        return () -> {
-            for (Runnable r : finalRunnableList) {
-                r.run();
-            }
-        };
+        return runnableList;
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
+        List<Runnable> runnableList;
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
             try {
                 Set<String> tableNames = db.getTableNamesWithLock();
-                unprotectDropDb(db, isForceDrop, true);
+                runnableList = unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -492,6 +482,10 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
             unlock();
+        }
+
+        for (Runnable runnable : runnableList) {
+            runnable.run();
         }
     }
 
@@ -1410,7 +1404,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // drop
-        Set<Long> tabletIdSet = new HashSet<Long>(); 
+        Set<Long> tabletIdSet = new HashSet<Long>();
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
@@ -2708,11 +2702,15 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
+        Runnable runnable;
         db.writeLock();
         try {
-            db.unprotectDropTable(tableId, isForceDrop, true);
+            runnable = db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {
             db.writeUnlock();
+        }
+        if (runnable != null) {
+            runnable.run();
         }
     }
 
