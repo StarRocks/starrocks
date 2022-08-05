@@ -475,6 +475,7 @@ alterClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
+    | modifyBrokerClause
     ;
 
 addPartitionClause
@@ -564,6 +565,13 @@ columnRenameClause
 reorderColumnsClause
     : ORDER BY identifierList (FROM rollupName=identifier)? properties?
     ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
