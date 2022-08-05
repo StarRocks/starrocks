@@ -1,0 +1,16 @@
+name: Labeler
+
+on:
+  pull_request_target:
+    types: [opened, edited]
+
+jobs:
+  Label:
+    runs-on: ubuntu-latest
+    steps:
+      # The action can be used as many times as needed in a single job
+      - uses: fregante/title-to-labels-action@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          keywords: backport, cherrypick
+          labels: automerge
