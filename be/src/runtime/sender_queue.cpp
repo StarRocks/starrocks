@@ -626,6 +626,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 total_chunk_bytes += chunk_bytes;
             }
         } else {
+            // NOTE: in the merge scenario, chunk is obtained through try_get_chunk and its return type is not Status.
+            // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
+            // we can change related interface's defination to do this later.
             for (auto i = 0; i < request.chunks().size(); i++) {
                 auto& pchunk = request.chunks().Get(i);
                 int64_t chunk_bytes = pchunk.data().size();
@@ -750,6 +753,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
                 total_chunk_bytes += chunk_bytes;
             }
         } else {
+            // NOTE: in the merge scenario, chunk is obtained through try_get_chunk and its return type is not Status.
+            // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
+            // we can change related interface's defination to do this later.
             for (auto i = 0; i < request.chunks().size(); i++) {
                 auto& pchunk = request.chunks().Get(i);
                 int64_t chunk_bytes = pchunk.data().size();
