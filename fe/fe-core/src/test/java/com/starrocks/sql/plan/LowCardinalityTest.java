@@ -482,8 +482,10 @@ public class LowCardinalityTest extends PlanTestBase {
 
         sql = "select max(upper(S_ADDRESS)) from supplier";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains(" <function id 12>"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 10>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 13> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
 
         sql = "select max(\"CONST\") from supplier";
         plan = getFragmentPlan(sql);
