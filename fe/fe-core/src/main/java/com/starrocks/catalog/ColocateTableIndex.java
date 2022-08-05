@@ -714,6 +714,8 @@ public class ColocateTableIndex implements Writable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
             GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
         }
+        // clean up if dbId or tableId not found, this is actually a bug
+        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
         return checksum;
     }
@@ -819,6 +821,36 @@ public class ColocateTableIndex implements Writable {
             LOG.warn("failed to replay modify table colocate", e);
         } finally {
             db.writeUnlock();
+        }
+    }
+
+    /**
+     * for legacy reason, all the colocate group index cannot be properly removed
+     * we have to add a cleanup function on start when loading image
+     */
+    protected void cleanupInvalidDbOrTable(GlobalStateMgr globalStateMgr) {
+        List<Long> badTableIds = new ArrayList<>();
+        for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
+            long dbId = entry.getValue().dbId;
+            long tableId = entry.getKey();
+            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            if (database == null) {
+                LOG.warn("cannot find db {}, will remove invalid table {} from group {}",
+                        dbId, tableId, entry.getValue());
+            } else {
+                Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+                if (table != null) {
+                    // this is a valid table/database, do nothing
+                    continue;
+                }
+                LOG.warn("cannot find table {} in db {}, will remove invalid table {} from group {}",
+                        tableId, dbId, tableId, entry.getValue());
+            }
+            badTableIds.add(tableId);
+        }
+        LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
+        for (Long tableId : badTableIds) {
+            removeTable(tableId);
         }
     }
 }

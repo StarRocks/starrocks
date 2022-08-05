@@ -375,8 +375,14 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
             if (tableInfo != null) {
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
+<<<<<<< HEAD
                 if (table.getType() == TableType.OLAP && !isCheckpointThread()) {
                     GlobalStateMgr.getCurrentState().onEraseOlapTable((OlapTable) table, true);
+=======
+                runnable = table.delete(true);
+                if (!isCheckpointThread() && runnable != null) {
+                    runnable.run();
+>>>>>>> c4ffab4d7 ([BugFix] Remove colocated index from memory (#9578))
                 }
             }
         }
