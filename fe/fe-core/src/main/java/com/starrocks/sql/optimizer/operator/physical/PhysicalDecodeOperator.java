@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
