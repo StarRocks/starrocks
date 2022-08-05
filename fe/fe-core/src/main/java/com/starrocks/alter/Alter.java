@@ -292,6 +292,13 @@ public class Alter {
             taskManager.createTask(task, false);
             // run task
             taskManager.executeTask(task.getName());
+        } else {
+            // newRefreshType = MaterializedView.RefreshType.MANUAL
+            // for now SYNC is not supported
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            task.setType(Constants.TaskType.EVENT_TRIGGERED);
+            taskManager.createTask(task, false);
+            taskManager.executeTask(task.getName());
         }
 
         final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
