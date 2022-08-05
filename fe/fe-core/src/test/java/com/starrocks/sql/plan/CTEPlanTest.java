@@ -7,6 +7,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -408,4 +409,167 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCTEExchangePruneColumn() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT x0.v1, x1.v2 FROM  w_t0 x0, w_t0 x1";
+
+        String thrift = getThriftPlan(sql);
+        assertContains(thrift, "TMultiCastDataStreamSink");
+        assertContains(thrift, "dest_dop:0, output_columns:[1]");
+        assertContains(thrift, "dest_dop:0, output_columns:[2]");
+    }
+
+    @Test
+    public void testMultiNestCTE() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(10000);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (SELECT * FROM t0)" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from x1 " +
+                "UNION ALL " +
+                "SELECT * from x1 ";
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        Assert.assertEquals(4, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(2, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiNestCTE2() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(10000);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (" +
+                "       WITH x3 as (SELECT * FROM t0)" +
+                "       SELECT * FROM x3 " +
+                "       UNION ALL " +
+                "       SELECT * FROM x3 " +
+                "   )" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from x1 " +
+                "UNION ALL " +
+                "SELECT * from x1 ";
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        Assert.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiNestCTE3() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(10000000);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (SELECT * FROM t0)" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from (" +
+                "   with x3 as (" +
+                "       SELECT * from x1 " +
+                "       UNION ALL " +
+                "       SELECT * from x1 " +
+                "   )" +
+                "   select * from x3" +
+                "   union all " +
+                "   select * from x3" +
+                ") x4 ";
+        String plan = getFragmentPlan(sql);
+        defaultCTEReuse();
+        System.out.println(plan);
+        Assert.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiNestCTE4() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(Double.MAX_VALUE);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (SELECT * FROM t0)" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from (" +
+                "   with x3 as (" +
+                "       SELECT * from x1 " +
+                "       UNION ALL " +
+                "       SELECT * from x1 " +
+                "   )" +
+                "   select * from x3" +
+                "   union all " +
+                "   select * from x3" +
+                ") x4 join (" +
+                "   with x5 as (" +
+                "       SELECT * from x1 " +
+                "       UNION ALL " +
+                "       SELECT * from x1 " +
+                "   )" +
+                "   select * from x5" +
+                "   union all " +
+                "   select * from x5" +
+                ") x7";
+        String plan = getFragmentPlan(sql);
+        defaultCTEReuse();
+        Assert.assertEquals(16, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(4, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiRefCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                " select * from t0" +
+                "), " +
+                " x2 as (" +
+                " select * from x1" +
+                " union all" +
+                " select * from x1" +
+                ")" +
+                "SELECT * from x1 " +
+                "UNION ALL " +
+                "SELECT * from x2 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode");
+    }
+>>>>>>> 6d99b7b65 ([BugFix] Fix multi nest cte inline error (#9467))
 }
