@@ -350,6 +350,14 @@ public class ComputeNode implements IComputable, Writable {
         return DecommissionBackendJob.DecommissionType.SystemDecommission;
     }
 
+    public int getCpuCores() {
+        return cpuCores;
+    }
+
+    public void setCpuCores(int cpuCores) {
+        this.cpuCores = cpuCores;
+    }
+
     /**
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
