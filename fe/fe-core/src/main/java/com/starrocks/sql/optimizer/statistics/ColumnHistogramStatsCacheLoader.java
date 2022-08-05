@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
@@ -25,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +76,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 for (ColumnStatsCacheKey key : keys) {
                     tableId = key.tableId;
                     columns.add(key.column);
+                    result.put(key, Optional.empty());
                 }
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(tableId, columns);
                 for (TStatisticData histogramStatsData : histogramStatsDataList) {
@@ -117,14 +120,19 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
 
         List<Bucket> buckets = convertBuckets(statisticData.histogram, column.getType());
-        Map<Double, Long> topn = convertTopN(statisticData.histogram, column.getType());
-        return new Histogram(buckets, topn);
+        Map<Double, Long> mcv = convertMCV(statisticData.histogram, column.getType());
+        return new Histogram(buckets, mcv);
     }
 
     private List<Bucket> convertBuckets(String histogramString, Type type) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
-        JsonArray histogramObj = jsonObject.getAsJsonArray("buckets");
 
+        JsonElement jsonElement = jsonObject.get("buckets");
+        if (jsonElement.isJsonNull()) {
+            return Collections.emptyList();
+        }
+
+        JsonArray histogramObj = (JsonArray) jsonElement;
         List<Bucket> buckets = Lists.newArrayList();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
@@ -152,11 +160,15 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return buckets;
     }
 
-    private Map<Double, Long> convertTopN(String histogramString, Type type) {
+    private Map<Double, Long> convertMCV(String histogramString, Type type) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
-        JsonArray histogramObj = jsonObject.getAsJsonArray("top-n");
+        JsonElement jsonElement = jsonObject.get("mcv");
+        if (jsonElement.isJsonNull()) {
+            return Collections.emptyMap();
+        }
 
-        Map<Double, Long> topN = new HashMap<>();
+        JsonArray histogramObj = (JsonArray) jsonElement;
+        Map<Double, Long> mcv = new HashMap<>();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
 
@@ -170,8 +182,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 key = Double.parseDouble(bucketJsonArray.get(0).getAsString());
             }
 
-            topN.put(key, Long.parseLong(bucketJsonArray.get(1).getAsString()));
+            mcv.put(key, Long.parseLong(bucketJsonArray.get(1).getAsString()));
         }
-        return topN;
+        return mcv;
     }
 }
