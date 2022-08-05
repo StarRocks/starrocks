@@ -326,10 +326,27 @@ public class CatalogRecycleBin extends MasterDaemon implements Writable {
                 continue;
             }
 
+<<<<<<< HEAD
             Table table = tableInfo.getTable();
             if (table.getName().equals(tableName)) {
                 if (table.getType() == TableType.OLAP) {
                     Catalog.getCurrentCatalog().onEraseOlapTable((OlapTable) table, false);
+=======
+    public synchronized void replayEraseTable(long tableId) {
+        Map<Long, RecycleTableInfo> column = idToTableInfo.column(tableId);
+        // For different TableIds, there must be only a unique DbId
+        Optional<Long> dbIdOpt = column.keySet().stream().findFirst();
+        if (dbIdOpt.isPresent()) {
+            Long dbId = dbIdOpt.get();
+            RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
+            if (tableInfo != null) {
+                Runnable runnable = null;
+                Table table = tableInfo.getTable();
+                nameToTableInfo.remove(dbId, table.getName());
+                runnable = table.delete(true);
+                if (!isCheckpointThread() && runnable != null) {
+                    runnable.run();
+>>>>>>> c4ffab4d7 ([BugFix] Remove colocated index from memory (#9578))
                 }
 
                 iterator.remove();
