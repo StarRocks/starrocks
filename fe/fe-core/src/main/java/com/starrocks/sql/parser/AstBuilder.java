@@ -33,6 +33,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BoolLiteral;
@@ -2823,6 +2824,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowBrokerStmt();
     }
 
+    // ------------------------------------------- Backup Store Statement ----------------------------------------------
+    @Override
+    public ParseNode visitBackupStatement(StarRocksParser.BackupStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        LabelName labelName = qualifiedNameToLabelName(qualifiedName);
+        List<TableRef> tblRefs = new ArrayList<>();
+        for (StarRocksParser.TableDescContext tableDescContext : context.tableDesc()) {
+            StarRocksParser.QualifiedNameContext qualifiedNameContext = tableDescContext.qualifiedName();
+            qualifiedName = getQualifiedName(qualifiedNameContext);
+            TableName tableName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (tableDescContext.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(tableDescContext.partitionNames());
+            }
+            TableRef tableRef = new TableRef(tableName, null, partitionNames);
+            tblRefs.add(tableRef);
+        }
+
+        Map<String, String> properties = null;
+        if (context.propertyList() != null) {
+            properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        String repoName = ((Identifier) visit(context.identifier())).getValue();
+        return new BackupStmt(labelName, repoName, tblRefs, properties);
+    }
+
     // ------------------------------------------- Expression ----------------------------------------------------------
 
     @Override
@@ -4008,5 +4040,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowCharsetStmt(pattern, where);
+    }
+
+    private LabelName qualifiedNameToLabelName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 2) {
+            return new LabelName(parts.get(0), parts.get(1));
+        } else if (parts.size() == 1) {
+            return new LabelName(null, parts.get(0));
+        } else {
+            throw new ParsingException("error table name ");
+        }
     }
 }
