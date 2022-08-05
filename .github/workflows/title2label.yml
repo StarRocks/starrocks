@@ -12,5 +12,5 @@ jobs:
       - uses: fregante/title-to-labels-action@v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          keywords: backport, cherrypick
+          keywords: backport, cherry-pick
           labels: automerge
