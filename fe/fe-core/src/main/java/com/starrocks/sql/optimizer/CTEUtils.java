@@ -2,15 +2,19 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -104,6 +108,10 @@ public class CTEUtils {
     private static void collectCteProduce(Group root, OptimizerContext context, boolean collectCosts) {
         GroupExpression expression = root.getFirstLogicalExpression();
 
+        for (Group group : expression.getInputs()) {
+            collectCteProduce(group, context, collectCosts);
+        }
+
         if (OperatorType.LOGICAL_CTE_PRODUCE.equals(expression.getOp().getOpType())) {
             // produce
             LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
@@ -118,16 +126,42 @@ public class CTEUtils {
                 context.getCteContext().addCTEProduceCost(produce.getCteId(), statistics.getComputeSize());
             }
         }
-
-        for (Group group : expression.getInputs()) {
-            collectCteProduce(group, context, collectCosts);
-        }
     }
 
     private static void collectCteConsume(Group root, OptimizerContext context, boolean collectCosts) {
+        for (Integer cteId : context.getCteContext().getAllCTEProduce().keySet()) {
+            Group anchor = findCteAnchor(root, cteId);
+            Preconditions.checkNotNull(anchor);
+            collectCteConsumeImpl(anchor, cteId, context, collectCosts);
+        }
+    }
+
+    private static Group findCteAnchor(Group root, Integer cteId) {
+        LinkedList<Group> queue = Lists.newLinkedList();
+        queue.addLast(root);
+
+        while (!queue.isEmpty()) {
+            Group group = queue.pollFirst();
+            GroupExpression expression = group.getFirstLogicalExpression();
+            if (OperatorType.LOGICAL_CTE_ANCHOR.equals(expression.getOp().getOpType()) &&
+                    ((LogicalCTEAnchorOperator) expression.getOp()).getCteId() == cteId) {
+                return group.getFirstLogicalExpression().inputAt(1);
+            }
+
+            expression.getInputs().forEach(queue::addLast);
+        }
+        return null;
+    }
+
+    private static void collectCteConsumeImpl(Group root, Integer cteId, OptimizerContext context,
+                                              boolean collectCosts) {
         GroupExpression expression = root.getFirstLogicalExpression();
 
         if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType())) {
+            if (((LogicalCTEConsumeOperator) expression.getOp()).getCteId() != cteId) {
+                // not ask children
+                return;
+            }
             // consumer
             LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) expression.getOp();
             context.getCteContext().addCTEConsume(consume.getCteId());
@@ -149,7 +183,7 @@ public class CTEUtils {
         }
 
         for (Group group : expression.getInputs()) {
-            collectCteConsume(group, context, collectCosts);
+            collectCteConsumeImpl(group, cteId, context, collectCosts);
         }
     }
 

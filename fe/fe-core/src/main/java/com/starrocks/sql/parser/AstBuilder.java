@@ -1781,6 +1781,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         QueryRelation queryRelation = (QueryRelation) visit(context.queryBody());
+        // Regenerate cteID when generating plan
         return new CTERelation(
                 RelationId.of(queryRelation).hashCode(),
                 ((Identifier) visit(context.name)).getValue(),
