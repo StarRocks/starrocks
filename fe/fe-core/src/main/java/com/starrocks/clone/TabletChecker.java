@@ -316,7 +316,7 @@ public class TabletChecker extends LeaderDaemon {
 
                                 unhealthyTabletNum++;
 
-                                if (!localTablet.readyToBeRepaired(statusWithPrio.second)) {
+                                if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
                                     tabletNotReady++;
                                     continue;
                                 }
