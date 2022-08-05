@@ -1805,7 +1805,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @Override
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
-        return replay ? null : new DeleteTableTask(this);
+        return replay ? null : new DeleteOlapTableTask(this);
     }
 
     @Override
@@ -1813,10 +1813,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return true;
     }
 
-    private static class DeleteTableTask implements Runnable {
+    private static class DeleteOlapTableTask implements Runnable {
         private final OlapTable table;
 
-        public DeleteTableTask(OlapTable table) {
+        public DeleteOlapTableTask(OlapTable table) {
             this.table = table;
         }
 
