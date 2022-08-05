@@ -186,10 +186,11 @@ public class Optimizer {
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // inline CTE if consume use once
-        if (cteContext.hasInlineCTE()) {
-            ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
-            cleanUpMemoGroup(memo);
+        while (cteContext.hasInlineCTE()) {
+            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
+            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         }
+        cleanUpMemoGroup(memo);
 
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
@@ -272,7 +273,11 @@ public class Optimizer {
         // compute CTE inline by costs
         if (cteContext.needOptimizeCTE()) {
             CTEUtils.collectCteOperators(memo, context);
-            ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_CTE);
+        }
+
+        // compute CTE inline by costs
+        while (cteContext.needOptimizeCTE() && cteContext.hasInlineCTE()) {
+            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(memo, context);
         }
 
