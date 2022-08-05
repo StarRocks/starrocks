@@ -390,7 +390,7 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
     GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
 
     if (!_async_thread_pool.try_offer([&]() { _get_info_impl(request, response, &latch); })) {
-        Status::ServiceUnavailable("too busy to get kafka info, you could set internal_service_async_thread_num bigger")
+        Status::ServiceUnavailable("too busy to get kafka info, please check the kafka broker status, or set internal_service_async_thread_num bigger")
                 .to_protobuf(response->mutable_status());
         return;
     }
