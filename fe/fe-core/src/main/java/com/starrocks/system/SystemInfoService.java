@@ -699,7 +699,7 @@ public class SystemInfoService {
             LOG.debug("random select: {}", backend);
         }
 
-        return new ArrayList<>();
+        return Collections.emptyList();
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
