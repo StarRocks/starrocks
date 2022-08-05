@@ -275,7 +275,6 @@ public class Alter {
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
-
         }
 
         if (newRefreshType == MaterializedView.RefreshType.ASYNC) {
