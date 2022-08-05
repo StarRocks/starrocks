@@ -1,3 +1,4 @@
+// clang-format off
 // Provides a C++11 implementation of a multi-producer, multi-consumer lock-free queue.
 // An overview, including benchmark results, is provided here:
 //     http://moodycamel.com/blog/2014/a-fast-general-purpose-lock-free-queue-for-c++
@@ -28,7 +29,6 @@
 // EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Also dual-licensed under the Boost Software License (see LICENSE.md)
-// clang-format off
 #pragma once
 
 #if defined(__GNUC__)

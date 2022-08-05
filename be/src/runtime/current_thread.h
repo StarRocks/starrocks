@@ -4,12 +4,12 @@
 
 #include <string>
 
+#include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 #include "util/uid_util.h"
-#include "fmt/format.h"
 
 #define SCOPED_THREAD_LOCAL_MEM_SETTER(mem_tracker, check)                             \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadMemTrackerSetter(mem_tracker); \
