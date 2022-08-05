@@ -3,6 +3,9 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -11,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.Set;
 
 public class PhysicalDecodeOperator extends PhysicalOperator {
     private final ImmutableMap<Integer, Integer> dictToStrings;
@@ -21,6 +25,54 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
         super(OperatorType.PHYSICAL_DECODE);
         this.dictToStrings = dictToStrings;
         this.stringFunctions = stringFunctions;
+        removeUnusedFunction();
+    }
+
+    private void removeUnusedFunction() {
+        Set<Integer> dictIds = this.dictToStrings.keySet();
+        Map<Integer, ScalarOperator> dictToFunctions = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : stringFunctions.entrySet()) {
+            dictToFunctions.put(entry.getKey().getId(), entry.getValue());
+        }
+
+        Set<Integer> usedDictIds = Sets.newHashSet();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : stringFunctions.entrySet()) {
+            if (dictIds.contains(entry.getKey().getId())) {
+                usedDictIds.add(entry.getKey().getId());
+            }
+        }
+
+        Set<Integer> currentUsed = Sets.newHashSet(usedDictIds);
+        Set<Integer> next = Sets.newHashSet();
+        while (!currentUsed.isEmpty()) {
+            next.clear();
+            for (Integer usedDictId : currentUsed) {
+                ScalarOperator scalarOperator = dictToFunctions.get(usedDictId);
+                ColumnRefSet usedColumns = scalarOperator.getUsedColumns();
+                for (int columnId : usedColumns.getColumnIds()) {
+                    if (!usedDictIds.contains(columnId)) {
+                        usedDictIds.add(columnId);
+                        next.add(usedDictId);
+                    }
+                }
+            }
+            currentUsed.clear();
+            Set<Integer> tmp = currentUsed;
+            currentUsed = next;
+            next = tmp;
+        }
+
+        Set<ColumnRefOperator> unusedStringFunctions = Sets.newHashSet();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : stringFunctions.entrySet()) {
+            if (!usedDictIds.contains(entry.getKey().getId())) {
+                unusedStringFunctions.add(entry.getKey());
+            }
+        }
+
+        for (ColumnRefOperator unusedStringFunction : unusedStringFunctions) {
+            stringFunctions.remove(unusedStringFunction);
+        }
+
     }
 
     public ImmutableMap<Integer, Integer> getDictToStrings() {
