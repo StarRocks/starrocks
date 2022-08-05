@@ -373,10 +373,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 Runnable runnable = null;
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (!isCheckpointThread()) {
-                    runnable = table.delete(true);
-                }
-                if (runnable != null) {
+                runnable = table.delete(true);
+                if (!isCheckpointThread() && runnable != null) {
                     runnable.run();
                 }
             }
