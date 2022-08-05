@@ -11,11 +11,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.lang3.StringUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -167,5 +170,54 @@ public class ColocateTableIndexTest {
         Assert.assertEquals(String.format("%d*, %d*", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
         Assert.assertEquals(String.format("%d*", table2_1.getId()), map.get("group2").get(2));
         Assert.assertEquals(String.format("%d*", table2_3.getId()), map.get("group3").get(2));
-      }
+    }
+
+    @Test
+    public void testCleanUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        // create goodDb
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database goodDb;", connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        Database goodDb = GlobalStateMgr.getCurrentState().getDb("goodDb");
+        // create goodtable
+        String sql = "CREATE TABLE " +
+                "goodDb.goodTable (k1 int, k2 int, k3 varchar(32))\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1)\n" +
+                "BUCKETS 4\n" +
+                "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        OlapTable table = (OlapTable)goodDb.getTable("goodTable");
+        ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentColocateIndex().getGroup(table.getId());
+
+
+        // create a bad db
+        long badDbId = 4000;
+        table.id = 4001;
+        table.name = "goodTableOfBadDb";
+        colocateTableIndex.addTableToGroup(
+                badDbId, table, "badGroupOfBadDb", new ColocateTableIndex.GroupId(badDbId, 4002));
+        // create a bad table in good db
+        table.id = 4003;
+        table.name = "badTable";
+        colocateTableIndex.addTableToGroup(
+                goodDb.getId(), table, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDb.getId(), 4004));
+
+        Map<String, List<String>> map = groupByName(GlobalStateMgr.getCurrentColocateIndex().getInfos());
+        Assert.assertTrue(map.containsKey("goodGroup"));
+        Assert.assertTrue(map.containsKey("badGroupOfBadDb"));
+        Assert.assertTrue(map.containsKey("badGroupOfBadTable"));
+
+        colocateTableIndex.cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
+        map = groupByName(GlobalStateMgr.getCurrentColocateIndex().getInfos());
+
+        Assert.assertTrue(map.containsKey("goodGroup"));
+        Assert.assertFalse(map.containsKey("badGroupOfBadDb"));
+        Assert.assertFalse(map.containsKey("badGroupOfBadTable"));
+    }
+
 }
