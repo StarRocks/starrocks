@@ -50,9 +50,11 @@ using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env),  
-              _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num, config::internal_service_async_thread_num)
-{}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env)
+        : _exec_env(exec_env),
+        // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+          _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num,
+                             config::internal_service_async_thread_num * 4) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -383,18 +385,24 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
 template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {
-    if (!_async_thread_pool.try_offer([&]() { _get_info_impl(controller, request, response, done); })) {
-        ClosureGuard closure_guard(done);
-        Status st = Status::ServiceUnavailable("too busy to get kafka info");
-        st.to_protobuf(response->mutable_status());
+    ClosureGuard closure_guard(done);
+
+    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
+
+    if (!_async_thread_pool.try_offer([&]() { _get_info_impl(request, response, &latch); })) {
+        Status::ServiceUnavailable("too busy to get kafka info, you could set internal_service_async_thread_num bigger")
+                .to_protobuf(response->mutable_status());
+        return;
     }
-    return;
+
+    latch.wait();
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_info_impl(google::protobuf::RpcController* controller, const PProxyRequest* request,
-                                           PProxyResult* response, google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
+void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                                                 GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch) {
+    DeferOp defer([latch] { latch->count_down(); });
+
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
         Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
