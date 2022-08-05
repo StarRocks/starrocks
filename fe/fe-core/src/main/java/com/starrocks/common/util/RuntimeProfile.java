@@ -44,7 +44,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -70,7 +69,7 @@ public class RuntimeProfile {
     private final Map<String, Pair<Counter, String>> counterMap = Maps.newConcurrentMap();
     private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
 
-    private final Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
+    private final Map<String, Set<String>> childCounterMap = Maps.newConcurrentMap();
     private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
 
     private String name;
@@ -123,9 +122,11 @@ public class RuntimeProfile {
             Counter newCounter = new Counter(type, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
-            TreeSet<String> childNames = childCounterMap.getOrDefault(parentName, new TreeSet<>());
+            if (!childCounterMap.containsKey(parentName)) {
+                childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+            }
+            Set<String> childNames = childCounterMap.get(parentName);
             childNames.add(name);
-            childCounterMap.put(parentName, childNames);
             return newCounter;
         }
     }
@@ -139,7 +140,7 @@ public class RuntimeProfile {
         Pair<Counter, String> pair = counterMap.get(name);
         String parentName = pair.second;
         if (childCounterMap.containsKey(parentName)) {
-            TreeSet<String> childNames = childCounterMap.get(parentName);
+            Set<String> childNames = childCounterMap.get(parentName);
             childNames.remove(name);
         }
 
@@ -148,7 +149,7 @@ public class RuntimeProfile {
         nameQueue.offer(name);
         while (!nameQueue.isEmpty()) {
             String topName = nameQueue.poll();
-            TreeSet<String> childNames = childCounterMap.get(topName);
+            Set<String> childNames = childCounterMap.get(topName);
             if (childNames != null) {
                 for (String childName : childNames) {
                     nameQueue.offer(childName);
@@ -187,7 +188,7 @@ public class RuntimeProfile {
                 newCounter.setValue(srcCounter.getValue());
             }
 
-            TreeSet<String> childNames = srcProfile.childCounterMap.get(name);
+            Set<String> childNames = srcProfile.childCounterMap.get(name);
             if (childNames != null) {
                 for (String childName : childNames) {
                     nameQueue.offer(Pair.create(childName, name));
@@ -356,6 +357,7 @@ public class RuntimeProfile {
             return;
         }
         List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
+        childNames.sort(String::compareTo);
 
         // Keep MIN/MAX metrics head of other child counters
         List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
@@ -562,7 +564,7 @@ public class RuntimeProfile {
                         continue;
                     }
 
-                    TreeSet<String> childNames = profile.childCounterMap.get(name);
+                    Set<String> childNames = profile.childCounterMap.get(name);
                     if (childNames != null) {
                         for (String childName : childNames) {
                             nameQueue.offer(childName);
