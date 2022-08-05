@@ -953,19 +953,6 @@ alter_system_clause ::=
     {:
         RESULT = new DropFollowerClause(hostPort);
     :}
-    /* Broker manipulation */
-    | KW_ADD KW_BROKER ident_or_text:brokerName string_list:hostPorts
-    {:
-        RESULT = ModifyBrokerClause.createAddBrokerClause(brokerName, hostPorts);
-    :}
-    | KW_DROP KW_BROKER ident_or_text:brokerName string_list:hostPorts
-    {:
-        RESULT = ModifyBrokerClause.createDropBrokerClause(brokerName, hostPorts);
-    :}
-    | KW_DROP KW_ALL KW_BROKER ident_or_text:brokerName
-    {:
-        RESULT = ModifyBrokerClause.createDropAllBrokerClause(brokerName);
-    :}
     // set load errors hub
     | KW_SET KW_LOAD KW_ERRORS KW_HUB opt_properties:properties
     {:
