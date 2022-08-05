@@ -3,9 +3,9 @@
 
 #include <memory>
 
-#include "gutil/stl_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/stl_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -32,9 +32,9 @@ QueryContext::~QueryContext() {
         _fragment_mgr.reset();
     }
 
-    // clear the detailed table-level statistics 
+    // clear the detailed table-level statistics
     STLClearObject(&_cur_scan_stats_items);
-    
+
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
     if (_exec_env != nullptr) {
