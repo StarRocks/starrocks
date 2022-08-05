@@ -1039,7 +1039,7 @@ public class FunctionSet {
 
         for (Type t : HISTOGRAM_TYPE) {
             addBuiltin(AggregateFunction.createBuiltin("histogram",
-                    Lists.newArrayList(t, Type.INT, Type.DOUBLE, Type.INT), Type.VARCHAR, Type.VARCHAR,
+                    Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
     }
