@@ -321,7 +321,9 @@ double MathFunctions::double_round(double value, int64_t dec, bool dec_unsigned,
             tmp2 = dec < 0 ? std::ceil(value_div_tmp) * tmp : std::ceil(value_mul_tmp) / tmp;
         }
     } else {
-        tmp2 = dec < 0 ? std::rint(value_div_tmp) * tmp : std::rint(value_mul_tmp) / tmp;
+        // Because std::rint(+2.5) = 2, std::rint(+3.5) = 4,
+        // so It's not expected result, we should use std::round instead of std::rint.
+        tmp2 = dec < 0 ? std::round(value_div_tmp) * tmp : std::round(value_mul_tmp) / tmp;
     }
 
     return tmp2;
