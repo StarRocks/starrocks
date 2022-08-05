@@ -276,12 +276,6 @@ public class Alter {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
 
-            if (newRefreshType == MaterializedView.RefreshType.MANUAL) {
-                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-                task.setType(Constants.TaskType.EVENT_TRIGGERED);
-                taskManager.createTask(task, false);
-                taskManager.executeTask(task.getName());
-            }
         }
 
         if (newRefreshType == MaterializedView.RefreshType.ASYNC) {
@@ -298,6 +292,13 @@ public class Alter {
             }
             taskManager.createTask(task, false);
             // run task
+            taskManager.executeTask(task.getName());
+        } else {
+            // newRefreshType = MaterializedView.RefreshType.MANUAL
+            // for now SYNC is not supported
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            task.setType(Constants.TaskType.EVENT_TRIGGERED);
+            taskManager.createTask(task, false);
             taskManager.executeTask(task.getName());
         }
 
