@@ -1176,7 +1176,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {
