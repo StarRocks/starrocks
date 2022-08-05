@@ -38,6 +38,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -594,6 +595,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         partitionInfo.setDataProperty(partitionId, recoverPartitionInfo.getDataProperty());
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
+        partitionInfo.setStorageInfo(partitionId, recoverPartitionInfo.getStorageInfo());
 
         // remove from recycle bin
         idToPartition.remove(partitionId);
@@ -907,6 +909,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         private DataProperty dataProperty;
         private short replicationNum;
         private boolean isInMemory;
+        private StorageInfo storageInfo;
 
         public RecyclePartitionInfo() {
             // for persist
@@ -923,6 +926,14 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             this.replicationNum = replicationNum;
             this.isInMemory = isInMemory;
         }
+
+        public RecyclePartitionInfo(long dbId, long tableId, Partition partition,
+                                    Range<PartitionKey> range, DataProperty dataProperty, short replicationNum,
+                                    boolean isInMemory, StorageInfo storageInfo) {
+            this(dbId, tableId, partition, range, dataProperty, replicationNum, isInMemory);
+            this.storageInfo = storageInfo;
+        }
+
 
         public long getDbId() {
             return dbId;
@@ -950,6 +961,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
         public boolean isInMemory() {
             return isInMemory;
+        }
+
+        public StorageInfo getStorageInfo() {
+            return storageInfo;
         }
 
         @Override

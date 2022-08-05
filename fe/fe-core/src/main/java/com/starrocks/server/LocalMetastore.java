@@ -995,6 +995,8 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo()
                     .setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
+            copiedTable.getPartitionInfo().setStorageInfo(partitionId,
+                    ((SingleRangePartitionDesc) partitionDesc).getStorageInfo());
 
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);
@@ -1073,7 +1075,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // Forward compatible with previous log formats
         // Version 1.15 is compatible if users only use single-partition syntax.
         // Otherwise, the followers will be crash when reading the new log
-        List<PartitionPersistInfoV2> partitionInfoListV2 = Lists.newArrayListWithCapacity(partitionLen);
+        List<PartitionPersistInfoV2> partitionInfoV2List = Lists.newArrayListWithCapacity(partitionLen);
         if (partitionLen == 1) {
             Partition partition = partitionList.get(0);
             if (existPartitionNameSet.contains(partition.getName())) {
@@ -1087,8 +1089,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                         ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
                         ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageInfo());
-                partitionInfoListV2.add(info);
-                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoListV2);
+                partitionInfoV2List.add(info);
+                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
                 editLog.logAddPartitions(infos);
             } else {
                 PartitionPersistInfo info = new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
@@ -1113,9 +1115,9 @@ public class LocalMetastore implements ConnectorMetadata {
                                 partitionInfo.getReplicationNum(partition.getId()),
                                 partitionInfo.getIsInMemory(partition.getId()), isTempPartition,
                                 ((RangePartitionInfo) partitionInfo).getRange(partition.getId()),
-                                ((SingleRangePartitionDesc) partitionDescs.get(0)).getStorageInfo());
+                                ((SingleRangePartitionDesc) partitionDescs.get(i)).getStorageInfo());
 
-                        partitionInfoListV2.add(info);
+                        partitionInfoV2List.add(info);
                     } else {
                         PartitionPersistInfo info =
                                 new PartitionPersistInfo(db.getId(), olapTable.getId(), partition,
@@ -1130,7 +1132,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (olapTable.isLakeTable()) {
-                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoListV2);
+                AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
                 editLog.logAddPartitions(infos);
             } else {
                 AddPartitionsInfo infos = new AddPartitionsInfo(partitionInfoList);
@@ -1295,6 +1297,8 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } catch (DdlException e) {
             cleanTabletIdSetForAll(tabletIdSetForAll);
+            // lake table need to delete shards
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSetForAll);
             throw e;
         }
     }
@@ -2582,7 +2586,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        StorageInfo partitionStorageInfo = table.getTableProperty().getStorageInfo();
+        StorageInfo partitionStorageInfo = partitionInfo.getStorageInfo(partitionId);
         CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(partitionStorageInfo.isEnableStorageCache())
                 .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS()).build();
         ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo())
