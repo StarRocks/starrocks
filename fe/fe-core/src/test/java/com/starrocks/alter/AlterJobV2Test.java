@@ -77,7 +77,7 @@ public class AlterJobV2Test {
     public void testSchemaChange() throws Exception {
         // 1. process a schema change job
         String alterStmtStr = "alter table test.schema_change_test add column k4 int default '1'";
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterStmtStr, connectContext);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
         // 2. check alter job
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2();

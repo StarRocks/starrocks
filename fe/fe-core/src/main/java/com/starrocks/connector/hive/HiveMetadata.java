@@ -20,7 +20,7 @@ public class HiveMetadata implements ConnectorMetadata {
     private HiveMetaCache metaCache = null;
     private final String resourceName;
 
-    public HiveMetadata(String resourceName) throws DdlException {
+    public HiveMetadata(String resourceName) {
         this.resourceName = resourceName;
     }
 

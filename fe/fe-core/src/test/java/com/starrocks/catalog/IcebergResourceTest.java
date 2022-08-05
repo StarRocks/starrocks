@@ -48,7 +48,7 @@ public class IcebergResourceTest {
         String metastoreURIs = "thrift://127.0.0.1:9380";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
-        properties.put("starrocks.catalog-type", catalogType);
+        properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
@@ -80,7 +80,7 @@ public class IcebergResourceTest {
         String catalogImpl = "com.starrocks.external.iceberg.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
-        properties.put("starrocks.catalog-type", catalogType);
+        properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog-impl", catalogImpl);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
         stmt.analyze(analyzer);
@@ -98,7 +98,7 @@ public class IcebergResourceTest {
         String catalogType = "HIVE";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
-        properties.put("starrocks.catalog-type", catalogType);
+        properties.put("iceberg.catalog.type", catalogType);
         resource.setProperties(properties);
 
         String json = GsonUtils.GSON.toJson(resource);

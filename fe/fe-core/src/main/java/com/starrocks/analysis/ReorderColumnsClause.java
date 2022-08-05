@@ -17,53 +17,23 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
 
 // reorder column
-public class ReorderColumnsClause extends AlterTableClause {
+public class ReorderColumnsClause extends AlterTableColumnClause {
     private List<String> columnsByPos;
-    private String rollupName;
-
-    private Map<String, String> properties;
 
     public List<String> getColumnsByPos() {
         return columnsByPos;
     }
 
-    public String getRollupName() {
-        return rollupName;
-    }
-
     public ReorderColumnsClause(List<String> cols, String rollup, Map<String, String> properties) {
-        super(AlterOpType.SCHEMA_CHANGE);
+        super(AlterOpType.SCHEMA_CHANGE, rollup, properties);
         this.columnsByPos = cols;
-        this.rollupName = rollup;
-        this.properties = properties;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (columnsByPos == null || columnsByPos.isEmpty()) {
-            throw new AnalysisException("No column in reorder columns clause.");
-        }
-        for (String col : columnsByPos) {
-            if (Strings.isNullOrEmpty(col)) {
-                throw new AnalysisException("Empty column in reorder columns.");
-            }
-        }
-        if (Strings.isNullOrEmpty(rollupName)) {
-            rollupName = null;
-        }
-    }
-
-    @Override
-    public Map<String, String> getProperties() {
-        return this.properties;
     }
 
     @Override
@@ -87,5 +57,15 @@ public class ReorderColumnsClause extends AlterTableClause {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitReorderColumnsClause(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

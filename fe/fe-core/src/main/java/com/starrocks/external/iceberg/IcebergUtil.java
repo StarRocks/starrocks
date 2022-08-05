@@ -177,13 +177,29 @@ public class IcebergUtil {
         return columns.build();
     }
 
-    public static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
-                                                String dbName, String tblName) throws DdlException {
+    public static IcebergTable convertCustomCatalogToSRTable(org.apache.iceberg.Table icebergTable, String catalogImpl,
+             String dbName, String tblName, Map<String, String> customProperties) throws DdlException {
         Map<String, String> properties = new HashMap<>();
-        properties.put(IcebergTable.ICEBERG_CATALOG, "HIVE_CATALOG");
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
+        properties.put(IcebergTable.ICEBERG_CATALOG, "CUSTOM_CATALOG");
+        properties.put(IcebergTable.ICEBERG_IMPL, catalogImpl);
+        properties.putAll(customProperties);
+        return convertToSRTable(icebergTable, properties);
+    }
+
+    public static IcebergTable convertHiveCatalogToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
+                                                String dbName, String tblName) throws DdlException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_DB, dbName);
+        properties.put(IcebergTable.ICEBERG_TABLE, tblName);
+        properties.put(IcebergTable.ICEBERG_CATALOG, "HIVE_CATALOG");
         properties.put(IcebergTable.ICEBERG_METASTORE_URIS, metastoreURI);
+        return convertToSRTable(icebergTable, properties);
+    }
+
+    private static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
+            throws DdlException {
         Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
                 .collect(Collectors.toMap(Types.NestedField::name, field -> field));
         List<Column> fullSchema = Lists.newArrayList();
@@ -242,7 +258,7 @@ public class IcebergUtil {
             case STRUCT:
             case MAP:
             default:
-                throw new RuntimeException("Unsupported type " + icebergType.typeId().toString());
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return ScalarType.createType(primitiveType);
     }

@@ -13,7 +13,7 @@ public interface DumpInfo {
 
     void addTable(String dbName, Table table);
 
-    void addView(View view);
+    void addView(String dbName, View view);
 
     void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic);
 

@@ -3146,8 +3146,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public void onErasePartition(Partition partition) {
-        localMetastore.onErasePartition(partition);
+    public Set<Long> onErasePartition(Partition partition) {
+        return localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {
@@ -3183,6 +3183,11 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
         }
     }
 

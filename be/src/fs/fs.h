@@ -24,6 +24,7 @@ namespace starrocks {
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
+class ResultFileOptions;
 struct WritableFileOptions;
 struct RandomAccessFileOptions;
 
@@ -37,8 +38,14 @@ struct SpaceInfo {
 };
 
 struct FSOptions {
-    FSOptions(const TBrokerScanRangeParams* params = nullptr) : params(params) {}
-    const TBrokerScanRangeParams* params;
+    FSOptions(const TBrokerScanRangeParams* scan_range_params = nullptr, const TExportSink* export_sink = nullptr,
+              const ResultFileOptions* result_file_options = nullptr)
+            : scan_range_params(scan_range_params),
+              export_sink(export_sink),
+              result_file_options(result_file_options) {}
+    const TBrokerScanRangeParams* scan_range_params;
+    const TExportSink* export_sink;
+    const ResultFileOptions* result_file_options;
 };
 
 class FileSystem {

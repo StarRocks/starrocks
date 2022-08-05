@@ -76,6 +76,12 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    //Routine Statement
+    | stopRoutineLoadStatement                                                              #stopRoutineLoad
+    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
+    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
+    | showRoutineLoadStatement                                                              #showRoutineLoad
+
     // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
@@ -83,7 +89,6 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
-    | SET setVarList                                                                        #setStmt
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -101,10 +106,10 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createResourceGroupStatement                                                              #createResourceGroup
-    | dropResourceGroupStatement                                                                #dropResourceGroup
-    | alterResourceGroupStatement                                                               #alterResourceGroup
-    | showResourceGroupStatement                                                                #showResourceGroup
+    | createResourceGroupStatement                                                          #createResourceGroup
+    | dropResourceGroupStatement                                                            #dropResourceGroup
+    | alterResourceGroupStatement                                                           #alterResourceGroup
+    | showResourceGroupStatement                                                            #showResourceGroup
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
@@ -113,6 +118,9 @@ statement
 
     // Load Statement
     | loadStatement                                                                         #load
+    | showLoadStatement                                                                     #showLoad
+    | showLoadWarningsStatement                                                             #showLoadWarnings
+    | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -126,6 +134,7 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | setStatement                                                                          #setStmt
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -457,6 +466,12 @@ alterClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
+    | addColumnClause
+    | addColumnsClause
+    | dropColumnClause
+    | modifyColumnClause
+    | columnRenameClause
+    | reorderColumnsClause
     ;
 
 addPartitionClause
@@ -523,6 +538,29 @@ modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
+addColumnClause
+    : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+addColumnsClause
+    : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+dropColumnClause
+    : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnClause
+    : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+columnRenameClause
+    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    ;
+
+reorderColumnsClause
+    : ORDER BY identifierList (FROM rollupName=identifier)? properties?
+    ;
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
@@ -537,6 +575,25 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+stopRoutineLoadStatement
+    : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+resumeRoutineLoadStatement
+    : RESUME ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+pauseRoutineLoadStatement
+    : PAUSE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+showRoutineLoadStatement
+    : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
@@ -674,6 +731,19 @@ resourceDesc
     : WITH RESOURCE name=identifierOrString props=propertyList?
     ;
 
+showLoadStatement
+    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+showLoadWarningsStatement
+    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
+    | SHOW LOAD WARNINGS ON string
+    ;
+
+cancelLoadStatement
+    : CANCEL LOAD (FROM identifier)? (WHERE expression)?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -718,18 +788,21 @@ showBrokerStatement
     : SHOW BROKER
     ;
 
-varType
-    : GLOBAL
-    | LOCAL
-    | SESSION
+setStatement
+    : SET setVar (',' setVar)*
     ;
 
 setVar
-    : varType? IDENTIFIER '=' expression
+    : varType? identifier '=' setExprOrDefault
+    | AT identifierOrString '=' expression
+    | AT AT (varType '.')? identifier '=' setExprOrDefault
     ;
 
-setVarList
-    : setVar (',' setVar)*
+setExprOrDefault
+    : DEFAULT
+    | ON
+    | ALL
+    | expression
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -858,7 +931,7 @@ outerAndSemiJoinType
     ;
 
 bracketHint
-    : '[' IDENTIFIER (',' IDENTIFIER)* ']'
+    : '[' identifier (',' identifier)* ']'
     ;
 
 setVarHint
@@ -866,7 +939,7 @@ setVarHint
     ;
 
 hintMap
-    : k=IDENTIFIER '=' v=literalExpression
+    : k=identifierOrString '=' v=literalExpression
     ;
 
 joinCriteria
@@ -1019,7 +1092,7 @@ aggregationFunction
     ;
 
 variable
-    : AT AT ((GLOBAL | SESSION | LOCAL) '.')? identifier
+    : AT AT (varType '.')? identifier
     ;
 
 columnReference
@@ -1182,6 +1255,12 @@ property
     : key=string '=' value=string
     ;
 
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
+    ;
+
 comment
     : COMMENT string
     ;
@@ -1265,10 +1344,10 @@ qualifiedName
     ;
 
 identifier
-    : IDENTIFIER             #unquotedIdentifier
+    : LETTER_IDENTIFIER      #unquotedIdentifier
     | nonReserved            #unquotedIdentifier
-    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
+    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     ;
 
 identifierList

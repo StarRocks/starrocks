@@ -475,7 +475,7 @@ public class BDBJournalCursorTest {
      public void refreshFailedRetriedSucceed(@Mocked BDBEnvironment environment) throws Exception {
         new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 times = 2;
                 result = new DatabaseNotFoundException("mock mock");
                 result = Arrays.asList(3L, 23L, 45L);
@@ -489,7 +489,7 @@ public class BDBJournalCursorTest {
      public void refreshFailed(@Mocked BDBEnvironment environment) throws Exception {
          new Expectations(environment) {
             {
-                environment.getDatabaseNames();
+                environment.getDatabaseNamesWithPrefix("");
                 result = new DatabaseNotFoundException("mock mock");
             }
         };

@@ -305,20 +305,19 @@ public:
 
     // Add a counter with 'name'/'type'.  Returns a counter object that the caller can
     // update.  The counter is owned by the RuntimeProfile object.
-    // If parent_counter_name is a non-empty string, the counter is added as a child of
-    // parent_counter_name.
+    // If parent_name is a non-empty string, the counter is added as a child of
+    // parent_name.
     // If the counter already exists, the existing counter object is returned.
-    Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
+    Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_name);
     Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
-    // If parent_counter_name is a non-empty string, the counter is added as a child of
-    // parent_counter_name.
+    // If parent_name is a non-empty string, the counter is added as a child of
+    // parent_name.
     // Returns NULL if the counter already exists.
     DerivedCounter* add_derived_counter(const std::string& name, TUnit::type type,
-                                        const DerivedCounterFunction& counter_fn,
-                                        const std::string& parent_counter_name);
+                                        const DerivedCounterFunction& counter_fn, const std::string& parent_name);
 
     // Add a set of thread counters prefixed with 'prefix'. Returns a ThreadCounters object
     // that the caller can update.  The counter is owned by the RuntimeProfile object.
@@ -338,8 +337,8 @@ public:
     // Remove the counter object with 'name', and it will remove all the child counters recursively
     void remove_counter(const std::string& name);
 
-    // Clean all the counters except saved_counter_names
-    void remove_counters(const std::set<std::string>& saved_counter_names);
+    // Clean all the counters except saved_names
+    void remove_counters(const std::set<std::string>& saved_names);
 
     // Helper to append to the "ExecOption" info string.
     void append_exec_option(const std::string& option) { add_info_string("ExecOption", option); }
@@ -433,13 +432,13 @@ public:
 
     // Add a bucket of counters to store the sampled value of src_counter.
     // The src_counter is sampled periodically and the buckets are updated.
-    void add_bucketing_counters(const std::string& name, const std::string& parent_counter_name, Counter* src_counter,
+    void add_bucketing_counters(const std::string& name, const std::string& parent_name, Counter* src_counter,
                                 int max_buckets, std::vector<Counter*>* buckets);
 
     /// Adds a high water mark counter to the runtime profile. Otherwise, same behavior
     /// as AddCounter().
     HighWaterMarkCounter* AddHighWaterMarkCounter(const std::string& name, TUnit::type unit,
-                                                  const std::string& parent_counter_name = "");
+                                                  const std::string& parent_name = "");
 
     // stops updating the value of 'rate_counter'. Rate counters are updated
     // periodically so should be removed as soon as the underlying counter is
@@ -471,7 +470,7 @@ private:
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
-    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_counter_name);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name);
 
     RuntimeProfile* _parent;
 
@@ -622,7 +621,7 @@ private:
                                      std::ostream* s);
 
 public:
-    // Merge all the isomorphic sub profiles and the caller must known for sure
+    // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     // The merged result will be stored in the first profile
     static void merge_isomorphic_profiles(std::vector<RuntimeProfile*>& profiles);
@@ -631,8 +630,6 @@ private:
     static const std::unordered_set<std::string> NON_MERGE_COUNTER_NAMES;
     // Merge all the isomorphic counters
     // The exact semantics of merge depends on TUnit::type
-    // TODO(hcf) is the classification right?
-    // TODO(hcf) merge bucket counters
     // sum:
     //     UNIT / UNIT_PER_SECOND
     //     BYTES / BYTES_PER_SECOND
@@ -640,8 +637,7 @@ private:
     // average:
     //     CPU_TICKS / TIME_NS / TIME_MS / TIME_S
     typedef std::tuple<int64_t, int64_t, int64_t> MergedInfo;
-    static MergedInfo merge_isomorphic_counters(TUnit::type type,
-                                                std::vector<std::tuple<Counter*, Counter*, Counter*>>& counters);
+    static MergedInfo merge_isomorphic_counters(TUnit::type type, std::vector<Counter*>& counters);
 
     static bool is_average_type(TUnit::type type) {
         return TUnit::type::CPU_TICKS == type || TUnit::type::TIME_NS == type || TUnit::type::TIME_MS == type ||

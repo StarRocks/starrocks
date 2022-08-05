@@ -570,8 +570,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
-                throw new DdlException("table[" + tableName + "] is not OLAP table");
+            if (!table.isOlapOrLakeTable()) {
+                throw new DdlException("table[" + tableName + "] is not OLAP table or LAKE table");
             }
             OlapTable olapTable = (OlapTable) table;
 
@@ -1410,6 +1410,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // drop
+        Set<Long> tabletIdSet = new HashSet<Long>(); 
         if (isTempPartition) {
             olapTable.dropTempPartition(partitionName, true);
         } else {
@@ -1426,13 +1427,17 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
-            olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+            tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
         }
 
         // log
         DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), partitionName, isTempPartition,
                 clause.isForceDrop());
         editLog.logDropPartition(info);
+
+        if (!tabletIdSet.isEmpty()) {
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+        }
 
         LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
                 clause.isForceDrop());
@@ -1441,12 +1446,16 @@ public class LocalMetastore implements ConnectorMetadata {
     public void replayDropPartition(DropPartitionInfo info) {
         Database db = this.getDb(info.getDbId());
         db.writeLock();
+        Set<Long> tabletIdSet = new HashSet<Long>();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {
-                olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+                tabletIdSet = olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
+            }
+            if (!tabletIdSet.isEmpty()) {
+                stateMgr.getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
             }
         } finally {
             db.writeUnlock();
@@ -1903,7 +1912,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = Config.storage_cooldown_second;
+                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
                 }
 
                 // get service shard storage info from StarMgr
@@ -4497,14 +4506,22 @@ public class LocalMetastore implements ConnectorMetadata {
         colocateTableIndex.removeTable(olapTable.getId());
     }
 
-    public void onErasePartition(Partition partition) {
+    public Set<Long> onErasePartition(Partition partition) {
         // remove tablet in inverted index
+        Set<Long> tabletIdSet = new HashSet<Long>();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
-                invertedIndex.deleteTablet(tablet.getId());
+                long tabletId = tablet.getId();
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                // only need to return lakeTablet
+                if (tabletMeta != null && tabletMeta.isLakeTablet()) {
+                    tabletIdSet.add(tabletId);
+                }
+                invertedIndex.deleteTablet(tabletId);
             }
         }
+        return tabletIdSet;
     }
 
     // for test only

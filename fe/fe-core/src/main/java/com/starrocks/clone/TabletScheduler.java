@@ -169,13 +169,13 @@ public class TabletScheduler extends LeaderDaemon {
         this.colocateTableIndex = globalStateMgr.getColocateTableIndex();
         this.stat = stat;
 
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)) {
+        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)) {
             this.rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        } else if (TabletBalancerStrategy.isBELoadScoreStrategy(Config.tablet_balancer_strategy)) {
+        } else if (TabletBalancerStrategy.isBELoadScoreStrategy(Config.tablet_sched_balancer_strategy)) {
             this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
         } else {
             LOG.warn("invalid value of Config.tablet_balancer_strategy {}, use be_load_score strategy",
-                    Config.tablet_balancer_strategy);
+                    Config.tablet_sched_balancer_strategy);
             this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
         }
     }
@@ -194,9 +194,9 @@ public class TabletScheduler extends LeaderDaemon {
     private boolean updateWorkingSlots() {
         // Compute delta that will be checked to update slot number per storage path and
         // record new value of `Config.schedule_slot_num_per_path`.
-        int cappedVal = Config.schedule_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
-                (Config.schedule_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
-                        Config.schedule_slot_num_per_path);
+        int cappedVal = Config.tablet_sched_slot_num_per_path < MIN_SLOT_PER_PATH ? MIN_SLOT_PER_PATH :
+                (Config.tablet_sched_slot_num_per_path > MAX_SLOT_PER_PATH ? MAX_SLOT_PER_PATH :
+                        Config.tablet_sched_slot_num_per_path);
         int delta = 0;
         int oldSlotPerPathConfig = currentSlotPerPathConfig;
         if (currentSlotPerPathConfig != 0) {
@@ -280,8 +280,8 @@ public class TabletScheduler extends LeaderDaemon {
         // and number of scheduling tablets exceed the limit,
         // refuse to add.
         if (tablet.getType() != TabletSchedCtx.Type.BALANCE && !force
-                && (pendingTablets.size() > Config.max_scheduling_tablets
-                || runningTablets.size() > Config.max_scheduling_tablets)) {
+                && (pendingTablets.size() > Config.tablet_sched_max_scheduling_tablets
+                || runningTablets.size() > Config.tablet_sched_max_scheduling_tablets)) {
             return AddResult.LIMIT_EXCEED;
         }
 
@@ -340,7 +340,7 @@ public class TabletScheduler extends LeaderDaemon {
 
         handleRunningTablets();
 
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)) {
+        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)) {
             // selectTabletsForBalance should depend on latest load statistics
             // do not select others balance task when there is running or pending balance tasks
             // to avoid generating repeated task
@@ -354,11 +354,11 @@ public class TabletScheduler extends LeaderDaemon {
             }
         } else {
             long numOfBalancingTablets = getBalanceTabletsNumber();
-            if (numOfBalancingTablets < Config.max_balancing_tablets) {
+            if (numOfBalancingTablets < Config.tablet_sched_max_balancing_tablets) {
                 selectTabletsForBalance();
             } else {
                 LOG.info("number of balancing tablets {} exceed limit: {}, skip selecting tablets for balance",
-                        numOfBalancingTablets, Config.max_balancing_tablets);
+                        numOfBalancingTablets, Config.tablet_sched_max_balancing_tablets);
             }
         }
 
@@ -483,7 +483,7 @@ public class TabletScheduler extends LeaderDaemon {
                             tabletCtx.getTabletId(), tabletCtx.getType().name(), e.getMessage());
                     if (tabletCtx.getType() == Type.BALANCE) {
                         // if balance is disabled, remove this tablet
-                        if (Config.disable_balance) {
+                        if (Config.tablet_sched_disable_balance) {
                             finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED,
                                     "disable balance and " + e.getMessage());
                         } else {
@@ -1170,7 +1170,7 @@ public class TabletScheduler extends LeaderDaemon {
      * and waiting to be scheduled.
      */
     private void selectTabletsForBalance() {
-        if (Config.disable_balance) {
+        if (Config.tablet_sched_disable_balance) {
             LOG.info("balance is disabled. skip selecting tablets for balance");
             return;
         }
@@ -1187,6 +1187,50 @@ public class TabletScheduler extends LeaderDaemon {
     private void doBalance(TabletSchedCtx tabletCtx, AgentBatchTask batchTask) throws SchedException {
         stat.counterBalanceSchedule.incrementAndGet();
         rebalancer.createBalanceTask(tabletCtx, backendsWorkingSlots, batchTask);
+    }
+
+    private RootPathLoadStatistic findPath(TabletSchedCtx tabletCtx,
+                                           List<RootPathLoadStatistic> allFitPaths,
+                                           boolean matchMedium) throws SchedException {
+        for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
+            if (matchMedium && rootPathLoadStatistic.getStorageMedium() != tabletCtx.getStorageMedium()) {
+                continue;
+            }
+
+            PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
+            if (slot == null) {
+                LOG.debug("backend {} does not found when getting slots", rootPathLoadStatistic.getBeId());
+                continue;
+            }
+
+            if (slot.takeSlot(rootPathLoadStatistic.getPathHash()) != -1) {
+                return rootPathLoadStatistic;
+            }
+        }
+
+        return null;
+    }
+
+    private RootPathLoadStatistic findAvailablePathWithMediumMatch(TabletSchedCtx tabletCtx,
+                                                                   List<RootPathLoadStatistic> allFitPaths)
+            throws SchedException {
+        return findPath(tabletCtx, allFitPaths, true /* match medium */);
+    }
+
+    private RootPathLoadStatistic findAvailablePathArbitrary(TabletSchedCtx tabletCtx,
+                                                             List<RootPathLoadStatistic> allFitPaths)
+            throws SchedException {
+        return findPath(tabletCtx, allFitPaths, false /* match medium */);
+    }
+
+    private RootPathLoadStatistic findAvailablePath(TabletSchedCtx tabletCtx,
+                                                    List<RootPathLoadStatistic> allFitPaths) throws SchedException {
+        RootPathLoadStatistic path = findAvailablePathWithMediumMatch(tabletCtx, allFitPaths);
+        if (path == null) {
+            path = findAvailablePathArbitrary(tabletCtx, allFitPaths);
+        }
+
+        return path;
     }
 
     // choose a path on a backend which is fit for the tablet
@@ -1233,37 +1277,13 @@ public class TabletScheduler extends LeaderDaemon {
 
         // all fit paths has already been sorted by load score in 'allFitPaths' in ascend order.
         // just get first available path.
-        // we try to find a path with specified media type, if not find, arbitrarily use one.
-        for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
-            if (rootPathLoadStatistic.getStorageMedium() != tabletCtx.getStorageMedium()) {
-                continue;
-            }
-
-            PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
-            if (slot == null) {
-                LOG.debug("backend {} does not found when getting slots", rootPathLoadStatistic.getBeId());
-                continue;
-            }
-
-            if (slot.takeSlot(rootPathLoadStatistic.getPathHash()) != -1) {
-                return rootPathLoadStatistic;
-            }
+        // we try to find a path with specified medium type, if not find, arbitrarily select one.
+        RootPathLoadStatistic path = findAvailablePath(tabletCtx, allFitPaths);
+        if (path != null) {
+            return path;
+        } else {
+            throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path which can be fit in");
         }
-
-        // no root path with specified media type is found, get arbitrary one.
-        for (RootPathLoadStatistic rootPathLoadStatistic : allFitPaths) {
-            PathSlot slot = backendsWorkingSlots.get(rootPathLoadStatistic.getBeId());
-            if (slot == null) {
-                LOG.debug("backend {} does not found when getting slots", rootPathLoadStatistic.getBeId());
-                continue;
-            }
-
-            if (slot.takeSlot(rootPathLoadStatistic.getPathHash()) != -1) {
-                return rootPathLoadStatistic;
-            }
-        }
-
-        throw new SchedException(Status.SCHEDULE_FAILED, "unable to find dest path which can be fit in");
     }
 
     private synchronized void addBackToPendingTablets(TabletSchedCtx tabletCtx) {

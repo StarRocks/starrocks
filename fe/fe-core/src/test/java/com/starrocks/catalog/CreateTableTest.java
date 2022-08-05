@@ -278,7 +278,7 @@ public class CreateTableTest {
         ));
         // Add column in unique key
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
 
         // Add column in primary key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -294,7 +294,7 @@ public class CreateTableTest {
                         ");"
         ));
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
     }
 
     @Test

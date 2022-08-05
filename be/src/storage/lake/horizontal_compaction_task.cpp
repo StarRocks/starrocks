@@ -2,21 +2,15 @@
 
 #include "storage/lake/horizontal_compaction_task.h"
 
-#include <fmt/format.h>
-
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
-#include "storage/empty_iterator.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/merge_iterator.h"
-#include "storage/rowset/rowset_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
 #include "util/defer_op.h"
@@ -49,34 +43,16 @@ Status HorizontalCompactionTask::execute() {
     const int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, num_rows, num_size, max_input_segs);
 
-    RowsetReadOptions rs_opts;
-    rs_opts.sorted = true;
-    rs_opts.reader_type = READER_CUMULATIVE_COMPACTION;
-    rs_opts.chunk_size = chunk_size;
-    rs_opts.stats = &statistics;
-    rs_opts.runtime_state = nullptr;
-    rs_opts.profile = nullptr;
-    rs_opts.use_page_cache = false;
-    rs_opts.tablet_schema = tablet_schema.get();
-
     vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    TabletReader reader(*_tablet, _version, schema, _input_rowsets);
+    RETURN_IF_ERROR(reader.prepare());
+    vectorized::TabletReaderParams reader_params;
+    reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
+    reader_params.chunk_size = chunk_size;
+    reader_params.profile = nullptr;
+    reader_params.use_page_cache = false;
+    RETURN_IF_ERROR(reader.open(reader_params));
 
-    std::vector<ChunkIteratorPtr> iterators;
-    for (auto& rowset : _input_rowsets) {
-        ASSIGN_OR_RETURN(auto iter, rowset->read(schema, rs_opts));
-        iterators.emplace_back(std::move(iter));
-    }
-
-    std::shared_ptr<vectorized::ChunkIterator> read_iter;
-    if (UNLIKELY(iterators.empty())) {
-        read_iter = new_empty_iterator(schema, chunk_size);
-    } else if (keys_type == DUP_KEYS) {
-        read_iter = new_heap_merge_iterator(iterators);
-    } else {
-        read_iter = new_aggregate_iterator(new_heap_merge_iterator(iterators), 0);
-    }
-    RETURN_IF_ERROR(read_iter->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS));
-    RETURN_IF_ERROR(read_iter->init_output_schema(vectorized::EMPTY_FILTERED_COLUMN_IDS));
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
@@ -91,7 +67,7 @@ Status HorizontalCompactionTask::execute() {
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
-        if (auto st = read_iter->get_next(chunk.get()); st.is_end_of_file()) {
+        if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
             return st;

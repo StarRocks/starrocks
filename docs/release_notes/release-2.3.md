@@ -26,8 +26,6 @@
   - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)、[base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)、[array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
   - [week](../sql-reference/sql-functions/date-time-functions/week.md)、[time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
 
-- Add the [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md) statement. After you use the GRANT statement to impersonate a specific user identity to perform operations, you can use the EXECUTE AS statement to switch the execution context of the current session to this user.
-
 ### Improvements
 
 - The compaction mechanism can merge large metadata more quickly. This prevents metadata squeezing and excessive disk usage that can occur shortly after frequent data updates.
@@ -49,10 +47,6 @@
 - Optimize the Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](../using_starrocks/External_table.md#elasticsearch-external-table).
 
 - When the sum() function calculates numeric strings, implicit conversion is  performed.
-
-- Optimize the [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 、[REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) statements.
-  - Use the GRANT statement to grant a role to a user, or to grant user `a` the privilege to perform operations as user `b`.
-  - Use the REVOKE statement to revoke a role from a user, or to revoke the privilege that allows user `a` to perform operations as user `b`.
 
 - The year, month, and day functions support the DATE data type.
 

@@ -6,7 +6,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
@@ -320,13 +319,9 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testCountDistinctWithDiffMultiColumns() throws Exception {
         String sql = "select count(distinct t1b,t1c), count(distinct t1b,t1d) from test_all_type";
-        try {
-            getFragmentPlan(sql);
-        } catch (StarRocksPlannerException e) {
-            Assert.assertEquals(
-                    "The query contains multi count distinct or sum distinct, each can't have multi columns.",
-                    e.getMessage());
-        }
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 18:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN");
     }
 
     @Test
@@ -1244,7 +1239,6 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testMultiCountDistinctWithNoneGroup() throws Exception {
-        connectContext.getSessionVariable().setCboCteReuse(true);
         String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  MultiCastDataSinks\n" +
@@ -1263,12 +1257,10 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "  11:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 14: t1c");
-        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     @Test
     public void testMultiCountDistinctWithNoneGroup2() throws Exception {
-        connectContext.getSessionVariable().setCboCteReuse(true);
         String sql = "select count(distinct t1b), count(distinct t1c), sum(t1c), max(t1b) from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MultiCastDataSinks\n" +
@@ -1294,31 +1286,27 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  7:Project\n" +
                 "  |  <slot 15> : 2: t1b");
-        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     @Test
     public void testMultiCountDistinctWithNoneGroup3() throws Exception {
         String sql = "select count(distinct t1b), count(distinct t1c) from test_all_type";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: multi_distinct_count(2: t1b), multi_distinct_count(3: t1c)\n");
+        assertContains(plan, "18:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN");
     }
 
     @Test
     public void testMultiCountDistinctWithNoneGroup4() throws Exception {
-        connectContext.getSessionVariable().setCboCteReuse(true);
         String sql = "select count(distinct t1b + 1), count(distinct t1c + 2) from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
                 "  |  <slot 11> : CAST(2: t1b AS INT) + 1\n" +
                 "  |  <slot 12> : CAST(3: t1c AS BIGINT) + 2");
-        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     @Test
     public void testMultiAvgDistinctWithNoneGroup() throws Exception {
-        connectContext.getSessionVariable().setCboCteReuse(true);
         String sql = "select avg(distinct t1b) from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "19:Project\n" +
@@ -1377,7 +1365,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 21> : 3: t1c");
         assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
-        connectContext.getSessionVariable().setCboCteReuse(false);
 
 
         int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
@@ -1402,7 +1389,6 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testMultiDistinctAggregate() throws Exception {
-        connectContext.getSessionVariable().setCboCteReuse(true);
         String sql = "select count(distinct t1b), count(distinct t1b, t1c) from test_all_type";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MultiCastDataSinks\n" +
@@ -1469,7 +1455,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 26> : 2: t1b\n" +
                 "  |  <slot 27> : 3: t1c\n" +
                 "  |  <slot 28> : 11: expr");
-        connectContext.getSessionVariable().setCboCteReuse(false);
     }
 
     @Test
@@ -1508,6 +1493,57 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 1> : 1: L_ORDERKEY\n" +
                 "  |  <slot 18> : 1.0001\n" +
                 "  |  <slot 20> : 20: count");
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testGroupByConstantWithAggPrune() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(4);
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY)\n" +
+                "  |  group by: 18: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY");
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY)\n" +
+                "  |  group by: 18: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: L_ORDERKEY");
+
+        sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: L_ORDERKEY), count(20: count)\n" +
+                "  |  group by: 18: expr\n" +
+                "  |  \n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  <slot 20> : 20: count\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update serialize)\n" +
+                "  |  output: count(2: L_PARTKEY)\n" +
+                "  |  group by: 1: L_ORDERKEY");
+        FeConstants.runningUnitTest = false;
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

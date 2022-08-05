@@ -5,15 +5,22 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
+import com.starrocks.analysis.AddColumnClause;
+import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CreateIndexClause;
+import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.ModifyPartitionClause;
 import com.starrocks.analysis.ModifyTablePropertiesClause;
+import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
@@ -44,11 +51,6 @@ public class AlterTableStatementAnalyzer {
                     "The '%s' cannot be alter by 'ALTER TABLE', because '%s' is a materialized view," +
                             "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
                     tbl.getTbl(), tbl.getTbl());
-        }
-        try {
-            CatalogUtils.checkIsLakeTable(tbl.getDb(), tbl.getTbl());
-        } catch (AnalysisException e) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
         }
         List<AlterClause> alterClauseList = statement.getOps();
         if (alterClauseList == null || alterClauseList.isEmpty()) {
@@ -186,6 +188,135 @@ public class AlterTableStatementAnalyzer {
             } catch (AnalysisException e) {
                 throw new SemanticException("check properties error: %s", e.getMessage());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitAddColumnClause(AddColumnClause clause, ConnectContext context) {
+            ColumnDef columnDef = clause.getColumnDef();
+            if (columnDef == null) {
+                throw new SemanticException("No column definition in add column clause.");
+            }
+            try {
+                columnDef.analyze(true);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+            }
+
+            ColumnPosition colPos = clause.getColPos();
+            if (colPos != null) {
+                try {
+                    colPos.analyze();
+                } catch (AnalysisException e) {
+                    throw new SemanticException("Analyze colPos error: %s", e.getMessage());
+                }
+            }
+
+            if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, columnDef.getName());
+            }
+
+            if (columnDef.getAggregateType() != null && colPos != null && colPos.isFirst()) {
+                throw new SemanticException("Cannot add value column[" + columnDef.getName() + "] at first");
+            }
+
+            // Make sure return null if rollup name is empty.
+            clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+            clause.setColumn(columnDef.toColumn());
+            return null;
+        }
+
+        @Override
+        public Void visitAddColumnsClause(AddColumnsClause clause, ConnectContext context) {
+            List<ColumnDef> columnDefs = clause.getColumnDefs();
+            if (columnDefs == null || columnDefs.isEmpty()) {
+                throw new SemanticException("Columns is empty in add columns clause.");
+            }
+            for (ColumnDef colDef : columnDefs) {
+                try {
+                    colDef.analyze(true);
+                } catch (AnalysisException e) {
+                    throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+                }
+                if (!colDef.isAllowNull() && colDef.defaultValueIsNull()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DEFAULT_FOR_FIELD, colDef.getName());
+                }
+            }
+
+            // Make sure return null if rollup name is empty.
+            clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+            columnDefs.forEach(columnDef -> clause.addColumn(columnDef.toColumn()));
+            return null;
+        }
+
+        @Override
+        public Void visitDropColumnClause(DropColumnClause clause, ConnectContext context) {
+            if (Strings.isNullOrEmpty(clause.getColName())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, clause.getColName());
+            }
+            clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+            return null;
+        }
+
+        @Override
+        public Void visitModifyColumnClause(ModifyColumnClause clause, ConnectContext context) {
+            ColumnDef columnDef = clause.getColumnDef();
+            if (columnDef == null) {
+                throw new SemanticException("No column definition in modify column clause.");
+            }
+            try {
+                columnDef.analyze(true);
+            } catch (AnalysisException e) {
+                throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+            }
+
+            ColumnPosition colPos = clause.getColPos();
+            if (colPos != null) {
+                try {
+                    colPos.analyze();
+                } catch (AnalysisException e) {
+                    throw new SemanticException("Analyze colPos error: %s", e.getMessage());
+                }
+            }
+
+            clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+            clause.setColumn(columnDef.toColumn());
+            return null;
+        }
+
+        @Override
+        public Void visitColumnRenameClause(ColumnRenameClause clause, ConnectContext context) {
+            if (Strings.isNullOrEmpty(clause.getColName())) {
+                throw new SemanticException("Column name is not set");
+            }
+
+            if (Strings.isNullOrEmpty(clause.getNewColName())) {
+                throw new SemanticException("New column name is not set");
+            }
+
+            try {
+                FeNameFormat.checkColumnName(clause.getNewColName());
+            } catch (AnalysisException e) {
+                throw new SemanticException("Analyze FeNameFormat error: %s", e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitReorderColumnsClause(ReorderColumnsClause clause, ConnectContext context) {
+            List<String> columnsByPos = clause.getColumnsByPos();
+            if (columnsByPos == null || columnsByPos.isEmpty()) {
+                throw new SemanticException("No column in reorder columns clause.");
+            }
+            for (String col : columnsByPos) {
+                if (Strings.isNullOrEmpty(col)) {
+                    throw new SemanticException("Empty column in reorder columns.");
+                }
+            }
+            clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
             return null;
         }
 

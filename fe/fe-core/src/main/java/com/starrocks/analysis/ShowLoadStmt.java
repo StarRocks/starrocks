@@ -22,20 +22,14 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.LoadProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -74,8 +68,28 @@ public class ShowLoadStmt extends ShowStmt {
         return dbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
+    }
+
+    public LimitElement getLimitElement() {
+        return limitElement;
+    }
+
     public ArrayList<OrderByPair> getOrderByPairs() {
         return this.orderByPairs;
+    }
+
+    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
     }
 
     public long getLimit() {
@@ -96,145 +110,46 @@ public class ShowLoadStmt extends ShowStmt {
         return this.labelValue;
     }
 
+    public void setLabelValue(String labelValue) {
+        this.labelValue = labelValue;
+    }
+
     public Set<JobState> getStates() {
         if (Strings.isNullOrEmpty(stateValue)) {
             return null;
         }
 
-        Set<JobState> states = new HashSet<JobState>();
+        Set<JobState> states = new HashSet<>();
         JobState state = JobState.valueOf(stateValue);
         states.add(state);
 
         return states;
     }
 
+    public void setStateValue(String stateValue) {
+        this.stateValue = stateValue;
+    }
+
     public boolean isAccurateMatch() {
         return isAccurateMatch;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-
-        // analyze where clause if not null
-        if (whereClause != null) {
-            if (whereClause instanceof CompoundPredicate) {
-                CompoundPredicate cp = (CompoundPredicate) whereClause;
-                if (cp.getOp() != com.starrocks.analysis.CompoundPredicate.Operator.AND) {
-                    throw new AnalysisException("Only allow compound predicate with operator AND");
-                }
-
-                analyzeSubPredicate(cp.getChild(0));
-                analyzeSubPredicate(cp.getChild(1));
-            } else {
-                analyzeSubPredicate(whereClause);
-            }
-        }
-
-        // order by
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            orderByPairs = new ArrayList<OrderByPair>();
-            for (OrderByElement orderByElement : orderByElements) {
-                if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                    throw new AnalysisException("Should order by column");
-                }
-                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = LoadProcDir.analyzeColumn(slotRef.getColumnName());
-                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                orderByPairs.add(orderByPair);
-            }
-        }
+    public void setIsAccurateMatch(boolean isAccurateMatch) {
+        this.isAccurateMatch = isAccurateMatch;
     }
 
-    private void analyzeSubPredicate(Expr subExpr) throws AnalysisException {
-        if (subExpr == null) {
-            return;
-        }
+    @Override
+    public void analyze(Analyzer analyzer) throws UserException {
+    }
 
-        boolean valid = true;
-        boolean hasLabel = false;
-        boolean hasState = false;
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowLoadStmt(this, context);
+    }
 
-        CHECK:
-        {
-            if (subExpr instanceof BinaryPredicate) {
-                BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-                if (binaryPredicate.getOp() != Operator.EQ) {
-                    valid = false;
-                    break CHECK;
-                }
-            } else if (subExpr instanceof LikePredicate) {
-                LikePredicate likePredicate = (LikePredicate) subExpr;
-                if (likePredicate.getOp() != LikePredicate.Operator.LIKE) {
-                    valid = false;
-                    break CHECK;
-                }
-            } else {
-                valid = false;
-                break CHECK;
-            }
-
-            // left child
-            if (!(subExpr.getChild(0) instanceof SlotRef)) {
-                valid = false;
-                break CHECK;
-            }
-            String leftKey = ((SlotRef) subExpr.getChild(0)).getColumnName();
-            if (leftKey.equalsIgnoreCase("label")) {
-                hasLabel = true;
-            } else if (leftKey.equalsIgnoreCase("state")) {
-                hasState = true;
-            } else {
-                valid = false;
-                break CHECK;
-            }
-
-            if (hasState && !(subExpr instanceof BinaryPredicate)) {
-                valid = false;
-                break CHECK;
-            }
-
-            if (hasLabel && subExpr instanceof BinaryPredicate) {
-                isAccurateMatch = true;
-            }
-
-            // right child
-            if (!(subExpr.getChild(1) instanceof StringLiteral)) {
-                valid = false;
-                break CHECK;
-            }
-
-            String value = ((StringLiteral) subExpr.getChild(1)).getStringValue();
-            if (Strings.isNullOrEmpty(value)) {
-                valid = false;
-                break CHECK;
-            }
-
-            if (hasLabel) {
-                labelValue = value;
-            } else if (hasState) {
-                stateValue = value.toUpperCase();
-
-                try {
-                    JobState.valueOf(stateValue);
-                } catch (Exception e) {
-                    valid = false;
-                    break CHECK;
-                }
-            }
-        }
-
-        if (!valid) {
-            throw new AnalysisException("Where clause should looks like: LABEL = \"your_load_label\","
-                    + " or LABEL LIKE \"matcher\", " + " or STATE = \"PENDING|ETL|LOADING|FINISHED|CANCELLED\", "
-                    + " or compound predicate with operator AND");
-        }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override

@@ -29,6 +29,7 @@
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
+#include "fs/fs_posix.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
@@ -38,16 +39,7 @@ namespace starrocks {
 
 FileResultWriter::FileResultWriter(const ResultFileOptions* file_opts,
                                    const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile)
-        : _file_opts(file_opts), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {
-    if (_file_opts->is_local_file) {
-        _fs = FileSystem::Default();
-    } else {
-        // TODO(@c1oudman) Do you only need first element of broker addresses?
-        _fs = new BrokerFileSystem(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
-                                   config::broker_write_timeout_seconds * 1000);
-        _owned_fs.reset(_fs);
-    }
-}
+        : _file_opts(file_opts), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
 FileResultWriter::~FileResultWriter() {
     _close_file_writer(true);
@@ -57,7 +49,6 @@ Status FileResultWriter::init(RuntimeState* state) {
     _state = state;
     _init_profile();
 
-    RETURN_IF_ERROR(_create_file_writer());
     return Status::OK();
 }
 
@@ -74,6 +65,24 @@ void FileResultWriter::_init_profile() {
 Status FileResultWriter::_create_file_writer() {
     std::string file_name = _get_next_file_name();
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
+    if (_fs == nullptr) {
+        if (_file_opts->is_local_file) {
+            _fs = new_fs_posix();
+        } else {
+            if (_file_opts->use_broker) {
+                _fs.reset(new BrokerFileSystem(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
+                                               config::broker_write_timeout_seconds * 1000));
+            } else {
+                ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path,
+                                                                         FSOptions(nullptr, nullptr, _file_opts)));
+            }
+        }
+    }
+    if (_fs == nullptr) {
+        return Status::InternalError(
+                strings::Substitute("file system initialize failed for file $0", _file_opts->file_path));
+    }
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(opts, file_name));
 
     switch (_file_opts->file_format) {
@@ -90,6 +99,14 @@ Status FileResultWriter::_create_file_writer() {
     }
     LOG(INFO) << "create file for exporting query result. file name: " << file_name
               << ". query id: " << print_id(_state->query_id());
+    return Status::OK();
+}
+
+Status FileResultWriter::open(RuntimeState* state) {
+    // Move the _create_file_writer from init to open, because libhdfs depends on JNI.
+    // In init() function, we are in bthread environment, bthread and JNI have a conflict
+    // In open() function, we are in pthread environemnt, pthread and JNI doesn't have a conflict
+    RETURN_IF_ERROR(_create_file_writer());
     return Status::OK();
 }
 

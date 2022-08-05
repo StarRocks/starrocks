@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -125,7 +126,7 @@ public class LocalTabletTest {
         dos.flush();
         dos.close();
 
-        // 2. Read a object from file
+        // Read an object from file
         DataInputStream dis = new DataInputStream(new FileInputStream(file));
         LocalTablet rTablet1 = LocalTablet.read(dis);
         Assert.assertEquals(1, rTablet1.getId());
@@ -154,6 +155,13 @@ public class LocalTabletTest {
 
         dis.close();
         file.delete();
+
+        // Read an object from json
+        String jsonStr = GsonUtils.GSON.toJson(tablet);
+        LocalTablet jTablet = GsonUtils.GSON.fromJson(jsonStr, LocalTablet.class);
+        Assert.assertEquals(1, jTablet.getId());
+        Assert.assertEquals(3, jTablet.getImmutableReplicas().size());
+        Assert.assertEquals(jTablet.getImmutableReplicas().get(0).getVersion(), jTablet.getImmutableReplicas().get(1).getVersion());
     }
 
     @Test

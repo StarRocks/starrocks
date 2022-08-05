@@ -300,6 +300,13 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+
+    public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
+        Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
+        new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
+        return subQueryRelations;
+    }
+
     private static class TableCollectorWithAlias extends TableCollector {
         public TableCollectorWithAlias(Map<TableName, Table> dbs) {
             super(dbs);
@@ -340,4 +347,25 @@ public class AnalyzerUtils {
             return null;
         }
     }
+
+    private static class SubQueryRelationCollector extends TableCollector {
+        Map<TableName, SubqueryRelation> subQueryRelations;
+
+        public SubQueryRelationCollector(Map<TableName, SubqueryRelation> subQueryRelations) {
+            super(null);
+            this.subQueryRelations = subQueryRelations;
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            subQueryRelations.put(node.getResolveTableName(), node);
+            return visit(node.getQueryStatement());
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            return null;
+        }
+    }
+
 }

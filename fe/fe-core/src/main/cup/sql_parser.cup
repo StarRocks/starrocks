@@ -898,27 +898,7 @@ opt_dup_keys ::=
     ;
 
 alter_table_clause ::=
-    KW_ADD KW_COLUMN column_definition:col opt_col_pos:col_pos opt_to_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new AddColumnClause(col, col_pos, rollup, properties);
-    :}
-    | KW_ADD KW_COLUMN LPAREN column_definition_list:cols RPAREN opt_to_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new AddColumnsClause(cols, rollup, properties);
-    :}
-    | KW_DROP KW_COLUMN ident:col opt_from_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new DropColumnClause(col, rollup, properties);
-    :}
-    | KW_MODIFY KW_COLUMN column_definition:col opt_col_pos:col_pos opt_from_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new ModifyColumnClause(col, col_pos, rollup, properties);
-    :}
-    | KW_ORDER KW_BY LPAREN ident_list:cols RPAREN opt_from_rollup:rollup opt_properties:properties
-    {:
-        RESULT = new ReorderColumnsClause(cols, rollup, properties);
-    :}
-    | KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
+    KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
     {:
         RESULT = new ReplacePartitionClause(partitions, tempPartitions, properties);
     :}
@@ -929,10 +909,6 @@ alter_table_clause ::=
     | KW_RENAME KW_PARTITION ident:partitionName ident:newPartitionName
     {:
         RESULT = new PartitionRenameClause(partitionName, newPartitionName);
-    :}
-    | KW_RENAME KW_COLUMN ident:colName ident:newColName
-    {:
-        RESULT = new ColumnRenameClause(colName, newColName);
     :}
     | KW_ADD index_definition:indexDef
     {:
@@ -2098,20 +2074,6 @@ show_param ::=
     {:
         RESULT = new ShowWarningStmt();
     :}
-    // show load warnings
-    | KW_LOAD KW_WARNINGS opt_db:db opt_wild_where limit_clause:limitClause
-    {:
-        RESULT = new ShowLoadWarningsStmt(db, null, parser.where, limitClause);
-    :}
-    | KW_LOAD KW_WARNINGS KW_ON STRING_LITERAL:url
-    {:
-        RESULT = new ShowLoadWarningsStmt(null, url, null, null);
-    :}
-    /* Show load statement */
-    | KW_LOAD opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
-    {:
-        RESULT = new ShowLoadStmt(db, parser.where, orderByClause, limitClause);
-    :}
     /* Show export statement */
     | KW_EXPORT opt_db:db opt_wild_where order_by_clause:orderByClause limit_clause:limitClause
     {:
@@ -2423,10 +2385,6 @@ cancel_rollup_job_id_list ::=
     ;
 
 cancel_param ::=
-    KW_LOAD opt_db:db opt_wild_where
-    {:
-        RESULT = new CancelLoadStmt(db, parser.where);
-    :}
     | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
     {:
         RESULT = new CancelAlterSystemStmt(hostPorts);

@@ -214,19 +214,42 @@ vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& col
 void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
-        auto& rg = _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
-        int64_t offset = 0;
-        if (rg.__isset.dictionary_page_offset) {
-            offset = rg.dictionary_page_offset;
+        // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
+        // metadata (such as page offset and compressed_size) from _row_group_meta directly rather than file_metadata.
+        // 2. For map or struct columns, the physical_column_index indicates the real column index in rows group meta,
+        // and it may not be equal to col_idx_in_chunk.
+        // 3. For array type, the physical_column_index is 0, we need to iterate the children and
+        // collect their io ranges.
+        auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+        if (schema_node->type.type != TYPE_ARRAY) {
+            int64_t range_end = 0;
+            _collect_field_io_range(*schema_node, ranges, &range_end);
+            end = std::max(end, range_end);
         } else {
-            offset = rg.data_page_offset;
+            for (auto& field : schema_node->children) {
+                int64_t range_end = 0;
+                _collect_field_io_range(field, ranges, &range_end);
+                end = std::max(end, range_end);
+            }
         }
-        int64_t size = rg.total_compressed_size;
-        auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
-        ranges->emplace_back(r);
-        end = std::max(end, offset + size);
     }
     *end_offset = end;
+}
+
+void GroupReader::_collect_field_io_range(const ParquetField& field,
+                                          std::vector<SharedBufferedInputStream::IORange>* ranges,
+                                          int64_t* end_offset) {
+    auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
+    int64_t offset = 0;
+    if (column.__isset.dictionary_page_offset) {
+        offset = column.dictionary_page_offset;
+    } else {
+        offset = column.data_page_offset;
+    }
+    int64_t size = column.total_compressed_size;
+    auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+    ranges->emplace_back(r);
+    *end_offset = offset + size;
 }
 
 bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& conjunct_ctxs_by_slot,

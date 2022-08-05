@@ -12,6 +12,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,7 @@ public class Utils {
             LOG.info("Ignored error {}", ex.getMessage());
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds.isEmpty()) {
+        if (backendIds == null || backendIds.isEmpty()) {
             return null;
         }
         return backendIds.get(0);
@@ -39,9 +40,15 @@ public class Utils {
     // Preconditions: Has required the database's reader lock.
     // Returns a map from backend ID to a list of tablet IDs.
     public static Map<Long, List<Long>> groupTabletID(LakeTable table) throws NoAliveBackendException {
+        return groupTabletID(table.getPartitions(), MaterializedIndex.IndexExtState.ALL);
+    }
+
+    public static Map<Long, List<Long>> groupTabletID(Collection<Partition> partitions,
+                                                      MaterializedIndex.IndexExtState indexState)
+            throws NoAliveBackendException {
         Map<Long, List<Long>> groupMap = new HashMap<>();
-        for (Partition partition : table.getPartitions()) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (Partition partition : partitions) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(indexState)) {
                 for (Tablet tablet : index.getTablets()) {
                     Long beId = chooseBackend((LakeTablet) tablet);
                     if (beId == null) {

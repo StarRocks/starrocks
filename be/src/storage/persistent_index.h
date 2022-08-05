@@ -26,6 +26,7 @@ class Column;
 enum PersistentIndexFileVersion {
     UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
+    PERSISTENT_INDEX_VERSION_2,
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -63,8 +64,9 @@ struct KeysInfo {
 struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
+    uint16_t size;
     KVRef() {}
-    KVRef(const uint8_t* kv_pos, uint64_t hash) : kv_pos(kv_pos), hash(hash) {}
+    KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
 class PersistentIndex;
@@ -84,7 +86,7 @@ public:
     // |values|: value array for return values
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    virtual Status get(size_t n, const void* keys, IndexValue* values, KeysInfo* not_found,
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values, KeysInfo* not_found,
                        size_t* num_found) const = 0;
 
     // batch upsert and get old value
@@ -94,7 +96,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    virtual Status upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values,
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                           KeysInfo* not_found, size_t* num_found) = 0;
 
     // batch upsert
@@ -103,14 +105,14 @@ public:
     // |values|: value array
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found(or already exist) to this argument
-    virtual Status upsert(size_t n, const void* keys, const IndexValue* values, KeysInfo* not_found,
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, KeysInfo* not_found,
                           size_t* num_found) = 0;
 
     // load wals
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    virtual Status load_wals(size_t n, const void* keys, const IndexValue* values) = 0;
+    virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
     virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
@@ -122,7 +124,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    virtual Status insert(size_t n, const void* keys, const IndexValue* values) = 0;
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // batch erase(delete)
     // |n|: size of key/value array
@@ -130,20 +132,20 @@ public:
     // |old_values|: return old values for updates, or set to NullValue if not exists
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    virtual Status erase(size_t n, const void* keys, IndexValue* old_values, KeysInfo* not_found,
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeysInfo* not_found,
                          size_t* num_found) = 0;
 
     // batch replace
     // |keys|: key array as raw buffer
     // |values|: new value array
     // |replace_idxes|: the idx array of the kv needed to be replaced
-    virtual Status replace(const void* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
+    virtual Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
 
     virtual Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) = 0;
 
-    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values) = 0;
+    virtual Status append_wal(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
-    virtual Status append_wal(size_t n, const void* keys, const IndexValue* values,
+    virtual Status append_wal(size_t n, const Slice* keys, const IndexValue* values,
                               const std::vector<size_t>& idxes) = 0;
 
     // get dump size of hashmap
@@ -179,14 +181,16 @@ class ImmutableIndex {
 public:
     // batch get
     // |n|: size of key/value array
-    // |keys|: key array as raw buffer
+    // |keys|: key array as slice array
     // |not_found|: information of keys not found in upper level, which needs to be checked in this level
     // |values|: value array for return values
     // |num_found|: add the number of keys found in L1 to this argument
-    Status get(size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found) const;
+    // |key_size|: the key size of keys array
+    Status get(size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values, size_t* num_found,
+               size_t key_size) const;
 
     // batch check key existence
-    Status check_not_exist(size_t n, const void* keys);
+    Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
 
     // get Immutable index file size;
     void file_size(uint64_t* file_size) {
@@ -208,16 +212,36 @@ public:
 private:
     friend class PersistentIndex;
 
+    Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                     uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_varlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
+                                     uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
+
     // get all the kv refs of a single shard by `shard_idx`, and add them to `kvs_by_shard`, the shard number of
     // kvs_by_shard may be different from this object's own shard number
     // NOTE: used by PersistentIndex only
-    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t pow,
+    Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info, IndexValue* values,
+    Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                IndexValue* values, size_t* num_found,
+                                std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                IndexValue* values, size_t* num_found,
+                                std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info, IndexValue* values,
                          size_t* num_found) const;
 
-    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const void* keys, const KeysInfo& keys_info) const;
+    Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+                                            std::unique_ptr<ImmutableIndexShard>* shard) const;
+
+    Status _check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info) const;
 
     std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
@@ -230,9 +254,13 @@ private:
         uint64_t bytes;
         uint32_t npage;
         uint32_t size;
+        uint32_t key_size;
+        uint32_t value_size;
+        uint32_t nbucket;
     };
 
     std::vector<ShardInfo> _shards;
+    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
 };
 
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
@@ -296,27 +324,27 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    Status get(size_t n, const void* keys, IndexValue* values);
+    Status get(size_t n, const Slice* keys, IndexValue* values);
 
     // batch upsert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
-    Status upsert(size_t n, const void* keys, const IndexValue* values, IndexValue* old_values);
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    Status insert(size_t n, const void* keys, const IndexValue* values, bool check_l1);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    Status erase(size_t n, const void* keys, IndexValue* old_values);
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -325,7 +353,7 @@ public:
     // |values|: value array
     // |src_rssid|: rssid array
     // |failed|: return not match rowid
-    [[maybe_unused]] Status try_replace(size_t n, const void* keys, const IndexValue* values,
+    [[maybe_unused]] Status try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                         const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed);
 
     // batch replace
@@ -334,10 +362,13 @@ public:
     // |values|: value array
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
-    Status try_replace(size_t n, const void* keys, const IndexValue* values, const uint32_t max_src_rssid,
+    Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
+
+    Status test_flush_varlen_to_immutable_index(const std::string& dir, const EditVersion& version, size_t num_entry,
+                                                const Slice* keys, const IndexValue* values);
 
 private:
     size_t _dump_bound();
@@ -351,7 +382,7 @@ private:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array, if operation is erase, |values| is nullptr
-    Status _append_wal(size_t n, const void* key, const IndexValue* values);
+    Status _append_wal(size_t n, const Slice* key, const IndexValue* values);
 
     Status _check_and_flush_l0();
 

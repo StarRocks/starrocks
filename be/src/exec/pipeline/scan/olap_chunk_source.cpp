@@ -52,6 +52,7 @@ void OlapChunkSource::close(RuntimeState* state) {
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
@@ -73,7 +74,6 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 }
 
 void OlapChunkSource::_init_counter(RuntimeState* state) {
-    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
@@ -313,7 +313,6 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         return Status::Cancelled("canceled state");
     }
 
-    SCOPED_TIMER(_scan_timer);
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk));

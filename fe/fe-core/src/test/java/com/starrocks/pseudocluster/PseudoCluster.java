@@ -3,23 +3,26 @@ package com.starrocks.pseudocluster;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.ibm.icu.impl.Assert;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.LakeServiceAsync;
-import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PBackendServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
+import org.apache.commons.dbcp2.BasicDataSource;
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.File;
+import java.io.IOException;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -28,6 +31,7 @@ public class PseudoCluster {
 
     private static volatile PseudoCluster instance;
 
+    String runDir;
     int queryPort;
 
     PseudoFrontend frontend;
@@ -36,6 +40,8 @@ public class PseudoCluster {
     HeatBeatPool heartBeatPool = new HeatBeatPool("heartbeat");
     BackendThriftPool backendThriftPool = new BackendThriftPool("backend");
     PseudoBrpcRroxy brpcProxy = new PseudoBrpcRroxy();
+
+    private BasicDataSource dataSource;
 
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
@@ -65,7 +71,6 @@ public class PseudoCluster {
     private class PseudoBrpcRroxy extends BrpcProxy {
         public PBackendServiceAsync getBackendService(TNetworkAddress address) {
             Preconditions.checkState(backends.containsKey(address.getHostname()));
-            LOG.warn("get PseudoBrpcRroxy: {}", address.getHostname());
             return backends.get(address.getHostname()).pBackendService;
         }
 
@@ -81,14 +86,35 @@ public class PseudoCluster {
     }
 
     public Connection getQueryConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection(
-                "jdbc:mysql://localhost:" + queryPort + "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false",
-                "root",
-                "");
-        return connection;
+        return dataSource.getConnection();
     }
 
-    public void shutdown() {
+    public void runSql(String db, String sql) throws SQLException {
+        Connection connection = getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            if (db != null) {
+                stmt.execute("use " + db);
+            }
+            stmt.execute(sql);
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    public String getRunDir() {
+        return runDir;
+    }
+
+    public void shutdown(boolean deleteRunDir) {
+        if (deleteRunDir) {
+            try {
+                FileUtils.forceDelete(new File(getRunDir()));
+            } catch (IOException e) {
+                Assert.fail(e);
+            }
+        }
     }
 
     /**
@@ -99,10 +125,20 @@ public class PseudoCluster {
      * @return PseudoCluster
      * @throws Exception
      */
-    private static PseudoCluster build(String runDir, int queryPort, int numBackends) throws Exception {
+    private static PseudoCluster build(String runDir, boolean fakeJournal, int queryPort, int numBackends) throws Exception {
         PseudoCluster cluster = new PseudoCluster();
+        cluster.runDir = runDir;
         cluster.queryPort = queryPort;
-        cluster.frontend = PseudoFrontend.getInstance();
+        cluster.frontend = new PseudoFrontend();
+
+        BasicDataSource dataSource = new BasicDataSource();
+        dataSource.setUrl(
+                "jdbc:mysql://localhost:" + queryPort + "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false");
+        dataSource.setUsername("root");
+        dataSource.setPassword("");
+        dataSource.setMaxTotal(40);
+        dataSource.setMaxIdle(40);
+        cluster.dataSource = dataSource;
 
         ClientPool.heartbeatPool = cluster.heartBeatPool;
         ClientPool.backendPool = cluster.backendThriftPool;
@@ -113,7 +149,7 @@ public class PseudoCluster {
 
         feConfMap.put("tablet_create_timeout_second", "10");
         feConfMap.put("query_port", Integer.toString(queryPort));
-        cluster.frontend.init(runDir + "/fe", feConfMap);
+        cluster.frontend.init(fakeJournal, runDir + "/fe", feConfMap);
         cluster.frontend.start(new String[0]);
 
         cluster.backends = Maps.newConcurrentMap();
@@ -137,9 +173,10 @@ public class PseudoCluster {
         return cluster;
     }
 
-    public static synchronized PseudoCluster getOrCreate(String runDir, int queryPort, int numBackends) throws Exception {
+    public static synchronized PseudoCluster getOrCreate(String runDir, boolean fakeJournal, int queryPort, int numBackends)
+            throws Exception {
         if (instance == null) {
-            instance = build(runDir, queryPort, numBackends);
+            instance = build(runDir, fakeJournal, queryPort, numBackends);
         }
         return instance;
     }
@@ -151,7 +188,7 @@ public class PseudoCluster {
     public static void main(String[] args) throws Exception {
         String currentPath = new java.io.File(".").getCanonicalPath();
         String runDir = currentPath + "/pseudo_cluster";
-        PseudoCluster cluster = PseudoCluster.getOrCreate(runDir, 9030, 3);
+        PseudoCluster cluster = PseudoCluster.getOrCreate(runDir, true, 9030, 3);
         for (int i = 0; i < 3; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
         }

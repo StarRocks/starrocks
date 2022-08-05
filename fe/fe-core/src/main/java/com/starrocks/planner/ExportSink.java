@@ -24,10 +24,12 @@ package com.starrocks.planner;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TExportSink;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TNetworkAddress;
@@ -39,20 +41,22 @@ public class ExportSink extends DataSink {
     private final String columnSeparator;
     private final String rowDelimiter;
     private final BrokerDesc brokerDesc;
+    private final THdfsProperties hdfsProperties;
 
     public ExportSink(String exportPath, String fileNamePrefix, String columnSeparator,
-                      String rowDelimiter, BrokerDesc brokerDesc) {
+                      String rowDelimiter, BrokerDesc brokerDesc, THdfsProperties hdfsProperties) {
         this.exportPath = exportPath;
         this.fileNamePrefix = fileNamePrefix;
         this.columnSeparator = columnSeparator;
         this.rowDelimiter = rowDelimiter;
         this.brokerDesc = brokerDesc;
+        this.hdfsProperties = hdfsProperties;
     }
 
     // for insert broker table
     public ExportSink(String exportPath, String columnSeparator,
                       String rowDelimiter, BrokerDesc brokerDesc) {
-        this(exportPath, null, columnSeparator, rowDelimiter, brokerDesc);
+        this(exportPath, null, columnSeparator, rowDelimiter, brokerDesc, null);
     }
 
     public String getFileNamePrefix() {
@@ -88,6 +92,11 @@ public class ExportSink extends DataSink {
         FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getAnyBroker(brokerDesc.getName());
         if (broker != null) {
             tExportSink.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
+        }
+        tExportSink.setUse_broker(brokerDesc.hasBroker());
+        tExportSink.setHdfs_write_buffer_size_kb(Config.hdfs_write_buffer_size_kb);
+        if (!brokerDesc.hasBroker()) {
+            tExportSink.setHdfs_properties(this.hdfsProperties);
         }
         tExportSink.setProperties(brokerDesc.getProperties());
 

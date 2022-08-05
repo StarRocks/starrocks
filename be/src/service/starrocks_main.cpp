@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+#if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
     // Aggressive decommit is required so that unused pages in the TCMalloc page heap are
     // not backed by physical pages and do not contribute towards memory consumption.
     //
@@ -265,8 +265,6 @@ int main(int argc, char** argv) {
         LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly. Error=" << status.to_string();
         starrocks::shutdown_logging();
         exit(1);
-    } else {
-        LOG(INFO) << "StarRocks BE HeartBeat Service started correctly.";
     }
 
 #ifdef USE_STAROS

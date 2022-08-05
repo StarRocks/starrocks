@@ -5,10 +5,8 @@ syntax="proto2";
 package starrocks.lake;
 option java_package = "com.starrocks.lake.proto";
 
-import "status.proto";
+import "lake_delete.proto";
 import "tablet_schema.proto";
-
-option cc_generic_services = true;
 
 message RowsetMetadataPB {
     optional uint32 id = 1;
@@ -17,6 +15,7 @@ message RowsetMetadataPB {
     repeated string del_vectors = 4;
     optional int64 num_rows = 5;
     optional int64 data_size = 6;
+    optional DeletePredicatePB delete_predicate = 7;
 }
 
 message PrimaryIndexMetadataPB {
