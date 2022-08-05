@@ -95,4 +95,9 @@ public class CancelExportStmt extends DdlStmt {
         return stringBuilder.toString();
     }
 
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
 }
