@@ -5,7 +5,7 @@ on:
     types: [opened, edited]
 
 jobs:
-  Label:
+  Title2Label:
     runs-on: ubuntu-latest
     steps:
       # The action can be used as many times as needed in a single job
