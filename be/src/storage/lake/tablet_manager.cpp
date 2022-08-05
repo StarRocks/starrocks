@@ -174,7 +174,7 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return Tablet(this, tablet_id);
 }
 
-Status TabletManager::drop_tablet(int64_t tablet_id) {
+Status TabletManager::delete_tablet(int64_t tablet_id) {
     std::vector<std::string> objects;
     // TODO: construct prefix in LocationProvider or a common place
     const auto tablet_metadata_prefix = fmt::format("tbl_{:016X}_", tablet_id);
@@ -187,7 +187,11 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
         }
         return true;
     };
-    RETURN_IF_ERROR(fs->iterate_dir(root_path, scan_cb));
+    auto st = fs->iterate_dir(root_path, scan_cb);
+    if (!st.ok() && !st.is_not_found()) {
+        return st;
+    }
+
     for (const auto& obj : objects) {
         erase_metacache(obj);
         (void)fs->delete_file(obj);
@@ -342,7 +346,14 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto location = txn_log_location(tablet_id, txn_id);
     erase_metacache(location);
-    return fs::delete_file(location);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
+Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
+    erase_metacache(segment_name);
+    auto st = fs::delete_file(segment_location(tablet_id, segment_name));
+    return st.is_not_found() ? Status::OK() : st;
 }
 
 StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_tablet) {
@@ -565,6 +576,36 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
     return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
+}
+
+Status TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
+    Status res;
+    // TODO: batch deletion
+    for (int i = 0; i < txns_size; i++) {
+        auto txn_id = txns[i];
+        auto txn_log_or = get_txn_log(tablet_id, txn_id);
+        if (txn_log_or.status().is_not_found()) {
+            continue;
+        } else if (!txn_log_or.ok()) {
+            res.update(txn_log_or.status());
+            continue;
+        }
+
+        DCHECK(txn_log_or.ok());
+        TxnLogPtr txn_log = std::move(txn_log_or).value();
+        if (txn_log->has_op_write()) {
+            for (const auto& segment : txn_log->op_write().rowset().segments()) {
+                res.update(delete_segment(tablet_id, segment));
+            }
+        }
+        if (txn_log->has_op_compaction()) {
+            for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
+                res.update(delete_segment(tablet_id, segment));
+            }
+        }
+        res.update(delete_txn_log(tablet_id, txn_id));
+    }
+    return res;
 }
 
 void TabletManager::start_gc() {

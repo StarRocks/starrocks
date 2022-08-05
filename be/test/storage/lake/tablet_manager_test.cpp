@@ -91,7 +91,7 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
+TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     TCreateTabletReq req;
     req.tablet_id = 65535;
     req.__set_version(1);
@@ -107,7 +107,7 @@ TEST_F(LakeTabletManagerTest, create_and_drop_tablet) {
     txnLog.set_txn_id(2);
     auto root = res.value().root_location();
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-    EXPECT_OK(_tablet_manager->drop_tablet(65535));
+    EXPECT_OK(_tablet_manager->delete_tablet(65535));
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(root));
     auto st = fs->path_exists(fmt::format("{}/tbl_{:016X}_{:016X}", root, 65535, 1));
