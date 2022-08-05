@@ -703,4 +703,151 @@ public class ColocateTableIndex implements Writable {
             writeUnlock();
         }
     }
+<<<<<<< HEAD
+=======
+
+    public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
+        if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_46) {
+            GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
+        }
+        // clean up if dbId or tableId not found, this is actually a bug
+        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
+        LOG.info("finished replay colocateTableIndex from image");
+        return checksum;
+    }
+
+    public long saveColocateTableIndex(DataOutputStream dos, long checksum) throws IOException {
+        write(dos);
+        return checksum;
+    }
+
+    // the invoker should keep db write lock
+    public void modifyTableColocate(Database db, OlapTable table, String colocateGroup, boolean isReplay,
+                                    GroupId assignedGroupId)
+            throws DdlException {
+
+        String oldGroup = table.getColocateGroup();
+        GroupId groupId = null;
+        if (!Strings.isNullOrEmpty(colocateGroup)) {
+            String fullGroupName = db.getId() + "_" + colocateGroup;
+            ColocateGroupSchema groupSchema = getGroupSchema(fullGroupName);
+            if (groupSchema == null) {
+                // user set a new colocate group,
+                // check if all partitions all this table has same buckets num and same replication number
+                PartitionInfo partitionInfo = table.getPartitionInfo();
+                if (partitionInfo.getType() == PartitionType.RANGE) {
+                    int bucketsNum = -1;
+                    short replicationNum = -1;
+                    for (Partition partition : table.getPartitions()) {
+                        if (bucketsNum == -1) {
+                            bucketsNum = partition.getDistributionInfo().getBucketNum();
+                        } else if (bucketsNum != partition.getDistributionInfo().getBucketNum()) {
+                            throw new DdlException(
+                                    "Partitions in table " + table.getName() + " have different buckets number");
+                        }
+
+                        if (replicationNum == -1) {
+                            replicationNum = partitionInfo.getReplicationNum(partition.getId());
+                        } else if (replicationNum != partitionInfo.getReplicationNum(partition.getId())) {
+                            throw new DdlException(
+                                    "Partitions in table " + table.getName() + " have different replication number");
+                        }
+                    }
+                }
+            } else {
+                // set to an already exist colocate group, check if this table can be added to this group.
+                groupSchema.checkColocateSchema(table);
+            }
+
+            List<List<Long>> backendsPerBucketSeq = null;
+            if (groupSchema == null) {
+                // assign to a newly created group, set backends sequence.
+                // we arbitrarily choose a tablet backends sequence from this table,
+                // let the colocation balancer do the work.
+                backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
+            }
+            // change group after getting backends sequence(if has), in case 'getArbitraryTabletBucketsSeq' failed
+            groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId);
+
+            if (groupSchema == null) {
+                Preconditions.checkNotNull(backendsPerBucketSeq);
+                addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            }
+
+            // set this group as unstable
+            markGroupUnstable(groupId, false /* edit log is along with modify table log */);
+            table.setColocateGroup(colocateGroup);
+        } else {
+            // unset colocation group
+            if (Strings.isNullOrEmpty(oldGroup)) {
+                // this table is not a colocate table, do nothing
+                return;
+            }
+
+            // when replayModifyTableColocate, we need the groupId info
+            String fullGroupName = db.getId() + "_" + oldGroup;
+            groupId = getGroupSchema(fullGroupName).getGroupId();
+
+            removeTable(table.getId());
+            table.setColocateGroup(null);
+        }
+
+        if (!isReplay) {
+            Map<String, String> properties = Maps.newHashMapWithExpectedSize(1);
+            properties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, colocateGroup);
+            TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
+        }
+        LOG.info("finished modify table's colocation property. table: {}, is replay: {}",
+                table.getName(), isReplay);
+    }
+
+    public void replayModifyTableColocate(TablePropertyInfo info) {
+        long tableId = info.getTableId();
+        Map<String, String> properties = info.getPropertyMap();
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
+        db.writeLock();
+        try {
+            OlapTable table = (OlapTable) db.getTable(tableId);
+            modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
+                    info.getGroupId());
+        } catch (DdlException e) {
+            // should not happen
+            LOG.warn("failed to replay modify table colocate", e);
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    /**
+     * for legacy reason, all the colocate group index cannot be properly removed
+     * we have to add a cleanup function on start when loading image
+     */
+    protected void cleanupInvalidDbOrTable(GlobalStateMgr globalStateMgr) {
+        List<Long> badTableIds = new ArrayList<>();
+        for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
+            long dbId = entry.getValue().dbId;
+            long tableId = entry.getKey();
+            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            if (database == null) {
+                LOG.warn("cannot find db {}, will remove invalid table {} from group {}",
+                        dbId, tableId, entry.getValue());
+            } else {
+                Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+                if (table != null) {
+                    // this is a valid table/database, do nothing
+                    continue;
+                }
+                LOG.warn("cannot find table {} in db {}, will remove invalid table {} from group {}",
+                        tableId, dbId, tableId, entry.getValue());
+            }
+            badTableIds.add(tableId);
+        }
+        LOG.warn("remove {} invalid tableid: {}", badTableIds.size(), badTableIds);
+        for (Long tableId : badTableIds) {
+            removeTable(tableId);
+        }
+    }
+>>>>>>> c4ffab4d7 ([BugFix] Remove colocated index from memory (#9578))
 }
