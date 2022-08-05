@@ -208,7 +208,10 @@ private:
 class ColumnTieBuilder final : public ColumnVisitorAdapter<ColumnTieBuilder> {
 public:
     explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie)
-            : ColumnVisitorAdapter(this), _column(column), _tie(tie) {}
+            : ColumnVisitorAdapter(this), _column(column), _tie(tie), _nullable_column(nullptr) {}
+
+    explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie, const NullColumnPtr nullable_column)
+            : ColumnVisitorAdapter(this), _column(column), _tie(tie), _nullable_column(nullable_column) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
         // TODO: maybe could skip compare rows that contains null
@@ -220,15 +223,21 @@ public:
             (*_tie)[i] &= (null_data[i - 1] == null_data[i]);
         }
 
-        build_tie_for_column(column.data_column(), _tie);
+        build_tie_for_column(column.data_column(), _tie, column.null_column());
         return Status::OK();
     }
 
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         auto& data = column.get_data();
+        NullData* null_data = nullptr;
+        if (_nullable_column != nullptr) {
+            null_data = &_nullable_column->get_data();
+        }
         for (size_t i = 1; i < column.size(); i++) {
-            (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
+            if ((null_data == nullptr) || ((*null_data)[i-1] != 1 && (*null_data)[i] != 1)) {
+                (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
+            }
         }
         return Status::OK();
     }
@@ -236,8 +245,14 @@ public:
     template <typename T>
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         auto& data = column.get_data();
+        NullData* null_data = nullptr;
+        if (_nullable_column != nullptr) {
+            null_data = &_nullable_column->get_data();
+        }
         for (size_t i = 1; i < column.size(); i++) {
-            (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
+            if ((null_data == nullptr) || ((*null_data)[i-1] != 1 && (*null_data)[i] != 1)) {
+                (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
+            }
         }
         return Status::OK();
     }
@@ -252,6 +267,7 @@ public:
 private:
     const ColumnPtr _column;
     Tie* _tie;
+    const NullColumnPtr _nullable_column;
 };
 
 int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, int sort_order, int null_first) {
@@ -285,11 +301,11 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
     }
 }
 
-void build_tie_for_column(const ColumnPtr column, Tie* tie) {
+void build_tie_for_column(const ColumnPtr column, Tie* tie, const NullColumnPtr null_column) {
     DCHECK(!!tie);
     DCHECK_EQ(column->size(), tie->size());
 
-    ColumnTieBuilder tie_builder(column, tie);
+    ColumnTieBuilder tie_builder(column, tie, null_column);
     [[maybe_unused]] Status st = column->accept(&tie_builder);
     DCHECK(st.ok());
 }
