@@ -1004,7 +1004,12 @@ public class StmtExecutor {
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
             }
         }
-        explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        // marked delete will get execPlan null
+        if (execPlan == null) {
+            explainString += "NOT AVAILABLE";
+        } else {
+            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        }
         return explainString;
     }
 
