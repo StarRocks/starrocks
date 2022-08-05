@@ -2,7 +2,7 @@
 // This is an extension of Jeff Preshing's sempahore implementation (licensed 
 // under the terms of its separate zlib license) that has been adapted and
 // extended by Cameron Desrochers.
-
+// clang-format off
 #pragma once
 
 #include <cstddef> // For std::size_t
@@ -409,3 +409,4 @@ public:
 };
 
 }   // end namespace moodycamel
+// clang-format on

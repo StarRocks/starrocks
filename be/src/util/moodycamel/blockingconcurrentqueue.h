@@ -4,7 +4,7 @@
 // Also dual-licensed under the Boost Software License (see LICENSE.md)
 // Uses Jeff Preshing's semaphore implementation (under the terms of its
 // separate zlib license, see lightweightsemaphore.h).
-
+// clang-format off
 #pragma once
 
 #include "concurrentqueue.h"
@@ -580,3 +580,4 @@ inline void swap(BlockingConcurrentQueue<T, Traits>& a, BlockingConcurrentQueue<
 }
 
 }	// end namespace moodycamel
+// clang-format on

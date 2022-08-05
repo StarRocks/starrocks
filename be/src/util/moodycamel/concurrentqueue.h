@@ -28,7 +28,7 @@
 // EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Also dual-licensed under the Boost Software License (see LICENSE.md)
-
+// clang-format off
 #pragma once
 
 #if defined(__GNUC__)
@@ -3740,3 +3740,4 @@ inline void swap(typename ConcurrentQueue<T, Traits>::ImplicitProducerKVP& a, ty
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
+// clang-format on
