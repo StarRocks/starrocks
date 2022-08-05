@@ -104,6 +104,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -188,65 +189,35 @@ public class SchemaChangeHandler extends AlterHandler {
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
             List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-            boolean isKey = false;
-            for (Column column : baseSchema) {
-                if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                    isKey = true;
-                    break;
-                }
-            }
+            boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in primary data model table");
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
             List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-            boolean isKey = false;
-            for (Column column : baseSchema) {
-                if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                    isKey = true;
-                    break;
-                }
-            }
-
+            boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in Unique data model table");
             }
-
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
             if (null == targetIndexName) {
                 // drop column in base table
                 long baseIndexId = olapTable.getBaseIndexId();
                 List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-                boolean isKey = false;
-                boolean hasReplaceColumn = false;
-                for (Column column : baseSchema) {
-                    if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                        isKey = true;
-                    } else if (AggregateType.REPLACE == column.getAggregationType() ||
-                            AggregateType.REPLACE_IF_NOT_NULL == column.getAggregationType()) {
-                        hasReplaceColumn = true;
-                    }
-                }
+                boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
+                boolean hasReplaceColumn = baseSchema.stream().map(Column::getAggregationType)
+                        .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
-                    throw new DdlException(
-                            "Can not drop key column when table has value column with REPLACE aggregation method");
+                    throw new DdlException("Can not drop key column when table has value column with REPLACE aggregation method");
                 }
             } else {
                 // drop column in rollup and base index
                 long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
-                // find column
                 List<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
-                boolean isKey = false;
-                boolean hasReplaceColumn = false;
-                for (Column column : targetIndexSchema) {
-                    if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                        isKey = true;
-                    } else if (AggregateType.REPLACE == column.getAggregationType() ||
-                            AggregateType.REPLACE_IF_NOT_NULL == column.getAggregationType()) {
-                        hasReplaceColumn = true;
-                    }
-                }
+                boolean isKey = targetIndexSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
+                boolean hasReplaceColumn = targetIndexSchema.stream().map(Column::getAggregationType)
+                        .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
                     throw new DdlException(
                             "Can not drop key column when rollup has value column with REPLACE aggregation method");
@@ -254,68 +225,24 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        Iterator<Index> it = indexes.iterator();
-        while (it.hasNext()) {
-            Index index = it.next();
-            for (String indexCol : index.getColumns()) {
-                if (dropColName.equalsIgnoreCase(indexCol)) {
-                    it.remove();
-                    break;
-                }
-            }
-        }
+        // Remove all Index that contains a column with the name dropColName.
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(dropColName)));
 
-        long baseIndexId = olapTable.getBaseIndexId();
         if (targetIndexName == null) {
             // if not specify rollup index, column should be dropped from both base and rollup indexes.
-            List<Long> indexIds = new ArrayList<Long>();
-            indexIds.add(baseIndexId);
-            indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
-
-            // find column in base index and remove it
-            List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-            boolean found = false;
-            Iterator<Column> baseIter = baseSchema.iterator();
-            while (baseIter.hasNext()) {
-                Column column = baseIter.next();
-                if (column.getName().equalsIgnoreCase(dropColName)) {
-                    baseIter.remove();
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            long baseIndexId = olapTable.getBaseIndexId();
+            boolean removed = indexSchemaMap.get(baseIndexId).removeIf(c -> c.getName().equalsIgnoreCase(dropColName));
+            if (!removed) {
                 throw new DdlException("Column does not exists: " + dropColName);
             }
-
-            // remove column in rollup index if exists (i = 1 to skip base index)
-            for (int i = 1; i < indexIds.size(); i++) {
-                List<Column> rollupSchema = indexSchemaMap.get(indexIds.get(i));
-                Iterator<Column> iter = rollupSchema.iterator();
-                while (iter.hasNext()) {
-                    Column column = iter.next();
-                    if (column.getName().equalsIgnoreCase(dropColName)) {
-                        iter.remove();
-                        break;
-                    }
-                }
-            } // end for index names
+            for (Long indexId : olapTable.getIndexIdListExceptBaseIndex()) {
+                indexSchemaMap.get(indexId).removeIf(c -> c.getName().equalsIgnoreCase(dropColName));
+            }
         } else {
             // if specify rollup index, only drop column from specified rollup index
             long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
-            // find column
-            List<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
-            boolean found = false;
-            Iterator<Column> iter = targetIndexSchema.iterator();
-            while (iter.hasNext()) {
-                Column column = iter.next();
-                if (column.getName().equalsIgnoreCase(dropColName)) {
-                    iter.remove();
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            boolean removed = indexSchemaMap.get(targetIndexId).removeIf(c -> c.getName().equalsIgnoreCase(dropColName));
+            if (!removed) {
                 throw new DdlException("Column does not exists: " + dropColName);
             }
         }
@@ -345,7 +272,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
-                modColumn.getName());
+                        modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
@@ -353,7 +280,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
-                modColumn.getName());
+                        modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
@@ -537,28 +464,20 @@ public class SchemaChangeHandler extends AlterHandler {
 
         long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
 
-        LinkedList<Column> newSchema = new LinkedList<Column>();
+        LinkedList<Column> newSchema = new LinkedList<>();
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
 
         // check and create new ordered column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (String colName : orderedColNames) {
-            Column oneCol = null;
-            for (Column column : targetIndexSchema) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    oneCol = column;
-                    break;
-                }
-            }
-            if (oneCol == null) {
+            Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
+            if (!oneCol.isPresent()) {
                 throw new DdlException("Column[" + colName + "] not exists");
             }
-            newSchema.add(oneCol);
-            if (colNameSet.contains(colName)) {
-                throw new DdlException("Reduplicative column[" + colName + "]");
-            } else {
-                colNameSet.add(colName);
+            if (!colNameSet.add(colName)) {
+                throw new DdlException("Duplicated column[" + colName + "]");
             }
+            newSchema.add(oneCol.get());
         }
         if (newSchema.size() != targetIndexSchema.size()) {
             throw new DdlException("Reorder stmt should contains all columns");
@@ -577,10 +496,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                    Set<String> newColNameSet) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
-        // expr like uuid() will support later
         if (defaultValueType == Column.DefaultValueType.VARY) {
-            throw new DdlException("Schema change currently not supported default expr:"
-                    + newColumn.getDefaultExpr().getExpr());
+            throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
         }
         String newColName = newColumn.getName();
         // check the validation of aggregation method on column.
@@ -624,8 +541,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Can not assign aggregation method on column in Duplicate data model table: " + newColName);
             }
             if (!newColumn.isKey()) {
-                if (targetIndexId != -1L &&
-                        olapTable.getIndexMetaByIndexId(targetIndexId).getKeysType() == KeysType.AGG_KEYS) {
+                if (targetIndexId != -1L && olapTable.getIndexMetaByIndexId(targetIndexId).getKeysType() == KeysType.AGG_KEYS) {
                     throw new DdlException("Please add non-key column on base table directly");
                 }
                 newColumn.setAggregationType(AggregateType.NONE, true);
@@ -637,30 +553,21 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("HLL type column can only be in Aggregation data model table: " + newColName);
         }
 
-        if (newColumn.getAggregationType() == AggregateType.BITMAP_UNION &&
-                KeysType.AGG_KEYS != olapTable.getKeysType()) {
+        if (newColumn.getAggregationType() == AggregateType.BITMAP_UNION && KeysType.AGG_KEYS != olapTable.getKeysType()) {
             throw new DdlException("BITMAP_UNION must be used in AGG_KEYS");
         }
 
-        if (newColumn.getAggregationType() == AggregateType.PERCENTILE_UNION &&
-                KeysType.AGG_KEYS != olapTable.getKeysType()) {
+        if (newColumn.getAggregationType() == AggregateType.PERCENTILE_UNION && KeysType.AGG_KEYS != olapTable.getKeysType()) {
             throw new DdlException("PERCENTILE_UNION must be used in AGG_KEYS");
         }
 
         if (newColumn.getType().isComplexType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
-            throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
+            throw new DdlException(newColumn.getType() + " must be used in DUP_KEYS");
         }
 
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
-        List<Column> baseSchema = olapTable.getBaseSchema();
-        boolean found = false;
-        for (Column column : baseSchema) {
-            if (column.getName().equalsIgnoreCase(newColName)) {
-                found = true;
-                break;
-            }
-        }
+        boolean found = olapTable.getBaseSchema().stream().anyMatch(c -> c.getName().equalsIgnoreCase(newColName));
         if (found) {
             throw new DdlException("Can not add column which already exists in base table: " + newColName);
         }
@@ -1481,16 +1388,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
-                        try {
-                            DynamicPartitionUtil
-                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
-                        } catch (DdlException e) {
-                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
-                            throw new DdlException("Table " + db.getOriginName() + "." +
-                                    olapTable.getName() +
-                                    " is not a dynamic partition table. Use command `HELP ALTER TABLE` " +
-                                    "to see how to change a normal table to a dynamic partition table.");
-                        }
+                        DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
                     }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
                     return null;
@@ -1507,7 +1405,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
                 // because insert overwrite will create tmp partitions
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
-                        "please start schema change after insert overwrite");
+                        "please start schema change after insert overwrite finished");
             }
             // the following operations can not be done when there are temp partitions exist.
             if (olapTable.existTempPartitions()) {
@@ -1598,8 +1496,8 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
                 if (!olapTable.checkPersistentIndex()) {
-                    throw new DdlException("PrimaryKey table using persistent index don't support " + 
-                         "varchar(char) as key so far, and key length should be no more than 64 Bytes");
+                    throw new DdlException("PrimaryKey table using persistent index don't support " +
+                            "varchar(char) as key so far, and key length should be no more than 64 Bytes");
                 }
             }
         } else {
