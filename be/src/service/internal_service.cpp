@@ -52,7 +52,7 @@ using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env)
         : _exec_env(exec_env),
-        // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+          // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
           _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num,
                              config::internal_service_async_thread_num * 4) {}
 
@@ -390,7 +390,9 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
     GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
 
     if (!_async_thread_pool.try_offer([&]() { _get_info_impl(request, response, &latch); })) {
-        Status::ServiceUnavailable("too busy to get kafka info, please check the kafka broker status, or set internal_service_async_thread_num bigger")
+        Status::ServiceUnavailable(
+                "too busy to get kafka info, please check the kafka broker status, or set "
+                "internal_service_async_thread_num bigger")
                 .to_protobuf(response->mutable_status());
         return;
     }
@@ -399,8 +401,9 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
-                                                 GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch) {
+void PInternalServiceImplBase<T>::_get_info_impl(
+        const PProxyRequest* request, PProxyResult* response,
+        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch) {
     DeferOp defer([latch] { latch->count_down(); });
 
     if (request->has_kafka_meta_request()) {
