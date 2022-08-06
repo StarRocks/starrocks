@@ -98,18 +98,10 @@ bool NLJoinProbeOperator::need_input() const {
         return false;
     }
 
-    if (_cross_join_context->is_build_chunk_empty()) {
-        return false;
-    }
-
     return _is_curr_probe_chunk_finished();
 }
 
 bool NLJoinProbeOperator::is_finished() const {
-    if (is_ready() && _cross_join_context->is_build_chunk_empty()) {
-        return true;
-    }
-
     return _input_finished && !has_output();
 }
 
@@ -155,16 +147,22 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
 }
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
-    if ((_join_conjuncts.empty() && _conjunct_ctxs.empty()) || !chunk || chunk->is_empty()) {
+    if ((_join_conjuncts.empty())) {
         return Status::OK();
     }
     vectorized::FilterPtr filter;
-    RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
-    DCHECK(!!filter);
+    if (chunk && !chunk->is_empty()) {
+        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
+        DCHECK(!!filter);
+    }
 
-    bool multi_probe_rows = _num_build_chunks() == 1;
     if (_is_left_join()) {
-        if (multi_probe_rows) {
+        if (_num_build_chunks() == 0) {
+            // Empty right table
+            DCHECK_EQ(_probe_row_current, _probe_chunk->num_rows());
+            _permute_left_join(state, chunk, 0, _probe_chunk->num_rows());
+        } else if (_num_build_chunks() == 1) {
+            // Multiple probe rows
             size_t num_build_rows = _cross_join_context->num_build_rows();
             DCHECK_GE(filter->size(), num_build_rows);
             DCHECK_LE(_probe_row_start, _probe_row_current);
@@ -172,21 +170,22 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
                 bool probe_matched = SIMD::contain_nonzero(*filter, i, num_build_rows);
                 if (!probe_matched) {
                     size_t probe_row_index = _probe_row_start + i / num_build_rows;
-                    _permute_left_join(state, chunk, probe_row_index);
+                    _permute_left_join(state, chunk, probe_row_index, 1);
                 }
             }
         } else {
             _probe_row_matched = _probe_row_matched || SIMD::contain_nonzero(*filter);
             bool probe_row_finished = _curr_build_chunk_index >= _num_build_chunks();
             if (!_probe_row_matched && probe_row_finished) {
-                _permute_left_join(state, chunk, _probe_row_current);
+                _permute_left_join(state, chunk, _probe_row_current, 1);
             }
         }
     }
 
-    if (_is_right_join()) {
+    if (_is_right_join() && filter) {
         VLOG(3) << fmt::format("NLJoin operator {} set build_flags for right join: {}", _driver_sequence,
                                fmt::join(*filter, ","));
+        bool multi_probe_rows = _num_build_chunks() == 1;
         if (multi_probe_rows) {
             size_t num_build_rows = _cross_join_context->num_build_rows();
             DCHECK_GE(filter->size(), num_build_rows);
@@ -244,7 +243,8 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
 }
 
 // Permute probe side for left join
-void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index) {
+void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index,
+                                             size_t probe_rows) {
     for (size_t i = 0; i < _col_types.size(); i++) {
         SlotDescriptor* slot = _col_types[i];
         ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
@@ -252,9 +252,9 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
             DCHECK_LT(probe_row_index, src_col->size());
-            dst_col->append(*src_col, probe_row_index, 1);
+            dst_col->append(*src_col, probe_row_index, probe_rows);
         } else {
-            dst_col->append_nulls(1);
+            dst_col->append_nulls(probe_rows);
         }
     }
 }
