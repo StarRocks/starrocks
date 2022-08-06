@@ -697,6 +697,9 @@ CONF_String(object_storage_endpoint, "");
 // Tencent cos needs to add region information
 CONF_String(object_storage_region, "");
 CONF_Int64(object_storage_max_connection, "102400");
+// Acccess object storage using https.
+// this options is applicable only if `object_storage_endpoint` is not specified.
+CONF_Bool(object_storage_endpoint_use_https, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
