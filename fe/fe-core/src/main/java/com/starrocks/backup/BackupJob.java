@@ -92,7 +92,7 @@ public class BackupJob extends AbstractJob {
     // all objects which need backup
     private List<TableRef> tableRefs = Lists.newArrayList();
 
-    private BackupJobState state;
+    protected BackupJobState state;
 
     private long snapshotFinishedTime = -1;
     private long snapshopUploadFinishedTime = -1;

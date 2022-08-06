@@ -249,7 +249,6 @@ private:
     bool _contains_rowset(const RowsetId rowset_id);
     Status _contains_version(const Version& version);
     Version _max_continuous_version_from_beginning_unlocked() const;
-    RowsetSharedPtr _rowset_with_largest_size();
     void _delete_inc_rowset_by_version(const Version& version);
     /// Delete stale rowset by version. This method not only delete the version in expired rowset map,
     /// but also delete the version in rowset meta vector.

@@ -99,6 +99,68 @@ TEST_F(VecMathFunctionsTest, Round_up_toTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithPositiveTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = Int32Column::create();
+
+        double dous[] = {7.845, 7.855};
+        int ints[] = {2, 2};
+
+        double res[] = {7.85, 7.86};
+
+        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+            tc1->append(dous[i]);
+            tc2->append(ints[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns);
+
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], v->get_data()[i]);
+        }
+    }
+}
+
+TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithNegativeTest) {
+    {
+        Columns columns;
+
+        auto tc1 = DoubleColumn::create();
+        auto tc2 = Int32Column::create();
+
+        double dous[] = {45.0, 44.0};
+        int ints[] = {-1, -1};
+
+        double res[] = {50, 40};
+
+        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+            tc1->append(dous[i]);
+            tc2->append(ints[i]);
+        }
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns);
+
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], v->get_data()[i]);
+        }
+    }
+}
+
 TEST_F(VecMathFunctionsTest, BinTest) {
     {
         Columns columns;

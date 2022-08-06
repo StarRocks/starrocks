@@ -793,7 +793,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 32
 PROPERTIES ("storage_type"="column");
 ```
 
-- Create table t1 and t2 that support Colocat Join.
+- Create table t1 and t2 that support Colocate Join.
 
 ```SQL
 CREATE TABLE `t1` (
@@ -1012,12 +1012,11 @@ ENGINE=hive
 PROPERTIES
 
 (
+    "resource" = "hive0",
 
     "database" = "hive_db_name",
 
-    "table" = "hive_table_name",
-
-    "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+    "table" = "hive_table_name"
 
 );
 ```

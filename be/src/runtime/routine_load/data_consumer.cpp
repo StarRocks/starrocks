@@ -89,6 +89,9 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
     RETURN_IF_ERROR(set_conf("auto.offset.reset", "error"));
     RETURN_IF_ERROR(set_conf("api.version.request", "true"));
     RETURN_IF_ERROR(set_conf("api.version.fallback.ms", "0"));
+    if (config::dependency_librdkafka_debug_enable) {
+        RETURN_IF_ERROR(set_conf("debug", config::dependency_librdkafka_debug));
+    }
 
     for (auto& item : ctx->kafka_info->properties) {
         if (boost::algorithm::starts_with(item.second, "FILE:")) {
