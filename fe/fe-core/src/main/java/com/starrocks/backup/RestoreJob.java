@@ -78,6 +78,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTaskType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -843,7 +844,7 @@ public class RestoreJob extends AbstractJob {
                 List<Long> beIds =
                         GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
                                 true);
-                if (beIds == null) {
+                if (CollectionUtils.isEmpty(beIds)) {
                     status = new Status(ErrCode.COMMON_ERROR,
                             "failed to get enough backends for creating replica of tablet "
                                     + newTabletId + ". need: " + restoreReplicationNum);
