@@ -995,8 +995,12 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable.getPartitionInfo()
                     .setReplicationNum(partitionId, partitionDesc.getReplicationNum());
             copiedTable.getPartitionInfo().setIsInMemory(partitionId, partitionDesc.isInMemory());
-            copiedTable.getPartitionInfo().setStorageInfo(partitionId,
-                    ((SingleRangePartitionDesc) partitionDesc).getStorageInfo());
+            // for debug
+            // LOG.info("partitionDesc type is {}", partitionDesc.getClass().getName());
+            if (partitionDesc instanceof SingleRangePartitionDesc) {
+                copiedTable.getPartitionInfo().setStorageInfo(partitionId,
+                        ((SingleRangePartitionDesc) partitionDesc).getStorageInfo());
+            }
 
             Partition partition =
                     createPartition(db, copiedTable, partitionId, partitionName, version, tabletIdSet);

@@ -22,6 +22,8 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
+import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterDatabaseRename;
@@ -53,7 +55,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -67,6 +71,8 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -873,6 +879,75 @@ public class AlterTest {
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
+    }
+
+    @Test
+    public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
+        Config.use_staros = true;
+
+        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
+        ShardStorageInfo shardStorageInfo =
+                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+
+        new Expectations() {
+            {
+                agent.getServiceShardStorageInfo();
+                result = shardStorageInfo;
+                agent.createShards(anyInt, (ShardStorageInfo) any);
+                returns(Lists.newArrayList(20001L, 20002L, 20003L),
+                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
+                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String dropSQL = "drop table if exists test_lake_partition";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        String createSQL = "CREATE TABLE test.test_lake_partition (\n" +
+                "      k1 DATE,\n" +
+                "      k2 INT,\n" +
+                "      k3 SMALLINT,\n" +
+                "      v1 VARCHAR(2048),\n" +
+                "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=starrocks\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1, k2, k3) (\n" +
+                "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
+                "PROPERTIES (\n" +
+                "   \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
+                "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "test_lake_partition", addPartitionClause);
+
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+                .getTable("test_lake_partition");
+
+        Assert.assertNotNull(table.getPartition("p1"));
+        Assert.assertNotNull(table.getPartition("p2"));
+        Assert.assertNotNull(table.getPartition("p3"));
+
+        dropSQL = "drop table test_lake_partition";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+
+        Config.use_staros = false;
     }
 
     @Test
