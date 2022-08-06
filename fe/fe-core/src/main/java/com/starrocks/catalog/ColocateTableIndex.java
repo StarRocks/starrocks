@@ -668,6 +668,8 @@ public class ColocateTableIndex implements Writable {
                 unstableGroups.add(GroupId.read(in));
             }
         }
+        // clean up if dbId or tableId not found, this is actually a bug
+        cleanupInvalidDbOrTable(Catalog.getCurrentCatalog());
     }
 
     private void convertedToNewMembers(Multimap<Long, Long> tmpGroup2Tables, Map<Long, Long> tmpTable2Group,
