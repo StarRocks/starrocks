@@ -200,10 +200,14 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     if (is_uninitialized(_query_ctx)) {
         _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
     }
+    int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state,
-                                                                    chunk_source_index](int worker_id) {
+        workgroup::ScanTask task = workgroup::ScanTask(_workgroup, [wp = _query_ctx, this, state, chunk_source_index,
+                                                                    driver_id](int worker_id) {
             if (auto sp = wp.lock()) {
+                CurrentThread::current().set_pipeline_driver_id(driver_id);
+                DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                 {
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     size_t num_read_chunks = 0;
@@ -229,9 +233,13 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         offer_task_success = ExecEnv::GetInstance()->scan_executor()->submit(std::move(task));
     } else {
         PriorityThreadPool::Task task;
-        task.work_function = [wp = _query_ctx, this, state, chunk_source_index]() {
+        task.work_function = [wp = _query_ctx, this, state, chunk_source_index, driver_id]() {
             if (auto sp = wp.lock()) {
                 {
+                    // Set driver_id here to share some driver-local contents.
+                    // Current it's used by ExprContext's driver-local state
+                    CurrentThread::current().set_pipeline_driver_id(driver_id);
+                    DeferOp defer([]() { CurrentThread::current().set_pipeline_driver_id(0); });
                     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
                     Status status =
                             _chunk_sources[chunk_source_index]->buffer_next_batch_chunks_blocking(_buffer_size, state);

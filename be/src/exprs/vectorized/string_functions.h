@@ -393,14 +393,6 @@ private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
 private:
-    struct StringFunctionsState {
-        std::unique_ptr<re2::RE2> regex;
-        std::unique_ptr<re2::RE2::Options> options;
-        bool const_pattern{false};
-
-        StringFunctionsState() : regex(), options() {}
-    };
-
     static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns);
     static ColumnPtr regexp_extract_general(FunctionContext* context, re2::RE2::Options* options,
                                             const Columns& columns);

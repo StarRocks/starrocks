@@ -823,7 +823,7 @@ struct ArrowListConverter {
         auto arrow_base_offset = arrow_offsets_data[0];
         arrow_offsets_data += 1;
         auto start_idx = offsets_layer->size() - 1;
-        offsets_layer->reserve(offsets_layer->size() + layer_num_elements);
+        offsets_layer->resize(offsets_layer->size() + layer_num_elements);
         auto* offsets_data = &offsets_layer->get_data().front() + start_idx;
         auto base_offset = offsets_data[0];
         offsets_data += 1;
@@ -861,6 +861,14 @@ struct ArrowListConverter {
         }
 
         auto last_arrow_type = list_layers.back()->type();
+        // for timestamp type, state->timezone is specified by user. convert function
+        // obtains timezone from array. thus timezone in array should be rectified to
+        // state->timezone.
+        if (list_layers.back()->type_id() == ArrowTypeId::TIMESTAMP) {
+            auto* timestamp_type = down_cast<arrow::TimestampType*>(last_arrow_type.get());
+            auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+            mutable_timezone = ctx->state->timezone();
+        }
         auto conv_func = get_arrow_converter(last_arrow_type->id(), last_type_desc->type, true, false);
         if (conv_func == nullptr) {
             return illegal_converting_error(last_arrow_type->name(), last_type_desc->debug_string());
@@ -871,7 +879,6 @@ struct ArrowListConverter {
             auto& layer = list_layers[d];
             auto& range = layer_ranges[d];
             auto& offsets_layer = offsets_layers[d];
-            auto& nulls_layer = nulls_layers[d];
             auto type_id = layer->type_id();
             auto layer_start_idx = range.first;
             auto layer_num_elements = range.second - range.first;
@@ -882,7 +889,6 @@ struct ArrowListConverter {
             } else {
                 return Status::InternalError(strings::Substitute("Invalid arrow list type($0)", layer->type()->name()));
             }
-            fill_null_column(layer, layer_start_idx, layer_num_elements, nulls_layer.get(), nulls_layer->size());
         }
 
         auto& last_layer = list_layers.back();
@@ -891,9 +897,15 @@ struct ArrowListConverter {
 
         auto layer_start_idx = last_range.first;
         auto layer_num_elements = last_range.second - last_range.first;
-        auto* last_null_data = &last_nulls_layer->get_data().front() - layer_num_elements;
+
+        fill_null_column(last_layer, layer_start_idx, layer_num_elements, last_nulls_layer.get(),
+                         last_nulls_layer->size());
+
+        auto* last_null_data = (&last_nulls_layer->get_data().front()) + last_nulls_layer->size() - layer_num_elements;
+
         conv_func(last_layer, layer_start_idx, layer_num_elements, last_column, last_column->size(), last_null_data,
                   nullptr, ctx);
+
         return Status::OK();
     }
 };

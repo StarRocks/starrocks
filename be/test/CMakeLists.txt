@@ -215,6 +215,8 @@ set(EXEC_FILES
         ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
+        ./runtime/memory_scratch_sink_test_issue_8676.cpp
+        ./runtime/memory_scratch_sink_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./simd/simd_test.cpp

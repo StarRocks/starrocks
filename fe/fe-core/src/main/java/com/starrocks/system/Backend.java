@@ -315,6 +315,14 @@ public class Backend implements Writable {
         return this.disksRef;
     }
 
+    public int getCpuCores() {
+        return cpuCores;
+    }
+
+    public void setCpuCores(int cpuCores) {
+        this.cpuCores = cpuCores;
+    }
+
     public boolean hasPathHash() {
         return disksRef.values().stream().allMatch(DiskInfo::hasPathHash);
     }

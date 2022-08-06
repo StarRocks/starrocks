@@ -177,9 +177,6 @@ private:
 
         ColumnPtr _search_string_column;
 
-        /// Used for RLIKE and REGEXP predicates if the pattern is a constant argument.
-        std::unique_ptr<re2::RE2> regex;
-
         // a pointer to the generated database that responsible for parsed expression.
         hs_database_t* database = nullptr;
         // a type containing error details that is returned by the compile calls on failure.

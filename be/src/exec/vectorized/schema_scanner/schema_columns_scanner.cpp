@@ -112,6 +112,12 @@ std::string SchemaColumnsScanner::to_mysql_data_type_string(TColumnDesc& desc) {
     case TPrimitiveType::DECIMAL: {
         return "decimal";
     }
+    case TPrimitiveType::HLL:
+        return "hll";
+    case TPrimitiveType::OBJECT:
+        return "bitmap";
+    case TPrimitiveType::PERCENTILE:
+        return "percentile";
     case TPrimitiveType::JSON:
         return "json";
     default:
@@ -178,6 +184,12 @@ std::string SchemaColumnsScanner::type_to_string(TColumnDesc& desc) {
         auto scale = desc.__isset.columnScale ? desc.columnScale : -1;
         return strings::Substitute("decimal($0,$1)", precision, scale);
     }
+    case TPrimitiveType::HLL:
+        return "hll";
+    case TPrimitiveType::OBJECT:
+        return "bitmap";
+    case TPrimitiveType::PERCENTILE:
+        return "percentile";
     case TPrimitiveType::JSON:
         return "json";
     default:

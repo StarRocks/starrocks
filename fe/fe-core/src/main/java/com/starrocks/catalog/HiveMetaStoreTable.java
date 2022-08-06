@@ -24,9 +24,10 @@ public interface HiveMetaStoreTable {
 
     Map<PartitionKey, Long> getPartitionKeys() throws DdlException;
 
-    void refreshTableCache() throws DdlException;
+    void refreshTableCache(String dbName, String tableName) throws DdlException;
 
     void refreshPartCache(List<String> partNames) throws DdlException;
 
     void refreshTableColumnStats() throws DdlException;
+
 }

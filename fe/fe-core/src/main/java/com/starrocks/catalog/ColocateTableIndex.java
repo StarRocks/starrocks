@@ -492,8 +492,26 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    /**
+     * After the user executes `DROP TABLE`, we only throw tables into the recycle bin instead of deleting them
+     * immediately. As a side effect, the table that stores in ColocateTableIndex may not be visible to users. We need
+     * to add a marker to indicate to our user that the corresponding table is marked deleted.
+     */
     public List<List<String>> getInfos() {
         List<List<String>> infos = Lists.newArrayList();
+
+        // mark for table that has just moved
+        Set<Long> tableIdsToBeRemoved = new HashSet<>();
+        CatalogRecycleBin catalogRecycleBin = Catalog.getCurrentRecycleBin();
+        // loop for current dbs + removed dbs
+        List<Long> allDBIds = Catalog.getCurrentCatalog().getDbIds();
+        allDBIds.addAll(catalogRecycleBin.getAllDbIds());
+        for (long dbId : allDBIds) {
+            for (Table table : catalogRecycleBin.getTables(dbId)) {
+                tableIdsToBeRemoved.add(table.getId());
+            }
+        }
+
         readLock();
         try {
             for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
@@ -501,7 +519,17 @@ public class ColocateTableIndex implements Writable {
                 GroupId groupId = entry.getValue();
                 info.add(groupId.toString());
                 info.add(entry.getKey());
-                info.add(Joiner.on(", ").join(group2Tables.get(groupId)));
+                StringBuffer sb = new StringBuffer();
+                for (Long tableId : group2Tables.get(groupId)) {
+                    if (sb.length() > 0) {
+                        sb.append(", ");
+                    }
+                    sb.append(tableId);
+                    if (tableIdsToBeRemoved.contains(tableId)) {
+                        sb.append("*");
+                    }
+                }
+                info.add(sb.toString());
                 ColocateGroupSchema groupSchema = group2Schema.get(groupId);
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));

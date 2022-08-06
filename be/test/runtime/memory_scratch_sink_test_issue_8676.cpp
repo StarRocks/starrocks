@@ -19,8 +19,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/memory_scratch_sink.h"
-
 #include <arrow/array.h>
 #include <arrow/array/builder_primitive.h>
 #include <arrow/buffer.h>
@@ -48,6 +46,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/memory_scratch_sink.h"
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
@@ -59,9 +58,9 @@
 
 namespace starrocks {
 
-class MemoryScratchSinkTest : public testing::Test {
+class MemoryScratchSinkIssue8676Test : public testing::Test {
 public:
-    MemoryScratchSinkTest() {
+    MemoryScratchSinkIssue8676Test() {
         {
             TExpr expr;
             {
@@ -70,7 +69,7 @@ public:
                 node.node_type = TExprNodeType::SLOT_REF;
                 node.num_children = 0;
                 TSlotRef slot_ref;
-                slot_ref.__set_slot_id(0);
+                slot_ref.__set_slot_id(1);
                 slot_ref.__set_tuple_id(0);
 
                 ::starrocks::TTypeDesc desc;
@@ -87,10 +86,35 @@ public:
                 expr.nodes.push_back(node);
             }
             _exprs.push_back(expr);
+
+            TExpr expr2;
+            {
+                // first int_column
+                TExprNode node;
+                node.node_type = TExprNodeType::SLOT_REF;
+                node.num_children = 0;
+                TSlotRef slot_ref;
+                slot_ref.__set_slot_id(0);
+                slot_ref.__set_tuple_id(0);
+
+                ::starrocks::TTypeDesc desc;
+                TTypeNode type_node;
+                type_node.__set_type(TTypeNodeType::type::SCALAR);
+                TScalarType scalar_type;
+                scalar_type.__set_type(TPrimitiveType::type::DOUBLE);
+                type_node.__set_scalar_type(scalar_type);
+                desc.__set_types({type_node});
+
+                node.__set_slot_ref(slot_ref);
+                node.__set_type(desc);
+
+                expr2.nodes.push_back(node);
+            }
+            _exprs.push_back(expr2);
         }
     }
 
-    ~MemoryScratchSinkTest() { delete _state; }
+    ~MemoryScratchSinkIssue8676Test() { delete _state; }
 
     virtual void SetUp() {
         config::periodic_counter_update_period_ms = 500;
@@ -181,13 +205,13 @@ private:
     std::vector<TExpr> _exprs;
 };
 
-void MemoryScratchSinkTest::init() {
+void MemoryScratchSinkIssue8676Test::init() {
     _exec_env = ExecEnv::GetInstance();
     init_runtime_state();
     init_desc_tbl();
 }
 
-void MemoryScratchSinkTest::init_runtime_state() {
+void MemoryScratchSinkIssue8676Test::init_runtime_state() {
     TQueryOptions query_options;
     query_options.batch_size = 1024;
     TUniqueId query_id;
@@ -199,7 +223,7 @@ void MemoryScratchSinkTest::init_runtime_state() {
     _state->init_mem_trackers(TUniqueId());
 }
 
-void MemoryScratchSinkTest::init_desc_tbl() {
+void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
     // TTableDescriptor
     TTableDescriptor t_table_desc;
     t_table_desc.id = 0;
@@ -218,6 +242,25 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     std::vector<TSlotDescriptor> slot_descs;
     int offset = 1;
     int i = 0;
+    // double_column
+    {
+        TSlotDescriptor t_slot_desc;
+        t_slot_desc.__set_id(i);
+        t_slot_desc.__set_slotType(gen_type_desc(TPrimitiveType::DOUBLE));
+        t_slot_desc.__set_columnPos(i);
+        t_slot_desc.__set_byteOffset(offset);
+        t_slot_desc.__set_nullIndicatorByte(0);
+        t_slot_desc.__set_nullIndicatorBit(-1);
+        t_slot_desc.__set_slotIdx(i);
+        t_slot_desc.__set_isMaterialized(true);
+        t_slot_desc.__set_colName("first_column");
+        t_slot_desc.__set_parent(0);
+
+        slot_descs.push_back(t_slot_desc);
+        offset += sizeof(int32_t);
+    }
+
+    i = 1;
     // int_column
     {
         TSlotDescriptor t_slot_desc;
@@ -264,13 +307,14 @@ void MemoryScratchSinkTest::init_desc_tbl() {
     _tnode.nullable_tuples.push_back(false);
 }
 
-TEST_F(MemoryScratchSinkTest, work_flow_normal) {
+TEST_F(MemoryScratchSinkIssue8676Test, work_flow_normal) {
     std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_DOUBLE);
     types.emplace_back(TYPE_INT);
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range_one;
-    range_one.__set_path("./be/test/runtime/test_data/csv_data");
+    range_one.__set_path("./be/test/runtime/test_data/issue_8576_data");
     range_one.__set_start_offset(0);
     range_one.__set_num_of_columns_from_file(types.size());
     ranges.push_back(range_one);
@@ -292,8 +336,13 @@ TEST_F(MemoryScratchSinkTest, work_flow_normal) {
     auto chunk = maybe_chunk.value();
     int num = chunk->num_rows();
 
-    ASSERT_EQ(6, num);
+    ASSERT_EQ(2, num);
     ASSERT_TRUE(sink.send_chunk(_state, chunk.get()).ok());
+
+    std::shared_ptr<arrow::Schema> schema = sink.schema();
+    std::vector<std::string> field_names = schema->field_names();
+    ASSERT_TRUE(field_names[0].compare("second_column") == 0);
+    ASSERT_TRUE(field_names[1].compare("first_column") == 0);
     ASSERT_TRUE(sink.close(_state, Status::OK()).ok());
 }
 

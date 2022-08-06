@@ -146,7 +146,7 @@ querySpecification
     ;
 
 fromClause
-    : (FROM relation (',' LATERAL? relation)*)?                                         #from
+    : (FROM relations)?                                                                 #from
     | FROM DUAL                                                                         #dual
     ;
 
@@ -176,12 +176,31 @@ selectItem
     | ASTERISK_SYMBOL                                                                    #selectAll
     ;
 
+relations
+    : relation (',' LATERAL? relation)*
+    ;
+
 relation
-    : left=relation crossOrInnerJoinType hint?
-            LATERAL? rightRelation=relation joinCriteria?                                #joinRelation
-    | left=relation outerAndSemiJoinType hint?
-            LATERAL? rightRelation=relation joinCriteria                                 #joinRelation
-    | aliasedRelation                                                                    #relationDefault
+    : relationPrimary joinRelation*
+    | '(' relationPrimary joinRelation* ')'
+    ;
+
+relationPrimary
+    : qualifiedName partitionNames? tabletList? (
+        AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
+    | '(' VALUES rowConstructor (',' rowConstructor)* ')'
+        (AS? alias=identifier columnAliases?)?                                          #inlineTable
+    | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryRelation
+    | qualifiedName '(' expression (',' expression)* ')'
+        (AS? alias=identifier columnAliases?)?                                          #tableFunction
+    | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+joinRelation
+    : crossOrInnerJoinType bracketHint?
+            LATERAL? rightRelation=relationPrimary joinCriteria?
+    | outerAndSemiJoinType bracketHint?
+            LATERAL? rightRelation=relationPrimary joinCriteria
     ;
 
 crossOrInnerJoinType
@@ -195,6 +214,10 @@ outerAndSemiJoinType
     | FULL OUTER JOIN
     | LEFT SEMI JOIN | RIGHT SEMI JOIN
     | LEFT ANTI JOIN | RIGHT ANTI JOIN
+    ;
+
+bracketHint
+    : '[' IDENTIFIER (',' IDENTIFIER)* ']'
     ;
 
 hint
@@ -211,20 +234,8 @@ joinCriteria
     | USING '(' identifier (',' identifier)* ')'
     ;
 
-aliasedRelation
-    : relationPrimary (AS? identifier columnAliases?)?
-    ;
-
 columnAliases
     : '(' identifier (',' identifier)* ')'
-    ;
-
-relationPrimary
-    : qualifiedName partitionNames? tabletList? hint?                                     #tableName
-    | '(' VALUES rowConstructor (',' rowConstructor)* ')'                                 #inlineTable
-    | subquery                                                                            #subqueryRelation
-    | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
-    | '(' relation ')'                                                                    #parenthesizedRelation
     ;
 
 partitionNames

@@ -292,6 +292,7 @@ public class FileSystemManager {
                 // it is a corner case
                 return null;
             }
+            UserGroupInformation ugi = null;
             if (fileSystem.getDFSFileSystem() == null) {
                 logger.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
@@ -326,7 +327,8 @@ public class FileSystemManager {
                                 "keytab is required for kerberos authentication");
                     }
                     UserGroupInformation.setConfiguration(conf);
-                    UserGroupInformation.loginUserFromKeytab(principal, keytab);
+ 
+                    ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {
                         try {
                             File file = new File(tmpFilePath);
@@ -390,7 +392,9 @@ public class FileSystemManager {
                 if (authentication.equals(AUTHENTICATION_SIMPLE) &&
                     properties.containsKey(USER_NAME_KEY) && !Strings.isNullOrEmpty(username)) {
                     // Use the specified 'username' as the login name
-                    UserGroupInformation ugi = UserGroupInformation.createRemoteUser(username);
+                    ugi = UserGroupInformation.createRemoteUser(username);
+                }
+                if (ugi != null) {
                     dfsFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
                         @Override
                         public FileSystem run() throws Exception {
@@ -725,7 +729,6 @@ public class FileSystemManager {
                     e, "file not found");
         } catch (Exception e) {
             logger.error("errors while get file status ", e);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
                     e, "unknown error when get file status");
         }
@@ -740,7 +743,6 @@ public class FileSystemManager {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (IOException e) {
             logger.error("errors while delete path " + path);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
                     e, "delete path {} error", path);
         }
@@ -764,7 +766,6 @@ public class FileSystemManager {
             }
         } catch (IOException e) {
             logger.error("errors while rename path from " + srcPath + " to " + destPath);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
                     e, "errors while rename {} to {}", srcPath, destPath);
         }
@@ -779,7 +780,6 @@ public class FileSystemManager {
             return isPathExist;
         } catch (IOException e) {
             logger.error("errors while check path exist: " + path);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
                     e, "errors while check if path {} exist", path);
         }
@@ -798,7 +798,6 @@ public class FileSystemManager {
             return fd;
         } catch (IOException e) {
             logger.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
                     e, "could not open file {}", path);
         }
@@ -885,7 +884,6 @@ public class FileSystemManager {
             return fd;
         } catch (IOException e) {
             logger.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR, 
                     e, "could not open file {}", path);
         }

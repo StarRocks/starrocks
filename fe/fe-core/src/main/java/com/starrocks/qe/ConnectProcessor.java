@@ -52,6 +52,7 @@ import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -230,6 +231,33 @@ public class ConnectProcessor {
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
+    private void addRunningQueryDetail(StatementBase parsedStmt) {
+        if (!Config.enable_collect_query_detail_info) {
+            return;
+        }
+        String sql;
+        if (parsedStmt.needAuditEncryption()) {
+            sql = parsedStmt.toSql();
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
+        QueryDetail queryDetail = new QueryDetail(
+                DebugUtil.printId(ctx.getQueryId()),
+                isQuery,
+                ctx.connectionId,
+                ctx.getMysqlChannel() != null ?
+                        ctx.getMysqlChannel().getRemoteIp() : "System",
+                ctx.getStartTime(), -1, -1,
+                QueryDetail.QueryMemState.RUNNING,
+                ctx.getDatabase(),
+                sql,
+                ctx.getQualifiedUser());
+        ctx.setQueryDetail(queryDetail);
+        //copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+    }
+
     // process COM_QUERY statement,
     private void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
@@ -276,6 +304,12 @@ public class ConnectProcessor {
                 }
                 parsedStmt = stmts.get(i);
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
+
+                // Only add the last running stmt for multi statement,
+                // because the audit log will only show the last stmt.
+                if (i == stmts.size() - 1) {
+                    addRunningQueryDetail(parsedStmt);
+                }
 
                 executor = new StmtExecutor(ctx, parsedStmt);
                 ctx.setExecutor(executor);

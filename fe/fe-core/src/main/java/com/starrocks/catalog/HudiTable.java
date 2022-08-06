@@ -30,6 +30,7 @@ import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieTableType;
@@ -159,7 +160,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void refreshTableCache() throws DdlException {
+    public void refreshTableCache(String dbName, String tableName) throws DdlException {
         Catalog.getCurrentCatalog().getHiveRepository().refreshTableCache(hmsTableInfo);
     }
 
@@ -255,6 +256,16 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         Option<String[]> hudiPartitionFields = hudiTableConfig.getPartitionFields();
         if (hudiPartitionFields.isPresent()) {
             for (String partField : hudiPartitionFields.get()) {
+                Column partColumn = this.nameToColumn.get(partField);
+                if (partColumn == null) {
+                    throw new DdlException("Partition column [" + partField + "] must exist in column list");
+                } else {
+                    this.partColumnNames.add(partField);
+                }
+            }
+        } else if (!metastoreTable.getPartitionKeys().isEmpty()) {
+            for (FieldSchema fieldSchema : metastoreTable.getPartitionKeys()) {
+                String partField = fieldSchema.getName();
                 Column partColumn = this.nameToColumn.get(partField);
                 if (partColumn == null) {
                     throw new DdlException("Partition column [" + partField + "] must exist in column list");

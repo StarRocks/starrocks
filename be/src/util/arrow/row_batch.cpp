@@ -40,6 +40,7 @@
 
 #include "common/logging.h"
 #include "exprs/slot_ref.h"
+#include "exprs/vectorized/column_ref.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -98,21 +99,39 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
     return Status::OK();
 }
 
-Status convert_to_arrow_field(SlotDescriptor* desc, std::shared_ptr<arrow::Field>* field) {
+Status convert_to_arrow_field(const TypeDescriptor& desc, const string& col_name, bool is_nullable,
+                              std::shared_ptr<arrow::Field>* field) {
     std::shared_ptr<arrow::DataType> type;
-    RETURN_IF_ERROR(convert_to_arrow_type(desc->type(), &type));
-    *field = arrow::field(desc->col_name(), type, desc->is_nullable());
+    RETURN_IF_ERROR(convert_to_arrow_type(desc, &type));
+    // we keep the col_name here just for compatibility, col_names are from the first RefSlot,
+    // users of arrow should not adjust the order of columns based on the colname.
+    *field = arrow::field(col_name, type, is_nullable);
     return Status::OK();
 }
 
-Status convert_to_arrow_schema(const RowDescriptor& row_desc, std::shared_ptr<arrow::Schema>* result) {
+Status convert_to_arrow_schema(const RowDescriptor& row_desc,
+                               const std::unordered_map<int64_t, std::string>& id_to_col_name,
+                               std::shared_ptr<arrow::Schema>* result,
+                               const std::vector<ExprContext*>& output_expr_ctxs) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    for (auto tuple_desc : row_desc.tuple_descriptors()) {
-        for (auto desc : tuple_desc->slots()) {
-            std::shared_ptr<arrow::Field> field;
-            RETURN_IF_ERROR(convert_to_arrow_field(desc, &field));
-            fields.push_back(field);
+    for (const auto& expr_context : output_expr_ctxs) {
+        Expr* expr = expr_context->root();
+        std::shared_ptr<arrow::Field> field;
+        string col_name;
+        vectorized::ColumnRef* col_ref = expr->get_column_ref();
+        DCHECK(col_ref != nullptr);
+        int64_t slot_id = col_ref->slot_id();
+        int64_t tuple_id = col_ref->tuple_id();
+        int64_t id = tuple_id << 32 | slot_id;
+        auto it = id_to_col_name.find(id);
+        if (it == id_to_col_name.end()) {
+            LOG(WARNING) << "Can't find the RefSlot in the row_desc.";
+        } else {
+            col_name = it->second;
         }
+
+        RETURN_IF_ERROR(convert_to_arrow_field(expr->type(), col_name, expr->is_nullable(), &field));
+        fields.push_back(field);
     }
     *result = arrow::schema(std::move(fields));
     return Status::OK();
