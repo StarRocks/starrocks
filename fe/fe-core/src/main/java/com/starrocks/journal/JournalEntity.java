@@ -104,6 +104,7 @@ import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -695,6 +696,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DELETE_UNUSED_SHARD: {
                 data = ShardInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_STARMGR: {
+                data = StarMgrJournal.read(in);
                 isRead = true;
                 break;
             }

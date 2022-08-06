@@ -41,6 +41,7 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
         return remoteConjuncts;
     }
 
+    // used for test
     public QueryBuilders.QueryBuilder convert(Expr conjunct) {
         return visit(conjunct);
     }
@@ -59,6 +60,9 @@ public class QueryConverter extends AstVisitor<QueryBuilders.QueryBuilder, Void>
             } catch (Exception e) {
                 localConjuncts.add(conjunct.clone());
             }
+        }
+        if (remoteConjuncts.size() == 0) {
+            return QueryBuilders.matchAllQuery();
         }
         return boolQueryBuilder;
     }

@@ -17,15 +17,14 @@
 
 namespace starrocks::lake {
 
-Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata)
-        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)) {}
+Rowset::Rowset(Tablet* tablet, RowsetMetadataPtr rowset_metadata, int index)
+        : _tablet(tablet), _rowset_metadata(std::move(rowset_metadata)), _index(index) {}
 
 Rowset::~Rowset() = default;
 
 // TODO: support
-//  1. delete predicates
-//  2. primary key table
-//  3. rowid range and short key range
+//  1. primary key table
+//  2. rowid range and short key range
 StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const RowsetReadOptions& options) {
     vectorized::SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet->root_location()));
@@ -39,6 +38,9 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
+    if (options.delete_predicates != nullptr) {
+        seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
+    }
 
     std::unique_ptr<vectorized::Schema> segment_schema_guard;
     auto* segment_schema = const_cast<vectorized::Schema*>(&schema);

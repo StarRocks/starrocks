@@ -1176,7 +1176,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {
@@ -1315,8 +1315,10 @@ public class DatabaseTransactionMgr {
         }
         if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED
                 || transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
-            throw new UserException("transaction's state is already "
-                    + transactionState.getTransactionStatus() + ", could not abort");
+            String msg = String.format("transaction %d state is %s, could not abort",
+                    transactionId, transactionState.getTransactionStatus().toString());
+            LOG.warn(msg);
+            throw new TransactionAlreadyCommitException(msg);
         }
         transactionState.setFinishTime(System.currentTimeMillis());
         transactionState.setReason(reason);
@@ -1652,6 +1654,7 @@ public class DatabaseTransactionMgr {
                 transactionState.setNewFinish();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
                 unprotectUpsertTransactionState(transactionState, false);
+                transactionState.notifyVisible();
                 txnOperated = true;
             } finally {
                 writeUnlock();

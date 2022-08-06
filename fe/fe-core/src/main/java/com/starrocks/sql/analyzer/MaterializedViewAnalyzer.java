@@ -30,6 +30,8 @@ import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
@@ -51,7 +53,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class MaterializedViewAnalyzer {
 
@@ -74,11 +75,19 @@ public class MaterializedViewAnalyzer {
                                                          ConnectContext context) {
             statement.getTableName().normalization(context);
             QueryStatement queryStatement = statement.getQueryStatement();
-            //check query relation is select relation
+            // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
             }
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+            // check cte
+            if (selectRelation.hasWithClause()) {
+                throw new SemanticException("Materialized view query statement not support cte");
+            }
+            // check subquery
+            if (!AnalyzerUtils.collectAllSubQueryRelation(queryStatement).isEmpty()) {
+                throw new SemanticException("Materialized view query statement not support subquery");
+            }
             // check alias except * and SlotRef
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
             for (SelectListItem selectListItem : selectListItems) {
@@ -103,6 +112,9 @@ public class MaterializedViewAnalyzer {
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
             }
+            if (tableNameTableMap.isEmpty()) {
+                throw new SemanticException("Can not find base table in query statement");
+            }
             tableNameTableMap.forEach((tableName, table) -> {
                 if (db.getTable(table.getId()) == null) {
                     throw new SemanticException(
@@ -113,6 +125,11 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException(
                             "Materialized view only supports olap table, but the type of table: " +
                                     table.getName() + " is: " + table.getType().name());
+                }
+                if (table instanceof MaterializedView) {
+                    throw new SemanticException(
+                            "Creating a materialized view from materialized view is not supported now. The type of table: " +
+                                    table.getName() + " is: Materialized View");
                 }
                 baseTableIds.add(table.getId());
             });
@@ -206,7 +223,7 @@ public class MaterializedViewAnalyzer {
                         + slotRef.toSql() + " must related to column");
             }
             for (Column column : columns) {
-                if (slotRef.getColumnName().equals(column.getName())) {
+                if (slotRef.getColumnName().equalsIgnoreCase(column.getName())) {
                     statement.setPartitionColumn(column);
                     break;
                 }
@@ -288,7 +305,7 @@ public class MaterializedViewAnalyzer {
                 }
                 boolean isInPartitionColumns = false;
                 for (Column basePartitionColumn : partitionColumns) {
-                    if (basePartitionColumn.getName().equals(slotRef.getColumnName())) {
+                    if (basePartitionColumn.getName().equalsIgnoreCase(slotRef.getColumnName())) {
                         isInPartitionColumns = true;
                         break;
                     }
@@ -356,8 +373,13 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view should contain distribution desc");
                 }
             }
-            distributionDesc.analyze(
-                    mvColumnItems.stream().map(Column::getName).collect(Collectors.toSet()));
+            Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column columnDef : mvColumnItems) {
+                if (!columnSet.add(columnDef.getName())) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
+                }
+            }
+            distributionDesc.analyze(columnSet);
         }
 
         @Override
@@ -414,6 +436,9 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not find database:" + mvName.getDb());
             }
             Table table = db.getTable(mvName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+            }
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
@@ -456,6 +481,11 @@ public class MaterializedViewAnalyzer {
                 return false;
             }
             if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {
+                String fmt = ((StringLiteral) fnExpr.getChild(0)).getValue();
+                if (fmt.equalsIgnoreCase("week")) {
+                    throw new SemanticException("The function date_trunc used by the materialized view for partition" +
+                            " does not support week formatting");
+                }
                 SlotRef slotRef = (SlotRef) fnExpr.getChild(1);
                 PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
                 // must check slotRef type, because function analyze don't check it.

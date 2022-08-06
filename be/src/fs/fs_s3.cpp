@@ -71,7 +71,7 @@ public:
     S3ClientFactory(S3ClientFactory&&) = delete;
     void operator=(S3ClientFactory&&) = delete;
 
-    S3ClientPtr new_client(const ClientConfiguration& config);
+    S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
     static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
@@ -98,7 +98,7 @@ private:
 
 S3ClientFactory::S3ClientFactory() : _items(0), _rand((int)::time(NULL)) {}
 
-S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config) {
+S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
 
     for (size_t i = 0; i < _items; i++) {
@@ -106,8 +106,17 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     }
 
     S3ClientPtr client;
-    const auto& access_key_id = config::object_storage_access_key_id;
-    const auto& secret_access_key = config::object_storage_secret_access_key;
+    string access_key_id;
+    string secret_access_key;
+    if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
+        DCHECK(opts.scan_range_params->hdfs_properties.__isset.access_key);
+        DCHECK(opts.scan_range_params->hdfs_properties.__isset.secret_key);
+        access_key_id = opts.scan_range_params->hdfs_properties.access_key;
+        secret_access_key = opts.scan_range_params->hdfs_properties.secret_key;
+    } else {
+        access_key_id = config::object_storage_access_key_id;
+        secret_access_key = config::object_storage_secret_access_key;
+    }
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
         client = std::make_shared<Aws::S3::S3Client>(credentials, config);
@@ -128,27 +137,47 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     return client;
 }
 
-static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri) {
+static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    if (!uri.endpoint().empty()) {
-        config.endpointOverride = uri.endpoint();
-    } else if (!config::object_storage_endpoint.empty()) {
-        config.endpointOverride = config::object_storage_endpoint;
-    } else if (config::object_storage_endpoint_use_https) {
-        config.scheme = Aws::Http::Scheme::HTTPS;
+    if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
+        const THdfsProperties& hdfs_properties = opts.scan_range_params->hdfs_properties;
+        DCHECK(hdfs_properties.__isset.end_point);
+        if (hdfs_properties.__isset.end_point) {
+            config.endpointOverride = hdfs_properties.end_point;
+        }
+        if (hdfs_properties.__isset.ssl_enable && hdfs_properties.ssl_enable) {
+            config.scheme = Aws::Http::Scheme::HTTPS;
+        }
+
+        if (hdfs_properties.__isset.region) {
+            config.region = hdfs_properties.region;
+        }
+        if (hdfs_properties.__isset.max_connection) {
+            config.maxConnections = hdfs_properties.max_connection;
+        } else {
+            config.maxConnections = config::object_storage_max_connection;
+        }
     } else {
-        config.scheme = Aws::Http::Scheme::HTTP;
+        if (!uri.endpoint().empty()) {
+            config.endpointOverride = uri.endpoint();
+        } else if (!config::object_storage_endpoint.empty()) {
+            config.endpointOverride = config::object_storage_endpoint;
+        } else if (config::object_storage_endpoint_use_https) {
+            config.scheme = Aws::Http::Scheme::HTTPS;
+        } else {
+            config.scheme = Aws::Http::Scheme::HTTP;
+        }
+        if (!config::object_storage_region.empty()) {
+            config.region = config::object_storage_region;
+        }
+        config.maxConnections = config::object_storage_max_connection;
     }
-    if (!config::object_storage_region.empty()) {
-        config.region = config::object_storage_region;
-    }
-    config.maxConnections = config::object_storage_max_connection;
-    return S3ClientFactory::instance().new_client(config);
+    return S3ClientFactory::instance().new_client(config, opts);
 }
 
 class S3FileSystem : public FileSystem {
 public:
-    S3FileSystem() {}
+    S3FileSystem(const FSOptions& options) : _options(options) {}
     ~S3FileSystem() override = default;
 
     S3FileSystem(const S3FileSystem&) = delete;
@@ -217,6 +246,9 @@ public:
     }
 
     StatusOr<SpaceInfo> space(const std::string& path) override;
+
+private:
+    FSOptions _options;
 };
 
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const std::string& path) {
@@ -229,7 +261,7 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
@@ -239,7 +271,7 @@ StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(cons
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));
     }
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     auto input_stream = std::make_shared<io::S3InputStream>(std::move(client), uri.bucket(), uri.key());
     return std::make_unique<SequentialFile>(std::move(input_stream), path);
 }
@@ -264,7 +296,7 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
     if (opts.mode != FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE && opts.mode != FileSystem::MUST_CREATE) {
         return Status::NotSupported(fmt::format("S3FileSystem does not support open mode {}", opts.mode));
     }
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     auto ostream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
                                                         config::experimental_s3_max_single_part_size,
                                                         config::experimental_s3_min_upload_part_size);
@@ -293,7 +325,7 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     }
     // `uri.key().empty()` is true means this is a root directory.
     bool directory_exist = uri.key().empty() ? true : false;
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     Aws::S3::Model::ListObjectsV2Request request;
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
@@ -357,7 +389,7 @@ Status S3FileSystem::create_dir(const std::string& dirname) {
         req.SetKey(fmt::format("{}/", uri.key()));
     }
     req.SetContentLength(0);
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     auto outcome = client->PutObject(req);
     if (outcome.IsSuccess()) {
         return Status::OK();
@@ -389,7 +421,7 @@ StatusOr<bool> S3FileSystem::is_directory(const std::string& path) {
     if (uri.key().empty()) { // root directory '/'
         return true;
     }
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     Aws::S3::Model::ListObjectsV2Request request;
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithMaxKeys(1);
@@ -421,7 +453,7 @@ Status S3FileSystem::delete_file(const std::string& path) {
     }
     Aws::S3::Model::DeleteObjectRequest request;
     request.WithBucket(uri.bucket()).WithKey(uri.key());
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     auto outcome = client->DeleteObject(request);
     // NOTE: If the object does not exist, outcome.IsSuccess() is true and OK is returned, which
     // is different from the behavior of posix fs.
@@ -444,7 +476,7 @@ Status S3FileSystem::delete_dir(const std::string& dirname) {
         uri.key().push_back('/');
     }
 
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
 
     // Check if the directory is empty
     Aws::S3::Model::ListObjectsV2Request request;
@@ -495,7 +527,7 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
         uri.key().push_back('/');
     }
     bool directory_exist = false;
-    auto client = new_s3client(uri);
+    auto client = new_s3client(uri, _options);
     Aws::S3::Model::ListObjectsV2Request request;
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key());
@@ -535,8 +567,8 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     return directory_exist ? Status::OK() : Status::NotFound(dirname);
 }
 
-std::unique_ptr<FileSystem> new_fs_s3() {
-    return std::make_unique<S3FileSystem>();
+std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
+    return std::make_unique<S3FileSystem>(options);
 }
 
 } // namespace starrocks

@@ -16,6 +16,7 @@ DIAGNOSTIC_POP
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
@@ -394,11 +395,16 @@ Status TabletManager::publish_version(int64_t tablet_id, int64_t base_version, i
 }
 
 static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata) {
-    if (op_write.has_rowset() && op_write.rowset().num_rows() > 0) {
+    if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
         auto rowset = metadata->add_rowsets();
         rowset->CopyFrom(op_write.rowset());
         rowset->set_id(metadata->next_rowset_id());
-        metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
+        if (op_write.rowset().num_rows() > 0) {
+            metadata->set_next_rowset_id(metadata->next_rowset_id() + rowset->segments_size());
+        } else {
+            // delete
+            metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
+        }
     }
     return Status::OK();
 }
@@ -457,7 +463,7 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
         new_cumulative_point = first_idx;
     } else {
         // base compaction
-        new_cumulative_point = first_idx - op_compaction.input_rowsets_size();
+        new_cumulative_point = metadata->cumulative_point() - op_compaction.input_rowsets_size();
     }
     if (op_compaction.has_output_rowset() && op_compaction.output_rowset().num_rows() > 0) {
         ++new_cumulative_point;
@@ -467,6 +473,20 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
                                                  new_cumulative_point, metadata->rowsets_size()));
     }
     metadata->set_cumulative_point(new_cumulative_point);
+
+    // Debug new tablet metadata
+    std::vector<uint32_t> rowset_ids;
+    std::vector<uint32_t> delete_rowset_ids;
+    for (const auto& rowset : metadata->rowsets()) {
+        rowset_ids.emplace_back(rowset.id());
+        if (rowset.has_delete_predicate()) {
+            delete_rowset_ids.emplace_back(rowset.id());
+        }
+    }
+    LOG(INFO) << "compaction finish. tablet: " << metadata->id() << ", version: " << metadata->version()
+              << ", cumulative point: " << metadata->cumulative_point() << ", rowsets: [" << JoinInts(rowset_ids, ",")
+              << "]"
+              << ", delete rowsets: [" << JoinInts(delete_rowset_ids, ",") + "]";
     return Status::OK();
 }
 
@@ -563,7 +583,9 @@ void* metadata_gc_trigger(void* arg) {
     while (!bthread_stopped(bthread_self())) {
         // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
         // configured value, which is ok now.
-        (void)bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000);
+        if (bthread_usleep(config::lake_gc_metadata_check_interval * 1000 * 1000) != 0) {
+            continue;
+        }
 
         std::set<std::string> roots;
         auto st = lp->list_root_locations(&roots);
@@ -576,8 +598,12 @@ void* metadata_gc_trigger(void* arg) {
                 auto r = metadata_gc(root, tablet_mgr);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
             });
-            LOG_IF(WARNING, !st.ok()) << "Fail to submit task to threadpool: " << st;
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+                break;
+            }
         }
+        // TODO: wait until all tasks finished.
     }
     return nullptr;
 }
@@ -590,7 +616,9 @@ void* segment_gc_trigger(void* arg) {
     while (!bthread_stopped(bthread_self())) {
         // NOTE: When the work load of bthread workers is high, the real sleep interval may be much longer than the
         // configured value, which is ok now.
-        (void)bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000);
+        if (bthread_usleep(config::lake_gc_segment_check_interval * 1000 * 1000) != 0) {
+            continue;
+        }
 
         std::set<std::string> roots;
         auto st = lp->list_root_locations(&roots);
@@ -603,8 +631,12 @@ void* segment_gc_trigger(void* arg) {
                 auto r = segment_gc(root, tablet_mgr);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do segment gc in " << root << ": " << r;
             });
-            LOG_IF(WARNING, !st.ok()) << "Fail to submit task to threadpool: " << st;
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to submit task to threadpool: " << st;
+                break;
+            }
         }
+        // TODO: wait until all tasks finished.
     }
     return nullptr;
 }

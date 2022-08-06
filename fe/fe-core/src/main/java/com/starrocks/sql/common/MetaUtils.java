@@ -59,7 +59,7 @@ public class MetaUtils {
         }
         Table table = db.getTable(tableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Unknown table '%s", tableName.getTbl());
+            throw new SemanticException("Unknown table %s", tableName.getTbl());
         }
         return table;
     }

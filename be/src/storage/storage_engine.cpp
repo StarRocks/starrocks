@@ -73,11 +73,9 @@ static Status _validate_options(const EngineOptions& options) {
 
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
     RETURN_IF_ERROR(_validate_options(options));
-    LOG(INFO) << "Opening storage engine using uid=" << options.backend_uid.to_string();
     std::unique_ptr<StorageEngine> engine = std::make_unique<StorageEngine>(options);
     RETURN_IF_ERROR_WITH_WARN(engine->_open(), "open engine failed");
     *engine_ptr = engine.release();
-    LOG(INFO) << "Opened storage engine";
     return Status::OK();
 }
 

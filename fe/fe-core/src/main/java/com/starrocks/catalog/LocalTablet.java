@@ -31,6 +31,7 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -52,7 +53,7 @@ import java.util.stream.Collectors;
  * This class represents the local olap tablet related metadata.
  * LocalTablet is based on local disk storage and replicas are managed by StarRocks.
  */
-public class LocalTablet extends Tablet {
+public class LocalTablet extends Tablet implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(LocalTablet.class);
 
     public enum TabletStatus {
@@ -368,6 +369,7 @@ public class LocalTablet extends Tablet {
         for (int i = 0; i < replicaCount; ++i) {
             Replica replica = Replica.read(in);
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
+                // do not need to update immutableReplicas, because it is a view of replicas
                 replicas.add(replica);
             }
         }
@@ -383,6 +385,13 @@ public class LocalTablet extends Tablet {
         LocalTablet tablet = new LocalTablet();
         tablet.readFields(in);
         return tablet;
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        // we need to update immutableReplicas, because replicas after deserialization from a json string
+        // will be different from the replicas initiated in the constructor
+        immutableReplicas = Collections.unmodifiableList(replicas);
     }
 
     @Override
@@ -588,7 +597,7 @@ public class LocalTablet extends Tablet {
      * tablet replicas:    1,2,3,4
      * <p>
      * No need to check if backend is available. We consider all backends in 'backendsSet' are available,
-     * If not, unavailable backends will be relocated by CalocateTableBalancer first.
+     * If not, unavailable backends will be relocated by ColocateTableBalancer first.
      */
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
@@ -630,8 +639,10 @@ public class LocalTablet extends Tablet {
      * NORNAL:  delay Config.tablet_repair_delay_factor_second * 2;
      * LOW:     delay Config.tablet_repair_delay_factor_second * 3;
      */
-    public boolean readyToBeRepaired(TabletSchedCtx.Priority priority) {
-        if (priority == Priority.VERY_HIGH) {
+    public boolean readyToBeRepaired(TabletStatus status, TabletSchedCtx.Priority priority) {
+        if (priority == Priority.VERY_HIGH ||
+                status == TabletStatus.VERSION_INCOMPLETE ||
+                status == TabletStatus.NEED_FURTHER_REPAIR) {
             return true;
         }
 
@@ -646,13 +657,13 @@ public class LocalTablet extends Tablet {
         boolean ready = false;
         switch (priority) {
             case HIGH:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000;
                 break;
             case NORMAL:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 2;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000 * 2;
                 break;
             case LOW:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 3;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000 * 3;
                 break;
             default:
                 break;

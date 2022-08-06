@@ -18,9 +18,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class CancelLoadStmt extends DdlStmt {
 
@@ -33,8 +32,20 @@ public class CancelLoadStmt extends DdlStmt {
         return dbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
     public String getLabel() {
         return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
     }
 
     public CancelLoadStmt(String dbName, Expr whereClause) {
@@ -43,62 +54,18 @@ public class CancelLoadStmt extends DdlStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                throw new AnalysisException("No database selected");
-            }
-        }
+    public void analyze(Analyzer analyzer) throws UserException {
+    }
 
-        // check auth after we get real load job
 
-        // analyze expr if not null
-        boolean valid = true;
-        do {
-            if (whereClause == null) {
-                valid = false;
-                break;
-            }
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitCancelLoadStmt(this, context);
+    }
 
-            if (whereClause instanceof BinaryPredicate) {
-                BinaryPredicate binaryPredicate = (BinaryPredicate) whereClause;
-                if (binaryPredicate.getOp() != Operator.EQ) {
-                    valid = false;
-                    break;
-                }
-            } else {
-                valid = false;
-                break;
-            }
-
-            // left child
-            if (!(whereClause.getChild(0) instanceof SlotRef)) {
-                valid = false;
-                break;
-            }
-            if (!((SlotRef) whereClause.getChild(0)).getColumnName().equalsIgnoreCase("label")) {
-                valid = false;
-                break;
-            }
-
-            // right child
-            if (!(whereClause.getChild(1) instanceof StringLiteral)) {
-                valid = false;
-                break;
-            }
-
-            label = ((StringLiteral) whereClause.getChild(1)).getStringValue();
-            if (Strings.isNullOrEmpty(label)) {
-                valid = false;
-                break;
-            }
-        } while (false);
-
-        if (!valid) {
-            throw new AnalysisException("Where clause should looks like: LABEL = \"your_load_label\"");
-        }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     @Override
@@ -106,7 +73,7 @@ public class CancelLoadStmt extends DdlStmt {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append("CANCEL LOAD ");
         if (!Strings.isNullOrEmpty(dbName)) {
-            stringBuilder.append("FROM " + dbName);
+            stringBuilder.append("FROM `").append(dbName).append("`");
         }
 
         if (whereClause != null) {
@@ -115,4 +82,8 @@ public class CancelLoadStmt extends DdlStmt {
         return stringBuilder.toString();
     }
 
+    @Override
+    public String toString() {
+        return toSql();
+    }
 }

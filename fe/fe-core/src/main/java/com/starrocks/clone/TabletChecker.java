@@ -174,10 +174,10 @@ public class TabletChecker extends LeaderDaemon {
     protected void runAfterCatalogReady() {
         int pendingNum = tabletScheduler.getPendingNum();
         int runningNum = tabletScheduler.getRunningNum();
-        if (pendingNum > Config.max_scheduling_tablets
-                || runningNum > Config.max_scheduling_tablets) {
+        if (pendingNum > Config.tablet_sched_max_scheduling_tablets
+                || runningNum > Config.tablet_sched_max_scheduling_tablets) {
             LOG.info("too many tablets are being scheduled. pending: {}, running: {}, limit: {}. skip check",
-                    pendingNum, runningNum, Config.max_scheduling_tablets);
+                    pendingNum, runningNum, Config.tablet_sched_max_scheduling_tablets);
             return;
         }
 
@@ -307,7 +307,7 @@ public class TabletChecker extends LeaderDaemon {
 
                                 unhealthyTabletNum++;
 
-                                if (!localTablet.readyToBeRepaired(statusWithPrio.second)) {
+                                if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
                                     tabletNotReady++;
                                     continue;
                                 }

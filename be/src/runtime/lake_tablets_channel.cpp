@@ -190,7 +190,12 @@ void LakeTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAd
 
     std::lock_guard l(sender.lock);
 
-    if (UNLIKELY(request.packet_seq() < sender.next_seq)) { // duplicated packet
+    if (UNLIKELY(request.packet_seq() < sender.next_seq && request.eos())) { // duplicated eos packet
+        LOG(ERROR) << "Duplicated eos packet. txn_id=" << _txn_id;
+        response->mutable_status()->set_status_code(TStatusCode::DUPLICATE_RPC_INVOCATION);
+        response->mutable_status()->add_error_msgs("duplicated eos packet");
+        return;
+    } else if (UNLIKELY(request.packet_seq() < sender.next_seq)) { // duplicated packet
         response->mutable_status()->set_status_code(TStatusCode::OK);
         return;
     } else if (UNLIKELY(request.packet_seq() > sender.next_seq)) { // out-of-order packet
@@ -259,9 +264,11 @@ void LakeTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAd
         if (!close_channel) {
             count_down_latch.count_down(_delta_writers.size());
         } else {
+            VLOG(5) << "Closing channel. txn_id=" << _txn_id;
             std::lock_guard l1(_dirty_partitions_lock);
             for (auto& [tablet_id, dw] : _delta_writers) {
                 if (_dirty_partitions.count(dw->partition_id()) == 0) {
+                    VLOG(5) << "Skip tablet " << tablet_id;
                     // This is a clean AsyncDeltaWriter, skip calling `finish()`
                     count_down_latch.count_down();
                     continue;
@@ -275,8 +282,10 @@ void LakeTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAd
                 dw->finish([&, id = tablet_id](Status st) {
                     if (st.ok()) {
                         context->add_finished_tablet(id);
+                        VLOG(5) << "Finished tablet " << id;
                     } else {
                         context->update_status(st);
+                        LOG(ERROR) << "Fail to finish tablet " << id << ": " << st;
                     }
                     count_down_latch.count_down();
                 });

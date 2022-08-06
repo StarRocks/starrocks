@@ -40,6 +40,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -54,12 +55,17 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,6 +77,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -719,9 +726,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         nameToPartition.put(partition.getName(), partition);
     }
 
-    // This is a private methid.
+    // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
-    private Partition dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
+    private Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         // 1. If "isForceDrop" is false, the partition will be added to the GlobalStateMgr Recyle bin, and all tablets of this
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
@@ -729,6 +736,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
+        Set<Long> tabletIds = new HashSet<Long>();
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
@@ -744,20 +752,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getReplicationNum(partition.getId()),
                         rangePartitionInfo.getIsInMemory(partition.getId()));
             } else if (!reserveTablets) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
         }
-        return partition;
+        return tabletIds;
     }
 
-    public Partition dropPartitionAndReserveTablet(String partitionName) {
+    public Set<Long> dropPartitionAndReserveTablet(String partitionName) {
         return dropPartition(-1, partitionName, true, true);
     }
 
-    public Partition dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+    public Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         return dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
     }
 
@@ -1338,7 +1346,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                        replicationNum, isInMemory, storageInfo);
+                    replicationNum, isInMemory, storageInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
@@ -1541,7 +1549,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (!column.isKey()) {
                 continue;
             }
-            if (column.getPrimitiveType() == PrimitiveType.VARCHAR 
+            if (column.getPrimitiveType() == PrimitiveType.VARCHAR
                     || column.getPrimitiveType() == PrimitiveType.CHAR) {
                 LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
                 return false;
@@ -1781,14 +1789,87 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
+        for (long mvId : getRelatedMaterializedViews()) {
+            Table tmpTable = db.getTable(mvId);
+            if (tmpTable != null) {
+                MaterializedView mv = (MaterializedView) tmpTable;
+                mv.setActive(false);
+            }
+        }
+    }
+
+    @Override
+    public Runnable delete(boolean replay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        return replay ? null : new DeleteOlapTableTask(this);
     }
 
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    private static class DeleteOlapTableTask implements Runnable {
+        private final OlapTable table;
+
+        public DeleteOlapTableTask(OlapTable table) {
+            this.table = table;
+        }
+
+        @Override
+        public void run() {
+            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+
+            // drop all replicas
+            for (Partition partition : table.getAllPartitions()) {
+                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    long indexId = materializedIndex.getId();
+                    int schemaHash = table.getSchemaHashByIndexId(indexId);
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        long tabletId = tablet.getId();
+                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                        for (Replica replica : replicas) {
+                            long backendId = replica.getBackendId();
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
+                            batchTask.addTask(dropTask);
+                        } // end for replicas
+                    } // end for tablets
+                } // end for indices
+            } // end for partitions
+
+            int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+            for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+                AgentBatchTask originTasks = entry.getValue();
+                if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                    AgentBatchTask partTask = new AgentBatchTask();
+                    List<AgentTask> allTasks = originTasks.getAllTasks();
+                    int curTask = 1;
+                    for (AgentTask task : allTasks) {
+                        partTask.addTask(task);
+                        if (curTask++ > numDropTaskPerBe) {
+                            AgentTaskExecutor.submit(partTask);
+                            curTask = 1;
+                            partTask = new AgentBatchTask();
+                            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                        }
+                    }
+                    if (!partTask.getAllTasks().isEmpty()) {
+                        AgentTaskExecutor.submit(partTask);
+                    }
+                } else {
+                    AgentTaskExecutor.submit(originTasks);
+                }
+            }
+        }
     }
 }

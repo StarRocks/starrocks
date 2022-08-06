@@ -27,7 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -44,10 +43,6 @@ import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.AgentBatchTask;
-import com.starrocks.task.AgentTask;
-import com.starrocks.task.AgentTaskExecutor;
-import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,7 +51,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -355,104 +349,58 @@ public class Database extends MetaObject implements Writable {
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
-        HashMap<Long, AgentBatchTask> batchTaskMap;
+        Runnable runnable;
         writeLock();
         try {
             table = getTable(tableName);
-            // double check because the table may be dropped
+            if (table == null && isSetIfExists) {
+                return;
+            }
             if (table == null) {
-                if (isSetIfExists) {
-                    LOG.info("drop table[{}] which does not exist", tableName);
-                    return;
-                } else {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
-                }
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+                return;
             }
-            if (!isForce) {
-                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .existCommittedTxns(id, table.getId(), null)) {
-                    throw new DdlException(
-                            "There are still some transactions in the COMMITTED state waiting to be completed. " +
-                                    "The table [" + table.getName() +
-                                    "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                    " please use \"DROP table FORCE\".");
-                }
+            if (!isForce && GlobalStateMgr.getCurrentGlobalTransactionMgr().existCommittedTxns(id, table.getId(), null)) {
+                throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
+                        "The table [" + table.getName() +
+                        "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                        " please use \"DROP table FORCE\".");
             }
-            batchTaskMap = unprotectDropTable(table.getId(), isForce, false);
+            runnable = unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
             writeUnlock();
         }
-        sendDropTabletTasks(batchTaskMap);
-        LOG.info("finished dropping table: {}, type:{} from db: {}, is force: {}",
-                table.getName(), table.getType(), fullQualifiedName, isForce);
+
+        if (runnable != null) {
+            runnable.run();
+        }
+        LOG.info("finished dropping table: {}, type:{} from db: {}, is force: {}", tableName, table.getType(), fullQualifiedName,
+                isForce);
     }
 
-    public HashMap<Long, AgentBatchTask> unprotectDropTable(long tableId, boolean isForceDrop,
-                                                            boolean isReplay) {
-        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+    public Runnable unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
+        Runnable runnable;
         Table table = getTable(tableId);
         // delete from db meta
         if (table == null) {
-            return batchTaskMap;
+            return null;
         }
 
-        table.onDrop();
+        table.onDrop(this, isForceDrop, isReplay);
 
         dropTable(table.getName());
+
         if (!isForceDrop) {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
-            if (oldTable != null && oldTable.isOlapOrLakeTable()) {
-                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) oldTable, isReplay);
-            }
-        } else { 
-            if (table.isOlapOrLakeTable()) {
-                batchTaskMap = GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, isReplay);
-            }
+            runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
+        } else {
+            runnable = table.delete(isReplay);
         }
 
-        // process related materialized views
-        if (table.isOlapTable()) {
-            OlapTable olapTable = (OlapTable) table;
-            for (long mvId : olapTable.getRelatedMaterializedViews()) {
-                Table tmpTable = getTable(mvId);
-                if (tmpTable != null) {
-                    MaterializedView mv = (MaterializedView) tmpTable;
-                    mv.setActive(false);
-                }
-            }
-        }
-
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(),
-                table.getId());
-        return batchTaskMap;
-    }
-
-    public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
-        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
-        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
-            AgentBatchTask originTasks = entry.getValue();
-            if (originTasks.getTaskNum() > numDropTaskPerBe) {
-                AgentBatchTask partTask = new AgentBatchTask();
-                List<AgentTask> allTasks = originTasks.getAllTasks();
-                int curTask = 1;
-                for (AgentTask task : allTasks) {
-                    partTask.addTask(task);
-                    if (curTask++ > numDropTaskPerBe) {
-                        AgentTaskExecutor.submit(partTask);
-                        curTask = 1;
-                        partTask = new AgentBatchTask();
-                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
-                    }
-                }
-                if (partTask.getAllTasks().size() > 0) {
-                    AgentTaskExecutor.submit(partTask);
-                }
-            } else {
-                AgentTaskExecutor.submit(originTasks);
-            }
-        }
+        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(), tableId);
+        return runnable;
     }
 
     public void dropTableWithLock(String tableName) {

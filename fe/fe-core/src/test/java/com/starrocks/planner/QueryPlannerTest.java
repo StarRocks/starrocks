@@ -25,6 +25,7 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
@@ -176,6 +177,40 @@ public class QueryPlannerTest {
         StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statementBase);
         stmtExecutor2.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+
+        String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
+        StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
+        stmtExecutor3.execute();
+        Assert.assertEquals(0, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
+    }
+
+    @Test
+    public void testSqlBlackListWithInsert() throws Exception {
+        String setEnableSqlBlacklist = "admin set frontend config (\"enable_sql_blacklist\" = \"true\")";
+        StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, setEnableSqlBlacklist);
+        stmtExecutor0.execute();
+
+        String addBlackListSql = "add sqlblacklist \"insert into .+ values.+\"";
+        StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
+        stmtExecutor1.execute();
+
+        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        long id = -1;
+        for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
+            id = entry.getValue().id;
+            Assert.assertEquals("insert into .+ values.+", entry.getKey());
+        }
+
+        String sql = "insert into test.baseall values (1, 1, 1, 1, 1, 'a', '2020-02-05', '2020-02-05 13:22:35', 'starrocks', 33.3, 22.55)";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor2 = new StmtExecutor(connectContext, statement);
+        try {
+            stmtExecutor2.execute();
+        } catch (AnalysisException e) {
+
+        }
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
                 connectContext.getState().getErrorMessage());
 

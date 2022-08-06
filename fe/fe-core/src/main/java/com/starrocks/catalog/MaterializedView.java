@@ -32,6 +32,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -358,10 +359,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         basePartitionInfoMap.put(basePartitionName, basePartitionInfo);
     }
 
-    public void removeBasePartition(long baseTableId, String baseTablePartitionName) {
-        removeBasePartition(baseTableId, baseTablePartitionName, false);
-    }
-
     public void removeBasePartition(long baseTableId, String baseTablePartitionName, boolean isReplay) {
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
@@ -373,15 +370,22 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
     }
 
-    public void cleanBasePartition(OlapTable base) {
+    public int cleanBasePartition(OlapTable base) {
+        int cleanedBasePartitionCounter = 0;
         Map<String, BasePartitionInfo> basePartitionInfoMap = this.getRefreshScheme().getAsyncRefreshContext()
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(base.getId(), k -> Maps.newHashMap());
-        for (String basePartitionName : basePartitionInfoMap.keySet()) {
+        Iterator<String> basePartitionNameIterator = basePartitionInfoMap.keySet().iterator();
+        while (basePartitionNameIterator.hasNext()) {
+            String basePartitionName = basePartitionNameIterator.next();
             if (base.getPartition(basePartitionName) == null) {
-                removeBasePartition(base.getId(), basePartitionName, false);
+                basePartitionNameIterator.remove();
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveMvVersionMapInfo(
+                        new MaterializedViewPartitionVersionInfo(this.dbId, this.id, base.getId(), basePartitionName, -1, -1));
+                cleanedBasePartitionCounter++;
             }
         }
+        return cleanedBasePartitionCounter;
     }
 
     @Override

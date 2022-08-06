@@ -292,6 +292,7 @@ TABLES: 'TABLES';
 TABLET: 'TABLET';
 TASK: 'TASK';
 TEMPORARY: 'TEMPORARY';
+TERMINATED: 'TERMINATED';
 THAN: 'THAN';
 THEN: 'THEN';
 TIME: 'TIME';
@@ -380,7 +381,7 @@ DOUBLE_QUOTED_TEXT
     : '"' ('\\'. | '""' | ~('"'| '\\'))* '"'
     ;
 
-IDENTIFIER
+LETTER_IDENTIFIER
     : (LETTER | '_') (LETTER | DIGIT | '_')*
     ;
 

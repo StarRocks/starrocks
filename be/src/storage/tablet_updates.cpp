@@ -1319,13 +1319,27 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     size_t total_rows = 0;
     vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
     vector<uint32_t> tmp_deletes;
+
+    // Since value stored in info->inputs of CompactInfo is rowset id
+    // we should get the real max rssid here by segment number
+    uint32_t max_rowset_id = *std::max_element(info->inputs.begin(), info->inputs.end());
+    Rowset* rowset = _get_rowset(max_rowset_id).get();
+    if (rowset == nullptr) {
+        string msg = Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1", _tablet.tablet_id(),
+                                max_rowset_id);
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+    uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
+
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         auto& pk_col = _compaction_state->pk_cols[i];
         total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         // replace will not grow hashtable, so don't need to check memory limit
-        index.try_replace(rssid, 0, *pk_col, *std::max_element(info->inputs.begin(), info->inputs.end()), &tmp_deletes);
+        index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);

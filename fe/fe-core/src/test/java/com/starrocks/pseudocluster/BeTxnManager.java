@@ -55,14 +55,22 @@ public class BeTxnManager {
 
     public synchronized void publish(long txnId, List<TPartitionVersionInfo> partitions, TFinishTaskRequest finish) {
         TxnInfo tinfo = txns.get(txnId);
-        if (tinfo == null) {
-            return;
-        }
         Exception e = null;
         int totalTablets = 0;
         List<Long> errorTabletIds = new ArrayList<>();
         List<TTabletVersionPair> tabletVersions = new ArrayList<>();
         for (TPartitionVersionInfo pInfo : partitions) {
+            if (tinfo == null) {
+                List<Tablet> tabletsInPartition = backend.getTabletManager().getTablets(pInfo.partition_id);
+                totalTablets += tabletsInPartition.size();
+                for (Tablet tablet : tabletsInPartition) {
+                    TTabletVersionPair p = new TTabletVersionPair();
+                    p.tablet_id = tablet.id;
+                    p.version = tablet.max_continuous_version();
+                    tabletVersions.add(p);
+                }
+                continue;
+            }
             Map<Long, TxnTabletInfo> tablets = tinfo.partitions.get(pInfo.partition_id);
             if (tablets == null) {
                 LOG.warn("publish version txn:" + txnId + " partition:" + pInfo.partition_id + " not found");
@@ -92,7 +100,9 @@ public class BeTxnManager {
                 }
             }
         }
-        LOG.info("publish version error:{} / total:{} {}", errorTabletIds.size(), totalTablets, e == null ? "" : e.getMessage());
+        LOG.info("backend: {} txn: {} publish version error:{} / total:{} {}", backend.be.getId(), txnId, errorTabletIds.size(),
+                totalTablets,
+                e == null ? "" : e.getMessage());
         finish.setError_tablet_ids(errorTabletIds);
         finish.setTablet_versions(tabletVersions);
         if (e != null) {

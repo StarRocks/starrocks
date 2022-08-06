@@ -67,7 +67,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertColumnType;
+import static com.starrocks.external.HiveMetaStoreTableUtils.convertHiveTableColumnType;
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 /**
@@ -250,7 +250,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                Type type = convertColumnType(fieldSchema.getType());
+                Type type = convertHiveTableColumnType(fieldSchema.getType());
                 if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
@@ -269,7 +269,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         // TODO: Column type conversion should not throw an exception, use invalidate type instead.
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertColumnType(fieldSchema.getType());
+            Type srType = convertHiveTableColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchemaTemp.add(column);
             nameToColumnTemp.put(column.getName(), column);
@@ -377,6 +377,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 throw new DdlException("Hive view table is not supported.");
             case "EXTERNAL_TABLE": // hive external table supported
             case "MANAGED_TABLE": // basic hive table supported
+            case "MATERIALIZED_VIEW": // hive materialized view table supported
                 break;
             default:
                 throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
@@ -602,7 +603,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         if (hiveRepository.getCounter().reduce(resourceName, hiveDbName, hiveTableName) == 0) {
             hiveRepository.clearCache(hmsTableInfo);
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(this);

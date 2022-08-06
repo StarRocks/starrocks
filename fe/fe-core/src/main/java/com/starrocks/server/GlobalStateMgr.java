@@ -306,7 +306,7 @@ public class GlobalStateMgr {
     private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
     private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
-    private JournalWriter journalWriter; // master only: write journal log
+    private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
@@ -479,7 +479,7 @@ public class GlobalStateMgr {
         return feStartTime;
     }
 
-    public ConnectorMetadata getLocalMetastore() {
+    public LocalMetastore getLocalMetastore() {
         return localMetastore;
     }
 
@@ -688,6 +688,10 @@ public class GlobalStateMgr {
     // use this to get correct ClusterInfoService instance
     public static SystemInfoService getCurrentSystemInfo() {
         return getCurrentState().getClusterInfo();
+    }
+
+    public static StarOSAgent getCurrentStarOSAgent() {
+        return getCurrentState().getStarOSAgent();
     }
 
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
@@ -934,18 +938,13 @@ public class GlobalStateMgr {
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
-            long replayStartTime = System.currentTimeMillis();
-            // replay journals. -1 means replay all the journals larger than current journal id.
-            replayJournal(JournalCursor.CUROSR_END_KEY);
-            long replayEndTime = System.currentTimeMillis();
-            LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
-
+            long maxJournalId = journal.getMaxJournalId();
+            replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
-
-            journalWriter.init(journal.getMaxJournalId());
+            journalWriter.init(maxJournalId);
         } catch (Exception e) {
             // TODO: gracefully exit
-            LOG.error("failed to init journal after transfer to master! will exit", e);
+            LOG.error("failed to init journal after transfer to leader! will exit", e);
             System.exit(-1);
         }
 
@@ -978,8 +977,8 @@ public class GlobalStateMgr {
                 initDefaultCluster();
             }
 
-            // MUST set master ip before starting checkpoint thread.
-            // because checkpoint thread need this info to select non-master FE to push image
+            // MUST set leader ip before starting checkpoint thread.
+            // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
 
             // start all daemon threads that only running on MASTER FE
@@ -993,13 +992,13 @@ public class GlobalStateMgr {
             canRead.set(true);
             isReady.set(true);
 
-            String msg = "master finished to replay journal, can write now.";
+            String msg = "leaer finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
-            // for master, there are some new thread pools need to register metric
+            // for leader, there are some new thread pools need to register metric
             ThreadPoolManager.registerAllThreadPoolMetric();
         } catch (Throwable t) {
-            LOG.warn("transfer to master failed with error", t);
+            LOG.warn("transfer to leader failed with error", t);
             feType = oldType;
             throw t;
         }
@@ -1616,10 +1615,10 @@ public class GlobalStateMgr {
                         lastMetaOutOfDateLogTime = currentTimeMs;
                     }
                     if (hasLog || feType == FrontendNodeType.UNKNOWN) {
-                        // 1. if we read log from BDB, which means master is still alive.
+                        // 1. if we read log from BDB, which means leader is still alive.
                         // So we need to set meta out of date.
                         // 2. if we didn't read any log from BDB and feType is UNKNOWN,
-                        // which means this non-master node is disconnected with master.
+                        // which means this non-leader node is disconnected with leader.
                         // So we need to set meta out of date either.
                         metaReplayState.setOutOfDate(currentTimeMs, synchronizedTimeMs);
                         canRead.set(false);
@@ -1637,6 +1636,7 @@ public class GlobalStateMgr {
                 super.run();
                 if (cursor != null) {
                     cursor.close();
+                    LOG.info("quit replay at {}", replayedJournalId.get());
                 }
             }
         };
@@ -1644,18 +1644,25 @@ public class GlobalStateMgr {
         replayer.setMetaContext(metaContext);
     }
 
-
     /**
-      * Replay journal from replayedJournalId + 1 to toJournalId
-      * used by checkpointer/replay after state change
-      */
-    public boolean replayJournal(long toJournalId) throws JournalException {
-        LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
-        boolean hasLog = false;
+     * Replay journal from replayedJournalId + 1 to toJournalId
+     * used by checkpointer/replay after state change
+     * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
+     */
+    public void replayJournal(long toJournalId) throws JournalException {
+        if (toJournalId <= replayedJournalId.get()) {
+            LOG.info("skip replay journal because {} <= {}", toJournalId, replayedJournalId.get());
+            return;
+        }
+
+        long startJournalId = replayedJournalId.get() + 1;
+        long replayStartTime = System.currentTimeMillis();
+        LOG.info("start to replay journal from {} to {}", startJournalId, toJournalId);
+
         JournalCursor cursor = null;
         try {
-            cursor = journal.read(replayedJournalId.get() + 1, toJournalId);
-            hasLog = replayJournalInner(cursor, false);
+            cursor = journal.read(startJournalId, toJournalId);
+            replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
             // TODO exit gracefully
@@ -1666,7 +1673,16 @@ public class GlobalStateMgr {
                 cursor.close();
             }
         }
-        return hasLog;
+
+        // verify if all log is replayed
+        if (toJournalId != replayedJournalId.get()) {
+            throw new JournalException(String.format(
+                    "should replay to %d but actual replayed journal id is %d",
+                    toJournalId, replayedJournalId.get()));
+        }
+
+        long replayInterval = System.currentTimeMillis() - replayStartTime;
+        LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
 
     /**
@@ -3134,12 +3150,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
-        return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
-    }
-
-    public void onErasePartition(Partition partition) {
-        localMetastore.onErasePartition(partition);
+    public Set<Long> onErasePartition(Partition partition) {
+        return localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {
@@ -3175,6 +3187,11 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
         }
     }
 

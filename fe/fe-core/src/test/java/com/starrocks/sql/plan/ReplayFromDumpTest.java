@@ -235,6 +235,11 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  32:OlapScanNode\n" +
                 "     table: date_dim, rollup: date_dim"));
+        Assert.assertTrue(replayPair.second.contains(" |----18:EXCHANGE\n" +
+                "  |       cardinality: 6304\n" +
+                "  |    \n" +
+                "  2:OlapScanNode\n" +
+                "     table: customer, rollup: customer"));
     }
 
     @Test
@@ -513,7 +518,15 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
                         TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
+        Assert.assertTrue(replayPair.second.contains("<slot 186> : 186: S_SUPPKEY"));
+    }
+
+    @Test
+    public void testMultiViewWithDbName() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_with_db"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 0:OlapScanNode\n" +
+                "     TABLE: t3"));
     }
 
     @Test
@@ -530,7 +543,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
+        Assert.assertTrue(replayPair.second.contains("  193:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
 
@@ -539,5 +552,20 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/intersect_cardinality"), null, TExplainLevel.COSTS);
         Assert.assertTrue(replayPair.second.contains("cardinality: 152160"));
+    }
+
+    @Test
+    public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNotNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL"));
+        Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: c_0_0 = 17: c_0_0\n" +
+                "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr"));
     }
 }

@@ -37,6 +37,7 @@ struct TTabletStat {
     1: required i64 tablet_id
     2: optional i64 data_size
     3: optional i64 row_num
+    4: optional i64 version_count
 }
 
 struct TTabletStatResult {

@@ -146,6 +146,32 @@ struct TBrokerRangeDesc {
     13: optional string json_root;
 }
 
+enum TObjectStoreType {
+  S3,
+  KS3,
+  OSS,
+  COS,
+  OBS,
+}
+
+struct THdfsProperty {
+  1: required string key
+  2: required string value
+}
+
+struct THdfsProperties {  
+  1: optional list<THdfsProperty> properties
+  2: optional TObjectStoreType object_store_type
+  3: optional string object_store_path
+  4: optional string access_key
+  5: optional string secret_key
+  6: optional string end_point
+  7: optional bool disable_cache
+  8: optional bool ssl_enable
+  9: optional i32 max_connection
+  10: optional string region
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -182,6 +208,13 @@ struct TBrokerScanRangeParams {
     12: optional string multi_row_delimiter;
     // If non_blocking_read is set, stream_load_pipe will not block while performing read io
     13: optional bool non_blocking_read;
+    // If use_broker is set, we will read hdfs thourgh broker
+    // If use_broker is not set, we will read through libhdfs/S3 directly
+    14: optional bool use_broker = false
+    // hdfs_read_buffer_size_kb for reading through lib hdfs directly
+    15: optional i32 hdfs_read_buffer_size_kb = 0
+    // properties from hdfs-site.xml, core-site.xml and load_properties
+    16: THdfsProperties hdfs_properties
 }
 
 // Broker scan range

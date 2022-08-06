@@ -65,8 +65,9 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
-    for (const auto& rowset_metadata : tablet_metadata->rowsets()) {
-        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata));
+    for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
+        const auto& rowset_metadata = tablet_metadata->rowsets(i);
+        auto rowset = std::make_shared<Rowset>(this, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;
@@ -103,6 +104,19 @@ std::string Tablet::segment_location(std::string_view segment_name) const {
 
 std::string Tablet::root_location() const {
     return _mgr->tablet_root_location(_id);
+}
+
+Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
+    auto txn_log = std::make_shared<lake::TxnLog>();
+    txn_log->set_tablet_id(_id);
+    txn_log->set_txn_id(txn_id);
+    auto op_write = txn_log->mutable_op_write();
+    auto rowset = op_write->mutable_rowset();
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(0);
+    rowset->mutable_delete_predicate()->CopyFrom(delete_predicate);
+    return put_txn_log(std::move(txn_log));
 }
 
 } // namespace starrocks::lake

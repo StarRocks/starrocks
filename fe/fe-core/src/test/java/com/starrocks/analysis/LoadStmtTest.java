@@ -21,16 +21,16 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -38,55 +38,25 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.List;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class LoadStmtTest {
-    private List<DataDescription> dataDescriptions;
-    private Analyzer analyzer;
-
-    @Mocked
-    private Auth auth;
-    @Mocked
-    private ConnectContext ctx;
-    @Mocked
-    DataDescription desc;
 
     @Before
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
-        dataDescriptions = Lists.newArrayList();
-        dataDescriptions.add(desc);
-        new Expectations() {
-            {
-                ConnectContext.get();
-                minTimes = 0;
-                result = ctx;
-
-                ctx.getQualifiedUser();
-                minTimes = 0;
-                result = "default_cluster:user";
-
-                desc.toSql();
-                minTimes = 0;
-                result = "XXX";
-            }
-        };
+    public void setUp() throws Exception {
+        AnalyzeTestUtil.init();
     }
 
     @Test
-    public void testNormal(@Injectable DataDescription desc, @Mocked GlobalStateMgr globalStateMgr,
-                           @Injectable ResourceMgr resourceMgr, @Injectable Auth auth)
-            throws UserException, AnalysisException {
-        List<DataDescription> dataDescriptionList = Lists.newArrayList();
-        dataDescriptionList.add(desc);
+    public void testNormal(@Injectable DataDescription desc, @Mocked GlobalStateMgr globalStateMgr, @Injectable ResourceMgr resourceMgr, @Injectable
+    Auth auth)
+            throws UserException {
         String resourceName = "spark0";
         SparkResource resource = new SparkResource(resourceName);
 
         new Expectations() {
             {
-                desc.toSql();
-                minTimes = 0;
-                result = "XXX";
                 globalStateMgr.getResourceMgr();
                 result = resourceMgr;
                 resourceMgr.getResource(resourceName);
@@ -95,39 +65,55 @@ public class LoadStmtTest {
                 result = auth;
                 auth.checkResourcePriv((ConnectContext) any, resourceName, PrivPredicate.USAGE);
                 result = true;
+                auth.checkTblPriv((ConnectContext) any, "default_cluster:test",
+                        "t0", PrivPredicate.LOAD);
+                result = true;
             }
         };
-
-        LoadStmt stmt = new LoadStmt(new LabelName("testDb", "testLabel"), dataDescriptionList, null, null, null);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("default_cluster:testDb", stmt.getLabel().getDbName());
-        Assert.assertEquals(dataDescriptionList, stmt.getDataDescriptions());
+        LoadStmt stmt = (LoadStmt) analyzeSuccess(
+                "LOAD LABEL test.testLabel " +
+                        "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`)");
+        DataDescription dataDescription = stmt.getDataDescriptions().get(0);
+        Assert.assertEquals("default_cluster:test", stmt.getLabel().getDbName());
+        Assert.assertFalse(dataDescription.isLoadFromTable());
+        Assert.assertTrue(dataDescription.isHadoopLoad());
         Assert.assertNull(stmt.getProperties());
-
-        Assert.assertEquals("LOAD LABEL `default_cluster:testDb`.`testLabel`\n"
-                + "(XXX)", stmt.toString());
+        Assert.assertEquals("LOAD LABEL `default_cluster:test`.`testLabel`\n" +
+                "(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)", stmt.toString());
 
         // test ResourceDesc
-        stmt = new LoadStmt(new LabelName("testDb", "testLabel"), dataDescriptionList,
-                new ResourceDesc(resourceName, null), null);
-        stmt.analyze(analyzer);
+        stmt = (LoadStmt) analyzeSuccess(
+                "LOAD LABEL test.testLabel " +
+                        "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) " +
+                        "WITH RESOURCE spark0 " +
+                        "PROPERTIES (\"strict_mode\"=\"true\")");
         Assert.assertEquals(EtlJobType.SPARK, stmt.getResourceDesc().getEtlJobType());
-        Assert.assertEquals("LOAD LABEL `default_cluster:testDb`.`testLabel`\n(XXX)\nWITH RESOURCE 'spark0'",
-                stmt.toString());
+        Assert.assertEquals("root", stmt.getUser());
+        Assert.assertEquals(ImmutableSet.of("strict_mode"), stmt.getProperties().keySet());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoData() throws UserException, AnalysisException {
-        new Expectations() {
-            {
-                desc.analyze(anyString);
-                minTimes = 0;
-            }
-        };
+    @Test
+    public void testNoData() {
+        analyzeFail("LOAD LABEL test.testLabel", "No data file in load statement.");
+    }
 
-        LoadStmt stmt = new LoadStmt(new LabelName("testDb", "testLabel"), null, null, null, null);
-        stmt.analyze(analyzer);
+    @Test
+    public void testNoDb() {
+        AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
+        analyzeFail("LOAD LABEL testLabel", "No database selected");
+    }
 
-        Assert.fail("No exception throws.");
+    @Test
+    public void testMultiTable() {
+        analyzeFail(
+                "LOAD LABEL testLabel (DATA FROM TABLE t0 INTO TABLE t1, DATA FROM TABLE t2 INTO TABLE t1)",
+                "Only support one olap table load from one external table");
+    }
+
+    @Test
+    public void testNoSparkLoad() {
+        analyzeFail(
+                "LOAD LABEL testLabel (DATA FROM TABLE t0 INTO TABLE t1)",
+                "Load from table should use Spark Load");
     }
 }

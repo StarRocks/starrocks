@@ -135,7 +135,8 @@ public class StatisticUtils {
         ScalarType dbNameType = ScalarType.createVarcharType(65530);
         ScalarType maxType = ScalarType.createVarcharType(65530);
         ScalarType minType = ScalarType.createVarcharType(65530);
-        ScalarType histogramType = ScalarType.createVarcharType(65530);
+        ScalarType bucketsType = ScalarType.createVarcharType(65530);
+        ScalarType mostCommonValueType = ScalarType.createVarcharType(65530);
 
         // varchar type column need call setAssignedStrLenInColDefinition here,
         // otherwise it will be set length to 1 at analyze
@@ -145,7 +146,8 @@ public class StatisticUtils {
         dbNameType.setAssignedStrLenInColDefinition();
         maxType.setAssignedStrLenInColDefinition();
         minType.setAssignedStrLenInColDefinition();
-        histogramType.setAssignedStrLenInColDefinition();
+        bucketsType.setAssignedStrLenInColDefinition();
+        mostCommonValueType.setAssignedStrLenInColDefinition();
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
@@ -184,7 +186,10 @@ public class StatisticUtils {
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
-                    new ColumnDef("histogram", new TypeDef(histogramType)),
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
         } else {

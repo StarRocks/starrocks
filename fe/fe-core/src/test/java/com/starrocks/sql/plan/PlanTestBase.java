@@ -57,7 +57,7 @@ public class PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         // disable checking tablets
-        Config.max_scheduling_tablets = -1;
+        Config.tablet_sched_max_scheduling_tablets = -1;
         FeConstants.default_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context

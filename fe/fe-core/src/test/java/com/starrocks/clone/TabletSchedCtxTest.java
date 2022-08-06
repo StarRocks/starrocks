@@ -148,7 +148,7 @@ public class TabletSchedCtxTest {
         systemInfoService.getBackends().forEach(be -> {
             List<Long> pathHashes =
                     be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
-            TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.schedule_slot_num_per_path);
+            TabletScheduler.PathSlot slot = new TabletScheduler.PathSlot(pathHashes, Config.tablet_sched_slot_num_per_path);
             tabletScheduler.getBackendsWorkingSlots().put(be.getId(), slot);
         });
     }

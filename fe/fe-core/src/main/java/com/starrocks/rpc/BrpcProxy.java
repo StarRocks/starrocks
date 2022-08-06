@@ -45,8 +45,7 @@ public class BrpcProxy {
         clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
         String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
         RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        PBackendServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
-        return service;
+        return com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
     }
 
     public LakeServiceAsync getLakeService(TNetworkAddress address) {
@@ -64,8 +63,7 @@ public class BrpcProxy {
         clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
         String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
         RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        LakeServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
-        return service;
+        return com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
     }
 
     private static class SingletonHolder {

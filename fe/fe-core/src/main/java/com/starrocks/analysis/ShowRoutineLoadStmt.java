@@ -27,9 +27,16 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 
+import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /*
   Show routine load progress by routine load name
@@ -86,8 +93,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .build();
 
     private final LabelName labelName;
-    private String dbFullName; // optional
-    private String name; // optional
     private boolean includeHistory = false;
     private RoutineLoadFunctionalExprProvider functionalExprProvider;
     private Expr whereClause;
@@ -108,24 +113,34 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     }
 
     public String getDbFullName() {
-        return dbFullName;
+        return labelName.getDbName();
     }
 
     public String getName() {
-        return name;
+        return labelName.getLabelName();
     }
 
     public boolean isIncludeHistory() {
         return includeHistory;
     }
 
-    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider() {
+    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) throws AnalysisException {
+        if (null == functionalExprProvider) {
+            functionalExprProvider = new RoutineLoadFunctionalExprProvider();
+        }
+        functionalExprProvider.analyze(context, whereClause, orderElements, limitElement);
+        return functionalExprProvider;
+    }
+
+    @Deprecated
+    public RoutineLoadFunctionalExprProvider getFunctionalExprProvider(){
         if (null == functionalExprProvider) {
             functionalExprProvider = new RoutineLoadFunctionalExprProvider();
         }
         return functionalExprProvider;
     }
 
+    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
@@ -133,19 +148,50 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         getFunctionalExprProvider().analyze(analyzer, whereClause, orderElements, limitElement);
     }
 
+    @Deprecated
     private void checkLabelName(Analyzer analyzer) throws AnalysisException {
-        dbFullName = labelName == null ? null : labelName.getDbName();
-        if (Strings.isNullOrEmpty(dbFullName)) {
-            dbFullName = analyzer.getContext().getDatabase();
-            if (Strings.isNullOrEmpty(dbFullName)) {
+        if (Strings.isNullOrEmpty(labelName.getDbName())) {
+            String dbName = analyzer.getContext().getDatabase();
+            if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
+            labelName.setDbName(dbName);
         }
-        name = labelName == null ? null : labelName.getLabelName();
     }
 
     public static List<String> getTitleNames() {
         return TITLE_NAMES;
+    }
+
+
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SHOW");
+        if (includeHistory) {
+            sb.append(" ALL");
+        }
+        sb.append(" ROUTINE LOAD");
+        if (!Strings.isNullOrEmpty(labelName.getLabelName())) {
+            sb.append(" FOR ").append(labelName.toString());
+        }
+        if (whereClause != null) {
+            sb.append(" WHERE ").append(whereClause.toSql());
+        }
+        if (orderElements != null) {
+            sb.append(" ORDER BY ");
+            String order = orderElements.stream().map(e -> e.toSql()).collect(Collectors.joining(","));
+            sb.append(order);
+        }
+        if (limitElement !=null) {
+            sb.append(limitElement.toSql());
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
     }
 
     @Override
@@ -161,5 +207,19 @@ public class ShowRoutineLoadStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    public void setDb(String db) {
+        this.labelName.setDbName(db);
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

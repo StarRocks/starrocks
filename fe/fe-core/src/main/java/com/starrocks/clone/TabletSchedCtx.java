@@ -652,7 +652,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 if (type == Type.REPAIR) {
                     slot.freeSlot(srcPathHash);
                 } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)
+                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
                             || isSrcPathResourceHold()) {
                         slot.freeBalanceSlot(srcPathHash);
                     }
@@ -666,7 +666,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 if (type == Type.REPAIR) {
                     slot.freeSlot(destPathHash);
                 } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)
+                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
                             || isDestPathResourceHold()) {
                         slot.freeBalanceSlot(destPathHash);
                     }
@@ -712,7 +712,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (state == State.PENDING
                 && (type == Type.REPAIR
                 || (type == Type.BALANCE &&
-                !TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)))) {
+                !TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)))) {
             if (!reserveTablet) {
                 this.tablet = null;
             }
@@ -833,7 +833,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 olapTable.enablePersistentIndex(),
                 olapTable.getPartitionInfo().getTabletType(partitionId));
         createReplicaTask.setIsRecoverTask(true);
-        taskTimeoutMs = Config.min_clone_task_timeout_sec * 1000;
+        taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
         Replica emptyReplica =
                 new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
@@ -849,8 +849,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private long getApproximateTimeoutMs() {
         long tabletSize = getTabletSize();
         long timeoutMs = tabletSize / 1024 / 1024 / MIN_CLONE_SPEED_MB_PER_SECOND * 1000;
-        timeoutMs = Math.max(timeoutMs, Config.min_clone_task_timeout_sec * 1000);
-        timeoutMs = Math.min(timeoutMs, Config.max_clone_task_timeout_sec * 1000);
+        timeoutMs = Math.max(timeoutMs, Config.tablet_sched_min_clone_task_timeout_sec * 1000);
+        timeoutMs = Math.min(timeoutMs, Config.tablet_sched_max_clone_task_timeout_sec * 1000);
         return timeoutMs;
     }
 

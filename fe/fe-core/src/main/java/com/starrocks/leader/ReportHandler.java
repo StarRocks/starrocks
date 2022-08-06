@@ -825,7 +825,7 @@ public class ReportHandler extends Daemon {
                             // from some BE, but the BE's tablet report doesn't see this deletion and still report
                             // the deleted tablet info to FE.
                             if (e.getErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
-                                LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                                LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                         tabletId, backendId, e.getMessage());
                             }
                             needDelete = true;

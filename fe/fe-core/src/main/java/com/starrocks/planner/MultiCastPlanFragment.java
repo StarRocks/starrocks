@@ -39,6 +39,10 @@ public class MultiCastPlanFragment extends PlanFragment {
         return destNodeList.stream().map(PlanNode::getFragment).collect(Collectors.toList());
     }
 
+    public ExchangeNode getDestNode(int index) {
+        return destNodeList.get(index);
+    }
+
     @Override
     public void finalize(Analyzer analyzer, boolean validateFileFormats) {
         if (sink != null) {

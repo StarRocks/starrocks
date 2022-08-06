@@ -38,10 +38,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +49,6 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -373,10 +370,12 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             Long dbId = dbIdOpt.get();
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
+                Runnable runnable = null;
                 Table table = tableInfo.getTable();
                 nameToTableInfo.remove(dbId, table.getName());
-                if (table.isOlapOrLakeTable() && !isCheckpointThread()) {
-                    GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, true);
+                runnable = table.delete(true);
+                if (!isCheckpointThread() && runnable != null) {
+                    runnable.run();
                 }
             }
         }
@@ -421,12 +420,16 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
             Partition partition = partitionInfo.getPartition();
             if (partition.getName().equals(partitionName)) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                Set<Long> tabletIdSet = GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
 
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
                         partition.getId(), partitionName);
+
+                if (!tabletIdSet.isEmpty()) {
+                    GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
+                }
             }
         }
     }
@@ -742,15 +745,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
-            long tableId = table.getId();
-            if (table.isOlapTable()) {
-                HashMap<Long, AgentBatchTask> batchTaskMap =
-                        GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((OlapTable) table, false);
-                GlobalStateMgr.getCurrentState().sendDropTabletTasks(batchTaskMap);
-            } else if (table.isLakeTable()) {
-                GlobalStateMgr.getCurrentState().onEraseOlapOrLakeTable((LakeTable) table, false);
+            Runnable runnable = table.delete(false);
+            if (runnable != null) {
+                runnable.run();
             }
-            LOG.info("erased table [{}-{}].", tableId, table.getName());
+            LOG.info("erased table [{}-{}].", table.getId(), table.getName());
         }
     }
 

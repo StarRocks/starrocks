@@ -7,9 +7,13 @@
 
 #include <atomic>
 
+#include "gutil/strings/substitute.h"
+#include "runtime/file_result_writer.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
+
+using namespace fmt::literals;
 
 namespace starrocks {
 
@@ -107,9 +111,87 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
     return std::move(statistics);
 }
 
+class HDFSWritableFile : public WritableFile {
+public:
+    HDFSWritableFile(hdfsFS fs, hdfsFile file, const std::string& path, size_t offset)
+            : _fs(fs), _file(file), _path(path), _offset(offset), _closed(false) {}
+
+    ~HDFSWritableFile() override { (void)HDFSWritableFile::close(); }
+
+    Status append(const Slice& data) override;
+
+    Status appendv(const Slice* data, size_t cnt) override;
+
+    Status close() override;
+
+    Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate"); }
+
+    Status flush(FlushMode mode) override {
+        int status = hdfsHFlush(_fs, _file);
+        return status == 0 ? Status::OK()
+                           : Status::InternalError(strings::Substitute("HDFS file flush error $0", _path));
+    }
+
+    Status sync() override {
+        int status = hdfsHSync(_fs, _file);
+        return status == 0 ? Status::OK()
+                           : Status::InternalError(strings::Substitute("HDFS file sync error $0", _path));
+    }
+
+    uint64_t size() const override { return _offset; }
+
+    const std::string& filename() const override { return _path; }
+
+private:
+    hdfsFS _fs;
+    hdfsFile _file;
+    const std::string& _path;
+    size_t _offset;
+    bool _closed;
+};
+
+Status HDFSWritableFile::append(const Slice& data) {
+    tSize r = hdfsWrite(_fs, _file, data.data, data.size);
+    if (r != data.size) {
+        auto error_msg =
+                "Fail to append {}, expect written size: {}, actual written size {} "_format(_path, data.size, r);
+        LOG(WARNING) << error_msg;
+        return Status::IOError(error_msg);
+    }
+    _offset += data.size;
+    return Status::OK();
+}
+
+Status HDFSWritableFile::appendv(const Slice* data, size_t cnt) {
+    for (size_t i = 0; i < cnt; i++) {
+        RETURN_IF_ERROR(append(data[i]));
+    }
+    return Status::OK();
+}
+
+Status HDFSWritableFile::close() {
+    if (_closed) {
+        return Status::OK();
+    }
+    auto ret = call_hdfs_scan_function_in_pthread([this]() {
+        int r = hdfsCloseFile(this->_fs, this->_file);
+        if (r == 0) {
+            return Status::OK();
+        } else {
+            return Status::IOError("");
+        }
+    });
+    Status st = ret->get_future().get();
+    PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
+    if (st.ok()) {
+        _closed = true;
+    }
+    return st;
+}
+
 class HdfsFileSystem : public FileSystem {
 public:
-    HdfsFileSystem() {}
+    HdfsFileSystem(const FSOptions& options) : _options(options) {}
     ~HdfsFileSystem() override = default;
 
     HdfsFileSystem(const HdfsFileSystem&) = delete;
@@ -124,20 +206,14 @@ public:
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
-        return Status::NotSupported("HdfsFileSystem::new_sequential_file");
-    }
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
 
-    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
-        return Status::NotSupported("HdfsFileSystem::new_writable_file");
-    }
+    StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
-                                                              const std::string& path) override {
-        return Status::NotSupported("HdfsFileSystem::new_writable_file");
-    }
+                                                              const std::string& path) override;
 
-    Status path_exists(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::path_exists"); }
+    Status path_exists(const std::string& path) override;
 
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
         return Status::NotSupported("HdfsFileSystem::get_children");
@@ -194,7 +270,99 @@ public:
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("HdfsFileSystem::link_file");
     }
+
+private:
+    Status _path_exists(hdfsFS fs, const std::string& path);
+
+    FSOptions _options;
 };
+
+Status HdfsFileSystem::path_exists(const std::string& path) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
+    }
+    return _path_exists(handle.hdfs_fs, path);
+}
+
+Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {
+    int status = hdfsExists(fs, path.data());
+    return status == 0 ? Status::OK() : Status::NotFound(path);
+}
+
+StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const std::string& path) {
+    return HdfsFileSystem::new_writable_file(WritableFileOptions(), path);
+}
+
+StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const WritableFileOptions& opts,
+                                                                          const std::string& path) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path, path="_format(path));
+    }
+
+    int flags = O_WRONLY;
+    if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
+        if (auto st = _path_exists(handle.hdfs_fs, path); st.ok()) {
+            return Status::NotSupported("Cannot truncate a file by hdfs writer, path="_format(path));
+        }
+    } else if (opts.mode == MUST_CREATE) {
+        if (auto st = _path_exists(handle.hdfs_fs, path); st.ok()) {
+            return Status::AlreadyExist(path);
+        }
+    } else if (opts.mode == MUST_EXIST) {
+        return Status::NotSupported("Open with MUST_EXIST not supported by hdfs writer");
+    } else if (opts.mode == CREATE_OR_OPEN) {
+        return Status::NotSupported("Open with CREATE_OR_OPEN not supported by hdfs writer");
+    } else {
+        auto msg = strings::Substitute("Unsupported open mode $0", opts.mode);
+        return Status::NotSupported(msg);
+    }
+
+    flags |= O_CREAT;
+
+    int hdfs_write_buffer_size = 0;
+    // result_file_options and export_sink can't both to be non-nullptr at the same time
+    if (_options.result_file_options != nullptr) {
+        hdfs_write_buffer_size = _options.result_file_options->write_buffer_size_kb;
+    }
+    if (_options.export_sink != nullptr && _options.export_sink->__isset.hdfs_write_buffer_size_kb) {
+        hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
+    }
+
+    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);
+    if (file == nullptr) {
+        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+    }
+    return std::make_unique<HDFSWritableFile>(handle.hdfs_fs, file, path, 0);
+}
+
+StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const std::string& path) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
+    }
+    // pass zero to hdfsOpenFile will use trhe default hdfs_read_buffer_size
+    int hdfs_read_buffer_size = 0;
+    if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
+        hdfs_read_buffer_size = _options.scan_range_params->hdfs_read_buffer_size_kb;
+    }
+    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
+    if (file == nullptr) {
+        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
+    }
+    auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
+    return std::make_unique<SequentialFile>(std::move(stream), path);
+}
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const std::string& path) {
     return HdfsFileSystem::new_random_access_file(RandomAccessFileOptions(), path);
@@ -205,20 +373,25 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
-    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle));
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
     if (handle.type != HdfsFsHandle::Type::HDFS) {
-        return Status::InvalidArgument("invalid hdfs path");
+        return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
     }
-    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, 0, 0, 0);
+    // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
+    int hdfs_read_buffer_size = 0;
+    if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
+        hdfs_read_buffer_size = _options.scan_range_params->hdfs_read_buffer_size_kb;
+    }
+    hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
-        return Status::InternalError(fmt::format("hdfsOpenFile failed, file={}", path));
+        return Status::InternalError("hdfsOpenFile failed, path={}"_format(path));
     }
     auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
 }
 
-std::unique_ptr<FileSystem> new_fs_hdfs() {
-    return std::make_unique<HdfsFileSystem>();
+std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options) {
+    return std::make_unique<HdfsFileSystem>(options);
 }
 
 } // namespace starrocks

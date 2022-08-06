@@ -120,7 +120,8 @@ public class Tablet {
         ev.rowsets.addAll(lastVersion.rowsets);
         ev.rowsets.add(rowset);
         versions.add(ev);
-        LOG.info("tablet:{} rowset commit, version:{} rowset:{} #rowset:{}", id, version, rowset.id, ev.rowsets.size());
+        LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #rowset:{}", rowset.txnId, id, version, rowset.id,
+                ev.rowsets.size());
     }
 
     public TTabletStat getStats() {

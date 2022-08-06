@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class MockJournal implements Journal {
-    private final AtomicLong nextJournalId = new AtomicLong(1);
+    private final AtomicLong nextJournalId = new AtomicLong(0);
     private final Map<Long, JournalEntity> values = Maps.newConcurrentMap();
     private Map<Long, JournalEntity> staggingEntityMap = new HashedMap();
 
@@ -93,6 +93,7 @@ public class MockJournal implements Journal {
     @Override
     public void batchWriteCommit() throws InterruptedException, JournalException {
         values.putAll(staggingEntityMap);
+        nextJournalId.set(staggingEntityMap.size() + nextJournalId.get());
         staggingEntityMap.clear();
     }
 

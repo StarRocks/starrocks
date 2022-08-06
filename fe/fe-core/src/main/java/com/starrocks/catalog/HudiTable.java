@@ -19,6 +19,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.HiveTableStats;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -34,7 +35,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieFileFormat;
-import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
@@ -50,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 
 /**
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
@@ -67,14 +69,18 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HUDI_PROPERTIES = "hudiProperties";
 
-    private static final String HUDI_TABLE_TYPE = "hudi.table.type";
-    private static final String HUDI_TABLE_PRIMARY_KEY = "hudi.table.primaryKey";
-    private static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
-    private static final String HUDI_BASE_PATH = "hudi.table.base.path";
-    private static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
-    private static final String HUDI_DB = "database";
-    private static final String HUDI_TABLE = "table";
-    private static final String HUDI_RESOURCE = "resource";
+    public static final String HUDI_TABLE_TYPE = "hudi.table.type";
+    public static final String HUDI_TABLE_PRIMARY_KEY = "hudi.table.primaryKey";
+    public static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
+    public static final String HUDI_BASE_PATH = "hudi.table.base.path";
+    public static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
+    public static final String HUDI_DB = "database";
+    public static final String HUDI_TABLE = "table";
+    public static final String HUDI_RESOURCE = "resource";
+
+    public enum HoodieTableType {
+        COW, MOR, UNKNOWN
+    }
 
     private String db;
     private String table;
@@ -95,7 +101,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public HudiTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.HUDI, schema);
-        validate(properties);
+        initProps(properties);
         initHmsTableInfo();
     }
 
@@ -111,8 +117,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return resourceName;
     }
 
-    public HoodieTableType getTableType() {
-        return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
+    public org.apache.hudi.common.model.HoodieTableType getTableType() {
+        return org.apache.hudi.common.model.HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
     public String getHudiBasePath() {
@@ -122,6 +128,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public String getTableName() {
         return table;
+    }
+
+    public HiveMetaStoreTableInfo getHmsTableInfo() {
+        return hmsTableInfo;
     }
 
     @Override
@@ -138,10 +148,24 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return dataColumnNames;
     }
 
+    public static HoodieTableType fromInputFormat(String inputFormat) {
+        switch (inputFormat) {
+            case "org.apache.hudi.hadoop.HoodieParquetInputFormat":
+            case "com.uber.hoodie.hadoop.HoodieInputFormat":
+                return HoodieTableType.COW;
+            case "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat":
+            case "com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat":
+                return HoodieTableType.MOR;
+            default:
+                return HoodieTableType.UNKNOWN;
+        }
+    }
+
     public void initHmsTableInfo() {
         if (hmsTableInfo == null) {
-            hmsTableInfo = new HiveMetaStoreTableInfo(resourceName, db, table,
-                    partColumnNames, dataColumnNames, nameToColumn, type);
+            hmsTableInfo =
+                    new HiveMetaStoreTableInfo(resourceName, db, table, partColumnNames, dataColumnNames, nameToColumn,
+                            type);
         }
     }
 
@@ -164,21 +188,34 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HiveMetaStoreTableUtils.getTableLevelColumnStats(hmsTableInfo, columnNames);
     }
 
+    // same as hive table, refresh table meta
+    // if table is internal table, refresh table cache
+    // if table is connector table, refresh table meta in hiveMetaCache
     @Override
     public void refreshTableCache(String dbName, String tableName) throws DdlException {
-        GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableCache(hmsTableInfo);
+        HiveRepository hiveRepository = GlobalStateMgr.getCurrentState().getHiveRepository();
+        try {
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+                hiveRepository.refreshTableCache(hmsTableInfo);
+            } else {
+                hiveRepository.refreshConnectorTable(resourceName, dbName, tableName);
+            }
+        } catch (Exception e) {
+            hiveRepository.clearCache(hmsTableInfo);
+            LOG.warn("Failed to refresh [{}.{}.{}]. Invalidate all cache on it", resourceName, dbName, tableName);
+            throw new DdlException(e.getMessage());
+        }
     }
 
+    // same as hive table, refresh partition meta
     @Override
     public void refreshPartCache(List<String> partNames) throws DdlException {
-        GlobalStateMgr.getCurrentState().getHiveRepository()
-                .refreshPartitionCache(hmsTableInfo, partNames);
+        GlobalStateMgr.getCurrentState().getHiveRepository().refreshPartitionCache(hmsTableInfo, partNames);
     }
 
     @Override
     public void refreshTableColumnStats() throws DdlException {
-        GlobalStateMgr.getCurrentState().getHiveRepository()
-                .refreshTableColumnStats(hmsTableInfo);
+        GlobalStateMgr.getCurrentState().getHiveRepository().refreshTableColumnStats(hmsTableInfo);
     }
 
     /**
@@ -190,7 +227,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HiveMetaStoreTableUtils.getPartitionStatsRowCount(hmsTableInfo, partitions);
     }
 
-    private void validate(Map<String, String> properties) throws DdlException {
+    private void initProps(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of hudi table.");
         }
@@ -207,19 +244,21 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
 
         String resourceName = copiedProps.remove(HUDI_RESOURCE);
-        Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
-        HudiResource hudiResource = (HudiResource) resource;
-        if (hudiResource == null) {
-            throw new DdlException("Hudi resource [" + resourceName + "] does NOT exists");
+        // trick like hive table, only external table has resourceName
+        if (isInternalCatalog(resourceName)) {
+            Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+            if (resource == null) {
+                throw new DdlException("hive resource [" + resourceName + "] not exists");
+            }
+            if (resource.getType() != Resource.ResourceType.HUDI) {
+                throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
+            }
         }
-        if (hudiResource.getType() != Resource.ResourceType.HUDI) {
-            throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
-        }
-
-        org.apache.hadoop.hive.metastore.api.Table metastoreTable = GlobalStateMgr.getCurrentState().getHiveRepository()
-                .getTable(resourceName, this.db, this.table);
 
         this.resourceName = resourceName;
+
+        org.apache.hadoop.hive.metastore.api.Table metastoreTable =
+                HudiTable.validate(resourceName, this.db, this.table, this.fullSchema);
 
         String hudiBasePath = metastoreTable.getSd().getLocation();
         if (!Strings.isNullOrEmpty(hudiBasePath)) {
@@ -231,8 +270,15 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
-        HoodieTableType hudiTableType = hudiTableConfig.getTableType();
-        if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
+        Schema tableSchema;
+        try {
+            tableSchema = loadHudiSchema(metastoreTable);
+        } catch (Exception e) {
+            throw new DdlException("Cannot get hudi table schema.");
+        }
+
+        org.apache.hudi.common.model.HoodieTableType hudiTableType = hudiTableConfig.getTableType();
+        if (hudiTableType == org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ) {
             throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
         }
         hudiProperties.put(HUDI_TABLE_TYPE, hudiTableType.name());
@@ -249,14 +295,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
         hudiProperties.put(HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
-
-        TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
-        Schema tableSchema;
-        try {
-            tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
-        } catch (Exception e) {
-            throw new DdlException("Cannot get hudi table schema.");
-        }
 
         Option<String[]> hudiPartitionFields = hudiTableConfig.getPartitionFields();
         if (hudiPartitionFields.isPresent()) {
@@ -279,24 +317,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 }
             }
         }
+
         for (Schema.Field hudiField : tableSchema.getFields()) {
             if (this.partColumnNames.stream().noneMatch(p -> p.equals(hudiField.name()))) {
                 this.dataColumnNames.add(hudiField.name());
-            }
-        }
-
-        for (Column column : this.fullSchema) {
-            if (!column.isAllowNull()) {
-                throw new DdlException(
-                        "Hudi extern table does not support no-nullable column: [" + column.getName() + "]");
-            }
-            Schema.Field hudiColumn = tableSchema.getField(column.getName());
-            if (hudiColumn == null) {
-                throw new DdlException("Column [" + column.getName() + "] not exists in hudi.");
-            }
-            if (!validColumnType(hudiColumn.schema(), column.getType())) {
-                throw new DdlException("Can not convert hudi column type [" + hudiColumn.schema().toString() + "] " +
-                        "to starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
             }
         }
 
@@ -305,7 +329,54 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
     }
 
-    private boolean validColumnType(Schema avroSchema, Type srType) {
+    // validate hudi table column type
+    public static org.apache.hadoop.hive.metastore.api.Table validate(String resourceName, String db, String table,
+                                                                      List<Column> fullSchema) throws DdlException {
+        org.apache.hadoop.hive.metastore.api.Table metastoreTable =
+                GlobalStateMgr.getCurrentState().getHiveRepository().getTable(resourceName, db, table);
+
+        Schema tableSchema = HudiTable.loadHudiSchema(metastoreTable);
+
+        for (Column column : fullSchema) {
+            if (!column.isAllowNull()) {
+                throw new DdlException(
+                        "Hudi extern table does not support no-nullable column: [" + column.getName() + "]");
+            }
+            Schema.Field hudiColumn = tableSchema.getField(column.getName());
+            if (hudiColumn == null) {
+                throw new DdlException("Column [" + column.getName() + "] not exists in hudi.");
+            }
+            // for each column in hudi schema, we should transfer hudi column type to starrocks type
+            // after that, we should check column type whether is same
+            // Only internal catalog like hudi external table need to validate column type
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
+                    !validColumnType(hudiColumn.schema(), column.getType())) {
+                throw new DdlException("Can not convert hudi column type [" + hudiColumn.schema().toString() + "] " +
+                        "to starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName()
+                        + ", starrocks type should be "
+                        + HiveMetaStoreTableUtils.convertHudiTableColumnType(hudiColumn.schema()).toSql());
+            }
+        }
+        return metastoreTable;
+    }
+
+    // load hudi table schema
+    public static Schema loadHudiSchema(org.apache.hadoop.hive.metastore.api.Table hiveTable) throws DdlException {
+        String hudiBasePath = hiveTable.getSd().getLocation();
+        Configuration conf = new Configuration();
+        HoodieTableMetaClient metaClient =
+                HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
+        TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
+        Schema hudiTable;
+        try {
+            hudiTable = HoodieAvroUtils.createHoodieWriteSchema(schemaUtil.getTableAvroSchema());
+        } catch (Exception e) {
+            throw new DdlException("Cannot get hudi table schema.");
+        }
+        return hudiTable;
+    }
+
+    private static boolean validColumnType(Schema avroSchema, Type srType) {
         Schema.Type columnType = avroSchema.getType();
         if (columnType == null) {
             return false;
@@ -360,12 +431,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                     return validColumnType(nonNullMembers.get(0), srType);
                 } else {
                     // UNION type is not supported in Starrocks
-                    return false;
+                    return primitiveType == PrimitiveType.UNKNOWN_TYPE;
                 }
             case ENUM:
             case MAP:
             default:
-                return false;
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
     }
 
@@ -427,8 +498,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tHudiTable.putToPartitions(partitionId, tPartition);
         }
 
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HUDI_TABLE,
-                fullSchema.size(), 0, table, db);
+        TTableDescriptor tTableDescriptor =
+                new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, table, db);
         tTableDescriptor.setHudiTable(tHudiTable);
         return tTableDescriptor;
     }
@@ -513,7 +584,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         if (this.resourceName != null) {
             GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(hmsTableInfo);
         }

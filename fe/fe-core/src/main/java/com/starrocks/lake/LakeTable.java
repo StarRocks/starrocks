@@ -5,6 +5,7 @@ package com.starrocks.lake;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -62,7 +63,7 @@ public class LakeTable extends OlapTable {
 
     public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS)
             throws DdlException {
-        String storageGroup = null;
+        String storageGroup;
         // s3://bucket/serviceId/tableId/
         String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
         try {
@@ -110,7 +111,17 @@ public class LakeTable extends OlapTable {
     public static LakeTable read(DataInput in) throws IOException {
         // type is already read in Table
         String json = Text.readString(in);
-        LakeTable table = GsonUtils.GSON.fromJson(json, LakeTable.class);
-        return table;
+        return GsonUtils.GSON.fromJson(json, LakeTable.class);
+    }
+
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        dropAllTempPartitions();
+    }
+
+    @Override
+    public Runnable delete(boolean replay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        return replay ? null : new DeleteLakeTableTask(this);
     }
 }

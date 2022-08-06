@@ -5,6 +5,14 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
+import com.starrocks.lake.proto.TabletStatRequest;
+import com.starrocks.lake.proto.TabletStatResponse;
+import com.starrocks.lake.proto.TabletStatResponse.TabletStat;
+import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -13,16 +21,21 @@ import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class TabletStatMgrTest {
     @Test
-    public void testUpdateTabletStat(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -81,9 +94,118 @@ public class TabletStatMgrTest {
 
         // Check
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
-        Deencapsulation.invoke(tabletStatMgr, "updateTabletStat", backendId, result);
+        Deencapsulation.invoke(tabletStatMgr, "updateLocalTabletStat", backendId, result);
 
         Assert.assertEquals(200L, replica.getDataSize());
         Assert.assertEquals(201L, replica.getRowCount());
+    }
+
+    @Test
+    public void testUpdateLakeTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
+                                         @Mocked LakeServiceClient client) throws RpcException {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tablet1Id = 10L;
+        long tablet2Id = 11L;
+        long tablet1NumRows = 20L;
+        long tablet2NumRows = 21L;
+        long tablet1DataSize = 30L;
+        long tablet2DataSize = 31L;
+
+        // Schema
+        List<Column> columns = Lists.newArrayList();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        // Tablet
+        Tablet tablet1 = new LakeTablet(tablet1Id);
+        Tablet tablet2 = new LakeTablet(tablet2Id);
+
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+        index.addTablet(tablet1, tabletMeta);
+        index.addTablet(tablet2, tabletMeta);
+
+        // Partition
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+        partition.setVisibleVersion(2L, System.currentTimeMillis());
+
+        // Lake table
+        LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        // db
+        Database db = new Database(dbId, "db");
+        db.createTable(table);
+
+        new Expectations() {
+            {
+                Utils.chooseBackend((LakeTablet) any);
+                result = 1000L;
+                client.getTabletStats((TabletStatRequest) any);
+                result = new Future<TabletStatResponse>() {
+                    @Override
+                    public boolean cancel(boolean mayInterruptIfRunning) {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isCancelled() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isDone() {
+                        return true;
+                    }
+
+                    @Override
+                    public TabletStatResponse get() throws InterruptedException, ExecutionException {
+                        List<TabletStat> stats = Lists.newArrayList();
+                        TabletStat stat1 = new TabletStat();
+                        stat1.tabletId = tablet1Id;
+                        stat1.numRows = tablet1NumRows;
+                        stat1.dataSize = tablet1DataSize;
+                        stats.add(stat1);
+                        TabletStat stat2 = new TabletStat();
+                        stat2.tabletId = tablet2Id;
+                        stat2.numRows = tablet2NumRows;
+                        stat2.dataSize = tablet2DataSize;
+                        stats.add(stat2);
+
+                        TabletStatResponse response = new TabletStatResponse();
+                        response.tabletStats = stats;
+                        return response;
+                    }
+
+                    @Override
+                    public TabletStatResponse get(long timeout, @NotNull TimeUnit unit)
+                            throws InterruptedException, ExecutionException, TimeoutException {
+                        return null;
+                    }
+                };
+            }
+        };
+
+        TabletStatMgr tabletStatMgr = new TabletStatMgr();
+        Deencapsulation.invoke(tabletStatMgr, "updateLakeTableTabletStat", db, table);
+
+        Assert.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
+        Assert.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
+        Assert.assertEquals(tablet2.getRowCount(-1), tablet2NumRows);
+        Assert.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
+        Map<Long, Long> partitionToUpdatedVersion =
+                Deencapsulation.getField(tabletStatMgr, "partitionToUpdatedVersion");
+        Assert.assertEquals(2L, (long) partitionToUpdatedVersion.get(partitionId));
     }
 }

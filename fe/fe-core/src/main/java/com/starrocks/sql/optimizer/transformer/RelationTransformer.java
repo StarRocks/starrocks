@@ -104,18 +104,18 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private final ConnectContext session;
 
     private final ExpressionMapping outer;
-    private final Map<Integer, ExpressionMapping> cteContext;
+    private final CTETransformerContext cteContext;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.outer = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
-        this.cteContext = new HashMap<>();
+        this.cteContext = new CTETransformerContext();
     }
 
     public RelationTransformer(ColumnRefFactory columnRefFactory, ConnectContext session, ExpressionMapping outer,
-                               Map<Integer, ExpressionMapping> cteContext) {
+                               CTETransformerContext cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
@@ -157,8 +157,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder root = null;
         OptExprBuilder anchorOptBuilder = null;
         for (CTERelation cteRelation : node.getCteRelations()) {
-            LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteRelation.getCteId());
-            LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteRelation.getCteId());
+            int cteId = cteContext.registerCteRef(cteRelation.getCteMouldId());
+            LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteId);
+            LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteId);
             LogicalPlan producerPlan =
                     new RelationTransformer(columnRefFactory, session,
                             new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
@@ -177,7 +178,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
             anchorOptBuilder = newAnchorOptBuilder;
 
-            cteContext.put(cteRelation.getCteId(), new ExpressionMapping(
+            cteContext.getCteExpressions().put(cteId, new ExpressionMapping(
                     new Scope(RelationId.of(
                             cteRelation.getCteQueryStatement().getQueryRelation()),
                             cteRelation.getRelationFields()),
@@ -478,9 +479,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     @Override
     public LogicalPlan visitCTE(CTERelation node, ExpressionMapping context) {
-        LogicalPlan childPlan = visit(node.getCteQueryStatement());
-        ExpressionMapping expressionMapping = cteContext.get(node.getCteId());
+        int cteId = cteContext.getCurrentCteRef(node.getCteMouldId());
+        ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
         Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = new HashMap<>();
+        LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
 
         Preconditions.checkState(childPlan.getOutputColumn().size() == expressionMapping.getFieldMappings().size());
 
@@ -494,7 +496,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             cteOutputColumnRefMap.put(childColumn, produceColumn);
         }
 
-        LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(node.getCteId(), cteOutputColumnRefMap);
+        LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
         OptExprBuilder consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
                 new ExpressionMapping(node.getScope(), childPlan.getOutputColumn()));
 

@@ -51,11 +51,10 @@ public class HeartbeatResponse implements Writable {
     @SerializedName(value = "status")
     protected HbStatus status;
 
-    /**
-     * msg and hbTime are no need to be synchronized to other Frontends,
-     * and only Leader Frontend has these info
-     */
+    @SerializedName(value = "msg")
     protected String msg;
+
+    @SerializedName(value = "hbTime")
     protected long hbTime;
 
     public HeartbeatResponse(Type type) {

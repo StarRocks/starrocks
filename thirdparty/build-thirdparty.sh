@@ -831,6 +831,9 @@ build_aliyun_oss_jars() {
 }
 
 build_aws_cpp_sdk() {
+    OLD_CFLAGS=$CFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
+
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt and transfer manager, you can add more components if you want.
@@ -847,6 +850,8 @@ build_aws_cpp_sdk() {
     cd build
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
+
+    export CFLAGS=$OLD_CFLAGS
 }
 
 # velocypack

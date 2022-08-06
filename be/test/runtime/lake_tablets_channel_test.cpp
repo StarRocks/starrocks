@@ -327,7 +327,7 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
     finish_request.add_partition_ids(11);
 
     _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, nullptr);
-    ASSERT_TRUE(finish_response.status().status_code() == TStatusCode::OK);
+    ASSERT_EQ(TStatusCode::OK, finish_response.status().status_code());
     ASSERT_EQ(4, finish_response.tablet_vec_size());
 
     std::vector<int64_t> finished_tablets;
@@ -347,6 +347,10 @@ TEST_F(LakeTabletsChannelTest, test_simple_write) {
         auto chunk = read_segment(tablet_id, txnlog->op_write().rowset().segments(0));
         ASSERT_EQ(kChunkSizePerTablet, chunk->num_rows());
     }
+
+    // Duplicated eos request should return error
+    _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, nullptr);
+    ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, finish_response.status().status_code());
 }
 
 TEST_F(LakeTabletsChannelTest, test_write_partial_partition) {

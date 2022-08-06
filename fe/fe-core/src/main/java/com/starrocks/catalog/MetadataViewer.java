@@ -118,7 +118,7 @@ public class MetadataViewer {
                             row.add(String.valueOf(replica.getLastFailedVersion()));
                             row.add(String.valueOf(replica.getLastSuccessVersion()));
                             row.add(String.valueOf(visibleVersion));
-                            row.add(String.valueOf(replica.getSchemaHash()));
+                            row.add(String.valueOf(Replica.DEPRECATED_PROP_SCHEMA_HASH));
                             row.add(String.valueOf(replica.getVersionCount()));
                             row.add(String.valueOf(replica.isBad()));
                             row.add(String.valueOf(replica.isSetBadForce()));

@@ -38,6 +38,8 @@ public:
 
     virtual Status init(RuntimeState* state) = 0;
 
+    virtual Status open(RuntimeState* state) { return Status::OK(); };
+
     // convert one chunk to mysql result and
     // append this chunk to the result sink
     virtual Status append_chunk(vectorized::Chunk* chunk) = 0;

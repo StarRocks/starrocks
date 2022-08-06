@@ -16,6 +16,7 @@
 #include "common/statusor.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
+#include "runtime/descriptors.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -23,6 +24,7 @@ namespace starrocks {
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
+class ResultFileOptions;
 struct WritableFileOptions;
 struct RandomAccessFileOptions;
 
@@ -33,6 +35,17 @@ struct SpaceInfo {
     int64_t free = 0;
     // Free space available to a non-privileged process (may be equal or less than free)
     int64_t available = 0;
+};
+
+struct FSOptions {
+    FSOptions(const TBrokerScanRangeParams* scan_range_params = nullptr, const TExportSink* export_sink = nullptr,
+              const ResultFileOptions* result_file_options = nullptr)
+            : scan_range_params(scan_range_params),
+              export_sink(export_sink),
+              result_file_options(result_file_options) {}
+    const TBrokerScanRangeParams* scan_range_params;
+    const TExportSink* export_sink;
+    const ResultFileOptions* result_file_options;
 };
 
 class FileSystem {
@@ -52,7 +65,8 @@ public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
 
-    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri);
+    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
+                                                                        FSOptions options = FSOptions());
 
     static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 

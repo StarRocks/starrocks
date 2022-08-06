@@ -255,4 +255,7 @@ public class OperationType {
     // new operator for add partition 10241 ~ 10260
     // only used in list partition currently
     public static final short OP_ADD_PARTITION_V2 = 10241;
+
+    // integrate with starmgr
+    public static final short OP_STARMGR = 11000;
 }

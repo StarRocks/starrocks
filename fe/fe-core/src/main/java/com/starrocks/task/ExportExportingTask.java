@@ -32,6 +32,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
@@ -222,16 +223,29 @@ public class ExportExportingTask extends LeaderTask {
             for (int i = 0; i < RETRY_NUM; ++i) {
                 try {
                     // check export file exist
-                    if (BrokerUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
-                        failMsg = exportedFile + " already exist";
-                        LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
-                                exportedTempFile, exportedFile, job.getId(), i, failMsg);
-                        break;
+                    if (!job.getBrokerDesc().hasBroker()) {
+                        if (HdfsUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
+                            failMsg = exportedFile + " already exist";
+                            LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
+                                    exportedTempFile, exportedFile, job.getId(), i, failMsg);
+                            break;
+                        }
+                    } else {
+                        if (BrokerUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
+                            failMsg = exportedFile + " already exist";
+                            LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
+                                    exportedTempFile, exportedFile, job.getId(), i, failMsg);
+                            break;
+                        }
                     }
 
                     // move
                     int timeoutMs = Math.min(Math.max(1, getLeftTimeSecond()), 3600) * 1000;
-                    BrokerUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
+                    if (!job.getBrokerDesc().hasBroker()) {
+                        HdfsUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
+                    } else {
+                        BrokerUtil.rename(exportedTempFile, exportedFile, job.getBrokerDesc(), timeoutMs);
+                    }
                     job.addExportedFile(exportedFile);
                     success = true;
                     LOG.info("move {} to {} success. job id: {}", exportedTempFile, exportedFile, job.getId());

@@ -3,12 +3,14 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -20,6 +22,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.Optional;
 
 public class PushDownPredicateProjectRule extends TransformationRule {
     private static final List<ScalarOperatorRewriteRule> PROJECT_REWRITE_PREDICATE_RULE = Lists.newArrayList(
@@ -37,6 +40,21 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_PROJECT,
                 Pattern.create(OperatorType.LOGICAL_FILTER).
                         addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF)));
+    }
+
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalProjectOperator secondProject = (LogicalProjectOperator) input.getInputs().get(0).getOp();
+        Optional<ScalarOperator> assertColumn = secondProject.getColumnRefMap().values()
+                .stream()
+                .filter((op) -> {
+                    if (!(op instanceof CallOperator)) {
+                        return false;
+                    }
+                    return FunctionSet.ASSERT_TRUE.equals(((CallOperator) op).getFnName());
+                })
+                .findAny();
+        return !assertColumn.isPresent();
     }
 
     @Override

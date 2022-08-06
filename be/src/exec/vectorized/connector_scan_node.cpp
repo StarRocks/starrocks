@@ -161,6 +161,7 @@ Status ConnectorScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ScanNode::open(state));
     RETURN_IF_ERROR(_data_source_provider->open(state));
+
     return Status::OK();
 }
 
@@ -168,10 +169,13 @@ Status ConnectorScanNode::_start_scan_thread(RuntimeState* state) {
     for (TScanRangeParams& scan_range : _scan_ranges) {
         _create_and_init_scanner(state, scan_range.scan_range);
     }
+    _num_scanners = _pending_scanners.size();
+    if (_num_scanners == 0) {
+        return Status::EndOfFile("");
+    }
 
     // init chunk pool
     _pending_scanners.reverse();
-    _num_scanners = _pending_scanners.size();
     _chunks_per_scanner = config::scanner_row_num / state->chunk_size();
     _chunks_per_scanner += static_cast<int>(config::scanner_row_num % state->chunk_size() != 0);
     int concurrency = std::min<int>(config::max_hdfs_scanner_num, _num_scanners);
@@ -207,6 +211,10 @@ Status ConnectorScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     if (!_start && _status.ok()) {
         Status status = _start_scan_thread(state);
+        if (status.is_end_of_file()) {
+            *eos = true;
+            return Status::OK();
+        }
         _update_status(status);
         LOG_IF(ERROR, !status.ok()) << "Failed to start scan node: " << status.to_string();
         _start = true;

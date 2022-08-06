@@ -7,12 +7,15 @@ public class Rowset {
     int id = -1;
     @SerializedName(value = "rowsetid")
     String rowsetid;
+    @SerializedName(value = "txnId")
+    long txnId;
     @SerializedName(value = "numRows")
     long numRows = 0;
     @SerializedName(value = "dataSize")
     long dataSize = 0;
 
-    Rowset(String rowsetid) {
+    Rowset(long txnId, String rowsetid) {
+        this.txnId = txnId;
         this.rowsetid = rowsetid;
     }
 
