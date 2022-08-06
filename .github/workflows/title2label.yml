@@ -10,6 +10,7 @@ jobs:
     steps:
       # The action can be used as many times as needed in a single job
       - uses: fregante/title-to-labels-action@v1
+        if: contains(github.event.pull_request.labels.*.name, 'conflicts') != 'true'
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           keywords: backport, cherry-pick
