@@ -10,9 +10,9 @@ public class Histogram {
     private double max;
     private boolean containMax;
     private final List<Bucket> buckets;
-    private Map<Double, Long> mcv;
+    private Map<String, Long> mcv;
 
-    public Histogram(List<Bucket> buckets, Map<Double, Long> mcv) {
+    public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
         this.buckets = buckets;
         this.mcv = mcv;
         this.min = Double.MIN_VALUE;
@@ -59,7 +59,7 @@ public class Histogram {
         return buckets;
     }
 
-    public Map<Double, Long> getMCV() {
+    public Map<String, Long> getMCV() {
         return mcv;
     }
 }

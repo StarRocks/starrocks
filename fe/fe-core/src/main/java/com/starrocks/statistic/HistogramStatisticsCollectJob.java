@@ -84,7 +84,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private String buildCollectHistogram(Database database, OlapTable table, double sampleRatio,
-                                        Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
+                                         Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
         VelocityContext context = new VelocityContext();
@@ -121,8 +121,13 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         if (!mostCommonValues.isEmpty()) {
-            context.put("topNExclude", " and " + columnName + " not in (" +
-                    Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+            if (column.getType().getPrimitiveType().isCharFamily()) {
+                context.put("topNExclude", " and " + columnName + " not in (\"" +
+                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
+            } else {
+                context.put("topNExclude", " and " + columnName + " not in (" +
+                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+            }
         } else {
             context.put("topNExclude", "");
         }

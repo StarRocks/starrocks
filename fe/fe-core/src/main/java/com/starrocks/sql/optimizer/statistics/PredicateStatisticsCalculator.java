@@ -18,7 +18,6 @@ import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
 public class PredicateStatisticsCalculator {
@@ -213,9 +212,7 @@ public class PredicateStatisticsCalculator {
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
                 if (rightChild.isConstant()) {
-                    OptionalDouble constant =
-                            (rightColumnStatistic.isInfiniteRange()) ?
-                                    OptionalDouble.empty() : OptionalDouble.of(rightColumnStatistic.getMaxValue());
+                    ConstantOperator constant = (ConstantOperator) rightChild;
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
                                     leftColumnStatistic, predicate, constant, statistics);

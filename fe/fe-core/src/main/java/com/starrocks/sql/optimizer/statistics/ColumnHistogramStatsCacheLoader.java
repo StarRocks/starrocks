@@ -120,7 +120,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
 
         List<Bucket> buckets = convertBuckets(statisticData.histogram, column.getType());
-        Map<Double, Long> mcv = convertMCV(statisticData.histogram, column.getType());
+        Map<String, Long> mcv = convertMCV(statisticData.histogram, column.getType());
         return new Histogram(buckets, mcv);
     }
 
@@ -160,7 +160,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return buckets;
     }
 
-    private Map<Double, Long> convertMCV(String histogramString, Type type) {
+    private Map<String, Long> convertMCV(String histogramString, Type type) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonElement jsonElement = jsonObject.get("mcv");
         if (jsonElement.isJsonNull()) {
@@ -168,18 +168,19 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
 
         JsonArray histogramObj = (JsonArray) jsonElement;
-        Map<Double, Long> mcv = new HashMap<>();
+        Map<String, Long> mcv = new HashMap<>();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
 
-            double key;
+            String key;
             if (type.isDate()) {
-                key = (double) getLongFromDateTime(
-                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
+                key = String.valueOf(getLongFromDateTime(
+                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay()));
             } else if (type.isDatetime()) {
-                key = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
+                key = String.valueOf(getLongFromDateTime(
+                        LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter)));
             } else {
-                key = Double.parseDouble(bucketJsonArray.get(0).getAsString());
+                key = bucketJsonArray.get(0).getAsString();
             }
 
             mcv.put(key, Long.parseLong(bucketJsonArray.get(1).getAsString()));

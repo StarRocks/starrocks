@@ -162,6 +162,12 @@ public:
                                                 buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
                                    ",";
                 }
+            } else if constexpr (pt_is_binary<PT>) {
+                for (int i = 0; i < buckets.size(); ++i) {
+                    bucket_json += toBucketJson(buckets[i].lower.to_string(), buckets[i].upper.to_string(),
+                                                buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
+                                   ",";
+                }
             }
             bucket_json[bucket_json.size() - 1] = ']';
         }

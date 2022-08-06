@@ -420,6 +420,8 @@ public class FunctionSet {
                     .add(Type.DECIMAL32)
                     .add(Type.DECIMAL64)
                     .add(Type.DECIMAL128)
+                    .add(Type.CHAR)
+                    .add(Type.VARCHAR)
                     .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
