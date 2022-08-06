@@ -40,7 +40,10 @@ import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.analysis.TruncatePartitionClause;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -381,6 +384,17 @@ public class Alter {
         // some operations will take long time to process, need to be done outside the databse lock
         boolean needProcessOutsideDatabaseLock = false;
         String tableName = dbTableName.getTbl();
+
+        // this logic is use to adapt mysql syntax, and cannot be executed after adding a write lock
+        // ALTER TABLE test TRUNCATE PARTITION pA;
+        if (currentAlterOps.hasTruncatePartitionOp()) {
+            TruncatePartitionClause clause = (TruncatePartitionClause) alterClauses.get(0);
+            TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
+            TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
+            GlobalStateMgr.getCurrentState().truncateTable(tStmt);
+            return;
+        }
+
         db.writeLock();
         try {
             Table table = db.getTable(tableName);
