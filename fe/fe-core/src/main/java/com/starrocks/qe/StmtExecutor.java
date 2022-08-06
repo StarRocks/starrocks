@@ -329,13 +329,6 @@ public class StmtExecutor {
                 LOG.debug("no need to transfer to Master. stmt: {}", context.getStmtId());
             }
 
-            // Only add the last running stmt for multi statement,
-            // because the audit log will only show the last stmt and
-            // the ConnectProcessor only add the last finished stmt
-            if (context.getIsLastStmt()) {
-                addRunningQueryDetail();
-            }
-
             if (parsedStmt instanceof QueryStmt) {
                 context.getState().setIsQuery(true);
 
@@ -536,8 +529,7 @@ public class StmtExecutor {
     }
 
     private void forwardToMaster() throws Exception {
-        boolean isQuery = parsedStmt instanceof QueryStmt;
-        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus, isQuery);
+        masterOpExecutor = new MasterOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Master. stmt: {}", context.getStmtId());
         masterOpExecutor.execute();
     }
@@ -1250,33 +1242,6 @@ public class StmtExecutor {
     private void handleExportStmt(UUID queryId) throws Exception {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         context.getCatalog().getExportMgr().addExportJob(queryId, exportStmt);
-    }
-
-    private void addRunningQueryDetail() {
-        String sql;
-        if (parsedStmt.needAuditEncryption()) {
-            sql = parsedStmt.toSql();
-        } else {
-            sql = originStmt.originStmt;
-        }
-        boolean isQuery = false;
-        if (parsedStmt instanceof QueryStmt) {
-            isQuery = true;
-        }
-        QueryDetail queryDetail = new QueryDetail(
-                DebugUtil.printId(context.getQueryId()),
-                isQuery,
-                context.connectionId,
-                context.getMysqlChannel() != null ?
-                        context.getMysqlChannel().getRemoteIp() : "System",
-                context.getStartTime(), -1, -1,
-                QueryDetail.QueryMemState.RUNNING,
-                context.getDatabase(),
-                sql,
-                context.getQualifiedUser());
-        context.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {

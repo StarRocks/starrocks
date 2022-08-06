@@ -135,8 +135,9 @@ public class GlobalTransactionMgr implements Writable {
         request.setTimeout_second(timeoutSecond);
         TBeginRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy
-                    .call(addr, 10000,
+            response = FrontendServiceProxy.call(addr,
+                            Config.thrift_rpc_timeout_ms,
+                            Config.thrift_rpc_retry_times,
                             client -> client.beginRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} beginRemoteTransaction rpc method failed, label: {}", addr, label, e);
@@ -175,8 +176,9 @@ public class GlobalTransactionMgr implements Writable {
         // request.setLabel(label);
         TCommitRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy
-                    .call(addr, 10000,
+            response = FrontendServiceProxy.call(addr,
+                            Config.thrift_rpc_timeout_ms,
+                            Config.thrift_rpc_retry_times,
                             client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn id: {}", addr, transactionId, e);
@@ -209,8 +211,9 @@ public class GlobalTransactionMgr implements Writable {
         request.setError_msg(errorMsg);
         TAbortRemoteTxnResponse response;
         try {
-            response = FrontendServiceProxy
-                    .call(addr, 10000,
+            response = FrontendServiceProxy.call(addr,
+                            Config.thrift_rpc_timeout_ms,
+                            Config.thrift_rpc_retry_times,
                             client -> client.abortRemoteTxn(request));
         } catch (Exception e) {
             LOG.warn("call fe {} abortRemoteTransaction rpc method failed, txn: {}", addr, transactionId, e);

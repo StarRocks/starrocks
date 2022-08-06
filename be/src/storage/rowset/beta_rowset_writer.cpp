@@ -448,8 +448,8 @@ std::unique_ptr<SegmentWriter> BetaRowsetWriter::_create_segment_writer() {
 }
 
 OLAPStatus BetaRowsetWriter::_flush_segment_writer(std::unique_ptr<segment_v2::SegmentWriter>* segment_writer) {
-    uint64_t segment_size;
-    uint64_t index_size;
+    uint64_t segment_size = 0;
+    uint64_t index_size = 0;
     Status s = (*segment_writer)->finalize(&segment_size, &index_size);
     if (!s.ok()) {
         LOG(WARNING) << "Fail to finalize segment, " << s.to_string();

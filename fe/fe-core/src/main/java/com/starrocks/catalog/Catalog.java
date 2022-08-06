@@ -229,7 +229,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.MasterTaskExecutor;
-import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
@@ -249,7 +248,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TException;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.BufferedInputStream;
@@ -6725,20 +6723,18 @@ public class Catalog {
 
     public Future<TStatus> refreshOtherFesTable(TNetworkAddress thriftAddress, String dbName, String tableName,
                                                 List<String> partitions) {
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setDb_name(dbName);
             request.setTable_name(tableName);
             request.setPartitions(partitions);
             try {
-                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
-                        new FrontendServiceProxy.MethodCallable<TRefreshTableResponse>() {
-                            @Override
-                            public TRefreshTableResponse invoke(FrontendService.Client client) throws TException {
-                                return client.refreshTable(request);
-                            }
-                        });
+                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress,
+                        timeout,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.refreshTable(request));
                 return response.getStatus();
             } catch (Exception e) {
                 LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
@@ -7178,7 +7174,8 @@ public class Catalog {
         setFrontendConfig(configs);
 
         List<Frontend> allFrontends = Catalog.getCurrentCatalog().getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
+                + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(Catalog.getCurrentCatalog().getSelfNode().first)) {
@@ -7190,16 +7187,10 @@ public class Catalog {
             request.setValues(new ArrayList<>(configs.values()));
             try {
                 TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(),
-                                        fe.getRpcPort()),
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
                                 timeout,
-                                new FrontendServiceProxy.MethodCallable<TSetConfigResponse>() {
-                                    @Override
-                                    public TSetConfigResponse invoke(FrontendService.Client client) throws TException {
-                                        return client.setConfig(request);
-                                    }
-                                }
-                        );
+                                Config.thrift_rpc_retry_times,
+                                client -> client.setConfig(request));
                 TStatus status = response.getStatus();
                 if (status.getStatus_code() != TStatusCode.OK) {
                     errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
@@ -7209,7 +7200,7 @@ public class Catalog {
                     errMsg.append(";");
                 }
             } catch (Exception e) {
-                LOG.warn("set remote fe[%s] config failed", fe.getHost(), e);
+                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
                 errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
             }
         }
@@ -7582,6 +7573,11 @@ public class Catalog {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
         }
     }
 }

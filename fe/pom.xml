@@ -43,6 +43,8 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
         <skip.plugin>false</skip.plugin>
+        <sonar.organization>starrocks</sonar.organization>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     </properties>
 
     <profiles>
