@@ -192,14 +192,14 @@ public class HdfsUtil {
      */
     public static void writeFile(String srcFilePath, String destFilePath,
             BrokerDesc brokerDesc) throws UserException {
-        FileInputStream fis = null;
+        FileInputStream inputFs = null;
         FileChannel channel = null;
         HDFSWriter writer = new HDFSWriter(destFilePath, brokerDesc);
         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE_B);
         try {
             writer.open();
-            fis = new FileInputStream(srcFilePath);
-            channel = fis.getChannel();
+            inputFs = new FileInputStream(srcFilePath);
+            channel = inputFs.getChannel();
             while (true) {
                 int readSize = channel.read(byteBuffer);
                 if (readSize == -1) {
@@ -211,7 +211,8 @@ public class HdfsUtil {
                 byteBuffer.clear();
             }
         } catch (IOException e) {
-            String failMsg = "Read file exception. filePath=" + srcFilePath;
+            String failMsg = "Write file exception. srcPath = " + srcFilePath + 
+                    ", destPath = " + destFilePath;
             LOG.warn(failMsg, e);
             throw new UserException(failMsg);
         } finally {
@@ -221,8 +222,8 @@ public class HdfsUtil {
                 if (channel != null) {
                     channel.close();
                 }
-                if (fis != null) {
-                    fis.close();
+                if (inputFs != null) {
+                    inputFs.close();
                 }
             } catch (IOException e) {
                 LOG.warn("Close local file failed. srcPath={}", srcFilePath, e);
