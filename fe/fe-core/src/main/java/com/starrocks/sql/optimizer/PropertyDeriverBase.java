@@ -30,9 +30,34 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
             // required property is not SHUFFLE_JOIN
             return createShuffleJoinRequiredProperties(leftShuffleColumns, rightShuffleColumns);
         } else {
+
+            List<Integer> requiredColumns = requiredShuffleDescOptional.get().getColumns();
+            // prune left and right side shuffle columns according to the required columns
+            //                      join (t0.v1 = t2.v1 and t0.v2 = t2.v2)
+            //                     /                                     \
+            //                  join  (t0.v1 = t1.v1 and
+            //                  /     \   t0.v2 = t1.v2 and
+            //                 /       \   t0.v3 = t1.v3)
+            //                /         \
+            //              t0          t1
+            // t0 and t1 could only shuffle columns v1,v2, do not need the column v3.
+            // It could reduce shuffle operation between the top join and left child join.
+            boolean leftContainsRequired = leftShuffleColumns.containsAll(requiredColumns);
+            boolean rightContainsRequired = rightShuffleColumns.containsAll(requiredColumns);
+            if (leftContainsRequired || rightContainsRequired) {
+                List<Integer> pruneLeftShuffleColumns = Lists.newArrayList();
+                List<Integer> pruneRightShuffleColumns = Lists.newArrayList();
+                for (Integer id : requiredColumns) {
+                    int idx = leftContainsRequired ? leftShuffleColumns.indexOf(id) : rightShuffleColumns.indexOf(id);
+                    pruneLeftShuffleColumns.add(leftShuffleColumns.get(idx));
+                    pruneRightShuffleColumns.add(rightShuffleColumns.get(idx));
+                }
+                leftShuffleColumns = pruneLeftShuffleColumns;
+                rightShuffleColumns = pruneRightShuffleColumns;
+            }
+
             // required property type is SHUFFLE_JOIN, adjust the required property shuffle columns based on the column
             // order required by parent
-            List<Integer> requiredColumns = requiredShuffleDescOptional.get().getColumns();
             boolean adjustBasedOnLeft = leftShuffleColumns.size() == requiredColumns.size()
                     && leftShuffleColumns.containsAll(requiredColumns)
                     && requiredColumns.containsAll(leftShuffleColumns);
@@ -43,7 +68,6 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
             if (adjustBasedOnLeft || adjustBasedOnRight) {
                 List<Integer> requiredLeft = Lists.newArrayList();
                 List<Integer> requiredRight = Lists.newArrayList();
-
                 for (Integer cid : requiredColumns) {
                     int idx = adjustBasedOnLeft ? leftShuffleColumns.indexOf(cid) : rightShuffleColumns.indexOf(cid);
                     requiredLeft.add(leftShuffleColumns.get(idx));
