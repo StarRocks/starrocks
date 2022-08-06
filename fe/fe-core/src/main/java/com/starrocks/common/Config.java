@@ -1675,5 +1675,5 @@ public class Config extends ConfigBase {
     public static boolean enable_new_publish_mechanism = false;
 
     @ConfField
-    public static int tablet_checker_interval_seconds = 60;
+    public static int tablet_checker_interval_seconds = 20;
 }
