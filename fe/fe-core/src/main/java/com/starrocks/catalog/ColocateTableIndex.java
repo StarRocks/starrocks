@@ -498,6 +498,14 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    protected boolean validDbIdAndTableId(long dbId, long tableId) {
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (database == null) {
+            return false;
+        }
+        return database.getTable(tableId) != null;
+    }
+
     /**
      * After the user executes `DROP TABLE`, we only throw tables into the recycle bin instead of deleting them
      * immediately. As a side effect, the table that stores in ColocateTableIndex may not be visible to users. We need
@@ -505,18 +513,6 @@ public class ColocateTableIndex implements Writable {
      */
     public List<List<String>> getInfos() {
         List<List<String>> infos = Lists.newArrayList();
-
-        // mark for table that has just moved
-        Set<Long> tableIdsToBeRemoved = new HashSet<>();
-        CatalogRecycleBin catalogRecycleBin = GlobalStateMgr.getCurrentRecycleBin();
-        // loop for current dbs + removed dbs
-        List<Long> allDBIds = GlobalStateMgr.getCurrentState().getDbIds();
-        allDBIds.addAll(catalogRecycleBin.getAllDbIds());
-        for (long dbId : allDBIds) {
-            for (Table table : catalogRecycleBin.getTables(dbId)) {
-                tableIdsToBeRemoved.add(table.getId());
-            }
-        }
 
         readLock();
         try {
@@ -531,7 +527,7 @@ public class ColocateTableIndex implements Writable {
                         sb.append(", ");
                     }
                     sb.append(tableId);
-                    if (tableIdsToBeRemoved.contains(tableId)) {
+                    if (!validDbIdAndTableId(groupId.dbId, tableId)) {
                         sb.append("*");
                     }
                 }
