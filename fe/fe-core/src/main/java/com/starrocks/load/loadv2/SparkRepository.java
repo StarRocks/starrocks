@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
@@ -158,7 +159,11 @@ public class SparkRepository {
         Preconditions.checkNotNull(remoteRepositoryPath);
         String remotePath = getRemoteArchivePath(currentDppVersion);
         try {
-            result = BrokerUtil.checkPathExist(remotePath, brokerDesc);
+            if (brokerDesc.hasBroker()) {
+                result = BrokerUtil.checkPathExist(remotePath, brokerDesc);
+            } else {
+                result = HdfsUtil.checkPathExist(remotePath, brokerDesc);
+            }
             LOG.info("check archive exists in repository, {}", result);
         } catch (UserException e) {
             LOG.warn("Failed to check remote archive exist, path={}, version={}", remotePath, currentDppVersion);
@@ -170,7 +175,11 @@ public class SparkRepository {
         try {
             String remoteArchivePath = getRemoteArchivePath(currentDppVersion);
             if (isReplace) {
-                BrokerUtil.deletePath(remoteArchivePath, brokerDesc);
+                if (brokerDesc.hasBroker()) {
+                    BrokerUtil.deletePath(remoteArchivePath, brokerDesc);
+                } else {
+                    HdfsUtil.deletePath(remoteArchivePath, brokerDesc);
+                }
                 currentArchive.libraries.clear();
             }
             String srcFilePath = null;
@@ -217,7 +226,11 @@ public class SparkRepository {
     private void getLibraries(String remoteArchivePath, List<SparkLibrary> libraries) throws LoadException {
         List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
         try {
-            BrokerUtil.parseFile(remoteArchivePath + "/*", brokerDesc, fileStatuses);
+            if (brokerDesc.hasBroker()) {
+                BrokerUtil.parseFile(remoteArchivePath + "/*", brokerDesc, fileStatuses);
+            } else {
+                HdfsUtil.parseFile(remoteArchivePath + "/*", brokerDesc, fileStatuses);
+            }
         } catch (UserException e) {
             throw new LoadException(e.getMessage());
         }
@@ -281,7 +294,11 @@ public class SparkRepository {
 
     private void upload(String srcFilePath, String destFilePath) throws LoadException {
         try {
-            BrokerUtil.writeFile(srcFilePath, destFilePath, brokerDesc);
+            if (brokerDesc.hasBroker()) {
+                BrokerUtil.writeFile(srcFilePath, destFilePath, brokerDesc);
+            } else {
+                HdfsUtil.writeFile(srcFilePath, destFilePath, brokerDesc);
+            }
             LOG.info("finished to upload file, localPath={}, remotePath={}", srcFilePath, destFilePath);
         } catch (UserException e) {
             throw new LoadException("failed to upload lib to repository, srcPath=" + srcFilePath +
@@ -291,7 +308,11 @@ public class SparkRepository {
 
     private void rename(String origFilePath, String destFilePath) throws LoadException {
         try {
-            BrokerUtil.rename(origFilePath, destFilePath, brokerDesc);
+            if (brokerDesc.hasBroker()) {
+                BrokerUtil.rename(origFilePath, destFilePath, brokerDesc);
+            } else {
+                HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
+            }
             LOG.info("finished to rename file, originPath={}, destPath={}", origFilePath, destFilePath);
         } catch (UserException e) {
             throw new LoadException("failed to rename file from " + origFilePath + " to " + destFilePath +

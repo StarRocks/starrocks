@@ -312,7 +312,8 @@ public class BrokerUtil {
                 byteBuffer.clear();
             }
         } catch (IOException e) {
-            String failMsg = "Read file exception. filePath=" + srcFilePath;
+            String failMsg = "Write file exception. filePath = " + srcFilePath
+                    + ", destPath = " + destFilePath;
             LOG.warn(failMsg, e);
             throw new UserException(failMsg);
         } finally {
