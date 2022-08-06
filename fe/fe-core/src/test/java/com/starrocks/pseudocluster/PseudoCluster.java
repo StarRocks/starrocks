@@ -69,12 +69,14 @@ public class PseudoCluster {
     }
 
     private class PseudoBrpcRroxy extends BrpcProxy {
-        public PBackendServiceAsync getBackendService(TNetworkAddress address) {
+        @Override
+        protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
             Preconditions.checkState(backends.containsKey(address.getHostname()));
             return backends.get(address.getHostname()).pBackendService;
         }
 
-        public LakeServiceAsync getLakeService(TNetworkAddress address) {
+        @Override
+        protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
             Preconditions.checkState(backends.containsKey(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;

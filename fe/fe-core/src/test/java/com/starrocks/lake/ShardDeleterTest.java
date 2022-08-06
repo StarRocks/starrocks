@@ -68,6 +68,10 @@ public class ShardDeleterTest {
             public LakeServiceAsync getLakeService(TNetworkAddress address) {
                 return lakeService;
             }
+            @Mock
+            public LakeServiceAsync getLakeService(String host, int port) {
+                return lakeService;
+            }
         };
 
         new Expectations() {
@@ -90,17 +94,15 @@ public class ShardDeleterTest {
         DeleteTabletResponse response = new DeleteTabletResponse();
         response.failedTablets = new ArrayList<>();
 
-        new Expectations() {
-            {
-                lakeService.deleteTablet((DeleteTabletRequest) any, (RpcCallback<DeleteTabletResponse>) any).get();
-                minTimes = 0;
-                result = response;
+        new Expectations() {{
+            lakeService.deleteTablet((DeleteTabletRequest) any);
+            minTimes = 1;
+            result = response;
 
-                starOSAgent.deleteShards(ids);
-                minTimes = 0;
-                result = null;
-            }
-        };
+            starOSAgent.deleteShards(ids);
+            minTimes = 1;
+            result = null;
+        }};
 
         shardDeleter.addUnusedShardId(ids);
         shardDeleter.runAfterCatalogReady();

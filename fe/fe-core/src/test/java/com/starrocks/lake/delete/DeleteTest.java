@@ -2,6 +2,7 @@
 
 package com.starrocks.lake.delete;
 
+import com.baidu.brpc.client.RpcCallback;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
@@ -36,17 +37,21 @@ import com.starrocks.load.DeleteJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.QueryStateException;
-import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
@@ -82,7 +87,7 @@ public class DeleteTest {
     @Mocked
     private SystemInfoService systemInfoService;
     @Mocked
-    private LakeServiceClient client;
+    private LakeServiceAsync lakeServiceAsync;
 
     private Database db;
     private Auth auth;
@@ -157,9 +162,15 @@ public class DeleteTest {
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
 
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeServiceAsync getLakeService(TNetworkAddress addr) {
+                return lakeServiceAsync;
+            }
+        };
         new Expectations() {
             {
-                client.deleteData((DeleteDataRequest) any);
+                lakeServiceAsync.deleteData((DeleteDataRequest) any, (RpcCallback<DeleteDataResponse>) any);
                 result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
@@ -219,10 +230,16 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testBeDeleteFail() throws RpcException, DdlException, QueryStateException {
+    public void testBeDeleteFail() throws DdlException, QueryStateException {
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeServiceAsync getLakeService(TNetworkAddress addr) {
+                return lakeServiceAsync;
+            }
+        };
         new Expectations() {
             {
-                client.deleteData((DeleteDataRequest) any);
+                lakeServiceAsync.deleteData((DeleteDataRequest) any, (RpcCallback<DeleteDataResponse>) any);
                 result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {

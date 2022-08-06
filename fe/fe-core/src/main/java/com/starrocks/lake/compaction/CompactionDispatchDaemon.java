@@ -2,6 +2,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.baidu.brpc.RpcContext;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -17,13 +18,13 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.CompactRequest;
 import com.starrocks.lake.proto.CompactResponse;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.EmptyRpcCallback;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -119,7 +120,7 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {
             compactTablets(db, currentVersion, beToTablets, txnId);
-        } catch (UserException | RpcException | ExecutionException | InterruptedException e) {
+        } catch (Throwable e) {
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             LOG.error(e);
             try {
@@ -133,7 +134,7 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
     }
 
     private void compactTablets(Database db, long currentVersion, Map<Long, List<Long>> beToTablets, long txnId)
-            throws UserException, RpcException, ExecutionException, InterruptedException {
+            throws UserException, ExecutionException, InterruptedException {
         List<Future<CompactResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
@@ -141,17 +142,15 @@ public class CompactionDispatchDaemon extends LeaderDaemon {
             if (backend == null) {
                 throw new UserException("Backend " + entry.getKey() + " has been dropped");
             }
-            TNetworkAddress address = new TNetworkAddress();
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
-
-            LakeServiceClient client = new LakeServiceClient(address);
             CompactRequest request = new CompactRequest();
             request.tabletIds = entry.getValue();
             request.txnId = txnId;
             request.version = currentVersion;
 
-            Future<CompactResponse> responseFuture = client.compact(request);
+            RpcContext rpcContext = RpcContext.getContext();
+            rpcContext.setReadTimeoutMillis(1800000);
+            LakeServiceAsync service = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<CompactResponse> responseFuture = service.compact(request, new EmptyRpcCallback<>());
             responseList.add(responseFuture);
         }
 
