@@ -187,6 +187,20 @@ public class AnalyzeManager implements Writable {
 
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
+
+        for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(basicStatsMeta.getDbId());
+            Table table = db.getTable(basicStatsMeta.getTableId());
+            /*
+             * If the meta contains statistical information, but the data is empty,
+             * it means that the table has been truncate or insert overwrite, and it is set to empty,
+             * so it is treated as a table that has been deleted here.
+             */
+            if (StatisticUtils.isEmptyTable(table)) {
+                tableIdHasDeleted.add(table.getId());
+            }
+        }
+
         dropBasicStatsMetaAndData(tableIdHasDeleted);
         dropHistogramStatsMetaAndData(tableIdHasDeleted);
     }
@@ -198,7 +212,10 @@ public class AnalyzeManager implements Writable {
             if (basicStatsMeta == null) {
                 continue;
             }
-            statisticExecutor.dropTableStatistics(tableId, basicStatsMeta.getType());
+            // Both types of tables need to be deleted, because there may have been a switch of
+            // collecting statistics types, leaving some discarded statistics data.
+            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.SAMPLE);
+            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.FULL);
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
             basicStatsMetaMap.remove(tableId);
         }
