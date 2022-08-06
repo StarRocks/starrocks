@@ -43,7 +43,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -164,7 +163,7 @@ public class DeleteTest {
 
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(TNetworkAddress addr) {
+            public LakeServiceAsync getLakeService(String host, int port) {
                 return lakeServiceAsync;
             }
         };
@@ -233,7 +232,7 @@ public class DeleteTest {
     public void testBeDeleteFail() throws DdlException, QueryStateException {
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(TNetworkAddress addr) {
+            public LakeServiceAsync getLakeService(String host, int port) {
                 return lakeServiceAsync;
             }
         };
