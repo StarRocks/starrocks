@@ -81,7 +81,6 @@ public:
     };
     struct CoalesceOptions {
         static constexpr int64_t MB = 1024 * 1024;
-        int64_t max_read_size = 16 * MB;
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
     };

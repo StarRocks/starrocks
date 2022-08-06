@@ -115,7 +115,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
             const auto& now = small_ranges[i];
             size_t now_end = now.offset + now.size;
             size_t prev_end = prev.offset + prev.size;
-            if (((now_end - small_ranges[unmerge].offset) <= _options.max_read_size) &&
+            if (((now_end - small_ranges[unmerge].offset) <= _options.max_buffer_size) &&
                 (now.offset - prev_end) <= _options.max_dist_size) {
                 continue;
             } else {
