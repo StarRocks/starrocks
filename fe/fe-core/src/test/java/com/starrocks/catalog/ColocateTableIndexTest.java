@@ -31,7 +31,7 @@ public class ColocateTableIndexTest {
         Catalog.getCurrentCatalog().createDb(createDbStmt);
 
         // create table1_1->group1
-        String sql = "CREATE TABLE db1.table1_1 (k1 int, k2 int, k3 varchar(32))\n" +
+        String sql = "CREATE TABLE db1.table1_1 (k1 int NOT NULL, k2 int, k3 varchar(32))\n" +
                 "PRIMARY KEY(k1)\n" +
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
@@ -47,7 +47,7 @@ public class ColocateTableIndexTest {
         LOG.info("after create db1.table1_1: {}", infos);
 
         // create table1_2->group1
-        sql = "CREATE TABLE db1.table1_2 (k1 int, k2 int, k3 varchar(32))\n" +
+        sql = "CREATE TABLE db1.table1_2 (k1 int NOT NULL, k2 int, k3 varchar(32))\n" +
                 "PRIMARY KEY(k1)\n" +
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
@@ -67,7 +67,7 @@ public class ColocateTableIndexTest {
         createDbStmt = (CreateDbStmt) UtFrameUtils.parseAndAnalyzeStmt(createDbStmtStr, connectContext);
         Catalog.getCurrentCatalog().createDb(createDbStmt);
         // create table2_1 -> group2
-        sql = "CREATE TABLE db2.table2_1 (k1 int, k2 int, k3 varchar(32))\n" +
+        sql = "CREATE TABLE db2.table2_1 (k1 int NOT NULL, k2 int, k3 varchar(32))\n" +
                 "PRIMARY KEY(k1)\n" +
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
