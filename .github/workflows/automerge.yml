@@ -1,0 +1,26 @@
+name: automerge
+on:
+  pull_request_review:
+    types:
+      - submitted
+  check_suite:
+    types:
+      - completed
+  status: {}
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - id: automerge
+        name: automerge
+        uses: pascalgn/automerge-action@v0.15.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+          MERGE_METHOD: squash
+          MERGE_REQUIRED_APPROVALS: 1
+
+      - name: feedback
+        if: steps.automerge.outputs.mergeResult == 'merged'
+        run: |
+          echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
