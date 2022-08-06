@@ -109,6 +109,16 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // t1.v1
         ColumnRefSet correlationPredicateInnerRefs = new ColumnRefSet(correlationPredicatePair.second.keySet());
 
+        OptExpression rightChild = input.inputAt(1);
+        if (correlationPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef())) {
+            // There are expression, need project node
+            Map<ColumnRefOperator, ScalarOperator> rightChildProjectMap = Maps.newHashMap();
+            Arrays.stream(input.inputAt(1).getOutputColumns().getColumnIds()).
+                    mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(i -> rightChildProjectMap.put(i, i));
+            rightChildProjectMap.putAll(correlationPredicatePair.second);
+            rightChild = OptExpression.create(new LogicalProjectOperator(rightChildProjectMap), rightChild);
+        }
+
         /*
          * Step1: build agg
          *      output: count(1) as countRows, any_value(t1.v2) as anyValue
@@ -137,7 +147,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
 
         OptExpression newAggOpt = OptExpression.create(
                 new LogicalAggregationOperator(AggType.GLOBAL, countAggregateGroupBys, aggregates),
-                input.inputAt(1));
+                rightChild);
 
         /*
          * Step2: build left outer join
