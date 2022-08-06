@@ -51,6 +51,11 @@ DIAGNOSTIC_POP
 
 namespace starrocks {
 
+namespace {
+constexpr int RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED = 5;
+constexpr int RETRY_INTERVAL_ON_SHUTDOWN_TABLET_OCCUPIED = 1; // in second
+} // namespace
+
 static void get_shutdown_tablets(std::ostream& os, void*) {
     auto mgr = StorageEngine::instance() ? StorageEngine::instance()->tablet_manager() : nullptr;
     if (mgr != nullptr) {
@@ -135,7 +140,34 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     int32_t schema_hash = request.tablet_schema.schema_hash;
     LOG(INFO) << "Creating tablet " << tablet_id;
 
-    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
+    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
+    std::unique_lock<std::shared_mutex> base_wlock;
+
+    // If do schema change, both the shard where the source tablet is located and
+    // the shard where the target tablet is located need to be locked.
+    // In order to prevent deadlock, the order of locking needs to be fixed.
+    if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
+        int shard_idx = _get_tablets_shard_idx(tablet_id);
+        int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
+
+        if (shard_idx == base_shard_idx) {
+            wlock.lock();
+        } else {
+            std::unique_lock tmp_wlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
+            base_wlock = std::move(tmp_wlock);
+
+            if (shard_idx < base_shard_idx) {
+                wlock.lock();
+                base_wlock.lock();
+            } else {
+                base_wlock.lock();
+                wlock.lock();
+            }
+        }
+    } else {
+        wlock.lock();
+    }
+
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, true, nullptr);
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
@@ -532,7 +564,7 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
     // reach here means do not has enough tablets to pick in current shard
     _shard_visited_tablet_ids.clear();
-    DCHECK(_tablets_shards.size() > 0);
+    DCHECK(!_tablets_shards.empty());
     _cur_shard = (_cur_shard + 1) % _tablets_shards.size();
     if (_cur_shard == 0) {
         // the next shard is 0, then all tablets has been visited
@@ -958,10 +990,13 @@ Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
         DroppedTabletInfo& info = _shutdown_tablets[tablet_id];
         if (info.tablet.use_count() != 1) {
             // there is usage, can not delete it
-            return Status::NotSupported(fmt::format("used in somewhere, use count:{}", info.tablet.use_count()));
+            return Status::ResourceBusy(fmt::format("used in somewhere, use count:{}", info.tablet.use_count()));
         }
         to_delete = info;
     }
+    // We release the `_shutdown_tablets_lock` prematurely here, because we're gonna do some io operations.
+    // This is safe because after a tablet is put into `_shutdown_tablets`, it'll never be used again(except those
+    // in-flight usage which is temporal).
     auto& tablet = to_delete.tablet;
     Status st = Status::OK();
     if (to_delete.flag == kMoveFilesToTrash) {
@@ -1322,7 +1357,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     if (snapshot_meta->tablet_meta().updates().next_log_id() != 0) {
         return Status::InternalError("non-zero log id in tablet meta");
     }
-    LOG(INFO) << Substitute("create tablet from snapshot tablet:$0 version:$1 path:", tablet_id,
+    LOG(INFO) << Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
                             snapshot_meta->snapshot_version(), schema_hash_path);
 
     // Set of rowset id collected from rowset meta.
@@ -1387,12 +1422,30 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
             // Must reset old_tablet_ptr, otherwise `delete_shutdown_tablet()` will never success.
             old_tablet_ptr.reset();
-            Status st = delete_shutdown_tablet(tablet_id);
-            if (st.ok() || st.is_not_found()) {
-                LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id;
-            } else {
-                LOG(WARNING) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet failed tablet:"
-                             << tablet_id << " st:" << st;
+            int retry = RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED;
+            Status st = Status::OK();
+            do {
+                st = delete_shutdown_tablet(tablet_id);
+                if (st.ok() || st.is_not_found()) {
+                    LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id
+                              << " successfully, retried " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
+                              << " times";
+                    break;
+                } else if (st.code() == TStatusCode::RESOURCE_BUSY) {
+                    // The SHUTDOWN tablet being referenced by other thread is just a temporal state, so we retry
+                    // a few times before mark this clone task failed to avoid too much wasted work.
+                    retry--;
+                    if (retry > 0) {
+                        SleepFor(MonoDelta::FromSeconds(RETRY_INTERVAL_ON_SHUTDOWN_TABLET_OCCUPIED));
+                    }
+                } else {
+                    break;
+                }
+            } while (retry > 0);
+            if (!st.ok() && !st.is_not_found()) {
+                LOG(WARNING) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN"
+                             << " tablet failed after " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
+                             << " times retry, tablet:" << tablet_id << " st:" << st;
                 return st;
             }
         } else {

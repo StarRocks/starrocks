@@ -735,7 +735,6 @@ public class FileSystemManager {
                     e, "file not found");
         } catch (Exception e) {
             logger.error("errors while get file status ", e);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     e, "unknown error when get file status");
         }
@@ -750,7 +749,6 @@ public class FileSystemManager {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (IOException e) {
             logger.error("errors while delete path " + path);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     e, "delete path {} error", path);
         }
@@ -774,7 +772,6 @@ public class FileSystemManager {
             }
         } catch (IOException e) {
             logger.error("errors while rename path from " + srcPath + " to " + destPath);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     e, "errors while rename {} to {}", srcPath, destPath);
         }
@@ -789,7 +786,6 @@ public class FileSystemManager {
             return isPathExist;
         } catch (IOException e) {
             logger.error("errors while check path exist: " + path);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     e, "errors while check if path {} exist", path);
         }
@@ -808,7 +804,6 @@ public class FileSystemManager {
             return fd;
         } catch (IOException e) {
             logger.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     e, "could not open file {}", path);
         }
@@ -895,7 +890,6 @@ public class FileSystemManager {
             return fd;
         } catch (IOException e) {
             logger.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                     e, "could not open file {}", path);
         }

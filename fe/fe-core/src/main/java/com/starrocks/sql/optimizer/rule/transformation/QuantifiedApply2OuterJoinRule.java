@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class QuantifiedApply2OuterJoinRule extends TransformationRule {
     public QuantifiedApply2OuterJoinRule() {
@@ -271,6 +273,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *          CTEConsume
          */
         private OptExpression buildDistinctAndConsume() {
+            OptExpression cteProduceChild = input.getInputs().get(1);
             // CTE distinct consume
             Map<ColumnRefOperator, ColumnRefOperator> distinctConsumeOutputMaps = Maps.newHashMap();
 
@@ -283,6 +286,19 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
                 ColumnRefOperator ref = factory.getColumnRef(columnId);
                 ColumnRefOperator dr = factory.create(ref, ref.getType(), ref.isNullable());
                 distinctConsumeOutputMaps.put(dr, ref);
+            }
+
+            ColumnRefSet correlationCols = new ColumnRefSet();
+            if (correlationPredicate != null) {
+                correlationPredicate.getUsedColumns().getStream().
+                        filter(c -> cteProduceChild.getOutputColumns().contains(c)).forEach(correlationCols::union);
+            }
+            for (int columnId : correlationCols.getColumnIds()) {
+                ColumnRefOperator ref = factory.getColumnRef(columnId);
+                if (!distinctConsumeOutputMaps.containsValue(ref)) {
+                    ColumnRefOperator dr = factory.create(ref, ref.getType(), ref.isNullable());
+                    distinctConsumeOutputMaps.put(dr, ref);
+                }
             }
 
             OptExpression distinctConsume =
@@ -308,11 +324,13 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *      CTEConsume
          */
         private OptExpression buildCountAndConsume() {
+            OptExpression cteProduceChild = input.getInputs().get(1);
             // CTE count consume
             Map<ColumnRefOperator, ColumnRefOperator> countConsumeOutputMaps = Maps.newHashMap();
 
             List<ColumnRefOperator> countAggregateGroupBys = Lists.newArrayList();
             List<ColumnRefOperator> countAggregateCounts = Lists.newArrayList();
+            Set<ColumnRefOperator> countAggregateGroupBysRefSet = Sets.newHashSet();
 
             for (int columnId : inPredicateUsedRefs.getColumnIds()) {
                 ColumnRefOperator ref = factory.getColumnRef(columnId);
@@ -325,10 +343,24 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             for (int columnId : correlationPredicateInnerRefs.getColumnIds()) {
                 ColumnRefOperator ref = factory.getColumnRef(columnId);
                 ColumnRefOperator cr = factory.create(ref, ref.getType(), ref.isNullable());
-
                 countConsumeOutputMaps.put(cr, ref);
-
                 countAggregateGroupBys.add(cr);
+                countAggregateGroupBysRefSet.add(ref);
+            }
+
+            ColumnRefSet correlationCols = new ColumnRefSet();
+            if (correlationPredicate != null) {
+                correlationPredicate.getUsedColumns().getStream().
+                        filter(c -> cteProduceChild.getOutputColumns().contains(c)).forEach(correlationCols::union);
+            }
+            for (int columnId : correlationCols.getColumnIds()) {
+                ColumnRefOperator ref = factory.getColumnRef(columnId);
+                if (!countAggregateGroupBysRefSet.contains(ref)) {
+                    ColumnRefOperator dr = factory.create(ref, ref.getType(), ref.isNullable());
+                    countConsumeOutputMaps.put(dr, ref);
+                    countAggregateGroupBys.add(dr);
+                    countAggregateGroupBysRefSet.add(ref);
+                }
             }
 
             OptExpression countConsume =

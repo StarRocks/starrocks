@@ -465,7 +465,11 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            session.getDumpInfo().addView(view);
+            String dbName = node.getName().getDb();
+            if (CatalogMgr.isInternalCatalog(node.getName().getCatalog())) {
+                dbName = dbName.split(":")[1];
+            }
+            session.getDumpInfo().addView(dbName, view);
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
             return viewScope;

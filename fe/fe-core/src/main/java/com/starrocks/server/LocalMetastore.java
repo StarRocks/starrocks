@@ -1217,7 +1217,12 @@ public class LocalMetastore implements ConnectorMetadata {
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             Partition partition = info.getPartition();
-
+            if (olapTable == null) {
+                // This usually caused by materialized view table downgrade
+                LOG.warn("ignore add partition log for tableId={}, partitionId={}, partitionName={}",
+                        info.getTableId(), partition.getId(), partition.getName());
+                return;
+            }
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (info.isTempPartition()) {
                 olapTable.addTempPartition(partition);
@@ -1310,6 +1315,12 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            if (olapTable == null) {
+                // This usually caused by materialized view table downgrade
+                LOG.warn("ignore drop partition log for tableId={}, dbId={}, partitionName={}",
+                        info.getTableId(), info.getDbId(), info.getPartitionName());
+                return;
+            }
             if (info.isTempPartition()) {
                 olapTable.dropTempPartition(info.getPartitionName(), true);
             } else {

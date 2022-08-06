@@ -750,7 +750,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql =
                 "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
+        Assert.assertTrue(plan.contains("dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("DictExpr(28: P_MFGR,[<place-holder> IN ('MFGR#1', 'MFGR#2')])"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), query_global_dicts:[TGlobalDict(columnId:28"));

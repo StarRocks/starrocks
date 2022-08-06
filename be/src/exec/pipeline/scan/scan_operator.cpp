@@ -352,8 +352,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                                           chunk_source->get_scan_bytes() - prev_scan_bytes);
             }
         };
-        // TODO(by satanson): set a proper priority
-        task.priority = 20;
+        // TODO: consider more factors, such as scan bytes and i/o time.
+        task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
 
         offer_task_success = _io_threads->try_offer(task);
     }

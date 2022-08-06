@@ -159,7 +159,6 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch17"), sessionVariable);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update serialize)"));
         Assert.assertTrue(replayPair.second.contains("3:AGGREGATE (merge finalize)"));
     }
@@ -207,6 +206,26 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  14:OlapScanNode\n" +
                 "     table: customer, rollup: customer"));
+    }
+
+    @Test
+    public void testTPCDS23_1() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 50\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 69\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  39:Project\n" +
+                "  |  <slot 171> : 171: c_customer_sk\n" +
+                "  |  \n" +
+                "  38:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
     @Test
@@ -422,7 +441,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testMergeGroupWithDeleteBestExpression() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
@@ -431,9 +451,18 @@ public class ReplayFromDumpTest {
     @Test
     public void testJoinReOrderPruneColumns() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_reorder_prune_columns"), null,
+                        TExplainLevel.NORMAL);
         // check without exception
         Assert.assertTrue(replayPair.second.contains("<slot 19> : 19: id_tinyint"));
+    }
+
+    @Test
+    public void testMultiViewWithDbName() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_with_db"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 0:OlapScanNode\n" +
+                "     TABLE: t3"));
     }
 
     @Test
@@ -452,6 +481,27 @@ public class ReplayFromDumpTest {
         // check without exception
         Assert.assertTrue(replayPair.second.contains(" 200:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
-        System.out.println(replayPair.second);
+    }
+
+    @Test
+    public void testIntersectCardinality() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/intersect_cardinality"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("cardinality: 152160"));
+    }
+
+    @Test
+    public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 21:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL"));
+        Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: c_0_0 = 17: c_0_0\n" +
+                "  |  other join predicates: if(17: c_0_0 != 1: c_0_0, 4: c_0_3, 19: c_0_3) = 18: expr"));
     }
 }

@@ -111,7 +111,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                 LogicalJoinOperator crossJoin = new LogicalJoinOperator.Builder().withOperator(join)
                         .setJoinType(JoinOperator.CROSS_JOIN)
                         .setOnPredicate(null)
-                        .setPredicate(postJoinPredicate)
+                        .setPredicate(Utils.compoundAnd(postJoinPredicate, join.getPredicate()))
                         .build();
                 root = OptExpression.create(crossJoin, input.getInputs());
             } else {

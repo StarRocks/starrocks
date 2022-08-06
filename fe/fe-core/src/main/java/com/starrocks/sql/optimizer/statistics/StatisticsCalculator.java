@@ -910,30 +910,49 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalIntersect(LogicalIntersectOperator node, ExpressionContext context) {
-        return computeIntersectNode(node, context, node.getOutputColumnRefOp());
+        return computeIntersectNode(node, context, node.getOutputColumnRefOp(), node.getChildOutputColumns());
     }
 
     @Override
     public Void visitPhysicalIntersect(PhysicalIntersectOperator node, ExpressionContext context) {
-        return computeIntersectNode(node, context, node.getOutputColumnRefOp());
+        return computeIntersectNode(node, context, node.getOutputColumnRefOp(), node.getChildOutputColumns());
     }
 
     private Void computeIntersectNode(Operator node, ExpressionContext context,
-                                      List<ColumnRefOperator> outputColumnRef) {
+                                      List<ColumnRefOperator> outputColumnRef,
+                                      List<List<ColumnRefOperator>> childOutputColumns) {
         Statistics.Builder builder = Statistics.builder();
 
-        double outputRowCount = context.getChildStatistics(0).getOutputRowCount();
-        for (int childIdx = 0; childIdx < context.arity(); ++childIdx) {
-            Statistics inputStatistics = context.getChildStatistics(childIdx);
-            if (inputStatistics.getOutputRowCount() < outputRowCount) {
-                outputRowCount = inputStatistics.getOutputRowCount();
+        int minOutputIndex = 0;
+        double minOutputRowCount = context.getChildStatistics(0).getOutputRowCount();
+        for (int i = 1; i < context.arity(); ++i) {
+            double childOutputRowCount = context.getChildStatistics(i).getOutputRowCount();
+            if (childOutputRowCount < minOutputRowCount) {
+                minOutputIndex = i;
+                minOutputRowCount = childOutputRowCount;
             }
         }
-        builder.setOutputRowCount(outputRowCount);
-
-        for (ColumnRefOperator columnRefOperator : outputColumnRef) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        // use child column statistics which has min OutputRowCount
+        Statistics minOutputChildStats = context.getChildStatistics(minOutputIndex);
+        for (int i = 0; i < outputColumnRef.size(); ++i) {
+            ColumnRefOperator columnRefOperator = childOutputColumns.get(minOutputIndex).get(i);
+            builder.addColumnStatistic(outputColumnRef.get(i), minOutputChildStats.getColumnStatistics().
+                    get(columnRefOperator));
         }
+        // compute the children maximum output row count with distinct value
+        double childMaxDistinctOutput = Double.MAX_VALUE;
+        for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
+            double childDistinctOutput = 1.0;
+            for (ColumnRefOperator columnRefOperator : childOutputColumns.get(childIndex)) {
+                childDistinctOutput *= context.getChildStatistics(childIndex).getColumnStatistics().
+                        get(columnRefOperator).getDistinctValuesCount();
+            }
+            if (childDistinctOutput < childMaxDistinctOutput) {
+                childMaxDistinctOutput = childDistinctOutput;
+            }
+        }
+        double outputRowCount = Math.min(minOutputChildStats.getOutputRowCount(), childMaxDistinctOutput);
+        builder.setOutputRowCount(outputRowCount);
 
         context.setStatistics(builder.build());
         return visitOperator(node, context);

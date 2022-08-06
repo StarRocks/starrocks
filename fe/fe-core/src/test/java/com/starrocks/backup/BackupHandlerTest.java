@@ -60,7 +60,6 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -73,6 +72,7 @@ import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -80,13 +80,6 @@ import java.util.Map;
 public class BackupHandlerTest {
 
     private BackupHandler handler;
-
-    @Mocked
-    private GlobalStateMgr globalStateMgr;
-    @Mocked
-    private BrokerMgr brokerMgr;
-    @Mocked
-    private EditLog editLog;
 
     private Database db;
 
@@ -98,8 +91,7 @@ public class BackupHandlerTest {
 
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
 
-    @Before
-    public void setUp() {
+    public void setUpMocker(GlobalStateMgr globalStateMgr, BrokerMgr brokerMgr, EditLog editLog) {
         Config.tmp_dir = tmpPath;
         rootDir = new File(Config.tmp_dir);
         rootDir.mkdirs();
@@ -163,7 +155,8 @@ public class BackupHandlerTest {
     }
 
     @Test
-    public void testInit() {
+    public void testInit(@Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
         handler = new BackupHandler(globalStateMgr);
         handler.runAfterCatalogReady();
 
@@ -172,7 +165,9 @@ public class BackupHandlerTest {
     }
 
     @Test
-    public void testCreateAndDropRepository() {
+    public void testCreateAndDropRepository(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked BrokerMgr brokerMgr, @Mocked EditLog editLog) {
+        setUpMocker(globalStateMgr, brokerMgr, editLog);
         new Expectations() {
             {
                 editLog.logCreateRepository((Repository) any);
@@ -401,4 +396,36 @@ public class BackupHandlerTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testExpired() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        handler = new BackupHandler(globalStateMgr);
+        Assert.assertEquals(0, handler.dbIdToBackupOrRestoreJob.size());
+        long now = System.currentTimeMillis();
+
+        // 1. create 3 jobs
+        // running jobs, won't expire
+        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
+        // just finished job, won't expire
+        BackupJob goodJob = new BackupJob("good_job", 2, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        goodJob.finishedTime = now;
+        goodJob.state = BackupJob.BackupJobState.FINISHED;
+        handler.dbIdToBackupOrRestoreJob.put(goodJob.getDbId(), goodJob);
+        // expired job
+        BackupJob badJob = new BackupJob("bad_job", 3, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        badJob.finishedTime = now - (Config.history_job_keep_max_second + 10) * 1000;
+        badJob.state = BackupJob.BackupJobState.FINISHED;
+        handler.dbIdToBackupOrRestoreJob.put(badJob.getDbId(), badJob);
+        Assert.assertEquals(3, handler.dbIdToBackupOrRestoreJob.size());
+
+        // 3. clean expire
+        handler.removeOldJobs();
+        Assert.assertEquals(2, handler.dbIdToBackupOrRestoreJob.size());
+        Assert.assertNotNull(handler.getJob(1));
+        Assert.assertNotNull(handler.getJob(2));
+        Assert.assertNull(handler.getJob(3));
+    }
+
 }

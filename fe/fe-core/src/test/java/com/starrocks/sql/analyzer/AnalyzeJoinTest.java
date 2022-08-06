@@ -188,4 +188,32 @@ public class AnalyzeJoinTest {
         sql = "select * from (t0 join t1 t) ,t1";
         analyzeSuccess(sql);
     }
+
+    //The precedence of the comma operator is less than that of INNER JOIN, CROSS JOIN, LEFT JOIN, and so on
+    @Test
+    public void testJoinPrecedence() {
+        String sql = "SELECT * FROM t0,t1 INNER JOIN t2 on t1.v4 = t2.v7";
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        JoinRelation joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
+        Assert.assertTrue(joinRelation.getJoinOp().isCrossJoin());
+
+        sql = "SELECT * FROM t0 inner join t1 INNER JOIN t2 on t1.v4 = t2.v7";
+        statement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
+        Assert.assertTrue(joinRelation.getJoinOp().isInnerJoin());
+        Assert.assertNotNull(joinRelation.getOnPredicate());
+
+        sql = "SELECT * FROM t0 inner join t1,t2";
+        statement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((SelectRelation) statement.getQueryRelation()).getRelation() instanceof JoinRelation);
+        joinRelation = (JoinRelation) ((SelectRelation) statement.getQueryRelation()).getRelation();
+        Assert.assertTrue(joinRelation.getJoinOp().isCrossJoin());
+
+        analyzeFail("SELECT * FROM t0,t1 INNER JOIN t2 on t0.v1 = t2.v4",
+                "Column '`t0`.`v1`' cannot be resolved");
+        analyzeSuccess("select * from t0 inner join t1 on t0.v1 = t1.v4 inner join t2 on t0.v2 = t2.v7");
+        analyzeSuccess("select * from t0 inner join t1 on t0.v1 = t1.v4 inner join t2 on t1.v5 = t2.v7");
+    }
 }

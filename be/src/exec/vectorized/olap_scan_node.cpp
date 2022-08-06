@@ -500,7 +500,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 }
 
 // The more tasks you submit, the less priority you get.
-int OlapScanNode::_compute_priority(int32_t num_submitted_tasks) {
+int OlapScanNode::compute_priority(int32_t num_submitted_tasks) {
     // int nice = 20;
     // while (nice > 0 && num_submitted_tasks > (22 - nice) * (20 - nice) * 6) {
     //     --nice;
@@ -535,7 +535,7 @@ bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
     PriorityThreadPool::Task task;
     task.work_function = [this, scanner] { _scanner_thread(scanner); };
-    task.priority = _compute_priority(num_submit);
+    task.priority = compute_priority(num_submit);
     _running_threads.fetch_add(1, std::memory_order_release);
     if (LIKELY(thread_pool->try_offer(task))) {
         return true;

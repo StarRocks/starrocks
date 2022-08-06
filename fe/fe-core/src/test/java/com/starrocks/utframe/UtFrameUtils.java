@@ -416,6 +416,11 @@ public class UtFrameUtils {
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
+            String dbName = entry.getKey().split("\\.")[0];
+            if (!starRocksAssert.databaseExist(dbName)) {
+                starRocksAssert.withDatabase(dbName);
+            }
+            starRocksAssert.useDatabase(dbName);
             String createView = "create view " + entry.getKey() + " as " + entry.getValue();
             starRocksAssert.withView(createView);
         }

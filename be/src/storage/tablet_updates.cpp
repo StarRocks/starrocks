@@ -2922,7 +2922,7 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
         if (versions.empty()) {
             string msg = strings::Substitute("get_rowsets_for_snapshot: no version to clone $0 request_version:$1,",
                                              _debug_version_info(false), missing_version_ranges.back());
-            LOG(WARNING) << msg;
+            LOG(INFO) << msg;
             return Status::NotFound(msg);
         }
         rowsetids.reserve(versions.size());
