@@ -15,7 +15,7 @@ public class CloneTest {
     @BeforeClass
     public static void setUp() throws Exception {
         // set some parameters to speedup test
-        Config.tablet_checker_interval_seconds = 1;
+        Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);

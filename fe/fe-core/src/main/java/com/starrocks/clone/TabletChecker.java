@@ -115,7 +115,7 @@ public class TabletChecker extends LeaderDaemon {
 
     public TabletChecker(GlobalStateMgr globalStateMgr, SystemInfoService infoService, TabletScheduler tabletScheduler,
                          TabletSchedulerStat stat) {
-        super("tablet checker", Config.tablet_checker_interval_seconds * 1000L);
+        super("tablet checker", Config.tablet_sched_checker_interval_seconds * 1000L);
         this.globalStateMgr = globalStateMgr;
         this.infoService = infoService;
         this.tabletScheduler = tabletScheduler;

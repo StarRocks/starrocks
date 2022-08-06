@@ -559,9 +559,9 @@ public class Config extends ConfigBase {
 
     /**
      * modifies the version string returned by following situations:
-     *  select version();
-     *  handshake packet version.
-     *  global variable version.
+     * select version();
+     * handshake packet version.
+     * global variable version.
      */
     @ConfField
     public static String mysql_server_version = "5.1.0";
@@ -1093,6 +1093,12 @@ public class Config extends ConfigBase {
     public static long tablet_sched_min_clone_task_timeout_sec = 3 * 60L; // 3min
     @ConfField(mutable = true, aliases = {"max_clone_task_timeout_sec"})
     public static long tablet_sched_max_clone_task_timeout_sec = 2 * 60 * 60L; // 2h
+
+    /**
+     * tablet checker's check interval in seconds
+     */
+    @ConfField
+    public static int tablet_sched_checker_interval_seconds = 20;
 
     @Deprecated
     @ConfField(mutable = true)
@@ -1673,7 +1679,4 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
-
-    @ConfField
-    public static int tablet_checker_interval_seconds = 20;
 }
