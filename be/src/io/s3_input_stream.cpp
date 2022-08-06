@@ -30,7 +30,9 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         _offset += body.gcount();
         return body.gcount();
     } else {
-        return Status::IOError(outcome.GetError().GetMessage());
+        const auto& error = outcome.GetError();
+        return Status::IOError(fmt::format("code={}(SdkErrorType:{}), message={}", error.GetResponseCode(),
+                                           error.GetErrorType(), error.GetMessage()));
     }
 }
 
@@ -53,7 +55,9 @@ StatusOr<int64_t> S3InputStream::get_size() {
         if (outcome.IsSuccess()) {
             _size = outcome.GetResult().GetContentLength();
         } else {
-            return Status::IOError(outcome.GetError().GetMessage());
+            const auto& error = outcome.GetError();
+            return Status::IOError(fmt::format("code={}(SdkErrorType:{}), message={}", error.GetResponseCode(),
+                                               error.GetErrorType(), error.GetMessage()));
         }
     }
     return _size;
