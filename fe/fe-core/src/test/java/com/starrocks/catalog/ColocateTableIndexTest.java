@@ -14,13 +14,15 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.UUID;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
+    private static final String runningDir = "fe/mocked/ColocateTableIndexTest/" + UUID.randomUUID().toString() + "/";
 
     @Test
     public void testDropTable() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
         // create db1
