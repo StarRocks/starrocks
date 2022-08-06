@@ -204,7 +204,7 @@ public:
 
     int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
 
-    bool is_open() { return _opened; }
+    bool is_open() { return _is_open; }
 
     bool acquire_pending_token(std::atomic_bool* token) {
         // acquire resource

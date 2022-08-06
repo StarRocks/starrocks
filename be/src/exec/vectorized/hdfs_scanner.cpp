@@ -142,7 +142,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 }
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
-    if (_opened) {
+    if (_is_open) {
         return Status::OK();
     }
     CHECK(_file == nullptr) << "File has already been opened";
@@ -152,7 +152,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
-        _opened = true;
+        _is_open = true;
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
