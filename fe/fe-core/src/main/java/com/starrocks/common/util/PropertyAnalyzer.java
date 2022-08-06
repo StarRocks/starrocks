@@ -191,7 +191,7 @@ public class PropertyAnalyzer {
             } catch (Exception e) {
                 throw new AnalysisException(e.getMessage());
             }
-            checkTheRangeOfReplicationNum(replicationNum);
+            checkAvailableBackendsIsEnough(replicationNum);
             properties.remove(PROPERTIES_REPLICATION_NUM);
         }
         return replicationNum;
@@ -206,15 +206,15 @@ public class PropertyAnalyzer {
             key = PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         }
         short replicationNum = Short.parseShort(properties.get(key));
-        checkTheRangeOfReplicationNum(replicationNum);
+        checkAvailableBackendsIsEnough(replicationNum);
         return replicationNum;
     }
 
-    private static void checkTheRangeOfReplicationNum(short replicationNum) throws AnalysisException {
+    private static void checkAvailableBackendsIsEnough(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
         }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
         if (replicationNum > backendIds.size()) {
             throw new AnalysisException("Replication num should less than current alive be node count" + 
             ", current alive be node count is [" + backendIds.size() + "]");

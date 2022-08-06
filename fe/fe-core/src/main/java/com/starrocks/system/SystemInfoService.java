@@ -574,6 +574,19 @@ public class SystemInfoService {
         }
     }
 
+    public List<Long> getAvailableBackendIds() {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
+        Iterator<Long> iter = backendIds.iterator();
+        while (iter.hasNext()) {
+            Backend backend = this.getBackend(iter.next());
+            if (backend == null || !backend.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return backendIds;
+    }
+
     public List<Long> getDecommissionedBackendIds() {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());

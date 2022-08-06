@@ -314,7 +314,7 @@ public class ShowExecutorTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
                 minTimes = 0;
                 result = Arrays.asList(10001, 10002, 10003);
             }
