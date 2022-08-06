@@ -951,6 +951,77 @@ public class AlterTest {
     }
 
     @Test
+    public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
+        Config.use_staros = true;
+
+        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
+        ShardStorageInfo shardStorageInfo =
+                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+
+        new Expectations() {
+            {
+                agent.getServiceShardStorageInfo();
+                result = shardStorageInfo;
+                agent.createShards(anyInt, (ShardStorageInfo) any);
+                returns(Lists.newArrayList(20001L, 20002L, 20003L),
+                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
+                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String dropSQL = "drop table if exists site_access";
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        String createSQL = "CREATE TABLE site_access (\n" +
+                "    datekey INT,\n" +
+                "    site_id INT,\n" +
+                "    city_code SMALLINT,\n" +
+                "    user_name VARCHAR(32),\n" +
+                "    pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "ENGINE=starrocks\n" +
+                "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE (datekey) (\n" +
+                "    START (\"1\") END (\"5\") EVERY (1)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(site_id) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+
+        String alterSQL = "ALTER TABLE site_access \n" +
+                "   ADD PARTITIONS START (\"6\") END (\"7\") EVERY (1)";
+
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+        GlobalStateMgr.getCurrentState().addPartitions(db, "site_access", addPartitionClause);
+
+        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+                .getTable("site_access");
+
+        Assert.assertNotNull(table.getPartition("p1"));
+        Assert.assertNotNull(table.getPartition("p2"));
+        Assert.assertNotNull(table.getPartition("p3"));
+        Assert.assertNotNull(table.getPartition("p4"));
+        Assert.assertNotNull(table.getPartition("p6"));
+
+        dropSQL = "drop table site_access";
+        dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+
+        Config.use_staros = false;
+    }
+
+    @Test
     public void testAddBackend() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
