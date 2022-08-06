@@ -45,10 +45,12 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    Status drop_tablet(int64_t tablet_id);
+    Status delete_tablet(int64_t tablet_id);
 
     Status publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
                            int txns_size);
+
+    void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
@@ -75,6 +77,8 @@ public:
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
     Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
+
+    Status delete_segment(int64_t tablet_id, std::string_view segment_name);
 
     void prune_metacache();
 
