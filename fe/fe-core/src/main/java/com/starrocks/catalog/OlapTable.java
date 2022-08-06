@@ -65,6 +65,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -547,7 +548,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                             .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
                                     true, true);
-                    if (beIds == null) {
+                    if (CollectionUtils.isEmpty(beIds)) {
                         return new Status(ErrCode.COMMON_ERROR, "failed to find "
                                 + partitionInfo.getReplicationNum(entry.getKey())
                                 + " different hosts to create table: " + name);
