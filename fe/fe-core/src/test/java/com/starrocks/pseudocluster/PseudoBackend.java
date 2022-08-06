@@ -49,6 +49,7 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
 import com.starrocks.thrift.TCancelPlanFragmentResult;
+import com.starrocks.thrift.TCloneReq;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TDeleteEtlFilesRequest;
@@ -114,8 +115,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class PseudoBackend {
     private static final Logger LOG = LogManager.getLogger(PseudoBackend.class);
-    private static final int REPORT_INTERVAL_SEC = 60;
-    private static final int REPORT_TASK_INTERVAL_SEC = 10;
+    private static final int REPORT_INTERVAL_SEC = 5;
+    public static final long PATH_HASH = 123456;
 
     private final PseudoCluster cluster;
     private final String runPath;
@@ -175,7 +176,7 @@ public class PseudoBackend {
         diskInfo1.setTotalCapacityB(100000000000L);
         diskInfo1.setAvailableCapacityB(50000000000L);
         diskInfo1.setDataUsedCapacityB(20000000000L);
-        diskInfo1.setPathHash(backendId);
+        diskInfo1.setPathHash(PATH_HASH);
         diskInfo1.setStorageMedium(TStorageMedium.SSD);
         disks.put(diskInfo1.getRootPath(), diskInfo1);
         be.setDisks(ImmutableMap.copyOf(disks));
@@ -212,7 +213,7 @@ public class PseudoBackend {
                     LOG.error("reportWorker error", e);
                 }
             }
-        }, "reportTablets" + be.getId());
+        }, "reportTablets-" + be.getId());
         reportTabletsWorker.start();
 
         reportDisksWorker = new Thread(() -> {
@@ -238,7 +239,7 @@ public class PseudoBackend {
                     LOG.error("reportWorker error", e);
                 }
             }
-        }, "reportDisks" + be.getId());
+        }, "reportDisks-" + be.getId());
         reportDisksWorker.start();
 
         reportTasksWorker = new Thread(() -> {
@@ -264,12 +265,16 @@ public class PseudoBackend {
                     LOG.error("reportWorker error", e);
                 }
             }
-        }, "reportTasks" + be.getId());
+        }, "reportTasks-" + be.getId());
         reportTasksWorker.start();
     }
 
     public String getHost() {
         return host;
+    }
+
+    public long getId() {
+        return be.getId();
     }
 
     public BeTxnManager getTxnManager() {
@@ -278,6 +283,10 @@ public class PseudoBackend {
 
     public BeTabletManager getTabletManager() {
         return tabletManager;
+    }
+
+    public Tablet getTablet(long tabletId) {
+        return tabletManager.getTablet(tabletId);
     }
 
     public void setWriteFailureRate(float rate) {
@@ -306,6 +315,7 @@ public class PseudoBackend {
         TMasterResult result;
         try {
             result = frontendService.report(request);
+            LOG.info("report {} tablets", request.tablets.size());
         } catch (TException e) {
             LOG.error("report tablets error", e);
             return;
@@ -334,6 +344,7 @@ public class PseudoBackend {
         TMasterResult result;
         try {
             result = frontendService.report(request);
+            LOG.info("report {} disks", request.disks.size());
         } catch (TException e) {
             LOG.error("report disk error", e);
             return;
@@ -358,6 +369,7 @@ public class PseudoBackend {
         TMasterResult result;
         try {
             result = frontendService.report(request);
+            LOG.info("report {} tasks", request.tasks.size());
         } catch (TException e) {
             LOG.error("report tasks error", e);
             return;
@@ -390,6 +402,35 @@ public class PseudoBackend {
         txnManager.publish(task.transaction_id, task.partition_version_infos, finish);
     }
 
+    void handleClone(TAgentTaskRequest request, TFinishTaskRequest finish) throws Exception {
+        TCloneReq task = request.clone_req;
+        Tablet destTablet = tabletManager.getTablet(task.tablet_id);
+        if (destTablet == null) {
+            throw new Exception("clone failed dest tablet " + task.tablet_id + " on " + be.getId() + " not found");
+        }
+        if (task.src_backends.size() != 1) {
+            throw new Exception("bad src backends size " + task.src_backends.size());
+        }
+        TBackend backend = task.src_backends.get(0);
+        PseudoBackend srcBackend = cluster.getBackendByHost(backend.host);
+        if (srcBackend == null) {
+            throw new Exception("clone failed src backend " + backend.host + " not found");
+        }
+        if (srcBackend.getId() == getId()) {
+            throw new Exception("clone failed src backend " + backend.host + " is same as dest backend " + be.getId());
+        }
+        Tablet srcTablet = srcBackend.getTabletManager().getTablet(task.tablet_id);
+        if (srcTablet == null) {
+            throw new Exception("clone failed src tablet " + task.tablet_id + " on " + srcBackend.be.getId() + " not found");
+        }
+        // currently, only incremental clone is supported
+        // TODO: add full clone support
+        destTablet.cloneFrom(srcTablet);
+        System.out.printf("clone tablet:%d %s -> %s %s\n", task.tablet_id, srcBackend.be.getId(), be.getId(),
+                destTablet.versionInfo());
+        finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
+    }
+
     void handleTask(TAgentTaskRequest request) {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                 request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
@@ -406,11 +447,14 @@ public class PseudoBackend {
                 case PUBLISH_VERSION:
                     handlePublish(request, finishTaskRequest);
                     break;
+                case CLONE:
+                    handleClone(request, finishTaskRequest);
+                    break;
                 default:
                     LOG.info("ignore task type:" + finishTaskRequest.task_type + " signature:" + finishTaskRequest.signature);
             }
         } catch (Exception e) {
-            LOG.warn("Exception in handleTask", e);
+            LOG.warn("Exception in handleTask " + finishTaskRequest.task_type + " " + finishTaskRequest.signature, e);
             finishTaskRequest.setTask_status(toStatus(e));
         }
         try {
@@ -452,7 +496,7 @@ public class PseudoBackend {
                         LOG.warn("error get task", e);
                     }
                 }
-            }).start();
+            }, "backend-worker-" + be.getId()).start();
         }
 
         @Override

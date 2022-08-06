@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
 import com.starrocks.common.AlreadyExistsException;
@@ -66,7 +67,7 @@ public class BeTxnManager {
                 for (Tablet tablet : tabletsInPartition) {
                     TTabletVersionPair p = new TTabletVersionPair();
                     p.tablet_id = tablet.id;
-                    p.version = tablet.max_continuous_version();
+                    p.version = tablet.maxContinuousVersion();
                     tabletVersions.add(p);
                 }
                 continue;
@@ -95,7 +96,7 @@ public class BeTxnManager {
                     }
                     TTabletVersionPair p = new TTabletVersionPair();
                     p.tablet_id = tablet.id;
-                    p.version = tablet.max_continuous_version();
+                    p.version = tablet.maxContinuousVersion();
                     tabletVersions.add(p);
                 }
             }

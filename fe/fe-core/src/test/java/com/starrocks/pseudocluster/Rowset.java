@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
 import com.google.gson.annotations.SerializedName;
@@ -19,7 +20,15 @@ public class Rowset {
         this.rowsetid = rowsetid;
     }
 
-    void setId(int id) {
+    public void setId(int id) {
         this.id = id;
+    }
+
+    public Rowset copy() {
+        Rowset r = new Rowset(txnId, rowsetid);
+        r.id = id;
+        r.numRows = numRows;
+        r.dataSize = dataSize;
+        return r;
     }
 }
