@@ -83,11 +83,13 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             if (status.is_end_of_file()) {
                 // Set _cur_file_eof to open a new reader.
                 _cur_file_eof = true;
-            } else {
-                // To read all readers, we just log and ignore the error returned by read_chunk.
+            } else if (status.is_data_quality_error()) {
+                // To read all readers, we just log and ignore the data quality error returned by read_chunk.
                 if (++_error_chunk_num <= _kMaxErrorChunkNum) {
                     LOG(WARNING) << "read chunk failed: : " << status;
                 }
+            } else {
+                return status;
             }
         }
 
