@@ -488,7 +488,9 @@ private:
             if (hash_table_slot.need_output) {
                 (*chunk)->append_column(std::move(column), slot->id());
             } else {
-                ColumnPtr default_column = ColumnHelper::create_const_null_column(_probe_state->count);
+                ColumnPtr default_column = ColumnHelper::create_column(
+                        slot->type(), column->is_nullable() || _table_items->left_to_nullable);
+                default_column->append_default(_probe_state->count);
                 (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
@@ -498,7 +500,8 @@ private:
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            ColumnPtr default_column = ColumnHelper::create_const_null_column(_probe_state->count);
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), true);
+            default_column->append_nulls(_probe_state->count);
             (*chunk)->append_column(std::move(default_column), slot->id());
         }
     }
