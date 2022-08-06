@@ -447,6 +447,7 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain) {
         DCHECK_EQ(0, _table_items->row_count);
+        *has_remain = false;
         switch (_table_items->join_type) {
         case TJoinOp::FULL_OUTER_JOIN:
         case TJoinOp::LEFT_OUTER_JOIN: {

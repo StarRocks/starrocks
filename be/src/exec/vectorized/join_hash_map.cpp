@@ -469,31 +469,52 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
 }
 
 void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
-    switch (_table_items->join_type) {
-    case TJoinOp::LEFT_OUTER_JOIN:
-        _remove_duplicate_index_for_left_outer_join(filter);
-        break;
-    case TJoinOp::LEFT_SEMI_JOIN:
-        _remove_duplicate_index_for_left_semi_join(filter);
-        break;
-    case TJoinOp::LEFT_ANTI_JOIN:
-    case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-        _remove_duplicate_index_for_left_anti_join(filter);
-        break;
-    case TJoinOp::RIGHT_OUTER_JOIN:
-        _remove_duplicate_index_for_right_outer_join(filter);
-        break;
-    case TJoinOp::RIGHT_SEMI_JOIN:
-        _remove_duplicate_index_for_right_semi_join(filter);
-        break;
-    case TJoinOp::RIGHT_ANTI_JOIN:
-        _remove_duplicate_index_for_right_anti_join(filter);
-        break;
-    case TJoinOp::FULL_OUTER_JOIN:
-        _remove_duplicate_index_for_full_outer_join(filter);
-        break;
-    default:
-        break;
+    if (_hash_map_type == JoinHashMapType::empty) {
+        switch (_table_items->join_type) {
+        case TJoinOp::LEFT_OUTER_JOIN:
+        case TJoinOp::LEFT_ANTI_JOIN:
+        case TJoinOp::FULL_OUTER_JOIN:
+        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN: {
+            size_t row_count = filter->size();
+            if (_hash_map_type == JoinHashMapType::empty) {
+                for (size_t i = 0; i < row_count; i++) {
+                    (*filter)[i] = 1;
+                }
+                return;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    } else {
+        DCHECK_LT(0, _table_items->row_count);
+        switch (_table_items->join_type) {
+        case TJoinOp::LEFT_OUTER_JOIN:
+            _remove_duplicate_index_for_left_outer_join(filter);
+            break;
+        case TJoinOp::LEFT_SEMI_JOIN:
+            _remove_duplicate_index_for_left_semi_join(filter);
+            break;
+        case TJoinOp::LEFT_ANTI_JOIN:
+        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
+            _remove_duplicate_index_for_left_anti_join(filter);
+            break;
+        case TJoinOp::RIGHT_OUTER_JOIN:
+            _remove_duplicate_index_for_right_outer_join(filter);
+            break;
+        case TJoinOp::RIGHT_SEMI_JOIN:
+            _remove_duplicate_index_for_right_semi_join(filter);
+            break;
+        case TJoinOp::RIGHT_ANTI_JOIN:
+            _remove_duplicate_index_for_right_anti_join(filter);
+            break;
+        case TJoinOp::FULL_OUTER_JOIN:
+            _remove_duplicate_index_for_full_outer_join(filter);
+            break;
+        default:
+            break;
+        }
     }
 }
 
