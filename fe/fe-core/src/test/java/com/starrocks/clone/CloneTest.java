@@ -11,8 +11,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Random;
-
 public class CloneTest {
     @BeforeClass
     public static void setUp() throws Exception {
@@ -20,8 +18,7 @@ public class CloneTest {
         Config.tablet_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
-        int fePort = new Random().nextInt(10000) + 50000;
-        PseudoCluster.getOrCreate("pseudo_cluster_" + fePort, true, fePort, 3);
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql(null, "create database test");

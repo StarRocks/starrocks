@@ -20,6 +20,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -216,6 +217,11 @@ public class PseudoCluster {
         return cluster;
     }
 
+    public static synchronized PseudoCluster getOrCreateWithRandomPort(boolean fakeJournal, int numBackends) throws Exception {
+        int queryPort = UtFrameUtils.findValidPort();
+        return getOrCreate("pseudo_cluster_" + queryPort, fakeJournal, queryPort, numBackends);
+    }
+
     public static synchronized PseudoCluster getOrCreate(String runDir, boolean fakeJournal, int queryPort, int numBackends)
             throws Exception {
         if (instance == null) {
@@ -229,9 +235,7 @@ public class PseudoCluster {
     }
 
     public static void main(String[] args) throws Exception {
-        String currentPath = new java.io.File(".").getCanonicalPath();
-        String runDir = currentPath + "/pseudo_cluster";
-        PseudoCluster cluster = PseudoCluster.getOrCreate(runDir, true, 9030, 3);
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
         for (int i = 0; i < 3; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
         }
