@@ -1,5 +1,18 @@
 # StarRocks version 2.0
 
+## 2.0.9
+
+发布日期：2022年8月6日
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 使用 Broker Load 导入数据时，如果 Broker 进程压力大，可能导致内部心跳处理时出现问题，从而导致导入数据丢失。[#8282](https://github.com/StarRocks/starrocks/issues/8282)
+- 使用 Broker Load 导入数据时，如果使用 `COLUMNS FROM PATH AS` 参数指定的列在 StarRocks 的表中不存在，会导致 BE 停止服务。[#5346](https://github.com/StarRocks/starrocks/issues/5346)
+- 一些查询会被转发到 Leader FE 节点上，从而可能导致通过 `/api/query_detail` 接口获得的 SQL 语句执行信息不正确，比如 SHOW FRONTENDS 语句。[#9185](https://github.com/StarRocks/starrocks/issues/9185)
+- 提交多个 Broker Load 作业同时导入相同 HDFS 文件的数据时，如果有一个作业出现异常，可能会导致其他作业也无法正常读取数据并且最终失败。[#9506](https://github.com/StarRocks/starrocks/issues/9506)
+
 ## 2.0.8
 
 发布日期：2022年7月15日
