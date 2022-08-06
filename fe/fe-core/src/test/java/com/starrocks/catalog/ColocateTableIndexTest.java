@@ -143,7 +143,7 @@ public class ColocateTableIndexTest {
         Database goodDb = Catalog.getCurrentCatalog().getDb("default_cluster:goodDb");
         // create goodtable
         String sql = "CREATE TABLE " +
-                "goodDb.goodTable (k1 int, k2 int, k3 varchar(32))\n" +
+                "goodDb.goodTable (k1 int NOT NULL, k2 int, k3 varchar(32))\n" +
                 "PRIMARY KEY(k1)\n" +
                 "DISTRIBUTED BY HASH(k1)\n" +
                 "BUCKETS 4\n" +
