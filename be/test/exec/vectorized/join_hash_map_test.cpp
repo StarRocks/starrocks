@@ -694,7 +694,6 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
             auto null_column = result_chunk->columns()[i];
             auto null_column_data = ColumnHelper::as_raw_column<Int32Column>(null_column)->get_data();
             for (int j = 0; j < expect_num_rows; j++) {
-                std::cout << "i:" << i << ",j:" << j << ", data:" << null_column_data[j] << std::endl;
                 ASSERT_EQ(null_column_data[j], i * 10 + j + 1);
             }
         }
@@ -703,7 +702,6 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
             for (int i = 3; i < 6; i++) {
                 auto null_column = result_chunk->columns()[i];
                 for (int j = 0; j < expect_num_rows; j++) {
-                    std::cout << "i:" << i << ",j:" << j << std::endl;
                     ASSERT_TRUE(null_column->is_null(j));
                 }
             }
