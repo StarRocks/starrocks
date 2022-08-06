@@ -2,7 +2,7 @@ name: Labeler
 
 on:
   pull_request:
-    types: [opened, edited]
+    types: [opened, edited, synchronize]
 
 jobs:
   Title2Label:
