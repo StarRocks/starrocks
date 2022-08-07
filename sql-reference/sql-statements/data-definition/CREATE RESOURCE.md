@@ -124,7 +124,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | password     | 是       | 目标数据库的登录密码。                                       |
 | jdbc_uri     | 是       | 用于连接目标数据库的JDBC URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。 |
 | driver_url   | 是       | 用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如 `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`， `file:///home/disk1/postgresql-42.3.3.jar`。 |
-| driver_class | 是       | 目标数据库使用的 JDBC 驱动程序的类名称。常见的类名称如下： <ul><li>MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）和com.mysql.cj.jdbc.Driver （MySQL 6.x 及以上版本）<li>SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver </li><li>Oracle： oracle.jdbc.driver.OracleDriver </li><li>PostgreSQL：org.postgresql.Driver</li> |
+| driver_class | 是       | 目标数据库使用的 JDBC 驱动程序的类名称。常见的类名称如下： <ul><li>MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）和com.mysql.cj.jdbc.Driver （MySQL 6.x 及以上版本）</li><li>SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver </li><li>Oracle： oracle.jdbc.driver.OracleDriver </li><li>PostgreSQL：org.postgresql.Driver</li> |
 
 ## 示例
 
