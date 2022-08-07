@@ -732,6 +732,14 @@ under the License.
                 <version>8.0.28</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
+            <dependency>
+                <groupId>com.mockrunner</groupId>
+                <artifactId>mockrunner-jdbc</artifactId>
+                <version>1.0.1</version>
+                <scope>test</scope>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-dbcp2 -->
             <dependency>
                 <groupId>org.apache.commons</groupId>
