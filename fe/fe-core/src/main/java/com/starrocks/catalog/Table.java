@@ -83,6 +83,7 @@ public class Table extends MetaObject implements Writable {
     protected TableType type;
     @SerializedName(value = "createTime")
     protected long createTime;
+
     /*
      *  fullSchema and nameToColumn should contains all columns, both visible and shadow.
      *  eg. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
@@ -456,4 +457,5 @@ public class Table extends MetaObject implements Writable {
     public boolean isSupported() {
         return false;
     }
+
 }

@@ -32,6 +32,9 @@ public class HudiResource extends Resource {
     @SerializedName(value = "metastoreURIs")
     private String metastoreURIs;
 
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
+
     public HudiResource(String name) {
         super(name, ResourceType.HUDI);
     }
@@ -39,12 +42,16 @@ public class HudiResource extends Resource {
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null);
-
+        this.properties = properties;
         metastoreURIs = properties.get(HIVE_METASTORE_URIS);
         if (StringUtils.isBlank(metastoreURIs)) {
             throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
         }
         validateMetastoreUris(metastoreURIs);
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override

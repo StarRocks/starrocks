@@ -34,6 +34,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
+
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
     public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
@@ -41,7 +43,7 @@ public class HiveMetaStoreTableUtils {
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableColumnStats")) {
+        try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("HMS.tableColumnStats")) {
             Map<String, HiveColumnStats> allColumnStats = GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getTableLevelColumnStats(hmsTable);
             Map<String, HiveColumnStats> result = Maps.newHashMapWithExpectedSize(columnNames.size());
@@ -66,13 +68,13 @@ public class HiveMetaStoreTableUtils {
 
     public static List<HivePartitionStats> getPartitionsStats(HiveMetaStoreTableInfo hmsTable,
                                                               List<PartitionKey> partitionKeys) throws DdlException {
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionStats")) {
+        try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("HMS.partitionStats")) {
             return GlobalStateMgr.getCurrentState().getHiveRepository().getPartitionsStats(hmsTable, partitionKeys);
         }
     }
 
     public static HiveTableStats getTableStats(HiveMetaStoreTableInfo hmsTable) throws DdlException {
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.tableStats")) {
+        try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("HMS.tableStats")) {
             return GlobalStateMgr.getCurrentState().getHiveRepository().getTableStats(hmsTable.getResourceName(),
                     hmsTable.getDb(), hmsTable.getTable());
         }
@@ -80,21 +82,21 @@ public class HiveMetaStoreTableUtils {
 
     public static List<HivePartition> getPartitions(HiveMetaStoreTableInfo hmsTable,
                                                     List<PartitionKey> partitionKeys) throws DdlException {
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitions")) {
+        try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("HMS.partitions")) {
             return GlobalStateMgr.getCurrentState().getHiveRepository()
                     .getPartitions(hmsTable, partitionKeys);
         }
     }
 
     public static Map<PartitionKey, Long> getPartitionKeys(HiveMetaStoreTableInfo hmsTable) throws DdlException {
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionKeys")) {
+        try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("HMS.partitionKeys")) {
             return GlobalStateMgr.getCurrentState().getHiveRepository().getPartitionKeys(hmsTable);
         }
     }
 
     public static long getPartitionStatsRowCount(HiveMetaStoreTableInfo hmsTable,
                                                  List<PartitionKey> partitions) {
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("HMS.partitionRowCount")) {
+        try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("HMS.partitionRowCount")) {
             return doGetPartitionStatsRowCount(hmsTable, partitions);
         }
     }
@@ -104,6 +106,29 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> unHivePartColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
         return allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
+    }
+
+    public static List<String> toPartitionValues(String partitionName)
+    {
+        // mimics Warehouse.makeValsFromName
+        ImmutableList.Builder<String> resultBuilder = ImmutableList.builder();
+        int start = 0;
+        while (true) {
+            while (start < partitionName.length() && partitionName.charAt(start) != '=') {
+                start++;
+            }
+            start++;
+            int end = start;
+            while (end < partitionName.length() && partitionName.charAt(end) != '/') {
+                end++;
+            }
+            if (start > partitionName.length()) {
+                break;
+            }
+            resultBuilder.add(unescapePathName(partitionName.substring(start, end)));
+            start = end + 1;
+        }
+        return resultBuilder.build();
     }
 
     public static boolean validateColumnType(String hiveType, Type type) {
@@ -157,7 +182,7 @@ public class HiveMetaStoreTableUtils {
         }
     }
 
-    public static Type convertColumnType(String hiveType) throws DdlException {
+    public static Type convertColumnType(String hiveType) {
         String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
         PrimitiveType primitiveType;
         switch (typeUpperCase) {

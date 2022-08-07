@@ -582,9 +582,9 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
-        this.metadataMgr = new MetadataMgr(localMetastore);
-        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.connectorMgr = new ConnectorMgr();
         this.catalogMgr = new CatalogMgr(connectorMgr);
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
@@ -2197,7 +2197,7 @@ public class GlobalStateMgr {
 
             // properties
             sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hudiTable.getDb()).append("\",\n");
+            sb.append("\"database\" = \"").append(hudiTable.getHiveDb()).append("\",\n");
             sb.append("\"table\" = \"").append(hudiTable.getTable()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");

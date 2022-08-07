@@ -140,6 +140,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
@@ -197,6 +198,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
@@ -219,6 +221,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
+import static com.starrocks.catalog.HiveTable.HIVE_DB;
+import static com.starrocks.catalog.HiveTable.HIVE_RESOURCE;
+import static com.starrocks.common.util.Util.validateMetastoreUris;
+import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 
@@ -2289,11 +2295,58 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("successfully create table{} with id {}", tableName, tableId);
     }
 
+    private void validate(Map<String, String> properties, HiveTable connectorTable, List<Column> columns)
+            throws DdlException {
+        Map<String, String> copiedProps = Maps.newHashMap(properties);
+        // check hive properties
+        // resource must be set and hive.metastore.uris will be ignored if specified.
+        String resourceName = copiedProps.get(HIVE_RESOURCE);
+
+        for (Column column : columns) {
+            Column ocolumn = connectorTable.getColumn(column.getName());
+            if (ocolumn == null) {
+                throw new DdlException("column [" + column.getName() + "] not exists in hive");
+            }
+            // Only internal catalog like hive external table need to validate column type
+            if (ocolumn.getType() == Type.UNKNOWN_TYPE) {
+                throw new DdlException("can not convert hive column type [" + "unknown" + "] to " +
+                        "starrocks type [" + column.getPrimitiveType() + "]");
+            }
+        }
+
+        for (String partName : connectorTable.getPartitionColumnNames()) {
+            if (!columns.stream().map(Column::getName).collect(Collectors.toList()).contains(partName)) {
+                throw new DdlException("partition column [" + partName + "] must exist in column list");
+            }
+        }
+
+        if (!copiedProps.isEmpty()) {
+            throw new DdlException("Unknown table properties: " + copiedProps.toString());
+        }
+    }
+//
+//    long id, String name, List<Column> fullSchema, String resourceName, String catalog,
+//    String hiveDbName, String hiveTableName, String hdfsPath, List<String> partColumnNames,
+//    List<String> dataColumnNames, Map<String, String> properties
+
     private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
         long tableId = getNextId();
-        HiveTable hiveTable = new HiveTable(tableId, tableName, columns, stmt.getProperties());
+        Map<String, String> properties = new HashMap<>();
+        String resource = properties.get("hive.metastore.uris");
+        String hivedb = properties.get("database");
+        String hivetbl = properties.get("table");
+        if (resource == null) {
+            throw new DdlException("xxxxx");
+        }
+        Table connectorTbl = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                CatalogMgr.INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX + resource, hivedb, hivetbl);
+        HiveTable ohiveTbl = (HiveTable) connectorTbl;
+        validate(properties, ohiveTbl, columns);
+        HiveTable hiveTable = new HiveTable(tableId, tableName, columns, resource, CatalogMgr.INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX + resource,
+                 hivedb, hivetbl, ohiveTbl.getHdfsPath(), ohiveTbl.getPartitionColumnNames(), ohiveTbl.getDataColumnNames(), properties);
+
         // partition key, commented for show partition key
         String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
         if (Strings.isNullOrEmpty(stmt.getComment())) {

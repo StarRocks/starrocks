@@ -8,8 +8,7 @@ public interface Connector {
      *
      * @return a ConnectorMetadata instance of connector
      */
-    ConnectorMetadata getMetadata() throws Exception;
-
+    ConnectorMetadata getMetadata() ;
     /**
      * Shutdown the connector by releasing any held resources such as
      * threads, sockets, etc. This method will only be called when no

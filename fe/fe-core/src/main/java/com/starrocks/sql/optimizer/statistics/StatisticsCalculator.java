@@ -30,6 +30,7 @@ import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -272,12 +273,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalHiveScan(LogicalHiveScanOperator node, ExpressionContext context) {
-        return computeHMSTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeHiveTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalHiveScan(PhysicalHiveScanOperator node, ExpressionContext context) {
-        return computeHMSTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+        return computeHiveTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     public Void computeHMSTableScanNode(Operator node, ExpressionContext context, Table table,
@@ -293,6 +294,30 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // 3. estimate cardinality
         context.setStatistics(builder.build());
         return visitOperator(node, context);
+    }
+
+    public Void computeHiveTableScanNode(Operator node, ExpressionContext context, Table table,
+                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Preconditions.checkState(context.arity() == 0);
+
+        ScanOperatorPredicates predicates;
+        try {
+            if (node.isLogical()) {
+                predicates = ((LogicalScanOperator) node).getScanOperatorPredicates();
+            } else {
+                predicates = ((PhysicalScanOperator) node).getScanOperatorPredicates();
+            }
+            List<PartitionKey> partitionKeys = predicates.getSelectedPartitionKeys();
+
+            Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTableStatistics(optimizerContext, table, Lists.newArrayList(colRefToColumnMetaMap.keySet()), partitionKeys);
+            context.setStatistics(statistics);
+            return visitOperator(node, context);
+        }
+        catch (AnalysisException e) {
+            LOG.warn("compute hive table row count failed : " + e);
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
+        }
     }
 
     private Statistics.Builder estimateHMSTableScanColumns(Table table, long tableRowCount,

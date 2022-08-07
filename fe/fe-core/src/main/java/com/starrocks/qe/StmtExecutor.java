@@ -329,7 +329,7 @@ public class StmtExecutor {
             // Entrance to the new planner
             if (isStatisticsOrAnalyzer(parsedStmt, context) ||
                     StatementPlanner.supportedByNewPlanner(parsedStmt)) {
-                try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+                try (PlannerProfile.ScopedTimer a = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToLeader()) {
                         context.getDumpInfo().reset();

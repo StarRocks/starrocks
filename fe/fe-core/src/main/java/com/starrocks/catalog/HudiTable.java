@@ -58,6 +58,10 @@ import java.util.stream.Collectors;
 public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
+    public enum HoodieTableType {
+        COW, MOR, UNKNOWN
+    }
+
     private static final String PROPERTY_MISSING_MSG =
             "Hudi %s is null. Please add properties('%s'='xxx') when create table";
     private static final String JSON_KEY_HUDI_DB = "database";
@@ -99,7 +103,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         initHmsTableInfo();
     }
 
-    public String getDb() {
+    public String getCatalogName() {
+        return "catalogName";
+    }
+
+    public String getHiveDb() {
         return db;
     }
 
@@ -124,9 +132,31 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return table;
     }
 
+    public static boolean isHudiTable(String inputFormat) {
+        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HoodieTableType.UNKNOWN;
+    }
+
+    public static HoodieTableType fromInputFormat(String inputFormat) {
+        switch (inputFormat) {
+            case "org.apache.hudi.hadoop.HoodieParquetInputFormat":
+            case "com.uber.hoodie.hadoop.HoodieInputFormat":
+                return HoodieTableType.COW;
+            case "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat":
+            case "com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat":
+                return HoodieTableType.MOR;
+            default:
+                return HoodieTableType.UNKNOWN;
+        }
+    }
+
     @Override
     public List<Column> getPartitionColumns() {
         return HiveMetaStoreTableUtils.getPartitionColumns(hmsTableInfo);
+    }
+
+    @Override
+    public boolean isUnpartitioned() {
+        return partColumnNames.size() == 0;
     }
 
     @Override
@@ -231,11 +261,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
-        HoodieTableType hudiTableType = hudiTableConfig.getTableType();
-        if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
-            throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
-        }
-        hudiProperties.put(HUDI_TABLE_TYPE, hudiTableType.name());
+//        HoodieTableType hudiTableType = hudiTableConfig.getTableType();
+//        if (hudiTableType == HoodieTableType.MERGE_ON_READ) {
+//            throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
+//        }
+//        hudiProperties.put(HUDI_TABLE_TYPE, hudiTableType.name());
 
         Option<String[]> hudiTablePrimaryKey = hudiTableConfig.getRecordKeyFields();
         if (hudiTablePrimaryKey.isPresent()) {

@@ -70,7 +70,7 @@ under the License.
                 </property>
             </activation>
             <properties>
-                <starrocks.thrift>${env.STARROCKS_THIRDPARTY}/installed/bin/thrift</starrocks.thrift>
+                <starrocks.thrift>/usr/local/bin/thrift</starrocks.thrift>
             </properties>
         </profile>
         <profile>
@@ -890,35 +890,35 @@ under the License.
             </plugin>
 
             <!-- for FE java code style checking -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.1.1</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>com.puppycrawl.tools</groupId>
-                        <artifactId>checkstyle</artifactId>
-                        <version>8.40</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <configLocation>checkstyle.xml</configLocation>
-                    <encoding>UTF-8</encoding>
-                    <consoleOutput>true</consoleOutput>
-                    <failsOnError>true</failsOnError>
-                    <linkXRef>false</linkXRef>
-                    <excludes>**/sql/parser/gen/**</excludes>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>validate</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
+<!--            <plugin>-->
+<!--                <groupId>org.apache.maven.plugins</groupId>-->
+<!--                <artifactId>maven-checkstyle-plugin</artifactId>-->
+<!--                <version>3.1.1</version>-->
+<!--                <dependencies>-->
+<!--                    <dependency>-->
+<!--                        <groupId>com.puppycrawl.tools</groupId>-->
+<!--                        <artifactId>checkstyle</artifactId>-->
+<!--                        <version>8.40</version>-->
+<!--                    </dependency>-->
+<!--                </dependencies>-->
+<!--                <configuration>-->
+<!--                    <configLocation>checkstyle.xml</configLocation>-->
+<!--                    <encoding>UTF-8</encoding>-->
+<!--                    <consoleOutput>true</consoleOutput>-->
+<!--                    <failsOnError>true</failsOnError>-->
+<!--                    <linkXRef>false</linkXRef>-->
+<!--                    <excludes>**/sql/parser/gen/**</excludes>-->
+<!--                </configuration>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>validate</id>-->
+<!--                        <phase>validate</phase>-->
+<!--                        <goals>-->
+<!--                            <goal>check</goal>-->
+<!--                        </goals>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
 
             <!-- clean fe/target dir before building -->
             <plugin>

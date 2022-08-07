@@ -11,8 +11,13 @@ import java.util.List;
 import java.util.Map;
 
 public interface HiveMetaStoreTable {
+    String getCatalogName();
+
+    String getHiveDb();
 
     String getTableName();
+
+    List<String> getDataColumnNames();
 
     List<String> getPartitionColumnNames();
 
@@ -26,7 +31,9 @@ public interface HiveMetaStoreTable {
 
     List<Column> getPartitionColumns();
 
-    Map<PartitionKey, Long> getPartitionKeys() throws DdlException;
+    boolean isUnpartitioned();
+
+//    Map<PartitionKey, Long> getPartitionKeys() throws DdlException;
 
     void refreshTableCache(String dbName, String tableName) throws DdlException;
 

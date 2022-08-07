@@ -36,6 +36,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * Resource manager is responsible for managing external resources used by StarRocks.
@@ -59,6 +61,10 @@ public class ResourceMgr implements Writable {
 
     public static final ImmutableList<String> RESOURCE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Name").add("ResourceType").add("Key").add("Value")
+            .build();
+
+    public static final ImmutableList<String> DLA_RESOURCE_TYPE = new ImmutableList.Builder<String>()
+            .add("hive").add("iceberg").add("hudi")
             .build();
 
     @SerializedName(value = "nameToResource")
@@ -86,6 +92,14 @@ public class ResourceMgr implements Writable {
         this.rwLock.writeLock().unlock();
     }
 
+    public List<Resource> getDLAResource() {
+        return nameToResource.values().stream()
+                .filter(x -> x.type == Resource.ResourceType.HIVE ||
+                        x.type == Resource.ResourceType.ICEBERG ||
+                        x.type == Resource.ResourceType.HUDI)
+                .collect(Collectors.toList());
+    }
+
     public void createResource(CreateResourceStmt stmt) throws DdlException {
         this.writeLock();
         try {
@@ -93,6 +107,14 @@ public class ResourceMgr implements Writable {
             String resourceName = stmt.getResourceName();
             if (nameToResource.putIfAbsent(resourceName, resource) != null) {
                 throw new DdlException("Resource(" + resourceName + ") already exist");
+            }
+
+            if (resource.isDLAResource()) {
+                GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(
+                        stmt.getResourceType().name(),
+                        CatalogMgr.INTERNAL_RESOURCE_TO_CATALOG_NAME_PREFIX + resourceName,
+                        "",
+                        stmt.getProperties());
             }
             // log add
             GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);

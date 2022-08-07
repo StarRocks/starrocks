@@ -84,15 +84,15 @@ public class HiveRepository {
                 throw new DdlException("resource [" + resourceName + "] is not hive/hudi resource");
             }
 
-            if (!isInternalCatalog) {
-                client = new HiveMetaClient(resourceName);
-            } else {
-                if (resource.getType() == ResourceType.HIVE) {
-                    client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
-                } else if (resource.getType() == ResourceType.HUDI) {
-                    client = new HiveMetaClient(((HudiResource) resource).getHiveMetastoreURIs());
-                }
-            }
+//            if (!isInternalCatalog) {
+//                client = new HiveMetaClient(resourceName);
+//            } else {
+//                if (resource.getType() == ResourceType.HIVE) {
+//                    client = new HiveMetaClient(((HiveResource) resource).getHiveMetastoreURIs());
+//                } else if (resource.getType() == ResourceType.HUDI) {
+//                    client = new HiveMetaClient(((HudiResource) resource).getHiveMetastoreURIs());
+//                }
+//            }
 
             metaClients.put(resourceName, client);
         } finally {

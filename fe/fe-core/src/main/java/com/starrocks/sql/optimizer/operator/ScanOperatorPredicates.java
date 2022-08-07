@@ -38,6 +38,14 @@ public class ScanOperatorPredicates {
         return selectedPartitionIds;
     }
 
+    public List<PartitionKey> getSelectedPartitionKeys() {
+        List<PartitionKey> partitions = Lists.newArrayList();
+        for (long partitionId : selectedPartitionIds) {
+            partitions.add(idToPartitionKey.get(partitionId));
+        }
+        return partitions;
+    }
+
     public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
         this.selectedPartitionIds = selectedPartitionIds;
     }

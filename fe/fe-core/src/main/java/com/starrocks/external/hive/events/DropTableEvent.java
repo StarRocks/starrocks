@@ -69,7 +69,7 @@ public class DropTableEvent extends MetastoreTableEvent {
             if (table == null) {
                 return;
             }
-            cache.clearCache(table.getHmsTableInfo());
+//            cache.clearCache(table.getHmsTableInfo());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

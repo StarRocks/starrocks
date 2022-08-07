@@ -1455,6 +1455,14 @@ public class Config extends ConfigBase {
     @ConfField
     public static long hive_meta_cache_ttl_s = 3600L * 24L;
 
+    @ConfField
+    public static long remote_file_cache_ttl_s = 3600 * 48L;
+
+    @ConfField
+    public static long remote_file_cache_refresh_s = 60;
+
+
+
     /**
      * Hive MetaStore Client socket timeout in seconds.
      */

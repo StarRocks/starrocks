@@ -6,7 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HivePartitionName;
 import com.starrocks.external.hive.HiveTableKey;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Partition;
@@ -38,8 +38,8 @@ public class InsertEvent extends MetastoreTableEvent {
             insertPartition = insertMessage.getPtnObj();
             if (insertPartition != null) {
                 hivePartitionKeys.clear();
-                hivePartitionKeys.add(
-                        new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
+//                hivePartitionKeys.add(
+//                        new HivePartitionName(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
             }
         } catch (Exception e) {
             LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
@@ -75,8 +75,9 @@ public class InsertEvent extends MetastoreTableEvent {
     protected boolean existInCache() {
         if (isPartitionTbl()) {
             List<String> partVals = insertPartition.getValues();
-            HivePartitionKey partitionKey = new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partVals);
-            return cache.partitionExistInCache(partitionKey);
+//            HivePartitionName partitionKey = new HivePartitionName(dbName, tblName, Table.TableType.HIVE, partVals);
+//            return cache.partitionExistInCache(partitionKey);
+            return false;
         } else {
             HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
             return cache.tableExistInCache(tableKey);

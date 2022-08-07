@@ -10,6 +10,7 @@ import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -21,10 +22,7 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    private final MetadataMgr metadataMgr;
-
-    public ConnectorMgr(MetadataMgr metadataMgr) {
-        this.metadataMgr = metadataMgr;
+    public ConnectorMgr() {
         init();
     }
 
@@ -44,13 +42,13 @@ public class ConnectorMgr {
 
     public Connector createConnector(ConnectorContext context) throws DdlException {
         String catalogName = context.getCatalogName();
-        String type = context.getType();
+        String type = context.getType().toLowerCase(Locale.ROOT);
         ConnectorFactory connectorFactory = connectorFactories.get(type);
         Preconditions.checkNotNull(connectorFactory, "Cannot load %s connector factory", type);
         readLock();
         try {
-            Preconditions.checkState(!connectors.containsKey(catalogName),
-                    "Connector of catalog '%s' already exists", catalogName);
+//            Preconditions.checkState(!connectors.containsKey(catalogName),
+//                    "Connector of catalog '%s' already exists", catalogName);
         } finally {
             readUnlock();
         }
@@ -65,19 +63,19 @@ public class ConnectorMgr {
         }
 
         // TODO (stephen): to test behavior that failed to create connector when fe starting.
-        try {
-            registerConnectorInternal(connector, context);
-        } catch (Exception e) {
-            writeLock();
-            try {
-                connectors.remove(catalogName);
-            } finally {
-                writeUnLock();
-            }
-            connector.shutdown();
-            throw new DdlException(String.format("Failed to create connector on [catalog : %s, type : %s]",
-                    catalogName, type), e);
-        }
+//        try {
+//            registerConnectorInternal(connector, context);
+//        } catch (Exception e) {
+//            writeLock();
+//            try {
+//                connectors.remove(catalogName);
+//            } finally {
+//                writeUnLock();
+//            }
+//            connector.shutdown();
+//            throw new DdlException(String.format("Failed to create connector on [catalog : %s, type : %s]",
+//                    catalogName, type), e);
+//        }
         return connector;
     }
 
@@ -108,12 +106,21 @@ public class ConnectorMgr {
         }
     }
 
-    private void registerConnectorInternal(Connector connector, ConnectorContext context) throws Exception {
-        metadataMgr.addMetadata(context.getCatalogName(), connector.getMetadata());
+    public Connector getConnector(String catalogName) {
+        readLock();
+        try {
+            return connectors.get(catalogName);
+        } finally {
+            readUnlock();
+        }
     }
 
+//    private void registerConnectorInternal(Connector connector, ConnectorContext context) throws Exception {
+//        metadataMgr.addMetadata(context.getCatalogName(), connector.getMetadata());
+//    }
+
     private void removeConnectorInternal(String catalogName) {
-        metadataMgr.removeMetadata(catalogName);
+//        metadataMgr.removeMetadata(catalogName);
     }
 
     private void readLock() {

@@ -9,6 +9,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import org.apache.commons.lang.StringUtils;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
@@ -34,6 +35,9 @@ public class HiveResource extends Resource {
     @SerializedName(value = "metastoreURIs")
     private String metastoreURIs;
 
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
+
     public HiveResource(String name) {
         super(name, ResourceType.HIVE);
     }
@@ -41,7 +45,7 @@ public class HiveResource extends Resource {
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkState(properties != null, "properties can not be null");
-
+        this.properties = properties;
         metastoreURIs = properties.get(HIVE_METASTORE_URIS);
         if (StringUtils.isBlank(metastoreURIs)) {
             throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
@@ -57,6 +61,10 @@ public class HiveResource extends Resource {
 
     public String getHiveMetastoreURIs() {
         return metastoreURIs;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties == null ? new HashMap<>() : properties;
     }
 
     /**

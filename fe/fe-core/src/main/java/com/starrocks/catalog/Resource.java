@@ -32,6 +32,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 public abstract class Resource implements Writable {
@@ -94,6 +95,10 @@ public abstract class Resource implements Writable {
         return resource;
     }
 
+    public boolean isDLAResource() {
+        return type == ResourceType.HIVE || type == ResourceType.ICEBERG || type == ResourceType.HUDI;
+    }
+
     public String getName() {
         return name;
     }
@@ -105,7 +110,15 @@ public abstract class Resource implements Writable {
     /**
      * Set and check the properties in child resources
      */
-    protected abstract void setProperties(Map<String, String> properties) throws DdlException;
+    protected void setProperties(Map<String, String> properties) throws DdlException { }
+
+    public Map<String, String> getProperties(){
+        return new HashMap<>();
+    }
+
+    public String getHiveMetastoreURIs() {
+        return "";
+    };
 
     /**
      * Fill BaseProcResult with different properties in child resources

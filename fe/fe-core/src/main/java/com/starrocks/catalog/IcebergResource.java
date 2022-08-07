@@ -54,10 +54,14 @@ public class IcebergResource extends Resource {
         properties = Maps.newHashMap();
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkNotNull(properties, "Properties of iceberg resource is null!");
-
+        this.properties = properties;
         catalogType = properties.get(ICEBERG_CATALOG);
         if (StringUtils.isBlank(catalogType)) {
             throw new DdlException(ICEBERG_CATALOG + " must be set in properties");

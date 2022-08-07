@@ -12,6 +12,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.external.hive.HdfsFileBlockDesc;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HivePartition;
+import com.starrocks.external.hive.RemoteFileDesc;
+import com.starrocks.external.hive.RemoteFileInfo;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -32,8 +35,8 @@ public class RemoteScanRangeLocations {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
 
-    private void addScanRangeLocations(long partitionId, HivePartition partition, HdfsFileDesc fileDesc,
-                                       HdfsFileBlockDesc blockDesc
+    private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
+                                       RemoteFileBlockDesc blockDesc
     ) {
         // NOTE: Config.hive_max_split_size should be extracted to a local variable,
         // because it may be changed before calling 'splitScanRangeLocations'
@@ -48,9 +51,9 @@ public class RemoteScanRangeLocations {
         }
     }
 
-    private void splitScanRangeLocations(long partitionId, HivePartition partition,
-                                         HdfsFileDesc fileDesc,
-                                         HdfsFileBlockDesc blockDesc,
+    private void splitScanRangeLocations(long partitionId, RemoteFileInfo partition,
+                                         RemoteFileDesc fileDesc,
+                                         RemoteFileBlockDesc blockDesc,
                                          long splitSize) {
         long remainingBytes = blockDesc.getLength();
         long length = blockDesc.getLength();
@@ -78,9 +81,9 @@ public class RemoteScanRangeLocations {
         } while (remainingBytes > 0);
     }
 
-    private void createScanRangeLocationsForSplit(long partitionId, HivePartition partition,
-                                                  HdfsFileDesc fileDesc,
-                                                  HdfsFileBlockDesc blockDesc,
+    private void createScanRangeLocationsForSplit(long partitionId, RemoteFileInfo partition,
+                                                  RemoteFileDesc fileDesc,
+                                                  RemoteFileBlockDesc blockDesc,
                                                   long offset, long length) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -127,15 +130,16 @@ public class RemoteScanRangeLocations {
             partitionKeys.add(partitionKey);
             partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey));
         }
-        List<HivePartition> partitions = hiveMetaStoreTable.getPartitions(partitionKeys);
+//        List<HivePartition> partitions = hiveMetaStoreTable.getPartitions(partitionKeys);
+        List<RemoteFileInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(table, partitionKeys);
 
         for (int i = 0; i < partitions.size(); i++) {
             descTbl.addReferencedPartitions(table, partitionInfos.get(i));
-            for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {
+            for (RemoteFileDesc fileDesc : partitions.get(i).getFiles()) {
                 if (fileDesc.getLength() == 0) {
                     continue;
                 }
-                for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
+                for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
                     addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, blockDesc);
                     LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
                             partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),

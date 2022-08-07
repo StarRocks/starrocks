@@ -41,10 +41,11 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
             result.addRow(Lists.newArrayList(hmsTable.getTableName()));
         } else {
             try {
-                for (PartitionKey partitionKey : hmsTable.getPartitionKeys().keySet()) {
-                    result.addRow(Lists.newArrayList(FileUtils.makePartName(hmsTable.getPartitionColumnNames(),
-                            Utils.getPartitionValues(partitionKey))));
-                }
+//                for (PartitionKey partitionKey : hmsTable.getPartitionKeys().keySet()) {
+//                    result.addRow(Lists.newArrayList(FileUtils.makePartName(hmsTable.getPartitionColumnNames(),
+//                            Utils.getPartitionValues(partitionKey))));
+//                }
+                throw new DdlException("aa");
             } catch (DdlException e) {
                 LOG.warn("Get table partitions failed", e);
                 throw new AnalysisException("get table partitions failed: " + e.getMessage());

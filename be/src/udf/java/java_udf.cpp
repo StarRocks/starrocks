@@ -80,7 +80,7 @@ std::pair<JNIEnv*, JVMFunctionHelper&> JVMFunctionHelper::getInstanceWithEnv() {
 
 void JVMFunctionHelper::_init() {
     std::string home = getenv("STARROCKS_HOME");
-    std::vector<std::string> class_paths = {home + "/lib/udf-extensions-jar-with-dependencies.jar",
+    std::vector<std::string> class_paths = {home + "/lib/udasf-extensions-jar-with-dependencies.jar",
                                             home + "/lib/starrocks-jdbc-bridge-jar-with-dependencies.jar"};
     for (auto path : class_paths) {
         _add_class_path(path);

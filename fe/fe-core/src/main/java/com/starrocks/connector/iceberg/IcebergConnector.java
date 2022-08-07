@@ -36,7 +36,7 @@ public class IcebergConnector implements Connector {
     }
 
     @Override
-    public ConnectorMetadata getMetadata() throws DdlException {
+    public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             try {
                 metadata = new IcebergMetadata(metastoreURI);

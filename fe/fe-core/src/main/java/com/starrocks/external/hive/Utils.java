@@ -9,6 +9,9 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HivePartitionKey;
+import com.starrocks.catalog.HudiPartitionKey;
+import com.starrocks.catalog.NullableKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -38,16 +41,20 @@ public class Utils {
         Preconditions.checkState(values.size() == columns.size(),
                 String.format("columns size is %d, but values size is %d", columns.size(), values.size()));
 
-        PartitionKey partitionKey = new PartitionKey();
+        PartitionKey partitionKey;
+        if (isHudiTable) {
+            partitionKey = new HudiPartitionKey();
+        } else {
+            partitionKey = new HivePartitionKey();
+        }
+
         // change string value to LiteralExpr,
         // and transfer __HIVE_DEFAULT_PARTITION__ to NullLiteral
         for (int i = 0; i < values.size(); i++) {
             String rawValue = values.get(i);
             Type type = columns.get(i).getType();
             LiteralExpr exprValue;
-            if (HiveMetaClient.PARTITION_NULL_VALUE.equals(rawValue)) {
-                exprValue = NullLiteral.create(type);
-            } else if (isHudiTable && HiveMetaClient.HUDI_PARTITION_NULL_VALUE.equals(rawValue)) {
+            if (((NullableKey) partitionKey).nullPartitionValue().equals(rawValue)) {
                 exprValue = NullLiteral.create(type);
             } else {
                 exprValue = LiteralExpr.create(rawValue, type);
@@ -57,22 +64,18 @@ public class Utils {
         return partitionKey;
     }
 
-    public static List<String> getPartitionValues(PartitionKey partitionKey) {
-        return getPartitionValues(partitionKey, false);
-    }
+//    public static List<String> getPartitionValues(PartitionKey partitionKey) {
+//        return getPartitionValues(partitionKey, false);
+//    }
 
-    public static List<String> getPartitionValues(PartitionKey partitionKey, boolean isHudiTable) {
+    public static List<String> getPartitionValues(PartitionKey partitionKey) {
         // get string value from partitionKey
         // using __HIVE_DEFAULT_PARTITION__ replace null value
         List<LiteralExpr> literalValues = partitionKey.getKeys();
         List<String> values = new ArrayList<>(literalValues.size());
         for (LiteralExpr value : literalValues) {
             if (value instanceof NullLiteral) {
-                if (isHudiTable) {
-                    values.add(HiveMetaClient.HUDI_PARTITION_NULL_VALUE);
-                } else {
-                    values.add(HiveMetaClient.PARTITION_NULL_VALUE);
-                }
+                values.add(((NullableKey) partitionKey).nullPartitionValue());
             } else if (value instanceof BoolLiteral) {
                 BoolLiteral boolValue = ((BoolLiteral) value);
                 values.add(String.valueOf(boolValue.getValue()));
@@ -155,16 +158,16 @@ public class Utils {
     }
 
     // Decimal string like "Decimal(3,2)"
-    public static int[] getPrecisionAndScale(String typeStr) throws DdlException {
+    public static int[] getPrecisionAndScale(String typeStr) throws StarRocksConnectorException {
         Matcher matcher = Pattern.compile(DECIMAL_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
             return new int[]{Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2))};
         }
-        throw new DdlException("Failed to get precision and scale at " + typeStr);
+        throw new StarRocksConnectorException("Failed to get precision and scale at " + typeStr);
     }
 
     // Array string like "Array<Array<int>>"
-    public static Type convertToArrayType(String typeStr) throws DdlException {
+    public static Type convertToArrayType(String typeStr) throws StarRocksConnectorException {
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
@@ -176,20 +179,20 @@ public class Utils {
     }
 
     // Char string like char(100)
-    public static int getCharLength(String typeStr) throws DdlException {
+    public static int getCharLength(String typeStr) throws StarRocksConnectorException {
         Matcher matcher = Pattern.compile(CHAR_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
             return Integer.parseInt(matcher.group(1));
         }
-        throw new DdlException("Failed to get char length at " + typeStr);
+        throw new StarRocksConnectorException("Failed to get char length at " + typeStr);
     }
 
     // Varchar string like varchar(100)
-    public static int getVarcharLength(String typeStr) throws DdlException {
+    public static int getVarcharLength(String typeStr) throws StarRocksConnectorException {
         Matcher matcher = Pattern.compile(VARCHAR_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         if (matcher.find()) {
             return Integer.parseInt(matcher.group(1));
         }
-        throw new DdlException("Failed to get varchar length at " + typeStr);
+        throw new StarRocksConnectorException("Failed to get varchar length at " + typeStr);
     }
 }

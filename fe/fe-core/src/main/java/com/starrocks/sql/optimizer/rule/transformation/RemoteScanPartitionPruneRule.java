@@ -3,16 +3,21 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.external.hive.HiveUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -34,10 +39,13 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+
+import static com.starrocks.external.hive.Utils.createPartitionKey;
 
 public class RemoteScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);
@@ -91,7 +99,23 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         // 1. partitionColumns is empty
         // 2. partitionKeys size = 1
         // 3. key.getKeys() is empty
-        Map<PartitionKey, Long> partitionKeys = hiveMetaStoreTable.getPartitionKeys();
+        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getPartitionNames(hiveMetaStoreTable.getCatalogName(),
+                        hiveMetaStoreTable.getHiveDb(),
+                        hiveMetaStoreTable.getTableName());
+        Map<PartitionKey, Long> partitionKeys = new HashMap<>();
+        if (hiveMetaStoreTable.getPartitionColumnNames().size() > 0) {
+            long partitionId = 0;
+            for (String partName : partitionNames) {
+                List<String> values = HiveUtils.toPartitionValues(partName);
+                PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table instanceof HudiTable);
+                partitionKeys.put(partitionKey, ++partitionId);
+            }
+        } else {
+            partitionKeys.put(new PartitionKey(), 0L);
+        }
+
+//        Map<PartitionKey, Long> partitionKeys = hiveMetaStoreTable.getPartitionKeys();
         for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
             PartitionKey key = entry.getKey();
             long partitionId = entry.getValue();

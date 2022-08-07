@@ -17,14 +17,19 @@ import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.external.hive.RemoteFileInfo;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
 
@@ -57,6 +62,21 @@ public interface ConnectorMetadata {
      */
     default Table getTable(String dbName, String tblName) {
         return null;
+    }
+
+    default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
+        return Lists.newArrayList();
+    }
+
+    default Statistics getTableStatistics(OptimizerContext session,
+                                          Table table,
+                                          List<ColumnRefOperator> columns,
+                                          List<PartitionKey> partitionKeys) {
+        return Statistics.builder().build();
+    }
+
+    default List<String> getPartitionNames(String dbName, String tblName) {
+        return Lists.newArrayList();
     }
 
     default void createDb(String dbName) throws  DdlException, AlreadyExistsException {}
