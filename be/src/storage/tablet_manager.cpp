@@ -142,7 +142,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     LOG(INFO) << "Creating tablet " << tablet_id;
 
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
-    std::unique_lock<std::shared_mutex> base_wlock;
+    std::shared_lock<std::shared_mutex> base_rlock;
 
     // If do schema change, both the shard where the source tablet is located and
     // the shard where the target tablet is located need to be locked.
@@ -154,14 +154,14 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         if (shard_idx == base_shard_idx) {
             wlock.lock();
         } else {
-            std::unique_lock tmp_wlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
-            base_wlock = std::move(tmp_wlock);
+            std::shared_lock tmp_rlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
+            base_rlock = std::move(tmp_rlock);
 
             if (shard_idx < base_shard_idx) {
                 wlock.lock();
-                base_wlock.lock();
+                base_rlock.lock();
             } else {
-                base_wlock.lock();
+                base_rlock.lock();
                 wlock.lock();
             }
         }
