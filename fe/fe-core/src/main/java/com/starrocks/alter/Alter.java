@@ -386,7 +386,7 @@ public class Alter {
         String tableName = dbTableName.getTbl();
 
         // this logic is use to adapt mysql syntax, and cannot be executed after adding a write lock
-        // ALTER TABLE test TRUNCATE PARTITION pA;
+        // ALTER TABLE test TRUNCATE PARTITION p1;
         if (currentAlterOps.hasTruncatePartitionOp()) {
             TruncatePartitionClause clause = (TruncatePartitionClause) alterClauses.get(0);
             TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
