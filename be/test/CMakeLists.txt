@@ -47,6 +47,7 @@ set(EXEC_FILES
         ./exec/vectorized/analytor_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
+        ./exec/es/es_scroll_parser_test.cpp
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp

@@ -109,7 +109,7 @@ static Status get_int_value(const rapidjson::Value& col, PrimitiveType type, voi
 
 ScrollParser::ScrollParser(bool doc_value_mode)
         : _tuple_desc(nullptr),
-          _docvalue_context(nullptr),
+          _doc_value_context(nullptr),
           _size(0),
           _cur_line(0),
           _doc_value_mode(doc_value_mode),
@@ -175,7 +175,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
     // TODO: we could fill chunk by column rather than row
     for (size_t i = 0; i < fill_sz; ++i) {
         const rapidjson::Value& obj = _inner_hits_node[_cur_line + i];
-        bool pure_doc_value = _pure_doc_value(obj);
+        bool pure_doc_value = _is_pure_doc_value(obj);
         bool has_source = obj.HasMember(FIELD_SOURCE);
         bool has_fields = obj.HasMember(FIELD_FIELDS);
 
@@ -230,7 +230,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             // if pure_doc_value enabled, docvalue_context must contains the key
             // todo: need move all `pure_docvalue` for every tuple outside fill_tuple
             //  should check pure_docvalue for one table scan not every tuple
-            const char* col_name = pure_doc_value ? _docvalue_context->at(slot_desc->col_name()).c_str()
+            const char* col_name = pure_doc_value ? _doc_value_context->at(slot_desc->col_name()).c_str()
                                                   : slot_desc->col_name().c_str();
 
             auto has_col = line.HasMember(col_name);
@@ -263,10 +263,10 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 void ScrollParser::set_params(const TupleDescriptor* descs,
                               const std::map<std::string, std::string>* docvalue_context) {
     _tuple_desc = descs;
-    _docvalue_context = docvalue_context;
+    _doc_value_context = docvalue_context;
 }
 
-bool ScrollParser::_pure_doc_value(const rapidjson::Value& obj) {
+bool ScrollParser::_is_pure_doc_value(const rapidjson::Value& obj) {
     if (obj.HasMember(FIELD_FIELDS)) {
         return true;
     }
@@ -294,6 +294,11 @@ void ScrollParser::_append_data(Column* column, CppType& value) {
 
 void ScrollParser::_append_null(Column* column) {
     column->append_default();
+}
+
+Status ScrollParser::test_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
+                                                     const rapidjson::Value& col, bool pure_doc_value) {
+    return _append_value_from_json_val(column, type_desc, col, pure_doc_value);
 }
 
 Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
@@ -518,8 +523,9 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 
     // In ElasticSearch, n-dimensional array will be flattened into one-dimensional array.
     // https://www.elastic.co/guide/en/elasticsearch/reference/8.3/array.html
-    // TODO: We should do schema validation in FE.
-    if (!col.IsArray() || child_type.type == TYPE_ARRAY) {
+    // So we do not support user to create nested array column.
+    // TODO: We should prevent user to create nested array column in FE, but we don't do any schema validation now.
+    if (child_type.type == TYPE_ARRAY) {
         std::string str = fmt::format("Invalid array format; Document slice is: {}.", json_value_to_string(col));
         return Status::RuntimeError(str);
     }
@@ -539,11 +545,41 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
     auto* offsets = array->offsets_column().get();
     auto* elements = array->elements_column().get();
 
-    for (auto& item : col.GetArray()) {
-        RETURN_IF_ERROR(_append_value_from_json_val(elements, child_type, item, pure_doc_value));
+    if (pure_doc_value) {
+        RETURN_IF_ERROR(_append_doc_value_array_val(col, child_type, elements));
+    } else {
+        RETURN_IF_ERROR(_append_source_array_val(col, child_type, elements));
     }
+
     size_t new_size = elements->size();
     offsets->append(new_size);
+    return Status::OK();
+}
+
+Status ScrollParser::_append_doc_value_array_val(const rapidjson::Value& col, const TypeDescriptor& child_type_desc,
+                                                 Column* column) {
+    for (auto& item : col.GetArray()) {
+        RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, item, true));
+    }
+    return Status::OK();
+}
+
+Status ScrollParser::_append_source_array_val(const rapidjson::Value& col, const TypeDescriptor& child_type_desc,
+                                              Column* column) {
+    if (col.IsNull()) {
+        // Ignore null item in _source.
+        return Status::OK();
+    }
+
+    if (!col.IsArray()) {
+        // For one item situation, like "1" should be treated as "[1]".
+        RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, col, false));
+        return Status::OK();
+    }
+
+    for (auto& item : col.GetArray()) {
+        RETURN_IF_ERROR(_append_source_array_val(item, child_type_desc, column));
+    }
     return Status::OK();
 }
 
