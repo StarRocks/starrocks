@@ -522,6 +522,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
      */
     @Override
     protected boolean cancelImpl(String errMsg) {
+        if (jobState.isFinalState()) {
+            return false;
+        }
         //colocate mv
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
@@ -529,17 +532,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             try {
                 OlapTable table = (OlapTable) db.getTable(tableId);
                 if (table != null) {
-                    if (jobState == JobState.CANCELLED) {
-                        table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
-                    }
+                    table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
                 }
             } finally {
                 db.writeUnlock();
             }
-        }
-
-        if (jobState.isFinalState()) {
-            return false;
         }
 
         cancelInternal();
