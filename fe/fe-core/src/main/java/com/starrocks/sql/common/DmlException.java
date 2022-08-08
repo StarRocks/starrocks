@@ -1,13 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.common;
 
+import static java.lang.String.format;
+
 public class DmlException extends RuntimeException {
     public DmlException(String message) {
         super(message);
     }
 
-    public DmlException(String message, Throwable cause) {
-        super(message, cause);
+    public DmlException(String formatString, Object... args) {
+        super(format(formatString, args));
+    }
+
+    public DmlException(String formatString, Throwable cause, Object... args) {
+        super(format(formatString, args), cause);
     }
 
     @Override

@@ -2,6 +2,8 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DmlStmt;
+import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -23,8 +25,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -33,10 +33,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
-public class MvTaskRunProcessorTest {
-
-    private static final Logger LOG = LogManager.getLogger(MvTaskRunProcessorTest.class);
+public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -97,6 +96,26 @@ public class MvTaskRunProcessorTest {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+                    if (tableName.getTbl().equals("tbl1")) {
+                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+                        for (Partition partition : tbl1.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    } else if (tableName.getTbl().equals("tbl2")) {
+                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl2"));
+                        for (Partition partition : tbl1.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
             }
         };
         Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
@@ -137,14 +156,23 @@ public class MvTaskRunProcessorTest {
             Assert.assertEquals(5, partitions.size());
             // base table partition insert data
             testBaseTablePartitionInsertData(testDb, materializedView, taskRun);
+
             // base table partition rename
-            testBaseTablePartitionRename(testDb, materializedView, taskRun);
+            testBaseTablePartitionRenameWhileSync(testDb, materializedView, taskRun);
+            testBaseTablePartitionRenameWhileInsert(testDb, materializedView, taskRun);
+
             // base table partition replace
             testBaseTablePartitionReplace(testDb, materializedView, taskRun);
+
             // base table add partition
-            testBaseTableAddPartition(testDb, materializedView, taskRun);
+            testBaseTableAddPartitionWhileSync(testDb, materializedView, taskRun);
+            testBaseTableAddPartitionWhileRefresh(testDb, materializedView, taskRun);
+
             // base table drop partition
-            testBaseTableDropPartition(testDb, materializedView, taskRun);
+            testBaseTableDropPartitionWhileSync(testDb, materializedView, taskRun);
+            testBaseTableDropPartitionWhileRefresh(testDb, materializedView, taskRun);
+
+            testRefreshWithFailure(testDb, materializedView, taskRun);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -169,49 +197,59 @@ public class MvTaskRunProcessorTest {
 
     private void testBaseTablePartitionInsertData(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
-        // mv need refresh with base table partition p0, p0 insert data after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
-        Map<Long, OlapTable> olapTables = Maps.newHashMap();
-        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
-            @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
-                Set<Long> baseTableIds = materializedView.getBaseTableIds();
-                database.readLock();
-                try {
-                    for (Long baseTableId : baseTableIds) {
-                        OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                        if (olapTable == null) {
-                            throw new SemanticException("Materialized view base table: " + baseTableId + " not exist.");
-                        }
-                        OlapTable copied = new OlapTable();
-                        if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
-                            throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
-                        }
-                        olapTables.put(olapTable.getId(), copied);
-                    }
-                } finally {
-                    database.readUnlock();
-                }
-                setPartitionVersion(olapTables.get(tbl1.getId()).getPartition("p0"), 2);
-                return olapTables;
-            }
-        };
-        // change partition and replica versions
-        setPartitionVersion(tbl1.getPartition("p0"), 3);
         taskRun.executeTaskRun();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         MaterializedView.BasePartitionInfo basePartitionInfo = baseTableVisibleVersionMap.get(tbl1.getId()).get("p0");
-        Assert.assertEquals(3, basePartitionInfo.getVersion());
+        Assert.assertEquals(1, basePartitionInfo.getVersion());
+        // insert new data into tbl1's p0 partition
+        // update base table tbl1's p0 version to 2
+        String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        taskRun.executeTaskRun();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap2 =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        MaterializedView.BasePartitionInfo newP0PartitionInfo = baseTableVisibleVersionMap2.get(tbl1.getId()).get("p0");
+        Assert.assertEquals(2, newP0PartitionInfo.getVersion());
+
+        MaterializedView.BasePartitionInfo p1PartitionInfo = baseTableVisibleVersionMap2.get(tbl1.getId()).get("p1");
+        Assert.assertEquals(1, p1PartitionInfo.getVersion());
     }
 
-    public void testBaseTablePartitionRename(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+    private void testRefreshWithFailure(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+            throws Exception {
+        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        // insert new data into tbl1's p0 partition
+        // update base table tbl1's p0 version to 3
+        String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+            @Mock
+            public void processTaskRun(TaskRunContext context) throws Exception {
+                throw new RuntimeException("new exception");
+            }
+        };
+        try {
+            taskRun.executeTaskRun();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap2 =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        MaterializedView.BasePartitionInfo newP0PartitionInfo = baseTableVisibleVersionMap2.get(tbl1.getId()).get("p0");
+        Assert.assertEquals(3, newP0PartitionInfo.getVersion());
+    }
+
+    public void testBaseTablePartitionRenameWhileSync(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p1, p1 renamed with p10 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
                 Set<Long> baseTableIds = materializedView.getBaseTableIds();
                 database.readLock();
@@ -232,6 +270,7 @@ public class MvTaskRunProcessorTest {
                 }
                 String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p1 p1_1";
                 try {
+                    // will fail when retry in second times
                     new StmtExecutor(connectContext, renamePartitionSql).execute();
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -239,23 +278,54 @@ public class MvTaskRunProcessorTest {
                 return olapTables;
             }
         };
-        // change partition and replica versions
-        setPartitionVersion(tbl1.getPartition("p1"), 2);
-        try {
-            taskRun.executeTaskRun();
-            Assert.fail("should not be here. testBaseTablePartitionRename will throw exception");
-        } catch (SemanticException e) {
-            Assert.assertEquals(
-                    "Refresh materialized view failed: Base table: " + tbl1.getId() +
-                            " partition: p1 can not find", e.getMessage());
-        } finally {
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-            MaterializedView.BasePartitionInfo p1BasePartitionInfo =
-                    baseTableVisibleVersionMap.get(tbl1.getId()).get("p1");
-            Assert.assertEquals(1, p1BasePartitionInfo.getVersion());
-            Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p1_1"));
-        }
+        // insert new data into tbl1's p1 partition
+        // update base table tbl1's p1 version to 2
+        String insertSql = "insert into tbl1 partition(p1) values('2022-01-01', 2, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        taskRun.executeTaskRun();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        MaterializedView.BasePartitionInfo p1BasePartitionInfo =
+                baseTableVisibleVersionMap.get(tbl1.getId()).get("p1_1");
+        Assert.assertEquals(2, p1BasePartitionInfo.getVersion());
+        Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p1"));
+    }
+
+    public void testBaseTablePartitionRenameWhileInsert(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+            throws Exception {
+        // mv need refresh with base table partition p1, p1 renamed with p10 after collect and before insert overwrite
+        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+            @Mock
+            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                // rename
+                String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p2 p2_1";
+                try {
+                    // will fail when retry in second times
+                    new StmtExecutor(connectContext, renamePartitionSql).execute();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                ConnectContext ctx = mvContext.getCtx();
+                StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
+                ctx.setExecutor(executor);
+                ctx.setThreadLocalInfo();
+                ctx.setStmtId(new AtomicInteger().incrementAndGet());
+                ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+                executor.handleDMLStmt(execPlan, insertStmt);
+            }
+        };
+        // insert new data into tbl1's p2 partition
+        String insertSql = "insert into tbl1 values('2022-02-01', 2, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        taskRun.executeTaskRun();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        MaterializedView.BasePartitionInfo p2BasePartitionInfo =
+                baseTableVisibleVersionMap.get(tbl1.getId()).get("p2");
+        Assert.assertEquals(2, p2BasePartitionInfo.getVersion());
+        Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p2_1"));
     }
 
     private void testBaseTablePartitionReplace(Database testDb, MaterializedView materializedView, TaskRun taskRun)
@@ -283,7 +353,7 @@ public class MvTaskRunProcessorTest {
                 } finally {
                     database.readUnlock();
                 }
-                String replacePartitionSql = "ALTER TABLE test.tbl1 REPLACE PARTITION (p2) WITH TEMPORARY PARTITION (tp2)\n" +
+                String replacePartitionSql = "ALTER TABLE test.tbl1 REPLACE PARTITION (p3) WITH TEMPORARY PARTITION (tp3)\n" +
                         "PROPERTIES (\n" +
                         "    \"strict_range\" = \"false\",\n" +
                         "    \"use_temp_partition_name\" = \"false\"\n" +
@@ -297,20 +367,19 @@ public class MvTaskRunProcessorTest {
             }
         };
         // change partition and replica versions
-        Partition partition = tbl1.getPartition("p2");
-        setPartitionVersion(partition, 2);
+        Partition partition = tbl1.getPartition("p3");
         String createTempPartitionSql =
-                "ALTER TABLE test.tbl1 ADD TEMPORARY PARTITION tp2 values [('2022-02-01'),('2022-03-01'))";
+                "ALTER TABLE test.tbl1 ADD TEMPORARY PARTITION tp3 values [('2022-03-01'),('2022-04-01'))";
         new StmtExecutor(connectContext, createTempPartitionSql).execute();
         taskRun.executeTaskRun();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        MaterializedView.BasePartitionInfo basePartitionInfo = baseTableVisibleVersionMap.get(tbl1.getId()).get("p2");
+        MaterializedView.BasePartitionInfo basePartitionInfo = baseTableVisibleVersionMap.get(tbl1.getId()).get("p3");
         Assert.assertNotEquals(partition.getId(), basePartitionInfo.getId());
         Assert.assertNotEquals(partition.getVisibleVersion(), basePartitionInfo.getVersion());
     }
 
-    public void testBaseTableAddPartition(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+    public void testBaseTableAddPartitionWhileSync(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
@@ -344,22 +413,60 @@ public class MvTaskRunProcessorTest {
                 return olapTables;
             }
         };
-        // change partition and replica versions
-        setPartitionVersion(tbl1.getPartition("p3"),2);
+
+        // insert new data into tbl1's p3 partition
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 2, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
         taskRun.executeTaskRun();
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assert.assertEquals(2, baseTableVisibleVersionMap.get(tbl1.getId()).get("p3").getVersion());
-        Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p99"));
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p99"));
+        Assert.assertEquals(1, baseTableVisibleVersionMap.get(tbl1.getId()).get("p99").getVersion());
     }
 
-    public void testBaseTableDropPartition(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+    public void testBaseTableAddPartitionWhileRefresh(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+            throws Exception {
+        // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
+        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+            @Mock
+            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p100 VALUES [('9999-04-01'),('9999-05-01'))";
+                try {
+                    new StmtExecutor(connectContext, addPartitionSql).execute();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                ConnectContext ctx = mvContext.getCtx();
+                StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
+                ctx.setExecutor(executor);
+                ctx.setThreadLocalInfo();
+                ctx.setStmtId(new AtomicInteger().incrementAndGet());
+                ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+                executor.handleDMLStmt(execPlan, insertStmt);
+            }
+        };
+
+        // insert new data into tbl1's p3 partition
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+
+        taskRun.executeTaskRun();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p3").getVersion());
+        Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p100"));
+    }
+
+    public void testBaseTableDropPartitionWhileSync(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p4, drop partition p4 after collect and before insert overwrite
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
                 Set<Long> baseTableIds = materializedView.getBaseTableIds();
                 database.readLock();
@@ -387,19 +494,51 @@ public class MvTaskRunProcessorTest {
                 return olapTables;
             }
         };
-        // change partition and replica versions
-        setPartitionVersion(tbl1.getPartition("p4"),2);
-        try {
-            taskRun.executeTaskRun();
-            Assert.fail("should not be here. testBaseTableDropPartition will throw exception");
-        } catch (SemanticException e) {
-            Assert.assertEquals(
-                    "Refresh materialized view failed: Base table: " + tbl1.getId() +
-                            " partition: p4 can not find", e.getMessage());
-        }
+
+        // insert new data into tbl1's p3 partition
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        taskRun.executeTaskRun();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p4"));
     }
 
-    private void setPartitionVersion(Partition partition, long version){
+    public void testBaseTableDropPartitionWhileRefresh(Database testDb, MaterializedView materializedView, TaskRun taskRun)
+            throws Exception {
+        // drop partition p4 after collect and before insert overwrite
+        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+        new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
+            @Mock
+            public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p100";
+                try {
+                    new StmtExecutor(connectContext, dropPartitionSql).execute();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                ConnectContext ctx = mvContext.getCtx();
+                StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
+                ctx.setExecutor(executor);
+                ctx.setThreadLocalInfo();
+                ctx.setStmtId(new AtomicInteger().incrementAndGet());
+                ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+                executor.handleDMLStmt(execPlan, insertStmt);
+            }
+        };
+
+        // insert new data into tbl1's p3 partition
+        String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        taskRun.executeTaskRun();
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+                materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Assert.assertNotNull(baseTableVisibleVersionMap.get(tbl1.getId()).get("p100"));
+        Assert.assertEquals(1, baseTableVisibleVersionMap.get(tbl1.getId()).get("p100").getVersion());
+    }
+
+    private void setPartitionVersion(Partition partition, long version) {
         partition.setVisibleVersion(version, System.currentTimeMillis());
         MaterializedIndex baseIndex = partition.getBaseIndex();
         List<Tablet> tablets = baseIndex.getTablets();

@@ -160,31 +160,34 @@ public class SyncPartitionUtils {
     }
 
     public static void calcPotentialRefreshPartition(Set<String> needRefreshMvPartitionNames,
-                                                      Set<String> baseChangedPartitionNames,
-                                                      Map<String, Set<String>> baseToMvNameRef,
-                                                      Map<String, Set<String>> mvToBaseNameRef) {
-        int curNameCount = needRefreshMvPartitionNames.size();
-        int updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
-                needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
-        while (curNameCount != updatedCount) {
-            curNameCount = updatedCount;
-            updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
-                    needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
-        }
-    }
-    private static int gatherPotentialRefreshPartitionNames(Set<String> baseChangedPartitionNames,
-                                                     Set<String> needRefreshMvPartitionNames,
+                                                     Set<String> baseChangedPartitionNames,
                                                      Map<String, Set<String>> baseToMvNameRef,
                                                      Map<String, Set<String>> mvToBaseNameRef) {
+        gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                baseToMvNameRef, mvToBaseNameRef);
+    }
+
+    private static void gatherPotentialRefreshPartitionNames(Set<String> needRefreshMvPartitionNames,
+                                                             Set<String> baseChangedPartitionNames,
+                                                            Map<String, Set<String>> baseToMvNameRef,
+                                                            Map<String, Set<String>> mvToBaseNameRef) {
+        int curNameCount = needRefreshMvPartitionNames.size();
+        Set<String> newBaseChangedPartitionNames = Sets.newHashSet();
+        Set<String> newNeedRefreshMvPartitionNames = Sets.newHashSet();
         for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
             Set<String> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
-            baseChangedPartitionNames.addAll(baseNames);
+            newBaseChangedPartitionNames.addAll(baseNames);
             for (String baseName : baseNames) {
                 Set<String> mvNames = baseToMvNameRef.get(baseName);
-                needRefreshMvPartitionNames.addAll(mvNames);
+                newNeedRefreshMvPartitionNames.addAll(mvNames);
             }
         }
-        return needRefreshMvPartitionNames.size();
+        baseChangedPartitionNames.addAll(newBaseChangedPartitionNames);
+        needRefreshMvPartitionNames.addAll(newNeedRefreshMvPartitionNames);
+        if (curNameCount != needRefreshMvPartitionNames.size()) {
+            gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                    baseToMvNameRef, mvToBaseNameRef);
+        }
     }
 
     public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,

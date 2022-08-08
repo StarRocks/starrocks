@@ -1202,7 +1202,7 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
         } catch (AnalysisException | NotImplementedException e) {
-            throw new DdlException(e.getMessage());
+            throw new DdlException(e.getMessage(), e);
         } finally {
             db.readUnlock();
         }
@@ -3149,7 +3149,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.setReplicationNum(replicationNum);
             }
         } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+            throw new DdlException(e.getMessage(), e);
         }
         // validate optHints
         Map<String, String> optHints = null;
@@ -3174,9 +3174,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
-            if (hasMedium) {
+            if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
-                // set storage coldown time into table property,
+                // set storage cooldown time into table property,
                 // because we don't have property in MaterializedView
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
