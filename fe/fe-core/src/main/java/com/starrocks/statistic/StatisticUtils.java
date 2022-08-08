@@ -4,17 +4,23 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.SystemInfoService;
 
 import java.time.Clock;
@@ -120,5 +126,74 @@ public class StatisticUtils {
 
     public static boolean isEmptyTable(Table table) {
         return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
+    }
+
+    public static List<ColumnDef> buildStatsColumnDef(String tableName) {
+        ScalarType columnNameType = ScalarType.createVarcharType(65530);
+        ScalarType tableNameType = ScalarType.createVarcharType(65530);
+        ScalarType partitionNameType = ScalarType.createVarcharType(65530);
+        ScalarType dbNameType = ScalarType.createVarcharType(65530);
+        ScalarType maxType = ScalarType.createVarcharType(65530);
+        ScalarType minType = ScalarType.createVarcharType(65530);
+        ScalarType bucketsType = ScalarType.createVarcharType(65530);
+        ScalarType mostCommonValueType = ScalarType.createVarcharType(65530);
+
+        // varchar type column need call setAssignedStrLenInColDefinition here,
+        // otherwise it will be set length to 1 at analyze
+        columnNameType.setAssignedStrLenInColDefinition();
+        tableNameType.setAssignedStrLenInColDefinition();
+        partitionNameType.setAssignedStrLenInColDefinition();
+        dbNameType.setAssignedStrLenInColDefinition();
+        maxType.setAssignedStrLenInColDefinition();
+        minType.setAssignedStrLenInColDefinition();
+        bucketsType.setAssignedStrLenInColDefinition();
+        mostCommonValueType.setAssignedStrLenInColDefinition();
+
+        if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("db_name", new TypeDef(dbNameType)),
+                    new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("distinct_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("max", new TypeDef(maxType)),
+                    new ColumnDef("min", new TypeDef(minType)),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("partition_name", new TypeDef(partitionNameType)),
+                    new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),
+                    new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("max", new TypeDef(maxType)),
+                    new ColumnDef("min", new TypeDef(minType)),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("column_name", new TypeDef(columnNameType)),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else {
+            throw new StarRocksPlannerException("Not support stats table " + tableName, ErrorType.INTERNAL_ERROR);
+        }
     }
 }
