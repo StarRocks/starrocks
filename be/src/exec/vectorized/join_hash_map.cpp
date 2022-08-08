@@ -469,25 +469,6 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
 }
 
 void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
-    if (_hash_map_type == JoinHashMapType::empty) {
-        switch (_table_items->join_type) {
-        case TJoinOp::LEFT_OUTER_JOIN:
-        case TJoinOp::LEFT_ANTI_JOIN:
-        case TJoinOp::FULL_OUTER_JOIN:
-        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN: {
-            size_t row_count = filter->size();
-            for (size_t i = 0; i < row_count; i++) {
-                (*filter)[i] = 1;
-            }
-            break;
-        }
-        default:
-            break;
-        }
-        return;
-    }
-
-    DCHECK_LT(0, _table_items->row_count);
     switch (_table_items->join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
         _remove_duplicate_index_for_left_outer_join(filter);
