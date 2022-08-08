@@ -1056,8 +1056,8 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
     size_t match_count = 0;
 
     size_t probe_row_count = _probe_state->probe_row_count;
-    DCHECK_LT(0, _table_items->row_count);
-    if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr) {
+    if (_table_items->join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _probe_state->null_array != nullptr &&
+        _table_items->row_count != 0) {
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
             size_t index = _probe_state->next[i];
