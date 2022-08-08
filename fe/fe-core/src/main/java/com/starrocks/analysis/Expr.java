@@ -261,6 +261,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public boolean isFilter() {
         return isFilter;
     }
+
     public boolean isAuxExpr() {
         return isAuxExpr;
     }
@@ -618,6 +619,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public String toJDBCSQL(boolean isMySQL) {
         return toSql();
     }
+
     /**
      * Return a column label for the expression
      */

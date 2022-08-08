@@ -12,6 +12,8 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
@@ -26,6 +28,7 @@ import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
@@ -94,6 +97,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -547,6 +551,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         LogicalPlan leftPlan = visit(node.getLeft());
         LogicalPlan rightPlan = visit(node.getRight());
+        OptExprBuilder leftOpt = leftPlan.getRootBuilder();
+        OptExprBuilder rightOpt = rightPlan.getRootBuilder();
 
         // The scope needs to be rebuilt here, because the scope of Semi/Anti Join
         // only has a child field. Bug on predicate needs to see the two child field
@@ -554,15 +560,15 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields()));
         joinScope.setParent(node.getScope().getParent());
         ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
-                        leftPlan.getRootBuilder().getFieldMappings().stream(),
-                        rightPlan.getRootBuilder().getFieldMappings().stream())
+                        leftOpt.getFieldMappings().stream(),
+                        rightOpt.getFieldMappings().stream())
                 .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
             OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
                     .setJoinType(JoinOperator.CROSS_JOIN)
                     .setJoinHint(node.getJoinHint())
-                    .build(), Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
+                    .build(), Lists.newArrayList(leftOpt, rightOpt),
                     expressionMapping);
 
             LogicalProjectOperator projectOperator =
@@ -571,6 +577,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
                     expressionMapping.getFieldMappings(), null);
         }
+
+        Pair<OptExprBuilder, OptExprBuilder> pair = processOnClauseSubquery(node, leftOpt, rightOpt, expressionMapping);
+        leftOpt = pair.first;
+        rightOpt = pair.second;
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
                 .translateWithoutRewrite(node.getOnPredicate(), expressionMapping);
@@ -598,14 +608,14 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         ExpressionMapping outputExpressionMapping;
         if (node.getJoinOp().isLeftSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
-                    Lists.newArrayList(leftPlan.getRootBuilder().getFieldMappings()));
+                    Lists.newArrayList(leftOpt.getFieldMappings()));
         } else if (node.getJoinOp().isRightSemiAntiJoin()) {
             outputExpressionMapping = new ExpressionMapping(node.getScope(),
-                    Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
+                    Lists.newArrayList(rightOpt.getFieldMappings()));
         } else {
             outputExpressionMapping = new ExpressionMapping(node.getScope(), Streams.concat(
-                            leftPlan.getRootBuilder().getFieldMappings().stream(),
-                            rightPlan.getRootBuilder().getFieldMappings().stream())
+                            leftOpt.getFieldMappings().stream(),
+                            rightOpt.getFieldMappings().stream())
                     .collect(Collectors.toList()));
         }
 
@@ -617,7 +627,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
         OptExprBuilder joinOptExprBuilder =
                 new OptExprBuilder(joinOperator,
-                        Lists.newArrayList(leftPlan.getRootBuilder(), rightPlan.getRootBuilder()),
+                        Lists.newArrayList(leftOpt, rightOpt),
                         outputExpressionMapping);
         LogicalProjectOperator projectOperator =
                 new LogicalProjectOperator(outputExpressionMapping.getFieldMappings().stream().distinct()
@@ -662,5 +672,109 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
                 null, null);
+    }
+
+    private Pair<OptExprBuilder, OptExprBuilder> processOnClauseSubquery(JoinRelation node, OptExprBuilder leftOpt,
+                                                                         OptExprBuilder rightOpt,
+                                                                         ExpressionMapping expressionMapping) {
+        Subquery subquery = node.getOnPredicate().getSubquery();
+        if (subquery == null) {
+            return Pair.create(leftOpt, rightOpt);
+        }
+        QueryStatement subqueryStmt = subquery.getQueryStatement();
+        SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
+        RelationId subqueryRelationId = selectRelation.getRelation().getScope().getRelationId();
+        List<FieldId> correlatedFieldIds = selectRelation.getColumnReferences().values().stream()
+                .filter(field -> !Objects.equals(subqueryRelationId, field.getRelationId()))
+                .collect(Collectors.toList());
+
+        /*
+         * Apply comprises two children, R and E(r) respectively
+         *         ApplyOperator
+         *       /              \
+         *   Outer:R        Inner: E(r)
+         * Since join node has two relation, we should to determine which one(left or right or both)
+         * is the outer relation of ApplyOperator
+         * kind == LEFT, then the left relation of join will be the outer relation of apply
+         * kind == RIGHT, then the right relation of join will be the outer relation of apply
+         * TODO, kind == BOTH, both of the left and right relations should be taken into account
+         */
+        final int LEFT = 1;
+        final int RIGHT = 2;
+        final int BOTH = 3;
+        final int kind;
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
+        if (correlatedFieldIds.isEmpty()) {
+            // Find the smallest part of join on predicate that contains the subquery
+            // TODO Utils
+            Expr subqueryConjunct = node.getOnPredicate();
+            while (true) {
+                List<Expr> conjuncts = subqueryConjunct.getConjuncts();
+                if (conjuncts.size() == 1) {
+                    // Cannot be split anymore
+                    break;
+                }
+                Expr prev = subqueryConjunct;
+                for (Expr conjunct : conjuncts) {
+                    if (conjunct.getSubquery() != null) {
+                        // Continue split
+                        subqueryConjunct = conjunct;
+                        break;
+                    }
+                }
+                Preconditions.checkState(subqueryConjunct != prev);
+            }
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            subqueryConjunct.collect(SlotRef.class, slotRefs);
+            RelationFields leftRelationFields = node.getLeft().getRelationFields();
+            RelationFields rightRelationFields = node.getRight().getRelationFields();
+            boolean leftContainsJoinOnSlotRef =
+                    slotRefs.stream().anyMatch(slotRef -> !leftRelationFields.resolveFields(slotRef).isEmpty());
+            boolean rightContainsJoinOnSlotRef =
+                    slotRefs.stream().anyMatch(slotRef -> !rightRelationFields.resolveFields(slotRef).isEmpty());
+
+            Preconditions.checkState(!(leftContainsJoinOnSlotRef && rightContainsJoinOnSlotRef),
+                    "Not support ON Clause un-correlated subquery referencing columns of two or more tables");
+            if (leftContainsJoinOnSlotRef) {
+                kind = LEFT;
+            } else {
+                kind = RIGHT;
+            }
+        } else {
+            boolean isJoinLeftCorrelated = false;
+            boolean isJoinRightCorrelated = false;
+            for (FieldId correlatedFieldId : correlatedFieldIds) {
+                Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
+                if (node.getLeft().getRelationFields().getAllFields().contains(field)) {
+                    isJoinLeftCorrelated = true;
+                }
+                if (node.getRight().getRelationFields().getAllFields().contains(field)) {
+                    isJoinRightCorrelated = true;
+                }
+            }
+            Preconditions.checkState(isJoinLeftCorrelated || isJoinRightCorrelated);
+            Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightCorrelated),
+                    "Not support ON Clause correlated subquery referencing columns of two or more tables");
+            if (isJoinLeftCorrelated) {
+                kind = LEFT;
+            } else {
+                kind = RIGHT;
+            }
+        }
+        OptExprBuilder newLeftOpt = leftOpt;
+        OptExprBuilder newRightOpt = rightOpt;
+        if (kind == LEFT) {
+            newLeftOpt = subqueryTransformer.handleSubqueries(columnRefFactory, leftOpt,
+                    node.getOnPredicate(), cteContext);
+            node.setOnPredicate(subqueryTransformer.rewriteJoinOnPredicate(node.getOnPredicate()));
+            expressionMapping.putAll(newLeftOpt.getExpressionMapping());
+        } else {
+            Preconditions.checkState(kind == RIGHT);
+            newRightOpt = subqueryTransformer.handleSubqueries(columnRefFactory, rightOpt,
+                    node.getOnPredicate(), cteContext);
+            node.setOnPredicate(subqueryTransformer.rewriteJoinOnPredicate(node.getOnPredicate()));
+            expressionMapping.putAll(newRightOpt.getExpressionMapping());
+        }
+        return Pair.create(newLeftOpt, newRightOpt);
     }
 }

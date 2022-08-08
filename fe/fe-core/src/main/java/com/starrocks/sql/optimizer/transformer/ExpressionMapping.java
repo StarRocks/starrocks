@@ -104,6 +104,12 @@ public class ExpressionMapping {
         expressionToColumns.put(expression, variable);
     }
 
+    public void putAll(ExpressionMapping other) {
+        for (Map.Entry<Expr, ColumnRefOperator> entry : other.expressionToColumns.entrySet()) {
+            put(entry.getKey(), entry.getValue());
+        }
+    }
+
     public boolean hasExpression(Expr expr) {
         return expressionToColumns.containsKey(expr);
     }
