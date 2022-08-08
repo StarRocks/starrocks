@@ -344,7 +344,7 @@ ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
     } else {
         size_t required_rows = std::min(size, reserved_rows);
         ChunkPtr res = chunk->clone_empty(required_rows);
-        res->append(*chunk, range.first + skipped_rows, reserved_rows);
+        res->append(*chunk, range.first + skipped_rows, required_rows);
         range.first += skipped_rows + required_rows;
         return res;
     }
