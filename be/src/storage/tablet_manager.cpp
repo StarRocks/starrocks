@@ -1034,7 +1034,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
         VLOG(3) << "begin to create init version. version=" << version;
         RowsetSharedPtr new_rowset;
         do {
-            RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+            RowsetWriterContext context;
             context.rowset_id = StorageEngine::instance()->next_rowset_id();
             context.tablet_uid = tablet->tablet_uid();
             context.tablet_id = tablet->tablet_id();

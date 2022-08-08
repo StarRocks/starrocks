@@ -280,7 +280,7 @@ TEST_F(RowsetTest, FinalMergeTest) {
     RowsetSharedPtr rowset;
     const uint32_t rows_per_segment = 1024;
 
-    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    RowsetWriterContext writer_context;
     create_rowset_writer_context(&tablet_schema, &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
 
@@ -374,7 +374,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     RowsetSharedPtr rowset;
     const uint32_t rows_per_segment = 1024;
     config::vertical_compaction_max_columns_per_group = 1;
-    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    RowsetWriterContext writer_context;
     create_rowset_writer_context(&tablet->tablet_schema(), &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
 
@@ -549,7 +549,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     auto tablet = create_tablet(12345, 1111);
     const uint32_t rows_per_segment = 1024;
     config::vertical_compaction_max_columns_per_group = 1;
-    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    RowsetWriterContext writer_context;
     std::vector<int32_t> column_indexes = {0, 1, 2, 3};
     std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
     create_partial_rowset_writer_context(column_indexes, partial_schema, &writer_context);
@@ -615,7 +615,7 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     TabletSchema tablet_schema;
     create_tablet_schema(&tablet_schema);
 
-    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    RowsetWriterContext writer_context;
     create_rowset_writer_context(&tablet_schema, &writer_context);
     writer_context.max_rows_per_segment = 5000;
     writer_context.writer_type = kVertical;

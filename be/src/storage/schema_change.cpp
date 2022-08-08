@@ -1500,7 +1500,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
 
         TabletSharedPtr new_tablet = sc_params.new_tablet;
         TabletSharedPtr base_tablet = sc_params.base_tablet;
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.tablet_uid = new_tablet->tablet_uid();
         writer_context.tablet_id = new_tablet->tablet_id();
