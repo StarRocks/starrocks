@@ -26,7 +26,7 @@ Status GroupReader::init(const GroupReaderParam& param) {
     _param = param;
     // the calling order matters, do not change unless you know why.
     RETURN_IF_ERROR(_init_column_readers());
-    _pre_process_columns_and_conjunct_ctxs();
+    _process_columns_and_conjunct_ctxs();
     RETURN_IF_ERROR(_rewrite_dict_column_predicates());
     _init_read_chunk();
     return Status::OK();
@@ -78,7 +78,28 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
     return status;
 }
 
+void GroupReader::close() {
+    // to release memory ASAP.
+    _sb_stream->release();
+    _column_readers.clear();
+}
+
 Status GroupReader::_init_column_readers() {
+    _sb_stream = _obj_pool.add(new SharedBufferedInputStream(_file));
+
+    ColumnReaderOptions& opts = _column_reader_opts;
+    opts.timezone = _param.timezone;
+    opts.chunk_size = _chunk_size;
+    opts.stats = _param.stats;
+    opts.sb_stream = _sb_stream;
+    opts.file = _file;
+    opts.row_group_meta = _row_group_metadata.get();
+    opts.use_sb_stream = config::parquet_coalesce_read_enable;
+
+    if (opts.use_sb_stream) {
+        RETURN_IF_ERROR(_set_io_ranges());
+    }
+
     for (const auto& column : _param.read_cols) {
         RETURN_IF_ERROR(_create_column_reader(column));
     }
@@ -88,20 +109,16 @@ Status GroupReader::_init_column_readers() {
 Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
-
-    ColumnReaderOptions opts;
-    opts.stats = _param.stats;
-    opts.timezone = _param.timezone;
     {
         SCOPED_RAW_TIMER(&_param.stats->column_reader_init_ns);
-        RETURN_IF_ERROR(ColumnReader::create(_file, schema_node, *_row_group_metadata, column.col_type_in_chunk, opts,
-                                             _chunk_size, &column_reader));
+        RETURN_IF_ERROR(
+                ColumnReader::create(_column_reader_opts, schema_node, column.col_type_in_chunk, &column_reader));
     }
     _column_readers[column.slot_id] = std::move(column_reader);
     return Status::OK();
 }
 
-void GroupReader::_pre_process_columns_and_conjunct_ctxs() {
+void GroupReader::_process_columns_and_conjunct_ctxs() {
     const auto& conjunct_ctxs_by_slot = _param.conjunct_ctxs_by_slot;
     const auto& slots = _param.tuple_desc->slots();
     for (const auto& column : _param.read_cols) {
@@ -121,6 +138,25 @@ void GroupReader::_pre_process_columns_and_conjunct_ctxs() {
             }
         }
     }
+}
+
+Status GroupReader::_set_io_ranges() {
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+
+    for (const auto& column : _param.read_cols) {
+        auto& rg = _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
+        int64_t offset = 0;
+        if (rg.__isset.dictionary_page_offset) {
+            offset = rg.dictionary_page_offset;
+        } else {
+            offset = rg.data_page_offset;
+        }
+        int64_t size = rg.total_compressed_size;
+        auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        ranges.emplace_back(r);
+    }
+
+    return _sb_stream->set_io_ranges(ranges);
 }
 
 bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& conjunct_ctxs_by_slot,

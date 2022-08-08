@@ -59,7 +59,7 @@ TEST(CompactionUtilsTest, test_get_segment_max_rows) {
     segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
     ASSERT_EQ(2147483647, segment_max_rows);
 
-    max_segment_file_size = 1LL << 63;
+    max_segment_file_size = std::numeric_limits<int64_t>::max();
     segment_max_rows = CompactionUtils::get_segment_max_rows(max_segment_file_size, 0, 0);
     ASSERT_EQ(2147483647, segment_max_rows);
 

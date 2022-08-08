@@ -2,9 +2,8 @@
 
 #include "formats/parquet/stored_column_reader.h"
 
-#include <memory>
-
 #include "column/column.h"
+#include "column_reader.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/types.h"
 #include "util/runtime_profile.h"
@@ -13,18 +12,14 @@ namespace starrocks::parquet {
 
 class RepeatedStoredColumnReader : public StoredColumnReader {
 public:
-    RepeatedStoredColumnReader(const StoredColumnReaderOptions& opts) : _opts(opts) {}
+    RepeatedStoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~RepeatedStoredColumnReader() override = default;
 
-    Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                RandomAccessFile* file) {
+    Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
-
-        ColumnChunkReaderOptions opts;
-        opts.stats = _opts.stats;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
-                                                      _field->type_length, chunk_metadata, file, opts);
-        RETURN_IF_ERROR(_reader->init(chunk_size));
+                                                      _field->type_length, chunk_metadata, _opts);
+        RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
@@ -48,7 +43,7 @@ private:
     void _delimit_rows(size_t* num_rows, size_t* num_levels_parsed);
 
 private:
-    StoredColumnReaderOptions _opts;
+    const ColumnReaderOptions& _opts;
 
     const ParquetField* _field = nullptr;
 
@@ -68,19 +63,15 @@ private:
 
 class OptionalStoredColumnReader : public StoredColumnReader {
 public:
-    OptionalStoredColumnReader(const StoredColumnReaderOptions& opts) : _opts(opts) {}
+    OptionalStoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
 
     ~OptionalStoredColumnReader() override = default;
 
-    Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                RandomAccessFile* file) {
+    Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
-
-        ColumnChunkReaderOptions opts;
-        opts.stats = _opts.stats;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
-                                                      _field->type_length, chunk_metadata, file, opts);
-        RETURN_IF_ERROR(_reader->init(chunk_size));
+                                                      _field->type_length, chunk_metadata, _opts);
+        RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
@@ -114,7 +105,7 @@ private:
     Status _read_records_only(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst);
     Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst);
 
-    StoredColumnReaderOptions _opts;
+    const ColumnReaderOptions& _opts;
     const ParquetField* _field = nullptr;
 
     // When the flag is false, the information of levels does not need to be materialized,
@@ -135,18 +126,14 @@ private:
 
 class RequiredStoredColumnReader : public StoredColumnReader {
 public:
-    RequiredStoredColumnReader(const StoredColumnReaderOptions& opts) : _opts(opts) {}
+    RequiredStoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~RequiredStoredColumnReader() override = default;
 
-    Status init(int chunk_size, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
-                RandomAccessFile* file) {
+    Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
-
-        ColumnChunkReaderOptions opts;
-        opts.stats = _opts.stats;
         _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
-                                                      _field->type_length, chunk_metadata, file, opts);
-        RETURN_IF_ERROR(_reader->init(chunk_size));
+                                                      _field->type_length, chunk_metadata, _opts);
+        RETURN_IF_ERROR(_reader->init(_opts.chunk_size));
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
     }
@@ -168,7 +155,7 @@ private:
     // TODO(zc): No need copy
     const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
-    StoredColumnReaderOptions _opts;
+    const ColumnReaderOptions& _opts;
     size_t _num_values_left_in_cur_page = 0;
 };
 
@@ -498,20 +485,20 @@ Status RequiredStoredColumnReader::_next_page() {
     return Status::OK();
 }
 
-Status StoredColumnReader::create(RandomAccessFile* file, const ParquetField* field,
-                                  const tparquet::ColumnChunk* chunk_metadata, const StoredColumnReaderOptions& opts,
-                                  int chunk_size, std::unique_ptr<StoredColumnReader>* out) {
+Status StoredColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field,
+                                  const tparquet::ColumnChunk* chunk_metadata,
+                                  std::unique_ptr<StoredColumnReader>* out) {
     if (field->max_rep_level() > 0) {
         std::unique_ptr<RepeatedStoredColumnReader> reader(new RepeatedStoredColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(chunk_size, field, chunk_metadata, file));
+        RETURN_IF_ERROR(reader->init(field, chunk_metadata));
         *out = std::move(reader);
     } else if (field->max_def_level() > 0) {
         std::unique_ptr<OptionalStoredColumnReader> reader(new OptionalStoredColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(chunk_size, field, chunk_metadata, file));
+        RETURN_IF_ERROR(reader->init(field, chunk_metadata));
         *out = std::move(reader);
     } else {
         std::unique_ptr<RequiredStoredColumnReader> reader(new RequiredStoredColumnReader(opts));
-        RETURN_IF_ERROR(reader->init(chunk_size, field, chunk_metadata, file));
+        RETURN_IF_ERROR(reader->init(field, chunk_metadata));
         *out = std::move(reader);
     }
     return Status::OK();
