@@ -37,6 +37,7 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/merge_iterator.h"
+#include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
@@ -59,23 +60,13 @@ BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
 Status BetaRowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
              _context.tablet_schema->contains_format_v2_column()));
-    auto real_data_format = _context.storage_format_version;
-    auto tablet_format = real_data_format;
-    if (_context.tablet_schema->contains_format_v1_column()) {
-        tablet_format = kDataFormatV1;
-    } else if (_context.tablet_schema->contains_format_v2_column()) {
-        tablet_format = kDataFormatV2;
-    }
-
-    // StarRocks is built on earlier work on Apache Doris and is compatible with its data format but
-    // has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
+    // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
     // When loading data into a tablet created by Apache Doris, the real data format will
     // be different from the tablet schema, so here we create a new schema matched with the
     // real data format to init `SegmentWriter`.
-    if (real_data_format != tablet_format) {
-        _rowset_schema = _context.tablet_schema->convert_to_format(real_data_format);
+    if (_context.tablet_schema->contains_format_v1_column()) {
+        _rowset_schema = _context.tablet_schema->convert_to_format(kDataFormatV2);
     }
-
     _rowset_meta = std::make_shared<RowsetMeta>();
     _rowset_meta->set_rowset_id(_context.rowset_id);
     _rowset_meta->set_partition_id(_context.partition_id);
@@ -93,7 +84,6 @@ Status BetaRowsetWriter::init() {
     }
     _rowset_meta->set_tablet_uid(_context.tablet_uid);
 
-    _writer_options.storage_format_version = _context.storage_format_version;
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
