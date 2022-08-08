@@ -690,9 +690,7 @@ public class AlterTest {
                 ");";
         createTable(createOlapTblStmt);
         String alterStmt = "alter table test." + tableName + " set (\"dynamic_partition.enable\" = \"true\");";
-        String errorMsg = "Table test.no_dynamic_table is not a dynamic partition table. " +
-                "Use command `HELP ALTER TABLE` to see how to change a normal table to a dynamic partition table.";
-        alterTableWithNewParserAndExceptionMsg(alterStmt, errorMsg);
+        alterTableWithNewParserAndExceptionMsg(alterStmt, "Must assign dynamic_partition.time_unit properties");
         // test set dynamic properties in a no dynamic partition table
         String stmt = "alter table test." + tableName + " set (\n" +
                 "'dynamic_partition.enable' = 'true',\n" +
