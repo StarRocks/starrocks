@@ -100,6 +100,7 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
+    bool _case_sensitive = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================
