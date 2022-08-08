@@ -261,6 +261,12 @@ struct THdfsScanRange {
     
     // for iceberg table scanrange should contains the full path of file
     8: optional string full_path
+
+    // delta logs of hudi MOR table
+    9: optional list<string> hudi_logs
+
+    // hudi table type
+    10: optional bool hudi_mor_table
 }
 
 // Specification of an individual data range which is held in its entirety

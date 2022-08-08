@@ -244,6 +244,9 @@ public:
     // how long it stays inside pending queue.
     uint64_t exit_pending_queue();
 
+protected:
+    Status open_random_access_file();
+
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;

@@ -88,6 +88,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -2964,6 +2965,13 @@ public class Coordinator {
                 if (esScanRange != null) {
                     sb.append("{ index=").append(esScanRange.getIndex())
                             .append(", shardid=").append(esScanRange.getShard_id())
+                            .append("}");
+                }
+                THdfsScanRange hdfsScanRange = range.getScan_range().getHdfs_scan_range();
+                if (hdfsScanRange != null) {
+                    sb.append("{relative_path=").append(hdfsScanRange.getRelative_path())
+                            .append(", offset=").append(hdfsScanRange.getOffset())
+                            .append(", length=").append(hdfsScanRange.getLength())
                             .append("}");
                 }
             }
