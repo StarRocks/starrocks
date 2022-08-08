@@ -507,7 +507,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         // colocate mv
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db!=null) {
+        if (db != null) {
             db.writeLock();
             tbl.addTableToColocateGroupIfSet(dbId, rollupIndexName);
             db.writeUnlock();
@@ -526,7 +526,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.writeLock();
-            try{
+            try {
                 OlapTable table = (OlapTable) db.getTable(tableId);
                 if (table != null) {
                     if (jobState == JobState.CANCELLED) {
