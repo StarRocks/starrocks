@@ -691,10 +691,16 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
         ASSERT_GE(expect_num_colums, 3);
         // check probe's output column
         for (int i = 0; i < 3; i++) {
-            auto null_column = result_chunk->columns()[i];
-            auto null_column_data = ColumnHelper::as_raw_column<Int32Column>(null_column)->get_data();
+            Int32Column* column;
+            if (result_chunk->columns()[i]->is_nullable()) {
+                auto data_column =
+                        ColumnHelper::as_raw_column<NullableColumn>(result_chunk->columns()[i])->data_column();
+                column = ColumnHelper::as_raw_column<Int32Column>(data_column);
+            } else {
+                column = ColumnHelper::as_raw_column<Int32Column>(result_chunk->columns()[i]);
+            }
             for (int j = 0; j < expect_num_rows; j++) {
-                ASSERT_EQ(null_column_data[j], i * 10 + j + 1);
+                ASSERT_EQ(column->get_data()[j], i * 10 + j + 1);
             }
         }
         if (expect_num_colums > 3) {
