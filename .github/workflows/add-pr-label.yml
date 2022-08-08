@@ -4,15 +4,28 @@ on:
   pull_request_target:
     types:
       - opened
-    paths:
-      - 'docs/**'
+      - edited
+      - unlabeled
 
 jobs:
   pr-label:
     runs-on: ubuntu-latest
-    steps:  
+    steps: 
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            src:
+              - 'docs/**'
+
       - name: add document label
+        if: steps.changes.outputs.src == 'true'
         uses: actions-ecosystem/action-add-labels@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
+
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: (contains(${{ github.event.pull_request.title }}, 'backport') || contains(${{ github.event.pull_request.title }}, 'cherry-pick')) && contains(github.event.pull_request.labels.*.name, 'conflicts') != 'true'
+        with:
+          labels: automerge
