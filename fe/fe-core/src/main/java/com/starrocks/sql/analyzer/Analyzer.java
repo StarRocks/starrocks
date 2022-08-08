@@ -201,8 +201,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitSetStatement(SetStmt stmt, ConnectContext session) {
-            stmt.analyze();
+        public Void visitSetStatement(SetStmt setStmt, ConnectContext session) {
+            SetStmtAnalyzer.analyze(setStmt, session);
             return null;
         }
 

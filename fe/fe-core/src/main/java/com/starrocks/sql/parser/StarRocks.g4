@@ -799,9 +799,14 @@ setStatement
     ;
 
 setVar
-    : varType? identifier '=' setExprOrDefault
-    | AT identifierOrString '=' expression
-    | AT AT (varType '.')? identifier '=' setExprOrDefault
+    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    | NAMES (charset = identifierOrString | DEFAULT)
+        (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
+    | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
+    | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
+    | varType? identifier '=' setExprOrDefault                                                  #setVariable
+    | AT identifierOrString '=' expression                                                      #setVariable
+    | AT AT (varType '.')? identifier '=' setExprOrDefault                                      #setVariable
     ;
 
 setExprOrDefault
