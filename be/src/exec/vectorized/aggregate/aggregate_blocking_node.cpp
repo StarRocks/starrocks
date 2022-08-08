@@ -174,7 +174,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
     if (agg_node.need_finalize) {
-        // If finalize aggregate with group by clause, then it can be parallelized
+        // If finalize aggregate with group by clause, then it can be paralized
         if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
             if (context->need_local_shuffle(ops_with_sink)) {
                 std::vector<ExprContext*> group_by_expr_ctxs;
