@@ -328,8 +328,8 @@ public:
             } else {
                 for (int i = 0; i < kBatchNums; ++i) {
                     // the index for vgetq_lane_u8 should be a literal integer
-                    // but in ASAN/Debug the loop is unrolled. so we won't call vgetq_lane_u8
-                    // in Debug/ASAN
+                    // but in ASAN/DEBUG the loop is unrolled. so we won't call vgetq_lane_u8
+                    // in ASAN/DEBUG
 #ifndef NDEBUG
                     if (vgetq_lane_u8(filter, i)) {
 #else
