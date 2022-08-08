@@ -13,28 +13,38 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class JDBCScanner {
-    private JDBCScanContext scanContext;
+    private String driverLocation;
     private HikariDataSource dataSource;
+    private JDBCScanContext scanContext;
     private Connection connection;
     private Statement statement;
     private ResultSet resultSet;
     private ResultSetMetaData resultSetMetaData;
     private List<String> resultColumnClassNames;
 
-    public JDBCScanner(JDBCScanContext scanContext) {
+    public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
+        this.driverLocation = driverLocation;
         this.scanContext = scanContext;
     }
 
     public void open() throws Exception {
-        HikariConfig config = new HikariConfig();
-        config.setDriverClassName(scanContext.getDriverClassName());
-        config.setJdbcUrl(scanContext.getJdbcURL());
-        config.setUsername(scanContext.getUser());
-        config.setPassword(scanContext.getPassword());
-        // one connection per query, so just set max pool size to 1
-        config.setMaximumPoolSize(1);
+        final String user = scanContext.getUser();
+        final String pass = scanContext.getPassword();
+        final String url = scanContext.getJdbcURL();
 
-        dataSource = new HikariDataSource(config);
+        dataSource = DataSourceCache.getInstance().getSource(driverLocation, user, pass, url);
+        if (dataSource == null) {
+            // create new datasource
+            HikariConfig config = new HikariConfig();
+            config.setDriverClassName(scanContext.getDriverClassName());
+            config.setJdbcUrl(scanContext.getJdbcURL());
+            config.setUsername(scanContext.getUser());
+            config.setPassword(scanContext.getPassword());
+            config.setMaximumPoolSize(1);
+            dataSource = new HikariDataSource(config);
+            DataSourceCache.getInstance().put(driverLocation, user, pass, url, dataSource);
+        }
+
         connection = dataSource.getConnection();
         statement = connection.createStatement();
         statement.setFetchSize(scanContext.getStatementFetchSize());
@@ -83,9 +93,6 @@ public class JDBCScanner {
         }
         if (connection != null) {
             connection.close();
-        }
-        if (dataSource != null) {
-            dataSource.close();
         }
     }
 }
