@@ -1067,19 +1067,17 @@ public class MaterializedViewHandler extends AlterHandler {
                 rollupJobV2List = getUnfinishedAlterJobV2ByTableId(olapTable.getId());
             }
             if (rollupJobV2List.size() == 0) {
-                throw new DdlException("Table[" + tableName + "] is not under ROLLUP. but job does not exist.");
+                throw new DdlException("Table[" + tableName + "] is under ROLLUP but job does not exist.");
             }
         } finally {
             db.writeUnlock();
         }
 
         // alter job v2's cancel must be called outside the database lock
-        if (rollupJobV2List.size() != 0) {
-            for (AlterJobV2 alterJobV2 : rollupJobV2List) {
-                alterJobV2.cancel("user cancelled");
-                if (alterJobV2.isDone()) {
-                    onJobDone(alterJobV2);
-                }
+        for (AlterJobV2 alterJobV2 : rollupJobV2List) {
+            alterJobV2.cancel("user cancelled");
+            if (alterJobV2.isDone()) {
+                onJobDone(alterJobV2);
             }
         }
     }

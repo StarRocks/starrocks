@@ -1472,7 +1472,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     schemaChangeJobV2List.size() == 0 ? null : Iterables.getOnlyElement(schemaChangeJobV2List);
             if (schemaChangeJobV2 == null) {
                 throw new DdlException(
-                        "Table[" + tableName + "] is under schema SCHEMA_CHANGE but job does not exits.");
+                        "Table[" + tableName + "] is under SCHEMA_CHANGE but job does not exits.");
             }
         } finally {
             db.writeUnlock();
