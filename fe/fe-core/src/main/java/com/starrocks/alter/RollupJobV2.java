@@ -481,8 +481,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 } // end for tablets
             } // end for partitions
 
-            // colocate mv
-            tbl.addTableToColocateGroupIfSet(dbId, rollupIndexName);
             onFinished(tbl);
         } finally {
             db.writeUnlock();
@@ -507,6 +505,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             partition.visualiseShadowIndex(rollupIndexId, false);
         }
+        // colocate mv
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db!=null) {
+            db.writeLock();
+            tbl.addTableToColocateGroupIfSet(dbId, rollupIndexName);
+            db.writeUnlock();
+        }
+
         tbl.rebuildFullSchema();
     }
 
@@ -518,10 +524,20 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     protected boolean cancelImpl(String errMsg) {
         //colocate mv
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
-        db.writeLock();
-        table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
-        db.writeUnlock();
+        if (db != null) {
+            db.writeLock();
+            try{
+                OlapTable table = (OlapTable) db.getTable(tableId);
+                if (table != null) {
+                    if (jobState == JobState.CANCELLED) {
+                        table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
+                    }
+                }
+            } finally {
+                db.writeUnlock();
+            }
+        }
+
         if (jobState.isFinalState()) {
             return false;
         }

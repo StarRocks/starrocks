@@ -153,7 +153,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @SerializedName(value = "colocateMv")
     protected Set<String> colocateMaterializedViewNames = Sets.newHashSet();
-
     @SerializedName(value = "isInColocateMvGroup")
     protected  boolean isInColocateMvGroup = false;
 
@@ -934,6 +933,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         colocateMaterializedViewNames.add(mvName);
     }
 
+    // 1. remove the materialized view name from the set colocateMaterializedViewNames
+    // 2. the base table will be removed from the colocate group
+    // only the currently deleted materialized view is the only colocate mv of the base table
     public void removeColocateMaterializedView(String mvName) {
         if (colocateMaterializedViewNames.contains(mvName)) {
             if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
@@ -964,6 +966,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
     }
 
+    // when the state of rollupJobV2 is canceled
+    // just remove the materialized view from the set
+    // for the materialized view is added to the set before the rollupJobV2 running
     public void removeMaterializedViewWhenJobCanceled(String rollupIndexName) {
         colocateMaterializedViewNames.remove(rollupIndexName);
     }
