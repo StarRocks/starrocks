@@ -22,7 +22,6 @@
 package com.starrocks.journal;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
@@ -252,12 +251,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_RECOVER_PARTITION: {
                 data = new RecoverInfo();
                 ((RecoverInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_START_DECOMMISSION_BACKEND:
-            case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
-                data = AlterJob.read(in);
                 isRead = true;
                 break;
             }

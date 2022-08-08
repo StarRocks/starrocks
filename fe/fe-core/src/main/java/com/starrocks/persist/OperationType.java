@@ -94,7 +94,9 @@ public class OperationType {
     public static final short OP_ADD_BACKEND = 50;
     public static final short OP_DROP_BACKEND = 51;
     public static final short OP_BACKEND_STATE_CHANGE = 52;
+    @Deprecated
     public static final short OP_START_DECOMMISSION_BACKEND = 53;
+    @Deprecated
     public static final short OP_FINISH_DECOMMISSION_BACKEND = 54;
     public static final short OP_ADD_FRONTEND = 55;
     public static final short OP_ADD_FIRST_FRONTEND = 56;
