@@ -27,13 +27,18 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
         removeUnusedFunction();
     }
 
+    // remove useless string functions
+    // Some functions end up not being used, or some functions generated in intermediate,
+    // and we need to remove them
     private void removeUnusedFunction() {
         Set<Integer> dictIds = this.dictToStrings.keySet();
         Map<Integer, ScalarOperator> dictToFunctions = Maps.newHashMap();
+        // build dictionary-id to string-function mapping
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : stringFunctions.entrySet()) {
             dictToFunctions.put(entry.getKey().getId(), entry.getValue());
         }
 
+        // get all used dictionary-id
         Set<Integer> usedDictIds = Sets.newHashSet();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : stringFunctions.entrySet()) {
             if (dictIds.contains(entry.getKey().getId())) {
@@ -41,6 +46,16 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
             }
         }
 
+        // get all used string functions
+        // The input column of a string function may be other string function result
+        // we need to add all dependent columns to the usedDictIds
+        //
+        // eg:
+        // dict list: [3]
+        // dict-id 2 <- string function 1:upper(1)
+        // dict-id 3 <- string function 2:upper(2)
+        // we should keep func2 and func1
+        //
         Set<Integer> currentUsed = Sets.newHashSet(usedDictIds);
         Set<Integer> next = Sets.newHashSet();
         while (!currentUsed.isEmpty()) {
