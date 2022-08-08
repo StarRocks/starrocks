@@ -498,12 +498,16 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    protected boolean validDbIdAndTableId(long dbId, long tableId) {
+    private String getTableName(long dbId, long tableId) {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
-            return false;
+            return null;
         }
-        return database.getTable(tableId) != null;
+        Table table = database.getTable(tableId);
+        if (table == null) {
+            return null;
+        }
+        return database.getOriginName() + "." + table.getName();
     }
 
     /**
@@ -521,22 +525,28 @@ public class ColocateTableIndex implements Writable {
                 GroupId groupId = entry.getValue();
                 info.add(groupId.toString());
                 info.add(entry.getKey());
-                StringBuffer sb = new StringBuffer();
+                StringBuilder tableIds = new StringBuilder();
+                StringBuilder tableNames = new StringBuilder();
                 for (Long tableId : group2Tables.get(groupId)) {
-                    if (sb.length() > 0) {
-                        sb.append(", ");
+                    if (tableIds.length() > 0) {
+                        tableIds.append(", ");
                     }
-                    sb.append(tableId);
-                    if (!validDbIdAndTableId(groupId.dbId, tableId)) {
-                        sb.append("*");
+                    tableIds.append(tableId);
+                    String tableName = getTableName(groupId.dbId, tableId);
+                    if (tableName == null) {
+                        tableIds.append("*");
+                        tableNames.append("NULL");
+                    } else {
+                        tableNames.append(tableName);
                     }
                 }
-                info.add(sb.toString());
+                info.add(tableIds.toString());
+                info.add(tableNames.toString());
                 ColocateGroupSchema groupSchema = group2Schema.get(groupId);
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
-                        e -> e.toSql()).collect(Collectors.toList());
+                        Type::toSql).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
                 info.add(String.valueOf(!unstableGroups.contains(groupId)));
                 infos.add(info);
