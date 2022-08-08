@@ -55,7 +55,6 @@ void JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTableI
     }
     if (table_items->bucket_size / 2 > table_items->row_count) {
         size_t count = SIMD::count_nonzero(table_items->first);
-        std::cout<<"ROW:"<<count<<":"<<table_items->row_count<<":"<<table_items->bucket_size<<std::endl;
         if (count == table_items->row_count) {
             table_items->is_distinct = true;
         }
