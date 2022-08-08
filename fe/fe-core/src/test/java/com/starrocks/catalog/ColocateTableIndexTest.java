@@ -85,7 +85,7 @@ public class ColocateTableIndexTest {
         map = groupByName(infos);
         Table table1_2 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_2");
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals("db1.table1_1, db2_table1_2", map.get("group1").get(3));
+        Assert.assertEquals("db1.table1_1, db1.table1_2", map.get("group1").get(3));
         LOG.info("after create db1.table1_2: {}", infos);
 
         // create db2
@@ -106,7 +106,7 @@ public class ColocateTableIndexTest {
         Assert.assertEquals(2, infos.size());
         map = groupByName(infos);
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals("db1.table1_1, db2_table1_2", map.get("group1").get(3));
+        Assert.assertEquals("db1.table1_1, db1.table1_2", map.get("group1").get(3));
         Table table2_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getTable("table2_1");
         Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
         Assert.assertEquals("db2.table2_1", map.get("group2").get(3));
@@ -122,7 +122,7 @@ public class ColocateTableIndexTest {
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
         Assert.assertEquals(String.format("%d*, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Assert.assertEquals("NULL, db2_table1_2", map.get("group1").get(3));
+        Assert.assertEquals("NULL, db1.table1_2", map.get("group1").get(3));
         Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
         Assert.assertEquals("db2.table2_1", map.get("group2").get(3));
         LOG.info("after drop db1.table1_1: {}", infos);

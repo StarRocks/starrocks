@@ -530,6 +530,7 @@ public class ColocateTableIndex implements Writable {
                 for (Long tableId : group2Tables.get(groupId)) {
                     if (tableIds.length() > 0) {
                         tableIds.append(", ");
+                        tableNames.append(", ");
                     }
                     tableIds.append(tableId);
                     String tableName = getTableName(groupId.dbId, tableId);
