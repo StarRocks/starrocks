@@ -82,14 +82,6 @@ std::string json_value_to_string(const rapidjson::Value& value) {
         }                                                                     \
     } while (false)
 
-#define RETURN_ERROR_IF_COL_IS_INVALID_ARRAY_FORMAT(col)             \
-    do {                                                             \
-        std::stringstream ss;                                        \
-        ss << "Invalid array format"                                 \
-           << "; Document slice is : " << json_value_to_string(col); \
-        return Status::RuntimeError(ss.str());                       \
-    } while (false)
-
 #define RETURN_ERROR_IF_PARSING_FAILED(result, col, type)                       \
     do {                                                                        \
         if (result != StringParser::PARSE_SUCCESS) {                            \
@@ -526,12 +518,13 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 
     // In ElasticSearch, n-dimensional array will be flattened into one-dimensional array.
     // https://www.elastic.co/guide/en/elasticsearch/reference/8.3/array.html
-    // We should do schema validation in FE.
+    // TODO: We should do schema validation in FE.
     if (!col.IsArray() || child_type.type == TYPE_ARRAY) {
-        RETURN_ERROR_IF_COL_IS_INVALID_ARRAY_FORMAT(col);
+        std::string str = fmt::format("Invalid array format; Document slice is: {}.", json_value_to_string(col));
+        return Status::RuntimeError(str);
     }
 
-    ArrayColumn* array;
+    ArrayColumn* array = nullptr;
 
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
