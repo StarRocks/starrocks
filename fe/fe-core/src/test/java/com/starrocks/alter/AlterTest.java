@@ -895,8 +895,8 @@ public class AlterTest {
                 result = shardStorageInfo;
                 agent.createShards(anyInt, (ShardStorageInfo) any);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                        Lists.newArrayList(20004L, 20005L, 20006L),
+                        Lists.newArrayList(20007L, 20008L, 20009L));
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -921,7 +921,7 @@ public class AlterTest {
                 "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
                 "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
                 ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "   \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\"\n" +
                 ")";
@@ -963,9 +963,12 @@ public class AlterTest {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
                 agent.createShards(anyInt, (ShardStorageInfo) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                returns(Lists.newArrayList(30001L, 30002L, 30003L),
+                        Lists.newArrayList(30004L, 30005L, 30006L),
+                        Lists.newArrayList(30007L, 30008L, 30009L),
+                        Lists.newArrayList(30010L, 30011L, 30012L),
+                        Lists.newArrayList(30013L, 30014L, 30015L),
+                        Lists.newArrayList(30016L, 30017L, 30018L));
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -989,7 +992,7 @@ public class AlterTest {
                 "PARTITION BY RANGE (datekey) (\n" +
                 "    START (\"1\") END (\"5\") EVERY (1)\n" +
                 ")\n" +
-                "DISTRIBUTED BY HASH(site_id) BUCKETS 10\n" +
+                "DISTRIBUTED BY HASH(site_id) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ")";
@@ -999,7 +1002,7 @@ public class AlterTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
 
         String alterSQL = "ALTER TABLE site_access \n" +
-                "   ADD PARTITIONS START (\"6\") END (\"7\") EVERY (1)";
+                "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
 
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
@@ -1012,7 +1015,8 @@ public class AlterTest {
         Assert.assertNotNull(table.getPartition("p2"));
         Assert.assertNotNull(table.getPartition("p3"));
         Assert.assertNotNull(table.getPartition("p4"));
-        Assert.assertNotNull(table.getPartition("p6"));
+        Assert.assertNotNull(table.getPartition("p7"));
+        Assert.assertNotNull(table.getPartition("p8"));
 
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
