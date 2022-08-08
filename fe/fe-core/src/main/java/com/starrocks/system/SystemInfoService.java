@@ -633,28 +633,32 @@ public class SystemInfoService {
             lastBackendId = lastBackendIdForOther;
         }
 
-        // host -> BE list
-        Map<String, List<Backend>> backendMaps = Maps.newHashMap();
-        for (Backend backend : srcBackends) {
-            // If needAvailable is true, unavailable backend won't go into the pick list
-            if (needAvailable && !backend.isAvailable()) {
-                continue;
-            }
-
-            if (backendMaps.containsKey(backend.getHost())) {
-                backendMaps.get(backend.getHost()).add(backend);
-            } else {
-                List<Backend> list = Lists.newArrayList();
-                list.add(backend);
-                backendMaps.put(backend.getHost(), list);
-            }
-        }
-
-        // if more than one backend exists in same host, select a backend at random
         List<Backend> backends = Lists.newArrayList();
-        for (List<Backend> list : backendMaps.values()) {
-            Collections.shuffle(list);
-            backends.add(list.get(0));
+        if (Config.enable_choose_backends_on_the_same_host) {
+            backends = srcBackends;
+        } else {
+            // host -> BE list
+            Map<String, List<Backend>> backendMaps = Maps.newHashMap();
+            for (Backend backend : srcBackends) {
+                // If needAvailable is true, unavailable backend won't go into the pick list
+                if (needAvailable && !backend.isAvailable()) {
+                    continue;
+                }
+
+                if (backendMaps.containsKey(backend.getHost())) {
+                    backendMaps.get(backend.getHost()).add(backend);
+                } else {
+                    List<Backend> list = Lists.newArrayList();
+                    list.add(backend);
+                    backendMaps.put(backend.getHost(), list);
+                }
+            }
+
+            // if more than one backend exists in same host, select a backend at random
+            for (List<Backend> list : backendMaps.values()) {
+                Collections.shuffle(list);
+                backends.add(list.get(0));
+            }
         }
 
         List<Long> backendIds = Lists.newArrayList();
