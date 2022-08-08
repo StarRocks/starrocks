@@ -580,7 +580,19 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
                                    [[maybe_unused]] int divisor) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
-                if (null_data[i] == DATUM_NULL) continue;
+                if (null_data[i] == DATUM_NULL) {
+                    // When performing aggregation, for nullable column, we will first compare the null flag,
+                    // then compare the data. We must make sure the data is consistent even for null value,
+                    // In stream/broker load, the data for null date/datetime is DefaultValueGenerator,
+                    // here we also set it to be DefaultValueGenerator for spark load, otherwise it will raise
+                    // a problem in issue #9496
+                    if constexpr (pt_is_date<PT>) {
+                        data[i] = DefaultValueGenerator<DateValue>::next_value();
+                    } else if constexpr (pt_is_datetime<PT>) {
+                        data[i] = DefaultValueGenerator<TimestampValue>::next_value();
+                    }
+                    continue;
+                }
             }
             bool fail;
             if constexpr (no_divide) {
@@ -606,6 +618,21 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         auto* data = &concrete_column->get_data().front() + column_start_idx;
         if constexpr (at_is_date<AT>) {
             for (int i = 0; i < num_elements; ++i) {
+                // When performing aggregation, for nullable column, we will first compare the null flag,
+                // then compare the data. We must make sure the data is consistent even for null value,
+                // In stream/broker load, the data for null date/datetime is DefaultValueGenerator,
+                // here we also set it to be DefaultValueGenerator for spark load, otherwise it will raise
+                // a problem in issue #9496
+                if constexpr (is_nullable) {
+                    if (null_data[i] == DATUM_NULL) {
+                        if constexpr (pt_is_date<PT>) {
+                            data[i] = DefaultValueGenerator<DateValue>::next_value();
+                        } else if constexpr (pt_is_datetime<PT>) {
+                            data[i] = DefaultValueGenerator<TimestampValue>::next_value();
+                        }
+                        continue;
+                    }
+                }
                 convert_date(data[i], arrow_data[i]);
             }
         } else if constexpr (at_is_datetime<AT>) {
