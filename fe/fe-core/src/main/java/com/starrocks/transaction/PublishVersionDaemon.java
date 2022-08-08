@@ -41,7 +41,9 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
-import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.EmptyRpcCallback;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -50,7 +52,6 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -330,11 +331,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 finished = false;
                 continue;
             }
-            TNetworkAddress address = new TNetworkAddress();
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
 
-            LakeServiceClient client = new LakeServiceClient(address);
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = partitionCommitInfo.getVersion() - 1;
             request.newVersion = partitionCommitInfo.getVersion();
@@ -342,10 +339,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             request.txnIds = Lists.newArrayList(txnId);
 
             try {
-                Future<PublishVersionResponse> responseFuture = client.publishVersion(request);
+                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<PublishVersionResponse> responseFuture = lakeService.publishVersion(request, new EmptyRpcCallback<>());
                 responseList.add(responseFuture);
                 backendList.add(backend);
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOG.warn(e);
                 finished = false;
             }

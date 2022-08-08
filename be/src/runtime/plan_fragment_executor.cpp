@@ -221,7 +221,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
         if (VLOG_ROW_IS_ON) {
             VLOG_ROW << "_open_internal_vectorized: #rows=" << chunk->num_rows()
-                     << " desc=" << row_desc().debug_string();
+                     << " desc=" << row_desc().debug_string() << " columns=" << chunk->debug_columns();
             // TODO(kks): support chunk debug log
         }
 

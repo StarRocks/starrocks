@@ -997,35 +997,75 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
     // all metrics will be merged into the first profile
     auto* profile0 = profiles[0];
 
-    // merge counters
+    // Merge counters
     {
-        // find all counters, although these profiles are expected to be isomorphic,
-        // some of the counters are only append to one of them
-        std::map<std::string, TUnit::type> counter_types;
+        // Find all counters, although these profiles are expected to be isomorphic,
+        // some counters are only attached to one of them
+        std::vector<std::map<std::string, std::pair<TUnit::type, std::string>>> all_level_counters;
         for (auto* profile : profiles) {
             std::lock_guard<std::mutex> l(profile->_counter_lock);
-            for (auto& [name, pair] : profile->_counter_map) {
-                auto* counter = pair.first;
-                if (NON_MERGE_COUNTER_NAMES.find(name) != NON_MERGE_COUNTER_NAMES.end()) {
-                    continue;
+            // Level order traverse starts with root
+            std::queue<std::string> name_queue;
+            name_queue.push(ROOT_COUNTER);
+            int32_t level_idx = -1;
+            while (!name_queue.empty()) {
+                level_idx++;
+                std::vector<std::string> current_names;
+                current_names.reserve(name_queue.size());
+                while (!name_queue.empty()) {
+                    current_names.emplace_back(std::move(name_queue.front()));
+                    name_queue.pop();
                 }
+                for (const auto& name : current_names) {
+                    if (NON_MERGE_COUNTER_NAMES.find(name) != NON_MERGE_COUNTER_NAMES.end()) {
+                        continue;
+                    }
+                    auto names_it = profile->_child_counter_map.find(name);
+                    if (names_it != profile->_child_counter_map.end()) {
+                        for (auto& child_name : names_it->second) {
+                            name_queue.push(child_name);
+                        }
+                    }
+                    if (name == ROOT_COUNTER) {
+                        continue;
+                    }
+                    auto pair_it = profile->_counter_map.find(name);
+                    DCHECK(pair_it != profile->_counter_map.end());
+                    const auto& pair = pair_it->second;
+                    const auto* counter = pair.first;
+                    const auto& parent_name = pair.second;
 
-                auto it = counter_types.find(name);
-                if (it == counter_types.end()) {
-                    counter_types[name] = counter->type();
-                    continue;
-                }
-                const auto exist_type = it->second;
-                if (counter->type() != exist_type) {
-                    LOG(WARNING) << "find non-isomorphic counter, profile_name=" << profile0->name()
-                                 << ", counter_name=" << name << ", exist_type=" << std::to_string(exist_type)
-                                 << ", another_type=" << std::to_string(counter->type());
-                    return;
+                    while (all_level_counters.size() <= level_idx) {
+                        all_level_counters.emplace_back();
+                    }
+                    auto& level_counters = all_level_counters[level_idx];
+                    auto it = level_counters.find(name);
+                    if (it == level_counters.end()) {
+                        level_counters[name] = std::make_pair<>(counter->type(), parent_name);
+                        continue;
+                    }
+                    const auto exist_type = it->second.first;
+                    if (counter->type() != exist_type) {
+                        LOG(WARNING) << "find non-isomorphic counter, profile_name=" << profile0->name()
+                                     << ", counter_name=" << name << ", exist_type=" << std::to_string(exist_type)
+                                     << ", another_type=" << std::to_string(counter->type());
+                        return;
+                    }
                 }
             }
         }
 
-        for (auto& [name, type] : counter_types) {
+        std::vector<std::tuple<TUnit::type, std::string, std::string>> level_ordered_counters;
+        for (const auto& level_counters : all_level_counters) {
+            for (const auto& [name, pair] : level_counters) {
+                level_ordered_counters.emplace_back(std::make_tuple(pair.first, name, pair.second));
+            }
+        }
+
+        for (const auto& tuple : level_ordered_counters) {
+            const auto& type = std::get<0>(tuple);
+            const auto& name = std::get<1>(tuple);
+            const auto& parent_name = std::get<2>(tuple);
             // We don't need to calculate sum or average of counter's extra info (min value and max value)
             if (name.rfind(MERGED_INFO_PREFIX_MIN, 0) == 0 || name.rfind(MERGED_INFO_PREFIX_MAX, 0) == 0) {
                 continue;
@@ -1040,7 +1080,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                 auto* profile = profiles[j];
                 auto* counter = profile->get_counter(name);
 
-                // Allow some of the counters only attach to one of the isomorphic profiles
+                // Allow some counters which only attach to one of the isomorphic profiles
                 // E.g. A bunch of ExchangeSinkOperators may share one SinkBuffer, so the metrics
                 // of SinkBuffer only attach to the first ExchangeSinkOperator's profile
                 if (counter == nullptr) {
@@ -1078,10 +1118,18 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             }
 
             auto* counter0 = profile0->get_counter(name);
-            // As memtioned before, some counters may only attach to one of the isomorphic profiles
+            // As stated before, some counters may only attach to one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == nullptr) {
-                counter0 = profile0->add_counter(name, type);
+                if (ROOT_COUNTER != parent_name && profile0->get_counter(parent_name) != nullptr) {
+                    counter0 = profile0->add_counter(name, type, parent_name);
+                } else {
+                    if (ROOT_COUNTER != parent_name) {
+                        LOG(WARNING) << "missing parent counter, profile_name=" << profile0->name()
+                                     << ", counter_name=" << name << ", parent_counter_name=" << parent_name;
+                    }
+                    counter0 = profile0->add_counter(name, type);
+                }
             }
             counter0->set(merged_value);
 

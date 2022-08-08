@@ -150,6 +150,9 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    // Backup Restore Satement
+    | backupStatement                                                                        #backup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -472,6 +475,7 @@ alterClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
+    | modifyBrokerClause
     ;
 
 addPartitionClause
@@ -561,6 +565,13 @@ columnRenameClause
 reorderColumnsClause
     : ORDER BY identifierList (FROM rollupName=identifier)? properties?
     ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
@@ -970,6 +981,14 @@ showProcStatement
     : SHOW PROC path=string
     ;
 
+// ---------------------------------------- Backup Restore Statement -----------------------------------------------------
+backupStatement
+    : BACKUP SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' tableDesc (',' tableDesc) * ')'
+    (PROPERTIES propertyList)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1170,6 +1189,10 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+tableDesc
+    : qualifiedName partitionNames?
+    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?

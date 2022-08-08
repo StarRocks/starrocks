@@ -395,7 +395,6 @@ public class Load {
                             slotDesc.setType(tblColumn.getType());
                             slotDesc.setColumn(new Column(columnName, tblColumn.getType()));
                         }
-                        slotDesc.setIsNullable(tblColumn.isAllowNull());
                         slotDesc.setIsMaterialized(true);
                     } else if (columnName.equals(Load.LOAD_OP_COLUMN)) {
                         // to support auto mapping, the new grammer for compatible with existing load tool.
@@ -404,15 +403,16 @@ public class Load {
                         // columns:__op,pk,col1,col2 equals to columns:srccol0,srccol1,srccol2,srccol3,__op=srccol0,pk=srccol1,col1=srccol2,col2=srccol3
                         slotDesc.setType(Type.TINYINT);
                         slotDesc.setColumn(new Column(columnName, Type.TINYINT));
-                        slotDesc.setIsNullable(false);
                         slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(Type.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, Type.VARCHAR));
-                        slotDesc.setIsNullable(true);
                         // Will check mapping expr has this slot or not later
                         slotDesc.setIsMaterialized(false);
                     }
+                    // FileScanNode will set all slot nullable, it check null in OlapTableSink if
+                    // dest table column is not null
+                    slotDesc.setIsNullable(true);
                 } else {
                     slotDesc.setType(Type.VARCHAR);
                     slotDesc.setColumn(new Column(columnName, Type.VARCHAR));

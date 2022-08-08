@@ -1240,6 +1240,39 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testAsTableOnMV() {
+        String sql1 = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        String sql2 = "create materialized view mv2 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from mv1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.assertEquals("Creating a materialized view from materialized view is not supported now." +
+                    " The type of table: mv1 is: Materialized View", e.getMessage());
+        }
+    }
+
+    @Test
     public void testAsHasStar() {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
@@ -1508,6 +1541,56 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Duplicate column name 'K1'", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testNoBaseTable() {
+        String sql = "create materialized view mv1 " +
+                "partition by K1 " +
+                "distributed by hash(K2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select 1 as k1, 2 as k2";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Can not find base table in query statement", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testUseCte() {
+        String sql = "create materialized view mv1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS with tbl as\n" +
+                "(select * from tbl1)\n" +
+                "SELECT k1,k2\n" +
+                "FROM tbl;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Materialized view query statement not support cte", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testUseSubQuery() {
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from (select * from tbl1) tbl";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Materialized view query statement not support subquery", e.getMessage());
         }
     }
 }

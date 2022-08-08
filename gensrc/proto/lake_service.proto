@@ -31,13 +31,11 @@ message AbortTxnResponse {
     repeated int64 failed_tablets = 1;
 }
 
-// TODO: Rename to DeleteTabletRequest
-message DropTabletRequest {
+message DeleteTabletRequest {
     repeated int64 tablet_ids = 1;
 }
 
-// TODO: Rename to DeleteTabletResponse
-message DropTabletResponse {
+message DeleteTabletResponse {
     repeated int64 failed_tablets = 1;
 }
 
@@ -57,6 +55,8 @@ message DropTableRequest {
 }
 
 message DropTableResponse {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
 }
 
 message DeleteDataRequest {
@@ -69,13 +69,32 @@ message DeleteDataResponse {
     repeated int64 failed_tablets = 1;
 }
 
+message TabletStatRequest {
+    message TabletInfo {
+        optional int64 tablet_id = 1;
+        optional int64 version = 2;
+    }
+
+    repeated TabletInfo tablet_infos = 1;
+}
+
+message TabletStatResponse {
+    message TabletStat {
+        optional int64 tablet_id = 1;
+        optional int64 num_rows = 2;
+        optional int64 data_size = 3;
+    }
+
+    repeated TabletStat tablet_stats = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
-    // TODO: Rename to delete_tablet
-    rpc drop_tablet(DropTabletRequest) returns (DropTabletResponse);
+    rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
     rpc drop_table(DropTableRequest) returns (DropTableResponse);
     rpc delete_data(DeleteDataRequest) returns (DeleteDataResponse);
+    rpc get_tablet_stats(TabletStatRequest) returns (TabletStatResponse);
 }
 

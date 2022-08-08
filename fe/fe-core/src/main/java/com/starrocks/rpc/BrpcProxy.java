@@ -14,12 +14,12 @@ public class BrpcProxy {
     private final ConcurrentHashMap<TNetworkAddress, PBackendServiceAsync> backendServiceMap;
     private final ConcurrentHashMap<TNetworkAddress, LakeServiceAsync> lakeServiceMap;
 
-    public BrpcProxy() {
+    protected BrpcProxy() {
         backendServiceMap = new ConcurrentHashMap<>();
         lakeServiceMap = new ConcurrentHashMap<>();
     }
 
-    public static BrpcProxy getInstance() {
+    private static BrpcProxy getInstance() {
         return BrpcProxy.SingletonHolder.INSTANCE;
     }
 
@@ -30,8 +30,24 @@ public class BrpcProxy {
         BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
-    public PBackendServiceAsync getBackendService(TNetworkAddress address) {
+    public static PBackendServiceAsync getBackendService(TNetworkAddress address) {
+        return getInstance().getBackendServiceImpl(address);
+    }
+
+    public static LakeServiceAsync getLakeService(TNetworkAddress address) {
+        return getInstance().getLakeServiceImpl(address);
+    }
+
+    public static LakeServiceAsync getLakeService(String host, int port) {
+        return getInstance().getLakeServiceImpl(new TNetworkAddress(host, port));
+    }
+
+    protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
         return backendServiceMap.computeIfAbsent(address, this::createBackendService);
+    }
+
+    protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
+        return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
     }
 
     private PBackendServiceAsync createBackendService(TNetworkAddress address) {
@@ -43,14 +59,9 @@ public class BrpcProxy {
         clientOption.setMinIdleConnections(10);
         clientOption.setLoadBalanceType(LoadBalanceStrategy.LOAD_BALANCE_FAIR);
         clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
-        String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
+        String serviceurl = "list://" + address.getHostname() + ":" + address.getPort();
         RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        PBackendServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
-        return service;
-    }
-
-    public LakeServiceAsync getLakeService(TNetworkAddress address) {
-        return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
+        return com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
     }
 
     private LakeServiceAsync createLakeService(TNetworkAddress address) {
@@ -62,10 +73,9 @@ public class BrpcProxy {
         clientOption.setMinIdleConnections(10);
         clientOption.setLoadBalanceType(LoadBalanceStrategy.LOAD_BALANCE_FAIR);
         clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
-        String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
+        String serviceurl = "list://" + address.getHostname() + ":" + address.getPort();
         RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        LakeServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
-        return service;
+        return com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
     }
 
     private static class SingletonHolder {

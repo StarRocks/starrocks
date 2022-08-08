@@ -9,6 +9,7 @@ import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.FrontendClause;
 import com.starrocks.analysis.ModifyBackendAddressClause;
+import com.starrocks.analysis.ModifyBrokerClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -97,6 +98,31 @@ public class AlterSystemStmtAnalyzer {
                 InetAddress.getByName(destHost);
             } catch (UnknownHostException e) {
                 throw new SemanticException("unknown host " + e.getMessage());
+            }
+        }
+
+        @Override
+        public Void visitModifyBrokerClause(ModifyBrokerClause clause, ConnectContext context) {
+            validateBrokerName(clause);
+            try {
+                if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
+                    for (String hostPort : clause.getHostPorts()) {
+                        Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                        clause.getHostPortPairs().add(pair);
+                    }
+                    Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException("broker host or port is wrong!");
+            }
+            return null;
+        }
+
+        private void validateBrokerName(ModifyBrokerClause clause) {
+            try {
+                clause.validateBrokerName();
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
             }
         }
     }

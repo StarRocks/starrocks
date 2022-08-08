@@ -32,6 +32,7 @@ import com.starrocks.thrift.TRuntimeProfileNode;
 import com.starrocks.thrift.TRuntimeProfileTree;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,7 +44,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -69,7 +69,7 @@ public class RuntimeProfile {
     private final Map<String, Pair<Counter, String>> counterMap = Maps.newConcurrentMap();
     private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
 
-    private final Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
+    private final Map<String, Set<String>> childCounterMap = Maps.newConcurrentMap();
     private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
 
     private String name;
@@ -122,9 +122,11 @@ public class RuntimeProfile {
             Counter newCounter = new Counter(type, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
-            TreeSet<String> childNames = childCounterMap.getOrDefault(parentName, new TreeSet<>());
+            if (!childCounterMap.containsKey(parentName)) {
+                childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+            }
+            Set<String> childNames = childCounterMap.get(parentName);
             childNames.add(name);
-            childCounterMap.put(parentName, childNames);
             return newCounter;
         }
     }
@@ -138,7 +140,7 @@ public class RuntimeProfile {
         Pair<Counter, String> pair = counterMap.get(name);
         String parentName = pair.second;
         if (childCounterMap.containsKey(parentName)) {
-            TreeSet<String> childNames = childCounterMap.get(parentName);
+            Set<String> childNames = childCounterMap.get(parentName);
             childNames.remove(name);
         }
 
@@ -147,7 +149,7 @@ public class RuntimeProfile {
         nameQueue.offer(name);
         while (!nameQueue.isEmpty()) {
             String topName = nameQueue.poll();
-            TreeSet<String> childNames = childCounterMap.get(topName);
+            Set<String> childNames = childCounterMap.get(topName);
             if (childNames != null) {
                 for (String childName : childNames) {
                     nameQueue.offer(childName);
@@ -186,7 +188,7 @@ public class RuntimeProfile {
                 newCounter.setValue(srcCounter.getValue());
             }
 
-            TreeSet<String> childNames = srcProfile.childCounterMap.get(name);
+            Set<String> childNames = srcProfile.childCounterMap.get(name);
             if (childNames != null) {
                 for (String childName : childNames) {
                     nameQueue.offer(Pair.create(childName, name));
@@ -355,6 +357,7 @@ public class RuntimeProfile {
             return;
         }
         List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
+        childNames.sort(String::compareTo);
 
         // Keep MIN/MAX metrics head of other child counters
         List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
@@ -544,35 +547,72 @@ public class RuntimeProfile {
 
         RuntimeProfile profile0 = profiles.get(0);
 
-        // merge counters
-        Map<String, Pair<TUnit, String>> counterTypes = Maps.newTreeMap();
+        // Find all counters, although these profiles are expected to be isomorphic,
+        // some counters are only attached to one of them
+        List<Map<String, Pair<TUnit, String>>> allLevelCounters = Lists.newArrayList();
         for (RuntimeProfile profile : profiles) {
-            for (Map.Entry<String, Pair<Counter, String>> entry : profile.counterMap.entrySet()) {
-                String name = entry.getKey();
-                Pair<Counter, String> pair = entry.getValue();
+            // Level order traverse starts with root
+            Queue<String> nameQueue = Lists.newLinkedList();
+            nameQueue.offer(ROOT_COUNTER);
+            int levelIdx = -1;
+            while (!nameQueue.isEmpty()) {
+                levelIdx++;
+                List<String> currentNames = Lists.newArrayList(nameQueue);
+                nameQueue.clear();
+                for (String name : currentNames) {
+                    if (NON_MERGE_COUNTER_NAMES.contains(name)) {
+                        continue;
+                    }
 
-                if (NON_MERGE_COUNTER_NAMES.contains(name)) {
-                    continue;
-                }
+                    Set<String> childNames = profile.childCounterMap.get(name);
+                    if (childNames != null) {
+                        for (String childName : childNames) {
+                            nameQueue.offer(childName);
+                        }
+                    }
 
-                if (!counterTypes.containsKey(name)) {
-                    counterTypes.put(name, Pair.create(pair.first.getType(), pair.second));
-                    continue;
-                }
-                TUnit existType = counterTypes.get(name).first;
-                if (!existType.equals(pair.first.getType())) {
-                    LOG.warn(
-                            "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
-                            profile0.name, name, existType.name(), pair.first.getType().name());
-                    return;
+                    if (Objects.equals(ROOT_COUNTER, name)) {
+                        continue;
+                    }
+                    Pair<Counter, String> pair = profile.counterMap.get(name);
+                    Preconditions.checkNotNull(pair);
+                    Counter counter = pair.first;
+                    String parentName = pair.second;
+
+                    while (allLevelCounters.size() <= levelIdx) {
+                        allLevelCounters.add(Maps.newHashMap());
+                    }
+
+                    Map<String, Pair<TUnit, String>> levelCounters = allLevelCounters.get(levelIdx);
+                    if (!levelCounters.containsKey(name)) {
+                        levelCounters.put(name, Pair.create(counter.getType(), parentName));
+                        continue;
+                    }
+                    TUnit existType = levelCounters.get(name).first;
+                    if (!existType.equals(counter.getType())) {
+                        LOG.warn(
+                                "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
+                                profile0.name, name, existType.name(), counter.getType().name());
+                        return;
+                    }
                 }
             }
         }
 
-        for (Map.Entry<String, Pair<TUnit, String>> entry : counterTypes.entrySet()) {
-            String name = entry.getKey();
-            TUnit type = entry.getValue().first;
-            String parentName = entry.getValue().second;
+        List<Triple<TUnit, String, String>> levelOrderedCounters = Lists.newArrayList();
+        for (Map<String, Pair<TUnit, String>> levelCounters : allLevelCounters) {
+            for (Map.Entry<String, Pair<TUnit, String>> entry : levelCounters.entrySet()) {
+                String name = entry.getKey();
+                TUnit type = entry.getValue().first;
+                String parentName = entry.getValue().second;
+                levelOrderedCounters.add(Triple.of(type, name, parentName));
+            }
+        }
+
+        for (Triple<TUnit, String, String> triple : levelOrderedCounters) {
+            TUnit type = triple.getLeft();
+            String name = triple.getMiddle();
+            String parentName = triple.getRight();
 
             // We don't need to calculate sum or average of counter's extra info (min value and max value) created by be
             if (name.startsWith(MERGED_INFO_PREFIX_MIN) || name.startsWith(MERGED_INFO_PREFIX_MAX)) {
@@ -586,7 +626,7 @@ public class RuntimeProfile {
             for (RuntimeProfile profile : profiles) {
                 Counter counter = profile.getCounter(name);
 
-                // Allow some of the counters only attach to one of the isomorphic profiles
+                // Allow some counters which only attach to one of the isomorphic profiles
                 // E.g. A bunch of ExchangeSinkOperators may share one SinkBuffer, so the metrics
                 // of SinkBuffer only attach to the first ExchangeSinkOperator's profile
                 if (counter == null) {
@@ -623,10 +663,18 @@ public class RuntimeProfile {
             }
 
             Counter counter0 = profile0.getCounter(name);
-            // As memtioned before, some counters may only attach to one of the isomorphic profiles
+            // As stated before, some counters may only attach to one of the isomorphic profiles
             // and the first profile may not have this counter, so we create a counter here
             if (counter0 == null) {
-                counter0 = profile0.addCounter(name, type, parentName);
+                if (!Objects.equals(ROOT_COUNTER, parentName) && profile0.getCounter(parentName) != null) {
+                    counter0 = profile0.addCounter(name, type, parentName);
+                } else {
+                    if (!Objects.equals(ROOT_COUNTER, parentName)) {
+                        LOG.warn("missing parent counter, profileName={}, counterName={}, parentCounterName={}",
+                                profile0.name, name, parentName);
+                    }
+                    counter0 = profile0.addCounter(name, type);
+                }
             }
             counter0.setValue(mergedValue);
 

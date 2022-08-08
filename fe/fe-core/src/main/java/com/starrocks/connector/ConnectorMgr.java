@@ -5,6 +5,7 @@ package com.starrocks.connector;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.HiveConnectorFactory;
+import com.starrocks.connector.hudi.HudiConnectorFactory;
 import com.starrocks.connector.iceberg.IcebergConnectorFactory;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
@@ -32,6 +33,7 @@ public class ConnectorMgr {
     private void init() {
         addConnectorFactory(new HiveConnectorFactory());
         addConnectorFactory(new IcebergConnectorFactory());
+        addConnectorFactory(new HudiConnectorFactory());
     }
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {

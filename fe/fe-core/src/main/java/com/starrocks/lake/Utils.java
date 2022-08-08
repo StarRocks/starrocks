@@ -9,6 +9,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,7 +32,7 @@ public class Utils {
             LOG.info("Ignored error {}", ex.getMessage());
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds.isEmpty()) {
+        if (CollectionUtils.isEmpty(backendIds)) {
             return null;
         }
         return backendIds.get(0);

@@ -9,18 +9,16 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
-import java.util.Random;
 
 public class PseudoClusterTest {
     @BeforeClass
     public static void setUp() throws Exception {
-        int fePort = new Random().nextInt(10000) + 50000;
-        PseudoCluster.getOrCreate("pseudo_cluster", fePort, 3);
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
     }
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown();
+        PseudoCluster.getInstance().shutdown(true);
     }
 
     @Test

@@ -65,6 +65,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -547,7 +548,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                             .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
                                     true, true);
-                    if (beIds == null) {
+                    if (CollectionUtils.isEmpty(beIds)) {
                         return new Status(ErrCode.COMMON_ERROR, "failed to find "
                                 + partitionInfo.getReplicationNum(entry.getKey())
                                 + " different hosts to create table: " + name);
@@ -1805,7 +1806,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @Override
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
-        return replay ? null : new DeleteTableTask(this);
+        return replay ? null : new DeleteOlapTableTask(this);
     }
 
     @Override
@@ -1813,10 +1814,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return true;
     }
 
-    private static class DeleteTableTask implements Runnable {
+    private static class DeleteOlapTableTask implements Runnable {
         private final OlapTable table;
 
-        public DeleteTableTask(OlapTable table) {
+        public DeleteOlapTableTask(OlapTable table) {
             this.table = table;
         }
 

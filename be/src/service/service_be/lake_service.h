@@ -22,8 +22,9 @@ public:
     void abort_txn(::google::protobuf::RpcController* controller, const ::starrocks::lake::AbortTxnRequest* request,
                    ::starrocks::lake::AbortTxnResponse* response, ::google::protobuf::Closure* done) override;
 
-    void drop_tablet(::google::protobuf::RpcController* controller, const ::starrocks::lake::DropTabletRequest* request,
-                     ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) override;
+    void delete_tablet(::google::protobuf::RpcController* controller,
+                       const ::starrocks::lake::DeleteTabletRequest* request,
+                       ::starrocks::lake::DeleteTabletResponse* response, ::google::protobuf::Closure* done) override;
 
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* request,
                  ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
@@ -33,6 +34,10 @@ public:
 
     void delete_data(::google::protobuf::RpcController* controller, const ::starrocks::lake::DeleteDataRequest* request,
                      ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) override;
+
+    void get_tablet_stats(::google::protobuf::RpcController* controller,
+                          const ::starrocks::lake::TabletStatRequest* request,
+                          ::starrocks::lake::TabletStatResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
     ExecEnv* _env;

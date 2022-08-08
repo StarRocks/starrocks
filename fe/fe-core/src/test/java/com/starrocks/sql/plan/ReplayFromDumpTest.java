@@ -522,6 +522,14 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testMultiViewWithDbName() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_with_db"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains(" 0:OlapScanNode\n" +
+                "     TABLE: t3"));
+    }
+
+    @Test
     public void testMultiViewCrossJoin() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);

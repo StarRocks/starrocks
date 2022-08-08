@@ -35,38 +35,34 @@ namespace starrocks {
 
 const std::string MemTracker::COUNTER_NAME = "PeakMemoryUsage";
 
-MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister)
+MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent)
         : _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
-          _local_counter(TUnit::BYTES),
-          _auto_unregister(auto_unregister) {
+          _local_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
 
-MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister)
+MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTracker* parent)
         : _type(type),
           _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
-          _local_counter(TUnit::BYTES),
-          _auto_unregister(auto_unregister) {
+          _local_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
 
-MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label, MemTracker* parent,
-                       bool auto_unregister)
+MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label, MemTracker* parent)
         : _type(NO_SET),
           _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
           _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES)),
-          _local_counter(TUnit::BYTES),
-          _auto_unregister(auto_unregister) {
+          _local_counter(TUnit::BYTES) {
     if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
@@ -88,7 +84,7 @@ MemTracker::~MemTracker() {
     // return memory to root mem_tracker
     release_without_root();
 
-    if (_auto_unregister && parent()) {
+    if (parent()) {
         unregister_from_parent();
     }
 }

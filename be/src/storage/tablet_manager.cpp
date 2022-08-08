@@ -234,9 +234,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
     // should remove the tablet's pending_id no matter create-tablet success or not
     DataDir* data_dir = tablet->data_dir();
 
-    // TODO(yiguolei)
-    // the following code is very difficult to understand because it mixed alter tablet v2
-    // and alter tablet v1 should remove alter tablet v1 code after v0.12
     Status status;
     bool is_tablet_added = false;
     do {
@@ -266,15 +263,10 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
         }
         if (is_schema_change) {
             if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
-                LOG(INFO) << "request for alter-tablet v2, do not add alter task to tablet";
                 // if this is a new alter tablet, has to set its state to not ready
                 // because schema change hanlder depends on it to check whether history data
                 // convert finished
                 tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-            } else {
-                // add alter task to new tablet if it is a new tablet during schema change
-                tablet->add_alter_task(base_tablet->tablet_id(), base_tablet->schema_hash(), std::vector<Version>(),
-                                       alter_type);
             }
             // Possible cases:
             // 1. Because system time may rollback, creation_time of new table will be earlier
@@ -505,15 +497,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
-            AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
-            if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
-                cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
-                    // Current tablet is newly created during schema-change or rollup, skip it
-                    continue;
-                }
-            }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
                 continue;
@@ -586,15 +569,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
-            }
-            AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
-            if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
-                cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
-                    // Current tablet is newly created during schema-change or rollup, skip it
-                    continue;
-                }
             }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {

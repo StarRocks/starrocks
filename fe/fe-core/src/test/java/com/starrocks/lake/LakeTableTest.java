@@ -119,5 +119,8 @@ public class LakeTableTest {
             Assert.assertEquals(expectedTabletId, lakeTablet.getShardId());
             ++expectedTabletId;
         }
+
+        Assert.assertNull(table.delete(true));
+        Assert.assertNotNull(table.delete(false));
     }
 }

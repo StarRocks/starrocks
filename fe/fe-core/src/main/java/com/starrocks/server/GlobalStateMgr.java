@@ -690,6 +690,10 @@ public class GlobalStateMgr {
         return getCurrentState().getClusterInfo();
     }
 
+    public static StarOSAgent getCurrentStarOSAgent() {
+        return getCurrentState().getStarOSAgent();
+    }
+
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
         return getCurrentState().getHeartbeatMgr();
     }
@@ -3183,6 +3187,11 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
         }
     }
 
