@@ -105,8 +105,8 @@ Status NodeChannel::init(RuntimeState* state) {
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
 
-    if (state->query_options().__isset.transmission_compression_type) {
-        _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
+    if (state->query_options().__isset.load_transmission_compression_type) {
+        _compress_type = CompressionUtils::to_compression_pb(state->query_options().load_transmission_compression_type);
     }
     RETURN_IF_ERROR(get_block_compression_codec(_compress_type, &_compress_codec));
 

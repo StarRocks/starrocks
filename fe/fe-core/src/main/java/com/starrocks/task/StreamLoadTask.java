@@ -77,7 +77,7 @@ public class StreamLoadTask {
     private long execMemLimit = 0;
     private long loadMemLimit = 0;
     private boolean partialUpdate = false;
-    private TCompressionType compressionType;
+    private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
@@ -294,6 +294,10 @@ public class StreamLoadTask {
             execMemLimit = Long.parseLong(routineLoadJob.getSessionVariables().get(SessionVariable.EXEC_MEM_LIMIT));
         } else {
             execMemLimit = SessionVariable.DEFAULT_EXEC_MEM_LIMIT;
+        }
+        if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            compressionType = CompressionUtils.findTCompressionByName(
+                    routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
         }
     }
 
