@@ -71,6 +71,8 @@ import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
 import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
 import com.starrocks.thrift.TPublishVersionRequest;
+import com.starrocks.thrift.TPushReq;
+import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
@@ -86,6 +88,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTransmitDataParams;
@@ -450,6 +453,8 @@ public class PseudoBackend {
                 case CLONE:
                     handleClone(request, finishTaskRequest);
                     break;
+                case REALTIME_PUSH:
+                    handleRealtimePush(request, finishTaskRequest);
                 default:
                     LOG.info("ignore task type:" + finishTaskRequest.task_type + " signature:" + finishTaskRequest.signature);
             }
@@ -469,6 +474,28 @@ public class PseudoBackend {
             }
         }
     }
+
+    private void handleRealtimePush(TAgentTaskRequest request, TFinishTaskRequest finish) {
+        TPushReq pushReq = request.getPush_req();
+        TPushType pushType = pushReq.getPush_type();
+        switch (pushType) {
+            case DELETE:
+                handleRealtimePushTypeDelete(pushReq, finish);
+                break;
+            default:
+                throw new RuntimeException("pushType:" + pushType + " is not implement");
+        }
+    }
+
+    private void handleRealtimePushTypeDelete(TPushReq pushReq, TFinishTaskRequest finish) {
+        List<TTabletInfo> finish_tablet_infos = Lists.newArrayList();
+        long tabletId = pushReq.getTablet_id();
+        Tablet tablet = tabletManager.getTablet(tabletId);
+        finish_tablet_infos.add(tablet.getTabletInfo());
+        finish.setFinish_tablet_infos(finish_tablet_infos);
+        finish.setRequest_version(pushReq.getVersion());
+    }
+
 
     private class HeartBeatClient extends HeartbeatService.Client {
         public HeartBeatClient() {
