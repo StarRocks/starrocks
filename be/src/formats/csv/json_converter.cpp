@@ -12,9 +12,8 @@ namespace starrocks::vectorized::csv {
 Status JsonConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                    const Options& options) const {
     auto data_column = down_cast<const JsonColumn*>(&column);
-    std::vector<JsonValue>& pool = const_cast<std::vector<JsonValue>&>(data_column->get_pool());
-    JsonValue b = pool.at(row_num);
-    return os->write(b.get_slice());
+    const std::vector<JsonValue>& pool = data_column->get_pool();
+    return os->write(pool[row_num].get_slice());
 }
 
 Status JsonConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
