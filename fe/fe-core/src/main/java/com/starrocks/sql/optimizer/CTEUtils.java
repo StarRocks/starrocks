@@ -88,6 +88,10 @@ public class CTEUtils {
         }
     }
 
+    public static void collectCteStatistics(Memo memo, OptimizerContext context) {
+        collectCteProduce(memo.getRootGroup(), context, true);
+    }
+
     /*
      * Estimate the complexity of the produce plan
      * */
@@ -120,10 +124,9 @@ public class CTEUtils {
             context.getCteContext().addCTEProduce(produce.getCteId(), opt);
 
             // costs
-            if (collectCosts) {
+            if (collectCosts && context.getCteContext().isForceCTE(produce.getCteId())) {
                 Statistics statistics = calculateStatistics(root, context);
-                opt.setStatistics(statistics);
-                context.getCteContext().addCTEProduceCost(produce.getCteId(), statistics.getComputeSize());
+                context.getCteContext().addCTEStatistics(produce.getCteId(), statistics);
             }
         }
     }
