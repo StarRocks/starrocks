@@ -481,28 +481,45 @@ public:
 
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
+        bool to_nullable = _table_items->left_to_nullable;
         for (size_t i = 0; i < _table_items->probe_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
             auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
             if (hash_table_slot.need_output) {
-                (*chunk)->append_column(std::move(column), slot->id());
+                if (to_nullable && !column->is_nullable()) {
+                    ColumnPtr dest_column = NullableColumn::create(column, NullColumn::create(column->size()));
+                    (*chunk)->append_column(std::move(dest_column), slot->id());
+                } else {
+                    DCHECK_EQ(column->is_nullable(), to_nullable);
+                    (*chunk)->append_column(std::move(column), slot->id());
+                }
             } else {
-                ColumnPtr default_column = ColumnHelper::create_column(
-                        slot->type(), column->is_nullable() || _table_items->left_to_nullable);
+                ColumnPtr default_column =
+                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
                 default_column->append_default(_probe_state->count);
                 (*chunk)->append_column(std::move(default_column), slot->id());
             }
         }
     }
     void _build_output(ChunkPtr* chunk) {
-        // output build
+        bool to_nullable = _table_items->right_to_nullable;
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
-            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), true);
-            default_column->append_nulls(_probe_state->count);
-            (*chunk)->append_column(std::move(default_column), slot->id());
+            ColumnPtr& column = _table_items->build_chunk->columns()[i];
+            if (hash_table_slot.need_output) {
+                // always output nulls.
+                DCHECK(to_nullable);
+                ColumnPtr default_column = ColumnHelper::create_column(slot->type(), true);
+                default_column->append_nulls(_probe_state->count);
+                (*chunk)->append_column(std::move(default_column), slot->id());
+            } else {
+                ColumnPtr default_column =
+                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+                default_column->append_default(_probe_state->count);
+                (*chunk)->append_column(std::move(default_column), slot->id());
+            }
         }
     }
 
