@@ -250,7 +250,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
-    public static final String ENABLE_CHOOSE_BACKENDS_ON_THE_SAME_HOST = "enable_choose_backends_on_the_same_host";
+    public static final String ENABLE_REPLICAS_ON_THE_SAME_HOST = "enable_replicas_on_the_same_host";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -606,8 +606,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * NOTE: This config should not be used on the production because data's replicas on the
      * same host may cause data lost when the host is broken down.
      */
-    @VarAttr(name = ENABLE_CHOOSE_BACKENDS_ON_THE_SAME_HOST, flag = VariableMgr.INVISIBLE)
-    private boolean enableChooseBackendsOntheSameHost = false;
+    @VarAttr(name = ENABLE_REPLICAS_ON_THE_SAME_HOST, flag = VariableMgr.INVISIBLE)
+    private boolean enableReplicasOnTheSameHost = false;
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;
@@ -1085,8 +1085,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
-    public boolean isEnableChooseBackendsOntheSameHost() {
-        return enableChooseBackendsOntheSameHost;
+    public boolean isEnableReplicasOnTheSameHost() {
+        return enableReplicasOnTheSameHost;
     }
 
     // Serialize to thrift object

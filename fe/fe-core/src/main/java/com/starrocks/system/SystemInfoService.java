@@ -635,17 +635,12 @@ public class SystemInfoService {
         }
 
         List<Backend> backends = Lists.newArrayList();
-        if (ConnectContext.get().getSessionVariable().isEnableChooseBackendsOntheSameHost()) {
+        if (ConnectContext.get().getSessionVariable().isEnableReplicasOnTheSameHost()) {
             backends = srcBackends;
         } else {
             // host -> BE list
             Map<String, List<Backend>> backendMaps = Maps.newHashMap();
             for (Backend backend : srcBackends) {
-                // If needAvailable is true, unavailable backend won't go into the pick list
-                if (needAvailable && !backend.isAvailable()) {
-                    continue;
-                }
-
                 if (backendMaps.containsKey(backend.getHost())) {
                     backendMaps.get(backend.getHost()).add(backend);
                 } else {
