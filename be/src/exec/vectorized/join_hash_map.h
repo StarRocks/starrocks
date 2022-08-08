@@ -106,6 +106,7 @@ struct JoinHashTableItems {
     bool left_to_nullable = false;
     bool right_to_nullable = false;
     bool has_large_column = false;
+    bool is_distinct = false;
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
 
@@ -470,80 +471,80 @@ private:
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
 
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& data);
 
     // for one key inner join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data);
 
     // for one key left outer join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_left_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                             const Buffer<CppType>& probe_data);
 
     // for one key left semi join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_left_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                            const Buffer<CppType>& probe_data);
 
     // for one key left anti join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_left_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                            const Buffer<CppType>& probe_data);
 
     // for one key right outer join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_right_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                              const Buffer<CppType>& probe_data);
 
     // for one key right semi join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_right_semi_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                             const Buffer<CppType>& probe_data);
 
     // for one key right anti join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_right_anti_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                             const Buffer<CppType>& probe_data);
 
     // for one key full outer join
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_full_outer_join(RuntimeState* state, const Buffer<CppType>& build_data,
                                             const Buffer<CppType>& probe_data);
 
     // for left outer join with other join conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_left_outer_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data);
 
     // for left semi join with other join conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_left_semi_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                const Buffer<CppType>& probe_data);
 
     // for left anti join with other join conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_left_anti_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                const Buffer<CppType>& probe_data);
 
     // for one key right outer join with other conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_right_outer_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                  const Buffer<CppType>& probe_data);
 
     // for one key right semi join with other join conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_right_semi_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data);
 
     // for one key right anti join with other join conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_right_anti_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data);
 
     // for one key full outer join with other join conjunct
-    template <bool first_probe>
+    template <bool first_probe, bool is_distinct>
     void _probe_from_ht_for_full_outer_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                 const Buffer<CppType>& probe_data);
 

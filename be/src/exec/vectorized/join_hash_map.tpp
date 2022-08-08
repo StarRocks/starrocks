@@ -53,6 +53,13 @@ void JoinBuildFunc<PT>::construct_hash_table(RuntimeState* state, JoinHashTableI
             table_items->first[bucket_num] = i;
         }
     }
+    if (table_items->bucket_size / 2 > table_items->row_count) {
+        size_t count = SIMD::count_nonzero(table_items->first);
+        std::cout<<"ROW:"<<count<<":"<<table_items->row_count<<":"<<table_items->bucket_size<<std::endl;
+        if (count == table_items->row_count) {
+            table_items->is_distinct = true;
+        }
+    }
 }
 
 template <PrimitiveType PT>
@@ -745,11 +752,15 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht(RuntimeState* state, Chun
 
         auto& build_data = BuildFunc().get_key_data(*_table_items);
         auto& probe_data = ProbeFunc().get_key_data(*_probe_state);
-        _search_ht_impl<true>(state, build_data, probe_data);
+        if (_table_items->is_distinct) {
+            _search_ht_impl<true, true>(state, build_data, probe_data);
+        } else {
+            _search_ht_impl<true, false>(state, build_data, probe_data);
+        }
     } else {
         auto& build_data = BuildFunc().get_key_data(*_table_items);
         auto& probe_data = ProbeFunc().get_key_data(*_probe_state);
-        _search_ht_impl<false>(state, build_data, probe_data);
+        _search_ht_impl<false, false>(state, build_data, probe_data);
     }
 }
 
@@ -789,64 +800,64 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state, const Buffer<CppType>& build_data,
                                                             const Buffer<CppType>& data) {
     if (!_table_items->with_other_conjunct) {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
-            _probe_from_ht_for_left_outer_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_outer_join<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::LEFT_SEMI_JOIN:
-            _probe_from_ht_for_left_semi_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_semi_join<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-            _probe_from_ht_for_left_anti_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_anti_join<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
-            _probe_from_ht_for_right_outer_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_right_outer_join<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_SEMI_JOIN:
-            _probe_from_ht_for_right_semi_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_right_semi_join<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_ANTI_JOIN:
-            _probe_from_ht_for_right_anti_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_right_anti_join<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::FULL_OUTER_JOIN:
-            _probe_from_ht_for_full_outer_join<first_probe>(state, build_data, data);
+            _probe_from_ht_for_full_outer_join<first_probe, is_distinct>(state, build_data, data);
             break;
         default:
-            _probe_from_ht<first_probe>(state, build_data, data);
+            _probe_from_ht<first_probe, is_distinct>(state, build_data, data);
             break;
         }
     } else {
         switch (_table_items->join_type) {
         case TJoinOp::LEFT_OUTER_JOIN:
-            _probe_from_ht_for_left_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_outer_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::LEFT_SEMI_JOIN:
-            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-            _probe_from_ht_for_left_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_left_anti_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
-            _probe_from_ht_for_right_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_right_outer_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_SEMI_JOIN:
-            _probe_from_ht_for_right_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_right_semi_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_ANTI_JOIN:
-            _probe_from_ht_for_right_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_right_anti_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         case TJoinOp::FULL_OUTER_JOIN:
-            _probe_from_ht_for_full_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
+            _probe_from_ht_for_full_outer_join_with_other_conjunct<first_probe, is_distinct>(state, build_data, data);
             break;
         default:
             // can't reach here
-            _probe_from_ht<first_probe>(state, build_data, data);
+            _probe_from_ht<first_probe, is_distinct>(state, build_data, data);
             break;
         }
     }
@@ -897,7 +908,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     _probe_state->cur_row_match_count = 0;
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, const Buffer<CppType>& build_data,
                                                            const Buffer<CppType>& probe_data) {
     _probe_state->match_flag = JoinMatchFlag::NORMAL;
@@ -935,6 +946,10 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                     RETURN_IF_CHUNK_FULL()
                 }
                 build_index = _table_items->next[build_index];
+
+                if constexpr (is_distinct) {
+                    break;
+                }
             } while (build_index != 0);
 
             if constexpr (first_probe) {
@@ -956,7 +971,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(RuntimeState* state,
                                                                                const Buffer<CppType>& build_data,
                                                                                const Buffer<CppType>& probe_data) {
@@ -995,8 +1010,13 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
 
                     RETURN_IF_CHUNK_FULL()
                 }
+
+                if constexpr (is_distinct) {
+                    break;
+                }
                 build_index = _table_items->next[build_index];
             }
+
             if (_probe_state->cur_row_match_count <= 0) {
                 // one key of left table match none key of right table
                 _probe_state->probe_index[match_count] = i;
@@ -1022,7 +1042,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(RuntimeState* state,
                                                                               const Buffer<CppType>& build_data,
                                                                               const Buffer<CppType>& probe_data) {
@@ -1040,6 +1060,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(Ru
                 match_count++;
                 break;
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             index = _table_items->next[index];
         }
     }
@@ -1049,7 +1072,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join(Ru
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(RuntimeState* state,
                                                                               const Buffer<CppType>& build_data,
                                                                               const Buffer<CppType>& probe_data) {
@@ -1077,6 +1100,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
                     found = true;
                     break;
                 }
+                if constexpr (is_distinct) {
+                    break;
+                }
                 index = _table_items->next[index];
             }
             if (!found) {
@@ -1098,6 +1124,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
                     found = true;
                     break;
                 }
+                if constexpr (is_distinct) {
+                    break;
+                }
                 index = _table_items->next[index];
             }
             if (!found) {
@@ -1112,7 +1141,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(RuntimeState* state,
                                                                                 const Buffer<CppType>& build_data,
                                                                                 const Buffer<CppType>& probe_data) {
@@ -1144,6 +1173,10 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
 
                 RETURN_IF_CHUNK_FULL()
             }
+
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
     }
@@ -1153,7 +1186,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join(
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(RuntimeState* state,
                                                                                const Buffer<CppType>& build_data,
                                                                                const Buffer<CppType>& probe_data) {
@@ -1184,6 +1217,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
                     RETURN_IF_CHUNK_FULL()
                 }
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
     }
@@ -1192,7 +1228,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(RuntimeState* state,
                                                                                const Buffer<CppType>& build_data,
                                                                                const Buffer<CppType>& probe_data) {
@@ -1207,6 +1243,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(R
             if (ProbeFunc().equal(build_data[index], probe_data[i])) {
                 _probe_state->build_match_index[index] = 1;
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             index = _table_items->next[index];
         }
     }
@@ -1214,7 +1253,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join(R
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(RuntimeState* state,
                                                                                const Buffer<CppType>& build_data,
                                                                                const Buffer<CppType>& probe_data) {
@@ -1253,6 +1292,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(R
 
                     RETURN_IF_CHUNK_FULL()
                 }
+                if constexpr (is_distinct) {
+                    break;
+                }
                 build_index = _table_items->next[build_index];
             }
             if (_probe_state->cur_row_match_count <= 0) {
@@ -1270,7 +1312,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join(R
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1313,6 +1355,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_w
 
                 RETURN_IF_CHUNK_FULL()
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
         if (_probe_state->cur_row_match_count <= 0) {
@@ -1330,7 +1375,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join_w
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1365,6 +1410,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
 
                 RETURN_IF_CHUNK_FULL()
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
     }
@@ -1374,7 +1422,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_semi_join_wi
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1417,6 +1465,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
 
                 RETURN_IF_CHUNK_FULL()
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
         if (_probe_state->cur_row_match_count <= 0) {
@@ -1434,7 +1485,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1457,6 +1508,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_
 
                 RETURN_IF_CHUNK_FULL()
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
     }
@@ -1465,7 +1519,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_outer_join_
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1488,6 +1542,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_w
 
                 RETURN_IF_CHUNK_FULL()
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
     }
@@ -1496,7 +1553,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join_w
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1519,6 +1576,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_w
 
                 RETURN_IF_CHUNK_FULL()
             }
+            if constexpr (is_distinct) {
+                break;
+            }
             build_index = _table_items->next[build_index];
         }
     }
@@ -1527,7 +1587,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_anti_join_w
 }
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
-template <bool first_probe>
+template <bool first_probe, bool is_distinct>
 void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_with_other_conjunct(
         RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
     size_t match_count = 0;
@@ -1567,6 +1627,9 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_full_outer_join_w
                     match_count++;
 
                     RETURN_IF_CHUNK_FULL()
+                }
+                if constexpr (is_distinct) {
+                    break;
                 }
                 build_index = _table_items->next[build_index];
             }

@@ -11,6 +11,14 @@
 
 namespace SIMD {
 
+inline size_t count_nonzero(const std::vector<uint32_t>& nums) {
+    size_t count = 0;
+    for (size_t num : nums) {
+        count += (num != 0);
+    }
+    return count;
+}
+
 // Count the number of zeros of 8-bit signed integers.
 inline size_t count_zero(const int8_t* data, size_t size) {
     size_t count = 0;
