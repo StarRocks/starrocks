@@ -150,6 +150,19 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_as_runtime_filter(ObjectPool
     return pool->add(new ExprContext(new_expr));
 }
 
+struct FilterZoneMapWithMinMaxOp {
+    template <PrimitiveType ptype>
+    bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
+        auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
+        return filter->filter_zonemap_with_min_max(min_column, max_column);
+    }
+};
+
+bool RuntimeFilterHelper::filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
+                                                      const Column* min_column, const Column* max_column) {
+    return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
+}
+
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;

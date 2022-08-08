@@ -45,6 +45,9 @@ public:
                                             size_t column_offset, bool eq_null);
 
     static StatusOr<ExprContext*> rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct, Chunk* chunk);
+
+    static bool filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
+                                            const Column* min_column, const Column* max_column);
 };
 
 // how to generate & publish this runtime filter
