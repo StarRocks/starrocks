@@ -2279,4 +2279,16 @@ public class AuthTest {
         newAuth.replayRevokeImpersonate(infos.get(0));
         Assert.assertFalse(newAuth.canImpersonate(harry, gregory));
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testUserNamePureDigit() throws Exception {
+        String sql = "CREATE USER '12345' IDENTIFIED BY '12345'";
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        auth.createUser(createUserStmt);
+        Assert.assertNotNull(auth.getUserProperties("default_cluster:'12345'@'%'"));
+    }
+ }
+>>>>>>> f62b50193 ([Feature] Support all-digit user name (#9715))
