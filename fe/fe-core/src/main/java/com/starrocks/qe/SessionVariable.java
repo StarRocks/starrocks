@@ -220,6 +220,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // in the case of insufficient network bandwidth, but excess CPU resources, an algorithm with a
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
+    public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -533,6 +534,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "LZ4";
+
+    @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
+    private String loadTransmissionCompressionType = "NO_COMPRESSION";
 
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
@@ -1061,6 +1065,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryDebugTrace;
     }
 
+    public String getloadTransmissionCompressionType() {
+        return loadTransmissionCompressionType;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1095,6 +1103,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
+        }
+
+        TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
+        if (loadCompressionType != null) {
+            tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
