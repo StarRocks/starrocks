@@ -235,7 +235,7 @@ public:
             null_data = &_nullable_column->get_data();
         }
         for (size_t i = 1; i < column.size(); i++) {
-            if ((null_data == nullptr) || ((*null_data)[i-1] != 1 && (*null_data)[i] != 1)) {
+            if ((null_data == nullptr) || ((*null_data)[i - 1] != 1 && (*null_data)[i] != 1)) {
                 (*_tie)[i] &= SorterComparator<Slice>::compare(data[i - 1], data[i]) == 0;
             }
         }
@@ -250,7 +250,7 @@ public:
             null_data = &_nullable_column->get_data();
         }
         for (size_t i = 1; i < column.size(); i++) {
-            if ((null_data == nullptr) || ((*null_data)[i-1] != 1 && (*null_data)[i] != 1)) {
+            if ((null_data == nullptr) || ((*null_data)[i - 1] != 1 && (*null_data)[i] != 1)) {
                 (*_tie)[i] &= SorterComparator<T>::compare(data[i - 1], data[i]) == 0;
             }
         }
