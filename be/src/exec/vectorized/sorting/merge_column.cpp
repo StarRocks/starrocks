@@ -316,27 +316,36 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
-ChunkPtr SortedRun::steal_chunk(size_t size) {
+ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
     if (empty()) {
         return {};
     }
-    if (size >= num_rows()) {
+    if (skipped_rows >= num_rows()) {
+        // all data should be skipped
+        chunk.reset();
+        range.first = range.second = 0;
+        return {};
+    }
+
+    size_t reserved_rows = num_rows() - skipped_rows;
+
+    if (size >= reserved_rows) {
         ChunkPtr res;
-        if (range.first == 0 && range.second == chunk->num_rows()) {
+        if (skipped_rows == 0 && range.first == 0 && range.second == chunk->num_rows()) {
             // No others reference this chunk
             res = chunk;
         } else {
-            res = chunk->clone_empty(num_rows());
-            res->append(*chunk, range.first, num_rows());
+            res = chunk->clone_empty(reserved_rows);
+            res->append(*chunk, range.first + skipped_rows, reserved_rows);
         }
         range.first = range.second = 0;
         chunk.reset();
         return res;
     } else {
-        size_t required_rows = std::min(size, num_rows());
+        size_t required_rows = std::min(size, reserved_rows);
         ChunkPtr res = chunk->clone_empty(required_rows);
-        res->append(*chunk, range.first, required_rows);
-        range.first += required_rows;
+        res->append(*chunk, range.first + skipped_rows, reserved_rows);
+        range.first += skipped_rows + required_rows;
         return res;
     }
 }
