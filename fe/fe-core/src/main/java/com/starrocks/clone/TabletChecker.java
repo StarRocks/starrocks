@@ -199,7 +199,16 @@ public class TabletChecker extends MasterDaemon {
      * to the queue again in the next `TabletChecker` round.
      */
     private boolean tryChooseSrcBeforeSchedule(TabletSchedCtx tabletCtx) {
-        return !(tabletCtx.needCloneFromSource() && tabletCtx.getHealthyReplicas().size() == 0);
+        if (tabletCtx.needCloneFromSource()) {
+            if (tabletCtx.getReplicas().size() == 1 && Config.recover_with_empty_tablet) {
+                // in this case, we need to forcefully create an empty replica to recover
+                return true;
+            } else {
+                return tabletCtx.getHealthyReplicas().size() != 0;
+            }
+        } else {
+            return true;
+        }
     }
 
     private void checkTablets() {
