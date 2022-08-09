@@ -21,9 +21,7 @@ on:
 
 jobs:
   automerge:
-    permissions:
-      contents: read
-      pull-requests: write
+    permissions: write-all
     runs-on: ubuntu-latest
     steps:
       - id: automerge
