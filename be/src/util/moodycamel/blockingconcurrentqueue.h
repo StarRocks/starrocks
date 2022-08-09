@@ -1,10 +1,10 @@
+// clang-format off
 // Provides an efficient blocking version of moodycamel::ConcurrentQueue.
 // ©2015-2020 Cameron Desrochers. Distributed under the terms of the simplified
 // BSD license, available at the top of concurrentqueue.h.
 // Also dual-licensed under the Boost Software License (see LICENSE.md)
 // Uses Jeff Preshing's semaphore implementation (under the terms of its
 // separate zlib license, see lightweightsemaphore.h).
-
 #pragma once
 
 #include "concurrentqueue.h"
@@ -580,3 +580,4 @@ inline void swap(BlockingConcurrentQueue<T, Traits>& a, BlockingConcurrentQueue<
 }
 
 }	// end namespace moodycamel
+// clang-format on
