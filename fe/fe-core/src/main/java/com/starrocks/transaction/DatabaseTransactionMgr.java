@@ -1165,7 +1165,11 @@ public class DatabaseTransactionMgr {
                 // no need to persist it. if prepare txn lost, the following commit will just be failed.
                 // user only need to retry this txn.
                 // The FRONTEND type txn is committed and running asynchronously, so we have to persist it.
+                long start = System.currentTimeMillis();
                 editLog.logInsertTransactionState(transactionState);
+                LOG.debug("insert txn state for txn {}, current state: {}, cost: {}ms",
+                        transactionState.getTransactionId(), transactionState.getTransactionStatus(),
+                        System.currentTimeMillis() - start);
             }
         }
         if (!transactionState.getTransactionStatus().isFinalStatus()) {

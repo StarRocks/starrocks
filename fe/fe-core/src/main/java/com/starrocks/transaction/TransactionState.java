@@ -221,6 +221,7 @@ public class TransactionState implements Writable {
     private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
+    private long publishVersionFinishTime = -1;
     private TransactionStatus preStatus = null;
 
     private long callbackId = -1;
@@ -320,6 +321,10 @@ public class TransactionState implements Writable {
 
     public void updateSendTaskTime() {
         this.publishVersionTime = System.currentTimeMillis();
+    }
+
+    public void updatePublishTaskFinishTime() {
+        this.publishVersionFinishTime = System.currentTimeMillis();
     }
 
     public long getPublishVersionTime() {
@@ -625,8 +630,19 @@ public class TransactionState implements Writable {
         if (commitTime > prepareTime) {
             sb.append(", write cost: ").append(commitTime - prepareTime).append("ms");
         }
+        if (publishVersionTime != -1 && publishVersionFinishTime != -1) {
+            if (publishVersionTime > commitTime) {
+                sb.append(", wait for publish cost: ").append(publishVersionTime - commitTime).append("ms");
+            }
+            if (publishVersionFinishTime > publishVersionTime) {
+                sb.append(", publish rpc cost: ").append(publishVersionFinishTime - publishVersionTime).append("ms");
+            }
+            if (finishTime > publishVersionFinishTime) {
+                sb.append(", finish txn cost: ").append(finishTime - publishVersionFinishTime).append("ms");
+            }
+        }
         if (finishTime > commitTime) {
-            sb.append(", publish cost: ").append(finishTime - commitTime).append("ms");
+            sb.append(", publish total cost: ").append(finishTime - commitTime).append("ms");
         }
         if (finishTime > prepareTime) {
             sb.append(", total cost: ").append(finishTime - prepareTime).append("ms");
@@ -854,7 +870,8 @@ public class TransactionState implements Writable {
                     partitionVersions,
                     traceParent,
                     txnSpan,
-                    createTime);
+                    createTime,
+                    this);
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }

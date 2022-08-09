@@ -119,7 +119,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
-        // traverse all ready transactions and dispatch the publish version task to all backends
+        // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
             for (PublishVersionTask task : tasks) {
@@ -148,8 +148,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
-                    // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
-                    // and it will upload the failed tabletinfo to fe and fe will deal with them
+                    // sometimes backend finish publish version task, but it maybe failed to change
+                    // transaction id to version for some tablets,
+                    // and it will upload the failed tablet info to fe and fe will deal with them
                     Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
                     if (!errReplicas.isEmpty()) {
                         publishErrorReplicaIds.addAll(errReplicas);
@@ -173,7 +174,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         publishErrorReplicaIds);
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
                             transactionState, publishErrorReplicaIds.size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
@@ -201,7 +202,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
                             transactionState, transactionState.getErrorReplicas().size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
