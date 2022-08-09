@@ -629,6 +629,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             ColumnRefOperator outputStringColumn = kv.getKey();
                             final ColumnRefOperator newDictColumn = context.columnRefFactory.create(
                                     dictColumn.getName(), ID_TYPE, dictColumn.isNullable());
+                            if (context.stringFunctions.containsKey(dictColumn)) {
+                                context.stringFunctions.put(newDictColumn, context.stringFunctions.get(dictColumn));
+                            }
                             newStringToDicts.put(outputStringColumn.getId(), newDictColumn.getId());
 
                             for (Pair<Integer, ColumnDict> globalDict : context.globalDicts) {
