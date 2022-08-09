@@ -165,7 +165,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public synchronized boolean recyclePartition(long dbId, long tableId, Partition partition,
                                                  Range<PartitionKey> range, DataProperty dataProperty,
                                                  short replicationNum,
-                                                 boolean isInMemory) {
+                                                 boolean isInMemory,
+                                                 StorageInfo storageInfo) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
             return false;
@@ -177,7 +178,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         // recycle partition
         RecyclePartitionInfo partitionInfo = new RecyclePartitionInfo(dbId, tableId, partition,
                 range, dataProperty, replicationNum,
-                isInMemory);
+                isInMemory, storageInfo);
         idToRecycleTime.put(partition.getId(), System.currentTimeMillis());
         idToPartition.put(partition.getId(), partitionInfo);
         LOG.info("recycle partition[{}-{}]", partition.getId(), partition.getName());
@@ -595,6 +596,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         partitionInfo.setDataProperty(partitionId, recoverPartitionInfo.getDataProperty());
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
+        // for debug
+        if (recoverPartitionInfo.getStorageInfo() == null) {
+            LOG.info("recoverPartitionInfo storageInfo is null");
+        }
         partitionInfo.setStorageInfo(partitionId, recoverPartitionInfo.getStorageInfo());
 
         // remove from recycle bin
