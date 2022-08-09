@@ -635,7 +635,13 @@ public class SystemInfoService {
 
         List<Backend> backends = Lists.newArrayList();
         if (Config.enable_replicas_on_the_same_host) {
-            backends = srcBackends;
+            for (Backend backend : srcBackends) {
+                // If needAvailable is true, unavailable backend won't go into the pick list
+                if (needAvailable && !backend.isAvailable()) {
+                    continue;
+                }
+                backends.add(backend);
+            }
         } else {
             // host -> BE list
             Map<String, List<Backend>> backendMaps = Maps.newHashMap();
