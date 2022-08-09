@@ -1,22 +1,24 @@
 # date_add
 
-## description
+## 功能
 
-### Syntax
+向日期添加指定的时间间隔。
+
+## 语法
 
 ```Haskell
 DATETIME DATE_ADD(DATETIME date,INTERVAL expr type)
 ```
 
-向日期添加指定的时间间隔。
+## 参数说明
 
-date 参数是合法的日期表达式。
+`date` 参数必须是合法的日期表达式。
 
-expr 参数是您希望添加的时间间隔。
+`expr` 参数是您希望添加的时间间隔。
 
-type 参数可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND
+`type` 参数可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND。
 
-## example
+## 示例
 
 ```Plain Text
 MySQL > select date_add('2010-11-30 23:59:59', INTERVAL 2 DAY);

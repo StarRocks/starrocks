@@ -1,20 +1,20 @@
 # timestampadd
 
-## description
+## 功能
 
-### Syntax
+将整数表达式间隔添加到日期或日期时间表达式`datetime_expr`中。
+
+`interval`的单位由unit参数给出，应该是下列值之一:
+
+SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR。
+
+## 语法
 
 ```Haskell
 DATETIME TIMESTAMPADD(unit, interval, DATETIME datetime_expr)
 ```
 
-将整数表达式间隔添加到日期或日期时间表达式datetime_expr中。
-
-interval的单位由unit参数给出，它应该是下列值之一:
-
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR。
-
-## example
+## 示例
 
 ```plain text
 

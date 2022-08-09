@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算输入值是否在 Bitmap 列中
+计算输入值是否在 Bitmap 列中。
 
 ## 语法
 
@@ -12,13 +12,13 @@ BITMAP_CONTAINS(bitmap, input)
 
 ## 参数说明
 
-`bitmap`: 支持的数据类型为 BITMAP
+`bitmap`: 支持的数据类型为 BITMAP。
 
-`input`: 输入值, 支持的数据类型为 BIGINT
+`input`: 输入值, 支持的数据类型为 BIGINT。
 
 ## 返回值说明
 
-返回值的数据类型为 BOOLEAN
+返回值的数据类型为 BOOLEAN。
 
 ## 示例
 

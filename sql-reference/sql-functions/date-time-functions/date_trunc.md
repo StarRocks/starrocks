@@ -2,7 +2,7 @@
 
 ## 背景
 
-客户在使用时间函数时经常有关于group by hour / week这样的需求，而且希望能够第一列直接展示成时间的格式，希望有类似 oracle 的trunc函数这样的方式来对datetime进行高效的截断，从而避免写出类似如下的低效sql:
+客户在使用时间函数时经常有关于group by hour/week这样的需求，而且希望能够将第一列直接展示成时间的格式，希望有类似 Oracle 的trunc函数这样的方式来对datetime进行高效的截断，从而避免写出类似如下的低效SQL:
 
 ```sql
 select ADDDATE(DATE_FORMAT(DATE_ADD(from_unixtime(`timestamp`), INTERVAL 8 HOUR),
@@ -12,11 +12,11 @@ select ADDDATE(DATE_FORMAT(DATE_ADD(from_unixtime(`timestamp`), INTERVAL 8 HOUR)
 from xxx group 1 ;
 ```
 
-## 动机
+## 目的
 
 为了更快实现对时间数据的截断，提供向量化的date_trunc系列函数。
 
-原本我们已经有了year/month/day等直接截取部分的时间函数。
+原本已有year/month/day等直接截取部分的时间函数。
 
 date_trunc与此类似，对datetime进行高位截断：
 
@@ -56,9 +56,7 @@ alter session set week_start = 1
 alter session set week_start = 3
 ```
 
-## description
-
-### Syntax
+## 语法
 
 ```Haskell
 DATETIME date_trunc(VARCHAR fmt, DATETIME datetime)
@@ -82,7 +80,7 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME datetime)
 | week | 截断到这个星期第一天作为有效时间 | 2020-11-04 11:12:00 => 2020-11-02 00:00:00 |
 | quarter | 截断到这个季度第一天作为有效时间 | 2020-06-23 11:12:00 => 2020-04-01 00:00:00 |
 
-## example
+## 示例
 
 ```Plain Text
 MySQL > select date_trunc("hour", "2020-11-04 11:12:13")

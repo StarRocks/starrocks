@@ -1,16 +1,16 @@
 # to_date
 
-## description
+## 功能
 
-### Syntax
+返回 DATETIME 类型值中的日期部分。
+
+## 语法
 
 ```Haskell
 DATE TO_DATE(DATETIME datetime)
 ```
 
-返回 DATETIME 类型中的日期部分。
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select to_date("2020-02-02 00:00:00");

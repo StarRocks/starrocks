@@ -1,16 +1,16 @@
 # array_position
 
-## description
+## 功能
 
-### Syntax
+获取数组中某个元素位置，是的话返回位置，否则返回0.
+
+## 语法
 
 ```Haskell
 array_position(any_array, any_element)
 ```
 
-获取数组中某个元素位置，是的话返回位置，否则返回0.
-
-## example
+## 示例
 
 ```plain text
 mysql> select array_position(["apple","orange","pear"], "orange");
@@ -22,7 +22,7 @@ mysql> select array_position(["apple","orange","pear"], "orange");
 1 row in set (0.01 sec)
 ```
 
-也可以获取数组NULL的位置
+也可以获取数组NULL的位置。
 
 ```plain text
 mysql> select array_position([1, NULL], NULL);

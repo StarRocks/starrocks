@@ -1,16 +1,16 @@
 # from_days
 
-## description
+## 功能
 
-### Syntax
+通过计算当前时间距离`0000-01-01`的天数计算出是哪一天。
+
+## 语法
 
 ```Haskell
 DATE FROM_DAYS(INT N)
 ```
 
-通过距离0000-01-01日的天数计算出哪一天
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select from_days(730669);

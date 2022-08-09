@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算两个输入 bitmap 的交集，返回新的 bitmap
+计算两个输入 bitmap 的交集，返回新的 bitmap。
 
 ## 语法
 
@@ -12,13 +12,13 @@ BITMAP_AND(lhs, rhs)
 
 ## 参数说明
 
-`lhs`: 支持的数据类型为 BITMAP
+`lhs`: 支持的数据类型为 BITMAP。
 
-`rhs`: 支持的数据类型为 BITMAP
+`rhs`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 

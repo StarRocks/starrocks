@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一个 BIMTAP 中的所有值组合成一个 bigint 数组
+将一个 BIMTAP 中的所有值组合成一个 bigint 数组。
 
 ## 语法
 
@@ -12,11 +12,11 @@
 
 ## 参数说明
 
-`bitmap`: 支持的数据类型为 BITMAP
+`bitmap`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
-返回值的数据类型为 ARRAY
+返回值的数据类型为 ARRAY。
 
 ## 示例
 

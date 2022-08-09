@@ -1,14 +1,14 @@
 # curtime,current_time
 
-## Syntax
+## 功能
+
+获取当前的时间，以TIME类型返回.
+
+## 语法
 
 `TIME CURTIME()`
 
-## Description
-
-获得当前的时间，以TIME类型返回
-
-## Examples
+## 示例
 
 ```Plain Text
 MySQL > select current_time();

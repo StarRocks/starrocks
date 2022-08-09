@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一个 bitmap 转化成一个逗号分隔的字符串, 字符串中包含所有设置的 BIT 位, 输入是 null 的话会返回 null
+将一个 bitmap 转化成一个逗号分隔的字符串, 字符串中包含所有设置的 BIT 位, 输入是 null 的话会返回 null。
 
 ## 语法
 
@@ -12,11 +12,11 @@ BITMAP_TO_STRING(input)
 
 ## 参数说明
 
-`input`: 支持的数据类型为 BITMAP
+`input`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
-返回值的数据类型为 VARCHAR
+返回值的数据类型为 VARCHAR。
 
 ## 示例
 

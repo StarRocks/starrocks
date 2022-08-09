@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一个几何图形转化为 WKT（Well Known Text）的表示形式
+将一个几何图形转化为 WKT（Well Known Text）的表示形式。
 
 ## 语法
 
@@ -12,11 +12,11 @@ ST_AsText(geo)
 
 ## 参数说明
 
-`geo`: 待转化的参数, 支持的数据类型为 GEOMETRY
+`geo`: 待转化的参数, 支持的数据类型为 GEOMETRY。
 
 ## 返回值说明
 
-返回值的数据类型为 VARCHAR
+返回值的数据类型为 VARCHAR。
 
 ## 示例
 

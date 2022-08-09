@@ -2,7 +2,7 @@
 
 ## 功能
 
-将一个 WKT（Well Known Text）转化为对应的内存的几何形式
+将一个 WKT（Well Known Text）转化为对应的内存的几何形式。
 
 ## 语法
 
@@ -12,11 +12,11 @@ ST_GeometryFromText(wkt)
 
 ## 参数说明
 
-`wkt`: 待转化的 WKT, 支持的数据类型为 VARCHAR
+`wkt`: 待转化的 WKT, 支持的数据类型为 VARCHAR。
 
 ## 返回值说明
 
-返回值的数据类型为 GEOMETRY
+返回值的数据类型为 GEOMETRY。
 
 ## 示例
 

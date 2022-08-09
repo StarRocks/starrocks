@@ -2,7 +2,7 @@
 
 ## 功能
 
-输入一组 bitmap 值, 求这一组 bitmap 值的并集, 并返回
+输入一组 bitmap 值, 求这一组 bitmap 值的并集, 并返回。
 
 ## 语法
 
@@ -12,11 +12,11 @@ BITMAP_UNION(value)
 
 ## 参数说明
 
-`value`: 支持的数据类型为 BITMAP
+`value`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 

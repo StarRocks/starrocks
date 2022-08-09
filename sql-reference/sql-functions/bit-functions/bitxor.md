@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回 `x` 和 `y` 两个数值型数值在按位 XOR 结果
+返回 `x` 和 `y` 两个数值型数值在按位 XOR 结果。
 
 ## 语法
 
@@ -12,15 +12,15 @@ BITXOR(x,y);
 
 ## 参数说明
 
-`x`: 支持的数据类型为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT
+`x`: 支持的数据类型为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT。
 
-`y`: 支持的数据类型为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT
+`y`: 支持的数据类型为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT。
 
-> 注：使用时 `x` 与 `y` 数据类型要相同
+> 注：使用时 `x` 与 `y` 数据类型要相同。
 
 ## 返回值说明
 
-返回值的数据类型与 `x` 类型一致
+返回值的数据类型与 `x` 类型一致。
 
 ## 示例
 

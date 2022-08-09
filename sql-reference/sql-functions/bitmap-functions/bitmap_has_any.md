@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算两个 Bitmap 列是否存在相交元素, 返回值是 Boolean 值
+计算两个 Bitmap 列是否存在相交元素, 返回值是 Boolean 值。
 
 ## 语法
 
@@ -12,13 +12,13 @@ BITMAP_HAS_ANY(lhs, rhs)
 
 ## 参数说明
 
-`lhs`: 支持的数据类型为 BITMAP
+`lhs`: 支持的数据类型为 BITMAP。
 
-`rhs`: 支持的数据类型为 BITMAP
+`rhs`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
-返回值的数据类型为 BOOLEAN
+返回值的数据类型为 BOOLEAN。
 
 ## 示例
 

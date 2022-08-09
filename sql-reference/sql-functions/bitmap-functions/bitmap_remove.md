@@ -2,7 +2,7 @@
 
 ## 功能
 
-从 **lhs** 中删除 **input** 作为结果集合返回
+从 **lhs** 中删除 **input** 作为结果集合返回。
 
 ## 语法
 
@@ -12,13 +12,13 @@ bitmap_remove(lhs, input)
 
 ## 参数说明
 
-`lhs`: 支持的数据类型为 BITMAP
+`lhs`: 支持的数据类型为 BITMAP。
 
-`input`: 支持的数据类型为 BIGINT
+`input`: 支持的数据类型为 BIGINT。
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 

@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回所给参数中的最小值
+返回所给参数中的最小值。
 
 ## 语法
 
@@ -12,11 +12,11 @@ LEAST(expr1,...);
 
 ## 参数说明
 
-`expr1`: 支持的数据类型为 SMALLINT、TINYINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、DATETIME、VARCHAR
+`expr1`: 支持的数据类型为 SMALLINT、TINYINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128、DATETIME、VARCHAR。
 
 ## 返回值说明
 
-返回值的数据类型为与参数 `expr1` 类型相同
+返回值的数据类型为与参数 `expr1` 类型相同。
 
 ## 示例
 

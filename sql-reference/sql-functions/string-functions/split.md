@@ -2,7 +2,7 @@
 
 ## 功能
 
-根据分隔符拆分字符串, 将拆分后的所有字符串以 ARRAY 的格式返回
+根据分隔符拆分字符串, 将拆分后的所有字符串以 ARRAY 的格式返回。
 
 ## 语法
 
@@ -12,13 +12,13 @@ split(content, delimiter)
 
 ## 参数说明
 
-`content`: 支持的数据类型为 VARCHAR
+`content`: 支持的数据类型为 VARCHAR。
 
-`delimiter`: 支持的数据类型为 VARCHAR
+`delimiter`: 支持的数据类型为 VARCHAR。
 
 ## 返回值说明
 
-返回值的数据类型为 ARRAY
+返回值的数据类型为 ARRAY。
 
 ## 示例
 

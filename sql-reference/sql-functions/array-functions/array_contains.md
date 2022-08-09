@@ -1,16 +1,16 @@
 # array_contains
 
-## description
+## 功能
 
-### Syntax
+检查数组中是否包含某个元素，是的话返回1，否则返回0.
+
+## 语法
 
 ```Haskell
 array_contains(any_array, any_element)
 ```
 
-检查数组中是否包含某个元素，是的话返回1，否则返回0.
-
-## example
+## 示例
 
 ```plain text
 mysql> select array_contains(["apple","orange","pear"], "orange");
@@ -22,7 +22,7 @@ mysql> select array_contains(["apple","orange","pear"], "orange");
 1 row in set (0.01 sec)
 ```
 
-也可以检查数组中是否包含NULL
+也可以检查数组中是否包含NULL。
 
 ```plain text
 mysql> select array_contains([1, NULL], NULL);

@@ -1,16 +1,16 @@
 # array_length
 
-## description
+## 功能
 
-### Syntax
+返回数组中元素个数，结果类型是INT，如果参数是NULL，结果也是NULL.
+
+## 语法
 
 ```Haskell
 array_length(any_array)
 ```
 
-返回数组中元素个数，结果类型是INT，如果参数是NULL，结果也是NULL.
-
-## example
+## 示例
 
 ```plain text
 mysql> select array_length([1,2,3]);

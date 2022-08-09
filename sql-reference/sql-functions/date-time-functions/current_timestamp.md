@@ -1,16 +1,16 @@
 # current_timestamp
 
-## description
+## 功能
 
-### Syntax
+获取当前时间，以Datetime类型返回。
+
+## 语法
 
 ```Haskell
 DATETIME CURRENT_TIMESTAMP()
 ```
 
-获得当前的时间，以Datetime类型返回
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select current_timestamp();

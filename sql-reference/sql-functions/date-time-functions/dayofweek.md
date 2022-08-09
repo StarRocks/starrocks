@@ -1,18 +1,18 @@
 # dayofweek
 
-## description
+## 功能
 
-### Syntax
+返回指定日期的工作日索引值，即星期日为1，星期一为2，星期六为7。
+
+参数为Date或者Datetime类型。或者为可以cast为Date或者Datetime类型的数字。
+
+## 语法
 
 ```Haskell
 INT dayofweek(DATETIME date)
 ```
 
-DAYOFWEEK函数返回日期的工作日索引值，即星期日为1，星期一为2，星期六为7
-
-参数为Date或者Datetime类型或者可以cast为Date或者Datetime类型的数字
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select dayofweek('2019-06-25');

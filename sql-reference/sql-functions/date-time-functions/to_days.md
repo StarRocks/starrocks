@@ -1,18 +1,18 @@
 # to_days
 
-## description
+## 功能
 
-### Syntax
+返回指定日期距离`0000-01-01`的天数。
+
+参数必须为 DATE或DATETIME类型。
+
+## 语法
 
 ```Haskell
 INT TO_DAYS(DATETIME date)
 ```
 
-返回date距离0000-01-01的天数
-
-参数为Date或者Datetime类型
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select to_days('2007-10-07');

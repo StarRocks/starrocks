@@ -2,7 +2,7 @@
 
 ## 功能
 
-根据分割符拆分字符串, 返回指定的分割部分(从 1 开始计数)
+根据分割符拆分字符串, 返回指定的分割部分(从 1 开始计数)。
 
 ## 语法
 
@@ -12,15 +12,15 @@ split_part(content, delimiter, field)
 
 ## 参数说明
 
-`content`: 支持的数据类型为 VARCHAR
+`content`: 支持的数据类型为 VARCHAR。
 
-`delimiter`: 支持的数据类型为 VARCHAR
+`delimiter`: 支持的数据类型为 VARCHAR。
 
-`field`: 支持的数据类型为 INT
+`field`: 支持的数据类型为 INT。
 
 ## 返回值说明
 
-返回值的数据类型为 VARCHAR
+返回值的数据类型为 VARCHAR。
 
 ## 示例
 

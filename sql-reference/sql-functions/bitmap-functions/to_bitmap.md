@@ -19,11 +19,11 @@ TO_BITMAP(expr)
 
 ## 参数说明
 
-`expr`: 支持的数据类型为 unsigned BIGINT
+`expr`: 支持的数据类型为 unsigned BIGINT。
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 
