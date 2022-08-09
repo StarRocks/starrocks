@@ -1,6 +1,13 @@
-
 name: automerge
 on:
+  workflow_run:
+    workflows: ["check"]
+    types: ['requested']
+permissions:
+  # All other permissions are set to none
+  checks: write
+  contents: read
+  pull-requests: write
 #   pull_request_target:
 #     types:
 #       - labeled
@@ -11,14 +18,14 @@ on:
 #       - ready_for_review
 #       - reopened
 #       - unlocked
-  pull_request_review:
-    types:
-      - submitted
-  check_suite:
-    types:
-      - completed
-  status: {}
-permissions: write-all
+#   pull_request_review:
+#     types:
+#       - submitted
+#   check_suite:
+#     types:
+#       - completed
+#   status: {}
+# permissions: write-all
 
 jobs:
   automerge:
