@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class CTEProperty implements PhysicalProperty {
+    // All cteID will be passed from top to bottom, and prune plan when meet CTENoOp node with same CTEid 
     private final Set<Integer> cteIds;
 
     public static final CTEProperty EMPTY = new CTEProperty(ImmutableSet.of());
