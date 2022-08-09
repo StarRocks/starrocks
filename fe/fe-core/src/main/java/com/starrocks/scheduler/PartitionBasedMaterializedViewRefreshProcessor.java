@@ -113,21 +113,23 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 if (checkBaseTablePartitionChange()) {
                     retryNum++;
                     if (retryNum > MAX_RETRY_NUM) {
-                        throw new DmlException("refresh task failed");
+                        throw new DmlException("materialized view:%s refresh task failed", materializedView.getName());
                     }
-                    LOG.info("base partition has changed. retry to sync partitions, retryNum:{}", retryNum);
+                    LOG.info("materialized view:{} base partition has changed. retry to sync partitions, retryNum:{}",
+                            materializedView.getName(), retryNum);
                     continue;
                 }
                 checked = true;
                 Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView();
                 LOG.debug("materialized view partitions to refresh:{}", partitionsToRefresh);
                 if (partitionsToRefresh.isEmpty()) {
-                    LOG.info("no partitions to refresh:{} for materialized view", materializedView.getName());
+                    LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                     return;
                 }
 
                 Map<String, Set<String>> sourceTablePartitions = getSourceTablePartitions(partitionsToRefresh);
-                LOG.debug("materialized view source partitions :{}", sourceTablePartitions);
+                LOG.debug("materialized view:{} source partitions :{}",
+                        materializedView.getName(), sourceTablePartitions);
 
                 // create ExecPlan
                 insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
@@ -221,8 +223,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
         // currently, mv only supports one expression
         Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-        Expr partitionExpr = materializedView.getPartitionRefTableExprs().get(0);
-        return partitionExpr;
+        return materializedView.getPartitionRefTableExprs().get(0);
     }
 
     private Pair<OlapTable, Column> getPartitionTableAndColumn(Map<Long, OlapTable> olapTables) {
