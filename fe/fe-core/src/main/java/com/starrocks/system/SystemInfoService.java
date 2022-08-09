@@ -651,13 +651,7 @@ public class SystemInfoService {
                     continue;
                 }
 
-                if (backendMaps.containsKey(backend.getHost())) {
-                    backendMaps.get(backend.getHost()).add(backend);
-                } else {
-                    List<Backend> list = Lists.newArrayList();
-                    list.add(backend);
-                    backendMaps.put(backend.getHost(), list);
-                }
+                backendMaps.putIfAbsent(backend.getHost(), Lists.newArrayList()).add(backend);
             }
 
             // if more than one backend exists in same host, select a backend at random
