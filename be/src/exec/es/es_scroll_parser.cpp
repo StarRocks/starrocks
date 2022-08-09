@@ -541,9 +541,9 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
     auto* elements = array->elements_column().get();
 
     if (pure_doc_value) {
-        RETURN_IF_ERROR(_append_doc_value_array_val(col, child_type, elements));
+        RETURN_IF_ERROR(_append_array_val_from_docvalue(col, child_type, elements));
     } else {
-        RETURN_IF_ERROR(_append_source_array_val(col, child_type, elements));
+        RETURN_IF_ERROR(_append_array_val_from_source(col, child_type, elements));
     }
 
     size_t new_size = elements->size();
@@ -551,7 +551,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
     return Status::OK();
 }
 
-Status ScrollParser::_append_doc_value_array_val(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+Status ScrollParser::_append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                                  Column* column) {
     for (auto& item : val.GetArray()) {
         RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, item, true));
@@ -559,7 +559,7 @@ Status ScrollParser::_append_doc_value_array_val(const rapidjson::Value& val, co
     return Status::OK();
 }
 
-Status ScrollParser::_append_source_array_val(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+Status ScrollParser::_append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                               Column* column) {
     if (val.IsNull()) {
         // Ignore null item in _source.
@@ -573,7 +573,7 @@ Status ScrollParser::_append_source_array_val(const rapidjson::Value& val, const
     }
 
     for (auto& item : val.GetArray()) {
-        RETURN_IF_ERROR(_append_source_array_val(item, child_type_desc, column));
+        RETURN_IF_ERROR(_append_array_val_from_source(item, child_type_desc, column));
     }
     return Status::OK();
 }
