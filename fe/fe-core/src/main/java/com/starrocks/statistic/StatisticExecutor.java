@@ -135,7 +135,7 @@ public class StatisticExecutor {
         }
     }
 
-    public List<TStatisticData> queryTopN(String sql) throws Exception {
+    public List<TStatisticData> queryMCV(String sql) throws Exception {
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         try {

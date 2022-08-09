@@ -1366,10 +1366,10 @@ public class Config extends ConfigBase {
     public static long histogram_buckets_size = 64;
 
     /**
-     * default top-n size of histogram statistics
+     * default most common value size of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_topn_size = 100;
+    public static long histogram_mcv_size = 100;
 
     /**
      * default sample ratio of histogram statistics
