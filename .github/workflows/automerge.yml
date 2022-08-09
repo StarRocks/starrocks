@@ -1,26 +1,16 @@
 name: automerge
 on:
-  pull_request_review:
+  pull_request_target:
     types:
-      - submitted
-  check_suite:
-    types:
-      - completed
-  status: {}
-
+      - labeled
 jobs:
   automerge:
     runs-on: ubuntu-latest
     steps:
-      - id: automerge
-        name: automerge
-        uses: pascalgn/automerge-action@v0.15.3
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-          MERGE_METHOD: squash
-          MERGE_REQUIRED_APPROVALS: 1
-
-      - name: feedback
-        if: steps.automerge.outputs.mergeResult == 'merged'
-        run: |
-          echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
+      - name: enable automerge
+        if: contains( github.event.pull_request.labels.*.name, 'automerge')
+        uses: peter-evans/enable-pull-request-automerge@v2
+        with:
+          token: ${{ secrets.PAT }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: merge
