@@ -177,12 +177,14 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
     // handle create repository stmt
     public void createRepository(CreateRepositoryStmt stmt) throws DdlException {
-        if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
-            ErrorReport
-                    .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
+        if (stmt.hasBroker()) {
+            if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
+                ErrorReport
+                        .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
+            }
         }
 
-        BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties());
+        BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties(), stmt.hasBroker());
         long repoId = globalStateMgr.getNextId();
         Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), stmt.getLocation(), storage);
 
