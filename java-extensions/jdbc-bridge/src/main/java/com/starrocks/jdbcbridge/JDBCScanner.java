@@ -40,7 +40,7 @@ public class JDBCScanner {
             config.setJdbcUrl(scanContext.getJdbcURL());
             config.setUsername(scanContext.getUser());
             config.setPassword(scanContext.getPassword());
-            config.setMaximumPoolSize(1);
+            config.setMaximumPoolSize(scanContext.getConnectionPoolSize());
             dataSource = new HikariDataSource(config);
             DataSourceCache.getInstance().put(driverLocation, user, pass, url, dataSource);
         }

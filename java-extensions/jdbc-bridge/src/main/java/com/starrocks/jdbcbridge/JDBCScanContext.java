@@ -72,5 +72,8 @@ public class JDBCScanContext {
         return statementFetchSize;
     }
 
+    public int getConnectionPoolSize() {
+        return connectionPoolSize;
+    }
 
 }
