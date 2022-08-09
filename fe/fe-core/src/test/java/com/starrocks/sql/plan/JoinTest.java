@@ -2681,6 +2681,7 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  4:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
+                "  |  hash predicates:\n" +
                 "  |  colocate: true\n" +
                 "  |  equal join conjunct: 1: v1 = 4: v1");
         FeConstants.runningUnitTest = false;
