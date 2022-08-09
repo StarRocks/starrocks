@@ -247,7 +247,6 @@
       + [week](/sql-reference/sql-functions/date-time-functions/week.md)
       + [weekofyear](/sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [year](/sql-reference/sql-functions/date-time-functions/year.md)
-      + [date_floor](/sql-reference/sql-functions/date-time-functions/date_floor.md)
       + [hours_diff](/sql-reference/sql-functions/date-time-functions/hours_diff.md)
       + [minutes_diff](/sql-reference/sql-functions/date-time-functions/minutes_diff.md)
       + [months_diff](/sql-reference/sql-functions/date-time-functions/months_diff.md)
