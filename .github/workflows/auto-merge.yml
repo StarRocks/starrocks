@@ -46,6 +46,8 @@ name: automerge
 on:
   # See note below about using pull_request_target
   pull_request_target:
+    types:
+      - labeled
 
 jobs:
   automerge:
@@ -61,11 +63,11 @@ jobs:
 
           # The name of the PR author to enable automerge for
           # Defaults to dependabot[bot]
-          allowed-author: "dependabot[bot]"
+          # allowed-author: "dependabot[bot]"
 
           # Allowed values: MERGE | SQUASH | REBASE
           # Defaults to MERGE
-          merge-method: MERGE
+          # merge-method: MERGE
   
 #       - name: feedback
 #         if: steps.automerge.outputs.mergeResult == 'merged'
