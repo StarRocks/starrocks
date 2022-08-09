@@ -1,13 +1,8 @@
-on: 
-  check_run:
-    types: ['completed']
-name: success-check
-jobs:
-  checkForSuccess:
-    name: success-check
-    runs-on: ubuntu-latest
-    steps:
-    - name: Check
-      uses: arup-group/action-all-checks-passed@master
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+on:
+  pull_request_review:
+    types:
+      - submitted
+  check_suite:
+    types:
+      - completed
+  status: {}
