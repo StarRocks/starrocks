@@ -1270,11 +1270,6 @@ public class GlobalStateMgr {
     }
 
     public long loadAlterJob(DataInputStream dis, long checksum, AlterJobV2.JobType type) throws IOException {
-        Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == AlterJobV2.JobType.SCHEMA_CHANGE) {
-            alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        }
-
         // alter jobs
         int size = dis.readInt();
         if (size > 0) {
@@ -1304,9 +1299,9 @@ public class GlobalStateMgr {
                     if (type == AlterJobV2.JobType.ROLLUP) {
                         this.getRollupHandler().addAlterJobV2(alterJobV2);
                     } else {
-                        alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                        this.getSchemaChangeHandler().addAlterJobV2(alterJobV2);
                     }
-                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpointed
+                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
                     // to prevent TabletInvertedIndex data loss,
                     // So just use AlterJob.replay() instead of AlterHandler.replay().
                     if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
@@ -1314,7 +1309,7 @@ public class GlobalStateMgr {
                         LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
                     }
                 } else {
-                    alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                    LOG.warn("Unknown job type:" + type.name());
                 }
             }
         }
