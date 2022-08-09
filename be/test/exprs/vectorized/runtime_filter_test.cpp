@@ -367,7 +367,11 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
 typedef std::function<void(BinaryColumn*, std::vector<uint32_t>&, std::vector<size_t>&)> PartitionByFunc;
 typedef std::function<void(JoinRuntimeFilter*, JoinRuntimeFilter::RunningContext*)> GrfConfigFunc;
 
-void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc part_func, GrfConfigFunc grf_config_func) {
+using TestHelper = std::function<void(size_t, size_t, PartitionByFunc, GrfConfigFunc)>;
+
+template <bool compatibility>
+void test_grf_helper_template(size_t num_rows, size_t num_partitions, PartitionByFunc part_func,
+                              GrfConfigFunc grf_config_func) {
     std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
     std::vector<JoinRuntimeFilter*> rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
@@ -410,6 +414,7 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
     {
         running_ctx.selection.assign(num_rows, 1);
         running_ctx.use_merged_selection = false;
+        running_ctx.compatibility = compatibility;
         grf.evaluate(column.get(), &running_ctx);
         auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
         ASSERT_EQ(true_count, num_rows);
@@ -424,12 +429,15 @@ void test_grf_helper(size_t num_rows, size_t num_partitions, PartitionByFunc par
         ASSERT_LE((double)true_count / negative_num_rows, 0.5);
     }
 }
+
+TestHelper test_grf_helper = test_grf_helper_template<true>;
+
 void test_colocate_or_bucket_shuffle_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
                                                 std::vector<int> bucketseq_to_partition,
                                                 TRuntimeFilterBuildJoinMode::type mode) {
-    auto part_by_func = [num_rows, num_partitions, num_buckets, &bucketseq_to_partition](
-                                BinaryColumn* column, std::vector<uint32_t>& hash_values,
-                                std::vector<size_t>& num_rows_per_partitions) {
+    auto part_by_func = [num_rows, num_buckets, &bucketseq_to_partition](BinaryColumn* column,
+                                                                         std::vector<uint32_t>& hash_values,
+                                                                         std::vector<size_t>& num_rows_per_partitions) {
         hash_values.assign(num_rows, 0);
         column->crc32_hash(hash_values.data(), 0, num_rows);
         std::vector<size_t> num_rows_per_bucket(num_buckets, 0);
