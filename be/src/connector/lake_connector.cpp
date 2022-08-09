@@ -223,9 +223,11 @@ Status LakeDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
     SCOPED_TIMER(_scan_timer);
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
 
         TRY_CATCH_ALLOC_SCOPE_START()
+        // NOTE: `TRY_CATCH_ALLOC_SCOPE_START` will catch alloc expection to avoid be crash when `malloc` failed.
+        // However if codes below are expcption unsafe, memory leak may be caused.
+        RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
 
         for (auto slot : _query_slots) {
             size_t column_index = chunk_ptr->schema()->get_field_index_by_name(slot->col_name());
