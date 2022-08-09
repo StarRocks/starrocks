@@ -449,8 +449,10 @@ public class DecodeRewriteTest extends PlanTestBase {
 
         sql = "select max(upper(S_ADDRESS)) from supplier";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains(" <function id 12>"));
+        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  <dict id 13> : <string id 10>\n" +
+                "  |  string functions:\n" +
+                "  |  <function id 13> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
 
         sql = "select max(\"CONST\") from supplier";
         plan = getFragmentPlan(sql);
@@ -695,10 +697,16 @@ public class DecodeRewriteTest extends PlanTestBase {
         sql = "select * from supplier l join supplier_nullable r where l.S_SUPPKEY = r.S_SUPPKEY " +
                 "order by l.S_ADDRESS limit 10";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:TOP-N\n" +
-                "  |  order by: <slot 17> 17: S_ADDRESS ASC\n" +
+        assertContains(plan, "  5:TOP-N\n" +
+                "  |  order by: <slot 3> 3 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
+                "  |  \n" +
+                "  4:Decode\n" +
+                "  |  <dict id 17> : <string id 3>\n" +
+                "  |  <dict id 18> : <string id 7>\n" +
+                "  |  <dict id 19> : <string id 11>\n" +
+                "  |  <dict id 20> : <string id 15>\n" +
                 "  |  \n" +
                 "  3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
@@ -712,24 +720,17 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "join supplier_nullable r " +
                 " on l.S_SUPPKEY = r.S_SUPPKEY ) tb group by S_SUPPKEY";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  8:Decode\n" +
-                "  |  <dict id 21> : <string id 17>\n" +
-                "  |  <dict id 22> : <string id 18>\n" +
+        assertContains(plan, "  9:Decode\n" +
+                "  |  <dict id 23> : <string id 17>\n" +
+                "  |  <dict id 24> : <string id 18>\n" +
                 "  |  \n" +
-                "  7:Project\n" +
-                "  |  <slot 21> : 21: S_ADDRESS\n" +
-                "  |  <slot 22> : 22: S_COMMENT\n" +
+                "  8:Project\n" +
+                "  |  <slot 23> : 23: S_ADDRESS\n" +
+                "  |  <slot 24> : 24: S_COMMENT\n" +
                 "  |  \n" +
-                "  6:AGGREGATE (update finalize)\n" +
-                "  |  output: max(19: S_ADDRESS), max(20: S_COMMENT)\n" +
-                "  |  group by: 1: S_SUPPKEY"));
-        plan = getThriftPlan(sql);
-        Assert.assertEquals(plan.split("\n").length, 3);
-        Assert.assertTrue(plan.split("\n")[0].contains("query_global_dicts:" +
-                "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1]), " +
-                "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1]), " +
-                "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1]), " +
-                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1])])"));
+                "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(21: S_ADDRESS), max(22: S_COMMENT)\n" +
+                "  |  group by: 1: S_SUPPKEY");
         // the fragment on the top don't have to send global dicts
         sql = "select upper(ST_S_ADDRESS),\n" +
                 "    upper(ST_S_COMMENT)\n" +
@@ -904,12 +905,6 @@ public class DecodeRewriteTest extends PlanTestBase {
                 "  |  string functions:\n" +
                 "  |  <function id 14> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])\n" +
                 "  |  "));
-        sql = "select max(if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT)), " +
-                "min(upper(S_COMMENT)) from supplier_nullable " +
-                "group by upper(S_COMMENT)";
-        plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("Decode"));
-
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
     }
