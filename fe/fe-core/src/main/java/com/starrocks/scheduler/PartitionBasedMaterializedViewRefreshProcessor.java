@@ -110,11 +110,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 // check whether there are partition changes for base tables, eg: partition rename
                 // retry to sync partitions if any base table changed the partition infos
                 if (checkBaseTablePartitionChange()) {
-                    LOG.info("base partition has changed. retry to sync partitions");
                     retryNum++;
                     if (retryNum > MAX_RETRY_NUM) {
                         throw new DmlException("refresh task failed");
                     }
+                    LOG.info("base partition has changed. retry to sync partitions, retryNum:{}", retryNum);
                     continue;
                 }
 
