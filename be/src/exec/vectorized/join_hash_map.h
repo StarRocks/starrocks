@@ -512,8 +512,8 @@ private:
                 // always output nulls.
                 DCHECK(to_nullable);
                 if (!column->is_nullable()) {
-                    auto null_column = NullColumn::create(_probe_state->count, 1);
-                    auto dest_column = NullableColumn::create(std::move(column), null_column);
+                    ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                    dest_column->append_nulls(_probe_state->count);
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
                     ColumnPtr dest_column = column->clone_empty();
