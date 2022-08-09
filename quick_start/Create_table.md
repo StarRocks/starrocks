@@ -80,7 +80,7 @@ StarRocks 表内部组织存储数据时会按照指定列排序，这些列为�
 
 #### 字段类型
 
-StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](/using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../using_starrocks/Array.md)，字段类型介绍详见 [数据类型章节](/sql-reference/sql-statements/data-types/BIGINT.md)。
+StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](/using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../sql-reference/sql-statements/data-types/Array.md)，字段类型介绍详见 [数据类型章节](/sql-reference/sql-statements/data-types/BIGINT.md)。
 
 > 注意：在建表时，您应尽量使用精确的类型。例如，整形数据不应使用字符串类型，INT 类型即可满足的数据不应使用 BIGINT 类型。精确的数据类型能够更好的发挥数据库的性能。
 

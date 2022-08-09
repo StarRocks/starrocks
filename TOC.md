@@ -40,7 +40,6 @@
   + [使用 catalog 管理内部和外部数据](/using_starrocks/Manage_data.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
-  + [数组](/using_starrocks/Array.md)
   + [窗口函数](/using_starrocks/Window_function.md)
   + [Java UDF](/using_starrocks/JAVA_UDF.md)
   + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
@@ -209,6 +208,7 @@
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
+        + [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
     + 辅助命令
       + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + 函数参考
