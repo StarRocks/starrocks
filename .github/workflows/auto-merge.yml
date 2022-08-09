@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: enable automerge
-        if: contains( github.event.pull_request.labels, 'automerge')
+        if: ${{ github.event.label.name == 'automerge' }}
         uses: daneden/enable-automerge-action@v1
         with:
           # A personal access token that you have generated and saved in the
