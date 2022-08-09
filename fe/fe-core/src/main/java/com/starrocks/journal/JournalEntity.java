@@ -34,7 +34,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -198,11 +197,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO:
-            case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO:
-                data = MaterializedViewPartitionVersionInfo.read(in);
-                isRead = true;
-                break;
             case OperationType.OP_DROP_TABLE:
             case OperationType.OP_DROP_ROLLUP: {
                 data = new DropInfo();
