@@ -1,8 +1,8 @@
 name: automerge
 on:
-  pull_request_target:
-    types:
-      - auto_merge_enabled
+#   pull_request_target:
+#     types:
+#       - auto_merge_enabled
   
 #   # All other permissions are set to none
 #   checks: write
@@ -18,13 +18,13 @@ on:
 #       - ready_for_review
 #       - reopened
 #       - unlocked
-#   pull_request_review:
-#     types:
-#       - submitted
-#   check_suite:
-#     types:
-#       - completed
-#   status: {}
+  pull_request_review:
+    types:
+      - submitted
+  check_suite:
+    types:
+      - completed
+  status: {}
 # permissions: write-all
 
 jobs:
