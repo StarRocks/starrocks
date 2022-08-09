@@ -52,7 +52,6 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -635,7 +634,7 @@ public class SystemInfoService {
         }
 
         List<Backend> backends = Lists.newArrayList();
-        if (ConnectContext.get().getSessionVariable().isEnableChooseBackendsOntheSameHost()) {
+        if (Config.enable_choose_backends_on_the_same_host) {
             backends = srcBackends;
         } else {
             // host -> BE list

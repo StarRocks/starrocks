@@ -800,6 +800,16 @@ public class Config extends ConfigBase {
     public static boolean enable_strict_storage_medium_check = false;
 
     /**
+     * If set to true, FE will choose backends on the same host which can be used for better dev because
+     * some cases can only be reproduced on the distributed env.
+     * <p>
+     * NOTE: This config should not be used on the production because data's replicas on the
+     * same host may cause data lost when the host is broken down.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_choose_backends_on_the_same_host = false;
+
+    /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when created.
      */
