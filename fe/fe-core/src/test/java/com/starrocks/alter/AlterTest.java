@@ -59,6 +59,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -2189,7 +2191,8 @@ public class AlterTest {
     public void testFindTruncatePartitionEntrance() throws Exception {
 
         Database db = new Database();
-        
+        OlapTable table = new OlapTable(TableType.OLAP);
+        table.setState(OlapTableState.NORMAL);
         new MockUp<GlobalStateMgr>() {
             @Mock
             public Database getDb(String name) {
@@ -2198,6 +2201,12 @@ public class AlterTest {
             @Mock
             public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
                 throw new DdlException("test DdlException");
+            }
+        };
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return table;
             }
         };
         List<AlterClause> cList = new ArrayList<>();

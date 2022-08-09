@@ -385,16 +385,6 @@ public class Alter {
         boolean needProcessOutsideDatabaseLock = false;
         String tableName = dbTableName.getTbl();
 
-        // this logic is use to adapt mysql syntax, and cannot be executed after adding a write lock
-        // ALTER TABLE test TRUNCATE PARTITION p1;
-        if (currentAlterOps.hasTruncatePartitionOp()) {
-            TruncatePartitionClause clause = (TruncatePartitionClause) alterClauses.get(0);
-            TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
-            TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-            GlobalStateMgr.getCurrentState().truncateTable(tStmt);
-            return;
-        }
-
         db.writeLock();
         try {
             Table table = db.getTable(tableName);
@@ -450,6 +440,15 @@ public class Alter {
                 } else {
                     throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
                 }
+            } else if (currentAlterOps.hasTruncatePartitionOp()) {
+                // this logic is use to adapt mysql syntax, and cannot be executed after adding a write lock
+                // ALTER TABLE test TRUNCATE PARTITION p1;
+                db.writeUnlock();
+                TruncatePartitionClause clause = (TruncatePartitionClause) alterClauses.get(0);
+                TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
+                TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
+                GlobalStateMgr.getCurrentState().truncateTable(tStmt);
+                return;
             } else if (currentAlterOps.hasRenameOp()) {
                 processRename(db, olapTable, alterClauses);
             } else if (currentAlterOps.hasSwapOp()) {
@@ -460,7 +459,9 @@ public class Alter {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
             }
         } finally {
-            db.writeUnlock();
+            if (!currentAlterOps.hasTruncatePartitionOp()) {
+                db.writeUnlock();
+            }
         }
 
         // the following ops should done outside db lock. because it contain synchronized create operation
