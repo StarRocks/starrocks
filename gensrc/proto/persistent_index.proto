@@ -21,10 +21,21 @@ message MutableIndexMetaPB {
     repeated IndexWalMetaPB wals = 3;
 }
 
+// Do not modify the parameters order because of compatibility
+// The parameters will be reorder after compatibility code is finished
 message ImmutableIndexShardMetaPB {
     uint64 size = 1;
     uint64 npage = 2;
     PagePointerPB data = 3;
+    uint64 key_size = 4;
+    uint64 value_size = 5;
+    uint64 nbucket = 6;
+}
+
+message ShardInfoPB {
+    uint32 key_size = 1;
+    uint64 shard_off = 2;
+    uint64 shard_num = 3;
 }
 
 message ImmutableIndexMetaPB {
@@ -34,8 +45,9 @@ message ImmutableIndexMetaPB {
     repeated ImmutableIndexShardMetaPB shards = 4;
     // only support fixed length KVs currently
     // will add varlen KV in future
-    uint64 fixed_key_size = 5;
-    uint64 fixed_value_size = 6;
+    uint64 fixed_key_size = 5; // Deprecated, will be delete in future
+    uint64 fixed_value_size = 6; // Deprecated, will be delete in future
+    repeated ShardInfoPB shard_info = 7;
 }
 
 message PersistentIndexMetaPB {

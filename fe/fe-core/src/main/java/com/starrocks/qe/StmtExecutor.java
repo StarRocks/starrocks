@@ -113,6 +113,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.task.LoadEtlTask;
@@ -804,6 +805,9 @@ public class StmtExecutor {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) parsedStmt;
         Database db = MetaUtils.getDatabase(context, analyzeStmt.getTableName());
         OlapTable table = (OlapTable) MetaUtils.getTable(context, analyzeStmt.getTableName());
+        if (StatisticUtils.isEmptyTable(table)) {
+            return;
+        }
 
         AnalyzeStatus analyzeStatus;
         StatisticExecutor statisticExecutor = new StatisticExecutor();
@@ -1004,7 +1008,12 @@ public class StmtExecutor {
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
             }
         }
-        explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        // marked delete will get execPlan null
+        if (execPlan == null) {
+            explainString += "NOT AVAILABLE";
+        } else {
+            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+        }
         return explainString;
     }
 

@@ -49,7 +49,13 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
         }
     }
     if (limit != -1) {
-        oss << " LIMIT " << limit;
+        if (jdbc_url.starts_with("jdbc:oracle")) {
+            // oracle doesn't support limit clause, we should generate a subquery to do this
+            // ref: https://stackoverflow.com/questions/470542/how-do-i-limit-the-number-of-rows-returned-by-an-oracle-query-after-ordering
+            return fmt::format("SELECT * FROM ({}) WHERE ROWNUM <= {}", oss.str(), limit);
+        } else {
+            oss << " LIMIT " << limit;
+        }
     }
     return oss.str();
 }

@@ -5,6 +5,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import jersey.repackaged.com.google.common.collect.Lists;
@@ -15,7 +16,9 @@ import org.junit.Test;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class StatisticsCollectJobTest extends PlanTestBase {
     @BeforeClass
@@ -183,5 +186,44 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs2.size());
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().remove(olapTable.getId());
+    }
+
+    @Test
+    public void testAnalyzeHistogram() {
+        Database db = GlobalStateMgr.getCurrentState().getDb(10002);
+        OlapTable olapTable = (OlapTable) db.getTable("t0_stats");
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
+        properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
+        HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v2"),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                properties);
+
+        String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2");
+        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats'," +
+                " histogram(v2, 64, 0.1),  NULL, NOW() FROM " +
+                "(SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  " +
+                "ORDER BY v2 LIMIT 9223372036854775807) t", sql);
+
+        Map<String, String> mostCommonValues = new HashMap<>();
+        mostCommonValues.put("1", "10");
+        mostCommonValues.put("2", "20");
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v2");
+        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats', " +
+                "histogram(v2, 64, 0.1),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
+                "FROM (SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  and v2 not in (1,2) " +
+                "ORDER BY v2 LIMIT 9223372036854775807) t", sql);
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+                db, olapTable, 100L, "v2");
+        Assert.assertEquals("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
+                "cast(column_key as varchar), cast(column_value as varchar) " +
+                "from (select 2 as version, 10002 as db_id, 16325 as table_id, `v2` as column_key, " +
+                "count(`v2`) as column_value from test.t0_stats group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
     }
 }

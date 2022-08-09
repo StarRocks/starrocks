@@ -198,6 +198,7 @@ public class FunctionSet {
     public static final String UUID = "uuid";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
+    public static final String ASSERT_TRUE = "assert_true";
 
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
@@ -1038,7 +1039,7 @@ public class FunctionSet {
 
         for (Type t : HISTOGRAM_TYPE) {
             addBuiltin(AggregateFunction.createBuiltin("histogram",
-                    Lists.newArrayList(t, Type.INT, Type.DOUBLE, Type.INT), Type.VARCHAR, Type.VARCHAR,
+                    Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
     }

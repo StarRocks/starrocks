@@ -668,9 +668,9 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, editLogPort);
-            if (fe != null) {
-                throw new DdlException("frontend already exists " + fe);
+            Frontend fe = getFeByHost(host);
+            if (null != fe) {
+                throw new DdlException("frontend use host [" + host + "] already exists ");
             }
 
             String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);

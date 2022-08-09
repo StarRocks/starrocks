@@ -31,6 +31,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -43,6 +44,8 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Backend be = UtFrameUtils.addMockBackend(10002);
+        be.setIsDecommissioned(true);
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -278,7 +281,7 @@ public class CreateTableTest {
         ));
         // Add column in unique key
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTable("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_unique_key ADD COLUMN k3 JSON"));
 
         // Add column in primary key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -294,7 +297,7 @@ public class CreateTableTest {
                         ");"
         ));
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTable("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_json_primary_key ADD COLUMN k3 JSON"));
     }
 
     @Test

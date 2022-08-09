@@ -78,7 +78,7 @@ public class SetPassVarTest {
         String setSql = "set sql_mode = concat(@@sql_mode,',STRICT_TRANS_TABLES');";
         SetStmt stmt = (SetStmt) UtFrameUtils.parseAndAnalyzeStmt(setSql, ctx);
         ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_STRICT_TRANS_TABLES);
-        stmt.analyze();
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         SetVar setVars = stmt.getSetVars().get(0);
 
         Assert.assertTrue(setVars.getResolvedExpression().getStringValue().contains("STRICT_TRANS_TABLES"));

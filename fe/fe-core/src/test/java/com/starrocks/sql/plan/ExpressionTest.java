@@ -1042,4 +1042,22 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3 | 1: v1 | 2: v2 | 3: v3"));
     }
 
+    @Test
+    public void testAssertTrue() throws Exception {
+        {
+            String sql = "select assert_true(null)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : assert_true(NULL)");
+        }
+        {
+            String sql = "select assert_true(true)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : assert_true(TRUE)");
+        }
+        {
+            String sql = "select assert_true(false)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : assert_true(FALSE)");
+        }
+    }
 }

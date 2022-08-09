@@ -526,10 +526,19 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
             return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);
-        } else if (alive < (replicationNum / 2) + 1) {
-            return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
-        } else if (alive < replicationNum) {
-            return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.NORMAL);
+        } else {
+            List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
+            // We create `REPLICA_MISSING` type task only when there exists enough available BEs which
+            // we can choose to clone data to, if not we should check if we can create `VERSION_INCOMPLETE` task,
+            // so that repair of replica with incomplete version won't be blocked and hence version publish process
+            // of load task won't be blocked either.
+            if (availableBEs.size() > alive) {
+                if (alive < (replicationNum / 2) + 1) {
+                    return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
+                } else if (alive < replicationNum) {
+                    return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.NORMAL);
+                }
+            }
         }
 
         // 2. version complete replicas are not enough
@@ -639,8 +648,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
      * NORNAL:  delay Config.tablet_repair_delay_factor_second * 2;
      * LOW:     delay Config.tablet_repair_delay_factor_second * 3;
      */
-    public boolean readyToBeRepaired(TabletSchedCtx.Priority priority) {
-        if (priority == Priority.VERY_HIGH) {
+    public boolean readyToBeRepaired(TabletStatus status, TabletSchedCtx.Priority priority) {
+        if (priority == Priority.VERY_HIGH ||
+                status == TabletStatus.VERSION_INCOMPLETE ||
+                status == TabletStatus.NEED_FURTHER_REPAIR) {
             return true;
         }
 

@@ -887,11 +887,11 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
 Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_rowset_writer,
                                        TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                        RowsetSharedPtr rowset) {
-    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
-            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
+    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(
+            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
-    auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
+    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
@@ -1077,10 +1077,10 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
                                           TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                           RowsetSharedPtr rowset) {
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
-    Schema base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
-            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs()));
-    Schema new_schema = std::move(ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema()));
-    auto char_field_indexes = std::move(ChunkHelper::get_char_field_indexes(new_schema));
+    Schema base_schema = ChunkHelper::convert_schema_to_format_v2(
+            base_tablet->tablet_schema(), *_chunk_changer->get_mutable_selected_column_indexs());
+    Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
+    auto char_field_indexes = ChunkHelper::get_char_field_indexes(new_schema);
 
     // memtable max buffer size set default 80% of memory limit so that it will do _merge() if reach limit
     // set max memtable size to 4G since some column has limit size, it will make invalid data
@@ -1347,10 +1347,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         Schema base_schema;
         if (config::enable_schema_change_v2) {
-            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(
-                    base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs()));
+            base_schema = ChunkHelper::convert_schema_to_format_v2(
+                    base_tablet->tablet_schema(), *sc_params.chunk_changer->get_mutable_selected_column_indexs());
         } else {
-            base_schema = std::move(ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema()));
+            base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
         }
 
         for (auto& version : versions_to_be_changed) {
@@ -1500,7 +1500,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
 
         TabletSharedPtr new_tablet = sc_params.new_tablet;
         TabletSharedPtr base_tablet = sc_params.base_tablet;
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.tablet_uid = new_tablet->tablet_uid();
         writer_context.tablet_id = new_tablet->tablet_id();

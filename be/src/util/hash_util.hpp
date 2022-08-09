@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "common/logging.h"
 #include "common/compiler_util.h"
+#include "common/logging.h"
 
 // For cross compiling with clang, we need to be able to generate an IR file with
 // no sse instructions.  Attempting to load a precompiled IR file that contains
@@ -32,12 +32,13 @@
 #include <nmmintrin.h>
 #endif
 #include <zlib.h>
-#include "util/cpu_info.h"
-#include "util/murmur_hash3.h"
+
 #include "gen_cpp/Types_types.h"
-#include "storage/uint24.h"
 #include "storage/decimal12.h"
+#include "storage/uint24.h"
+#include "util/cpu_info.h"
 #include "util/int96.h"
+#include "util/murmur_hash3.h"
 
 namespace starrocks {
 
@@ -118,9 +119,7 @@ public:
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
 
-    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) {
-        return (x << r) | (x >> (32 - r));
-    }
+    ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
 
     ALWAYS_INLINE static uint32_t fmix32(uint32_t h) {
         h ^= h >> 16;
@@ -140,27 +139,33 @@ public:
 
         const uint32_t c1 = 0xcc9e2d51;
         const uint32_t c2 = 0x1b873593;
-        const uint32_t * blocks = (const uint32_t *)(data + nblocks * 4);
+        const uint32_t* blocks = (const uint32_t*)(data + nblocks * 4);
 
-        for(int i = -nblocks; i; i++) {
+        for (int i = -nblocks; i; i++) {
             uint32_t k1 = blocks[i];
 
             k1 *= c1;
-            k1 = rotl32(k1,15);
+            k1 = rotl32(k1, 15);
             k1 *= c2;
 
             h1 ^= k1;
-            h1 = rotl32(h1,13);
+            h1 = rotl32(h1, 13);
             h1 = h1 * 5 + 0xe6546b64;
         }
 
-        const uint8_t * tail = (const uint8_t*)(data + nblocks * 4);
+        const uint8_t* tail = (const uint8_t*)(data + nblocks * 4);
         uint32_t k1 = 0;
-        switch(len & 3) {
-            case 3: k1 ^= tail[2] << 16;
-            case 2: k1 ^= tail[1] << 8;
-            case 1: k1 ^= tail[0];
-                k1 *= c1; k1 = rotl32(k1,15); k1 *= c2; h1 ^= k1;
+        switch (len & 3) {
+        case 3:
+            k1 ^= tail[2] << 16;
+        case 2:
+            k1 ^= tail[1] << 8;
+        case 1:
+            k1 ^= tail[0];
+            k1 *= c1;
+            k1 = rotl32(k1, 15);
+            k1 *= c2;
+            h1 ^= k1;
         };
 
         h1 ^= len;
@@ -188,21 +193,21 @@ public:
 
         const uint8_t* data2 = reinterpret_cast<const uint8_t*>(data);
         switch (len & 7) {
-            case 7:
-                h ^= uint64_t(data2[6]) << 48;
-            case 6:
-                h ^= uint64_t(data2[5]) << 40;
-            case 5:
-                h ^= uint64_t(data2[4]) << 32;
-            case 4:
-                h ^= uint64_t(data2[3]) << 24;
-            case 3:
-                h ^= uint64_t(data2[2]) << 16;
-            case 2:
-                h ^= uint64_t(data2[1]) << 8;
-            case 1:
-                h ^= uint64_t(data2[0]);
-                h *= MURMUR_PRIME;
+        case 7:
+            h ^= uint64_t(data2[6]) << 48;
+        case 6:
+            h ^= uint64_t(data2[5]) << 40;
+        case 5:
+            h ^= uint64_t(data2[4]) << 32;
+        case 4:
+            h ^= uint64_t(data2[3]) << 24;
+        case 3:
+            h ^= uint64_t(data2[2]) << 16;
+        case 2:
+            h ^= uint64_t(data2[1]) << 8;
+        case 1:
+            h ^= uint64_t(data2[0]);
+            h *= MURMUR_PRIME;
         }
 
         h ^= h >> MURMUR_R;
@@ -212,7 +217,7 @@ public:
     }
 
     // default values recommended by http://isthe.com/chongo/tech/comp/fnv/
-    static const uint32_t FNV_PRIME = 0x01000193; //   16777619
+    static const uint32_t FNV_PRIME = 0x01000193;    //   16777619
     static constexpr uint32_t FNV_SEED = 0x811C9DC5; // 2166136261
     static const uint64_t FNV64_PRIME = 1099511628211UL;
     static const uint64_t FNV64_SEED = 14695981039346656037UL;
@@ -249,24 +254,24 @@ public:
     // Our hash function is MurmurHash2, 64 bit version.
     // It was modified in order to provide the same result in
     // big and little endian archs (endian neutral).
-    static uint64_t murmur_hash64A (const void* key, int32_t len, unsigned int seed) {
+    static uint64_t murmur_hash64A(const void* key, int32_t len, unsigned int seed) {
         const uint64_t m = MURMUR_PRIME;
         const int r = 47;
         uint64_t h = seed ^ (len * m);
-        const uint8_t *data = (const uint8_t *)key;
-        const uint8_t *end = data + (len-(len&7));
+        const uint8_t* data = (const uint8_t*)key;
+        const uint8_t* end = data + (len - (len & 7));
 
-        while(data != end) {
+        while (data != end) {
             uint64_t k;
 #if (BYTE_ORDER == BIG_ENDIAN)
-            k = (uint64_t) data[0];
-            k |= (uint64_t) data[1] << 8;
-            k |= (uint64_t) data[2] << 16;
-            k |= (uint64_t) data[3] << 24;
-            k |= (uint64_t) data[4] << 32;
-            k |= (uint64_t) data[5] << 40;
-            k |= (uint64_t) data[6] << 48;
-            k |= (uint64_t) data[7] << 56;
+            k = (uint64_t)data[0];
+            k |= (uint64_t)data[1] << 8;
+            k |= (uint64_t)data[2] << 16;
+            k |= (uint64_t)data[3] << 24;
+            k |= (uint64_t)data[4] << 32;
+            k |= (uint64_t)data[5] << 40;
+            k |= (uint64_t)data[6] << 48;
+            k |= (uint64_t)data[7] << 56;
 #else
             memcpy(&k, data, sizeof(k));
 #endif
@@ -279,15 +284,22 @@ public:
             data += 8;
         }
 
-        switch(len & 7) {
-            case 7: h ^= (uint64_t)data[6] << 48;
-            case 6: h ^= (uint64_t)data[5] << 40;
-            case 5: h ^= (uint64_t)data[4] << 32;
-            case 4: h ^= (uint64_t)data[3] << 24;
-            case 3: h ^= (uint64_t)data[2] << 16;
-            case 2: h ^= (uint64_t)data[1] << 8;
-            case 1: h ^= (uint64_t)data[0];
-                h *= m;
+        switch (len & 7) {
+        case 7:
+            h ^= (uint64_t)data[6] << 48;
+        case 6:
+            h ^= (uint64_t)data[5] << 40;
+        case 5:
+            h ^= (uint64_t)data[4] << 32;
+        case 4:
+            h ^= (uint64_t)data[3] << 24;
+        case 3:
+            h ^= (uint64_t)data[2] << 16;
+        case 2:
+            h ^= (uint64_t)data[1] << 8;
+        case 1:
+            h ^= (uint64_t)data[0];
+            h *= m;
         };
 
         h ^= h >> r;
@@ -329,97 +341,107 @@ public:
         murmur_hash3_x64_64(data, bytes, seed, &hash);
         return hash;
 #endif
-
     }
 
     template <typename T>
     static inline void hash_combine(std::size_t& seed, const T& v) {
-        seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+        seed ^= std::hash<T>{}(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
 
-template <typename T>
-static inline T unaligned_load(void const* ptr) noexcept {
-    // using memcpy so we don't get into unaligned load problems.
-    // compiler should optimize this very well anyways.
-    T t;
-    memcpy(&t, ptr, sizeof(T));
-    return t;
-}
+    template <typename T>
+    static inline T unaligned_load(void const* ptr) noexcept {
+        // using memcpy so we don't get into unaligned load problems.
+        // compiler should optimize this very well anyways.
+        T t;
+        memcpy(&t, ptr, sizeof(T));
+        return t;
+    }
 
-// Modify from https://github.com/martinus/robin-hood-hashing/blob/master/src/include/robin_hood.h
-// Hash an arbitrary amount of bytes. This is basically Murmur2 hash without caring about big
-// endianness. TODO(martinus) add a fallback for very large strings?
-static size_t hash_bytes(void const* ptr, size_t const len) noexcept {
-    static constexpr uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
-    static constexpr uint64_t seed = UINT64_C(0xe17a1465);
-    static constexpr unsigned int r = 47;
+    // Modify from https://github.com/martinus/robin-hood-hashing/blob/master/src/include/robin_hood.h
+    // Hash an arbitrary amount of bytes. This is basically Murmur2 hash without caring about big
+    // endianness. TODO(martinus) add a fallback for very large strings?
+    static size_t hash_bytes(void const* ptr, size_t const len) noexcept {
+        static constexpr uint64_t m = UINT64_C(0xc6a4a7935bd1e995);
+        static constexpr uint64_t seed = UINT64_C(0xe17a1465);
+        static constexpr unsigned int r = 47;
 
-    auto const data64 = static_cast<uint64_t const*>(ptr);
-    uint64_t h = seed ^ (len * m);
+        auto const data64 = static_cast<uint64_t const*>(ptr);
+        uint64_t h = seed ^ (len * m);
 
-    size_t const n_blocks = len / 8;
-    for (size_t i = 0; i < n_blocks; ++i) {
-        auto k = unaligned_load<uint64_t>(data64 + i);
+        size_t const n_blocks = len / 8;
+        for (size_t i = 0; i < n_blocks; ++i) {
+            auto k = unaligned_load<uint64_t>(data64 + i);
 
-        k *= m;
-        k ^= k >> r;
-        k *= m;
+            k *= m;
+            k ^= k >> r;
+            k *= m;
 
-        h ^= k;
+            h ^= k;
+            h *= m;
+        }
+
+        auto const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
+        switch (len & 7U) {
+        case 7:
+            h ^= static_cast<uint64_t>(data8[6]) << 48U;
+            break;
+        case 6:
+            h ^= static_cast<uint64_t>(data8[5]) << 40U;
+            break;
+        case 5:
+            h ^= static_cast<uint64_t>(data8[4]) << 32U;
+            break;
+        case 4:
+            h ^= static_cast<uint64_t>(data8[3]) << 24U;
+            break;
+        case 3:
+            h ^= static_cast<uint64_t>(data8[2]) << 16U;
+            break;
+        case 2:
+            h ^= static_cast<uint64_t>(data8[1]) << 8U;
+            break;
+        case 1:
+            h ^= static_cast<uint64_t>(data8[0]);
+            h *= m;
+            break;
+        default:
+            break;
+        }
+
+        h ^= h >> r;
         h *= m;
+        h ^= h >> r;
+        return static_cast<size_t>(h);
     }
 
-    auto const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
-    switch (len & 7U) {
-    case 7:
-        h ^= static_cast<uint64_t>(data8[6]) << 48U;
-        break;
-    case 6:
-        h ^= static_cast<uint64_t>(data8[5]) << 40U;
-        break;
-    case 5:
-        h ^= static_cast<uint64_t>(data8[4]) << 32U;
-        break;
-    case 4:
-        h ^= static_cast<uint64_t>(data8[3]) << 24U;
-        break;
-    case 3:
-        h ^= static_cast<uint64_t>(data8[2]) << 16U;
-        break;
-    case 2:
-        h ^= static_cast<uint64_t>(data8[1]) << 8U;
-        break;
-    case 1:
-        h ^= static_cast<uint64_t>(data8[0]);
-        h *= m;
-        break;
-    default:
-        break;
+    // Xorshift is a pseudorandom number generator, which is an implementation of
+    // linear-feedback shift registers (LFSRs). It generates next pseudorandom state from
+    // the current state, which can be easily repurposed as hash functions.
+    // The original paper: https://www.jstatsoft.org/article/view/v008i14
+    static uint32_t xorshift32(uint32_t x) {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        return x;
     }
-
-    h ^= h >> r;
-    h *= m;
-    h ^= h >> r;
-    return static_cast<size_t>(h);
-}
-
-// Xorshift is a pseudorandom number generator, which is an implementation of
-// linear-feedback shift registers (LFSRs). It generates next pseudorandom state from
-// the current state, which can be easily repurposed as hash functions.
-// The original paper: https://www.jstatsoft.org/article/view/v008i14
-static uint32_t xorshift32(uint32_t x) {
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    return x;
-}
-
 };
 
-}
+struct ModuloOp {
+    uint32_t operator()(uint32_t l, uint32_t r) { return l % r; }
+};
+
+// https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+// avoid div/modulo operations
+// mapping l to the range [0, r]
+// we weed to ensure that l is randomly and uniformly distributed in [0, 2^32]
+struct ReduceOp {
+    uint32_t operator()(uint32_t l, uint32_t r) { return ((uint64_t)l * (uint64_t)r) >> 32; }
+};
+
+} // namespace starrocks
 
 namespace std {
-template<>
+template <>
 struct hash<starrocks::TUniqueId> {
     std::size_t operator()(const starrocks::TUniqueId& id) const {
         std::size_t seed = 0;
@@ -429,7 +451,7 @@ struct hash<starrocks::TUniqueId> {
     }
 };
 
-template<>
+template <>
 struct hash<starrocks::TNetworkAddress> {
     size_t operator()(const starrocks::TNetworkAddress& address) const {
         std::size_t seed = 0;
@@ -441,36 +463,30 @@ struct hash<starrocks::TNetworkAddress> {
 
 #if !__clang__ && __GNUC__ < 6
 // Cause this is builtin function
-template<>
+template <>
 struct hash<__int128> {
-    std::size_t operator()(const __int128& val) const {
-        return starrocks::HashUtil::hash(&val, sizeof(val), 0);
-    }
+    std::size_t operator()(const __int128& val) const { return starrocks::HashUtil::hash(&val, sizeof(val), 0); }
 };
 #endif
 
-template<>
+template <>
 struct hash<starrocks::uint24_t> {
-    size_t operator()(const starrocks::uint24_t& val) const {
-        return starrocks::HashUtil::hash(&val, sizeof(val), 0);
-    }
+    size_t operator()(const starrocks::uint24_t& val) const { return starrocks::HashUtil::hash(&val, sizeof(val), 0); }
 };
 
-template<>
+template <>
 struct hash<starrocks::int96_t> {
-    size_t operator()(const starrocks::int96_t& val) const {
-        return starrocks::HashUtil::hash(&val, sizeof(val), 0);
-    }
+    size_t operator()(const starrocks::int96_t& val) const { return starrocks::HashUtil::hash(&val, sizeof(val), 0); }
 };
 
-template<>
+template <>
 struct hash<starrocks::decimal12_t> {
     size_t operator()(const starrocks::decimal12_t& val) const {
         return starrocks::HashUtil::hash(&val, sizeof(val), 0);
     }
 };
 
-template<>
+template <>
 struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
     size_t operator()(const std::pair<starrocks::TUniqueId, int64_t>& pair) const {
         size_t seed = 0;
@@ -481,4 +497,4 @@ struct hash<std::pair<starrocks::TUniqueId, int64_t>> {
     }
 };
 
-}
+} // namespace std

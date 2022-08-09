@@ -245,16 +245,16 @@ public class RuntimeProfileTest {
         {
             Counter time1 = profile1.addCounter("time1", TUnit.TIME_NS);
             time1.setValue(2000000000L);
-            Counter minOfTime1 = profile1.addCounter("__MIN_OF_time1", TUnit.TIME_NS);
+            Counter minOfTime1 = profile1.addCounter("__MIN_OF_time1", TUnit.TIME_NS, "time1");
             minOfTime1.setValue(1500000000L);
-            Counter maxOfTime1 = profile1.addCounter("__MAX_OF_time1", TUnit.TIME_NS);
+            Counter maxOfTime1 = profile1.addCounter("__MAX_OF_time1", TUnit.TIME_NS, "time1");
             maxOfTime1.setValue(5000000000L);
 
             Counter count1 = profile1.addCounter("count1", TUnit.UNIT);
             count1.setValue(6);
-            Counter minOfCount1 = profile1.addCounter("__MIN_OF_count1", TUnit.UNIT);
+            Counter minOfCount1 = profile1.addCounter("__MIN_OF_count1", TUnit.UNIT, "count1");
             minOfCount1.setValue(1);
-            Counter maxOfCount1 = profile1.addCounter("__MAX_OF_count1", TUnit.UNIT);
+            Counter maxOfCount1 = profile1.addCounter("__MAX_OF_count1", TUnit.UNIT, "count1");
             maxOfCount1.setValue(3);
 
             profiles.add(profile1);
@@ -264,16 +264,16 @@ public class RuntimeProfileTest {
         {
             Counter time1 = profile2.addCounter("time1", TUnit.TIME_NS);
             time1.setValue(3000000000L);
-            Counter minOfTime1 = profile2.addCounter("__MIN_OF_time1", TUnit.TIME_NS);
+            Counter minOfTime1 = profile2.addCounter("__MIN_OF_time1", TUnit.TIME_NS, "time1");
             minOfTime1.setValue(100000000L);
-            Counter maxOfTime1 = profile2.addCounter("__MAX_OF_time1", TUnit.TIME_NS);
+            Counter maxOfTime1 = profile2.addCounter("__MAX_OF_time1", TUnit.TIME_NS, "time1");
             maxOfTime1.setValue(4000000000L);
 
             Counter count1 = profile2.addCounter("count1", TUnit.UNIT);
             count1.setValue(15);
-            Counter minOfCount1 = profile2.addCounter("__MIN_OF_count1", TUnit.UNIT);
+            Counter minOfCount1 = profile2.addCounter("__MIN_OF_count1", TUnit.UNIT, "count1");
             minOfCount1.setValue(4);
-            Counter maxOfCount1 = profile2.addCounter("__MAX_OF_count1", TUnit.UNIT);
+            Counter maxOfCount1 = profile2.addCounter("__MAX_OF_count1", TUnit.UNIT, "count1");
             maxOfCount1.setValue(6);
 
             profiles.add(profile2);
@@ -299,5 +299,93 @@ public class RuntimeProfileTest {
         Assert.assertNotNull(mergedMaxOfCount1);
         Assert.assertEquals(1, mergedMinOfCount1.getValue());
         Assert.assertEquals(6, mergedMaxOfCount1.getValue());
+    }
+
+    @Test
+    public void testRemoveRedundantMinMaxMetrics() {
+        RuntimeProfile profile0 = new RuntimeProfile("profile0");
+        RuntimeProfile profile1 = new RuntimeProfile("profile1");
+        profile0.addChild(profile1);
+
+        Counter time1 = profile1.addCounter("time1", TUnit.TIME_NS);
+        time1.setValue(1500000000L);
+        Counter minOfTime1 = profile1.addCounter("__MIN_OF_time1", TUnit.TIME_NS, "time1");
+        minOfTime1.setValue(1500000000L);
+        Counter maxOfTime1 = profile1.addCounter("__MAX_OF_time1", TUnit.TIME_NS, "time1");
+        maxOfTime1.setValue(1500000000L);
+
+        Counter time2 = profile1.addCounter("time2", TUnit.TIME_NS);
+        time2.setValue(2000000000L);
+        Counter minOfTime2 = profile1.addCounter("__MIN_OF_time2", TUnit.TIME_NS, "time2");
+        minOfTime2.setValue(1500000000L);
+        Counter maxOfTime2 = profile1.addCounter("__MAX_OF_time2", TUnit.TIME_NS, "time2");
+        maxOfTime2.setValue(3000000000L);
+
+        Counter count1 = profile1.addCounter("count1", TUnit.UNIT);
+        count1.setValue(6);
+        Counter minOfCount1 = profile1.addCounter("__MIN_OF_count1", TUnit.UNIT, "count1");
+        minOfCount1.setValue(1);
+        Counter maxOfCount1 = profile1.addCounter("__MAX_OF_count1", TUnit.UNIT, "count1");
+        maxOfCount1.setValue(1);
+
+        Counter count2 = profile1.addCounter("count2", TUnit.UNIT);
+        count2.setValue(6);
+        Counter minOfCount2 = profile1.addCounter("__MIN_OF_count2", TUnit.UNIT, "count2");
+        minOfCount2.setValue(1);
+        Counter maxOfCount2 = profile1.addCounter("__MAX_OF_count2", TUnit.UNIT, "count2");
+        maxOfCount2.setValue(3);
+
+        RuntimeProfile.removeRedundantMinMaxMetrics(profile0);
+
+        Assert.assertNull(profile1.getCounter("__MIN_OF_time1"));
+        Assert.assertNull(profile1.getCounter("__MAX_OF_time1"));
+        Assert.assertNotNull(profile1.getCounter("__MIN_OF_time2"));
+        Assert.assertNotNull(profile1.getCounter("__MAX_OF_time2"));
+        Assert.assertNull(profile1.getCounter("__MIN_OF_count1"));
+        Assert.assertNull(profile1.getCounter("__MAX_OF_count1"));
+        Assert.assertNotNull(profile1.getCounter("__MIN_OF_count2"));
+        Assert.assertNotNull(profile1.getCounter("__MAX_OF_count2"));
+    }
+
+    @Test
+    public void testMissingCounter() {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+
+        RuntimeProfile profile1 = new RuntimeProfile("profile");
+        {
+            Counter count1 = profile1.addCounter("count1", TUnit.UNIT);
+            count1.setValue(1);
+
+            Counter count2 = profile1.addCounter("count2", TUnit.UNIT);
+            count2.setValue(5);
+            Counter count2_sub = profile1.addCounter("count2_sub", TUnit.UNIT, "count2");
+            count2_sub.setValue(6);
+            profiles.add(profile1);
+        }
+
+        RuntimeProfile profile2 = new RuntimeProfile("profile");
+        {
+            Counter count1 = profile2.addCounter("count1", TUnit.UNIT);
+            count1.setValue(1);
+            Counter count1_sub = profile2.addCounter("count1_sub", TUnit.UNIT, "count1");
+            count1_sub.setValue(2);
+
+            profiles.add(profile2);
+        }
+
+        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+
+        RuntimeProfile mergedProfile = profiles.get(0);
+        Assert.assertEquals(13, mergedProfile.getCounterMap().size());
+        RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
+        Assert.assertEquals(5, mergedProfile.getCounterMap().size());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1"));
+        Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count1_sub"));
+        Assert.assertEquals(2, mergedProfile.getCounterMap().get("count1_sub").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2"));
+        Assert.assertEquals(5, mergedProfile.getCounterMap().get("count2").getValue());
+        Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2_sub"));
+        Assert.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
     }
 }

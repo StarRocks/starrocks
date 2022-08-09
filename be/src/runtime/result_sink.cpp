@@ -102,6 +102,7 @@ Status ResultSink::prepare(RuntimeState* state) {
 }
 
 Status ResultSink::open(RuntimeState* state) {
+    RETURN_IF_ERROR(_writer->open(state));
     return Expr::open(_output_expr_ctxs, state);
 }
 

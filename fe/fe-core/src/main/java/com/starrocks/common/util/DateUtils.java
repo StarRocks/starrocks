@@ -16,6 +16,7 @@ public class DateUtils {
     public static final String DATEKEY_FORMAT = "yyyyMMdd";
     public static final String DATE_FORMAT = "yyyy-MM-dd";
     public static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+    public static final String SECOND_FORMAT = "yyyyMMddHHmmss";
     public static final String MINUTE_FORMAT = "yyyyMMddHHmm";
     public static final String HOUR_FORMAT = "yyyyMMddHH";
     public static final String MONTH_FORMAT = "yyyyMM";
@@ -25,6 +26,7 @@ public class DateUtils {
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DATE_FORMAT);
     public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern(DATEKEY_FORMAT);
     public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
+    public static final DateTimeFormatter SECOND_FORMATTER = DateTimeFormatter.ofPattern(SECOND_FORMAT);
     public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern(MINUTE_FORMAT);
     public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern(HOUR_FORMAT);
     public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern(YEAR_FORMAT);

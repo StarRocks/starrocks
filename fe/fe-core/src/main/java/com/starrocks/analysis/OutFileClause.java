@@ -25,9 +25,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TResultFileSinkOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,6 +50,8 @@ public class OutFileClause implements ParseNode {
     private static final String PROP_COLUMN_SEPARATOR = "column_separator";
     private static final String PROP_LINE_DELIMITER = "line_delimiter";
     private static final String PROP_MAX_FILE_SIZE = "max_file_size";
+    private static final String VIEW_FS_PREFIX = "viewfs://";
+    private static final String HDFS_PREFIX = "hdfs://";
 
     private static final long DEFAULT_MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024L; // 1GB
     private static final long MIN_FILE_SIZE_BYTES = 5 * 1024 * 1024L; // 5MB
@@ -117,7 +123,7 @@ public class OutFileClause implements ParseNode {
         }
 
         Set<String> processedPropKeys = Sets.newHashSet();
-        getBrokerProperties(processedPropKeys);
+        getBrokerProperties(filePath, processedPropKeys);
         if (brokerDesc == null) {
             return;
         }
@@ -153,12 +159,20 @@ public class OutFileClause implements ParseNode {
         }
     }
 
-    private void getBrokerProperties(Set<String> processedPropKeys) {
+    private void getBrokerProperties(String filePath, Set<String> processedPropKeys) {
+        boolean outfile_without_broker = false;
         if (!properties.containsKey(PROP_BROKER_NAME)) {
-            return;
+            if (filePath.startsWith(HDFS_PREFIX) || filePath.startsWith(VIEW_FS_PREFIX)) {
+                outfile_without_broker = true; 
+            } else {
+                return;
+            }
         }
-        String brokerName = properties.get(PROP_BROKER_NAME);
-        processedPropKeys.add(PROP_BROKER_NAME);
+        String brokerName = null;
+        if (!outfile_without_broker) {
+            brokerName = properties.get(PROP_BROKER_NAME);
+            processedPropKeys.add(PROP_BROKER_NAME);
+        }
 
         Map<String, String> brokerProps = Maps.newHashMap();
         Iterator<Map.Entry<String, String>> iter = properties.entrySet().iterator();
@@ -169,8 +183,11 @@ public class OutFileClause implements ParseNode {
                 processedPropKeys.add(entry.getKey());
             }
         }
-
-        brokerDesc = new BrokerDesc(brokerName, brokerProps);
+        if (!outfile_without_broker) {
+            brokerDesc = new BrokerDesc(brokerName, brokerProps);
+        } else {
+            brokerDesc = new BrokerDesc(brokerProps);
+        }
     }
 
     private boolean isCsvFormat() {
@@ -197,7 +214,7 @@ public class OutFileClause implements ParseNode {
         return sb.toString();
     }
 
-    public TResultFileSinkOptions toSinkOptions() {
+    public TResultFileSinkOptions toSinkOptions() throws AnalysisException {
         TResultFileSinkOptions sinkOptions = new TResultFileSinkOptions(filePath, fileFormatType);
         if (isCsvFormat()) {
             sinkOptions.setColumn_separator(columnSeparator);
@@ -205,6 +222,19 @@ public class OutFileClause implements ParseNode {
         }
         sinkOptions.setMax_file_size_bytes(maxFileSizeBytes);
         if (brokerDesc != null) {
+            if (!brokerDesc.hasBroker()) {
+                sinkOptions.setUse_broker(false);
+                sinkOptions.setHdfs_write_buffer_size_kb(Config.hdfs_write_buffer_size_kb);
+                THdfsProperties hdfsProperties = new THdfsProperties();
+                try {
+                    HdfsUtil.getTProperties(filePath, brokerDesc, hdfsProperties);
+                } catch (UserException e) {
+                    throw new AnalysisException(e.getMessage());
+                }
+                sinkOptions.setHdfs_properties(hdfsProperties);
+            } else {
+                sinkOptions.setUse_broker(true);
+            }
             sinkOptions.setBroker_properties(brokerDesc.getProperties());
             // broker_addresses of sinkOptions will be set in Coordinator.
             // Because we need to choose the nearest broker with the result sink node.

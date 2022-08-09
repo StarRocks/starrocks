@@ -43,7 +43,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
 
             StatsConstants.HISTOGRAM_BUCKET_NUM,
-            StatsConstants.HISTOGRAM_TOPN_SIZE,
+            StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
 
             //Deprecated , just not throw exception
@@ -55,7 +55,7 @@ public class AnalyzeStmtAnalyzer {
     public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder().addAll(
             Lists.newArrayList(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
-                    StatsConstants.HISTOGRAM_TOPN_SIZE,
+                    StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -183,35 +183,20 @@ public class AnalyzeStmtAnalyzer {
                 }
                 statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
 
-                properties.computeIfAbsent(StatsConstants.HISTOGRAM_TOPN_SIZE,
-                        p -> String.valueOf(Config.histogram_topn_size));
+                properties.computeIfAbsent(StatsConstants.HISTOGRAM_MCV_SIZE,
+                        p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
 
-                long sampleRows = Config.statistic_sample_collect_rows;
-                if (properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS) != null) {
-                    sampleRows = Long.parseLong(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS));
-                }
-
                 long totalRows = analyzeTable.getRowCount();
-                sampleRows = Math.max(sampleRows,
-                        (long) (totalRows * Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO))));
+                long sampleRows = (long) (totalRows *
+                        Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO)));
 
-                if (totalRows < sampleRows) {
-                    sampleRows = totalRows;
+                if (sampleRows < Config.statistic_sample_collect_rows && totalRows != 0) {
+                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
+                            String.valueOf(BigDecimal.valueOf((double) sampleRows / (double) totalRows)
+                                    .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                 }
-                if (sampleRows > Config.histogram_max_sample_row_count) {
-                    sampleRows = Config.histogram_max_sample_row_count;
-                }
-
-                if (totalRows == 0) {
-                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
-                } else {
-                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
-                            BigDecimal.valueOf((double) sampleRows / (double) totalRows)
-                                    .setScale(2, RoundingMode.HALF_UP).doubleValue()));
-                }
-                properties.put(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS, String.valueOf(sampleRows));
             }
         }
 

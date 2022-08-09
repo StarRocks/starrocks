@@ -22,7 +22,6 @@
 package com.starrocks.journal;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
@@ -54,6 +53,7 @@ import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
+import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -231,6 +231,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_PARTITIONS_V2: {
+                data = AddPartitionsInfoV2.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_DROP_PARTITION: {
                 data = DropPartitionInfo.read(in);
                 isRead = true;
@@ -252,12 +257,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_RECOVER_PARTITION: {
                 data = new RecoverInfo();
                 ((RecoverInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_START_DECOMMISSION_BACKEND:
-            case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
-                data = AlterJob.read(in);
                 isRead = true;
                 break;
             }

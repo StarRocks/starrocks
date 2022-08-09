@@ -113,7 +113,7 @@ Status HiveDataSource::_init_partition_values() {
         }
 
         // eval conjuncts and skip if no rows.
-        ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
         }

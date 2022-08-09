@@ -29,7 +29,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.AlterJob.JobState;
 import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AlterClause;
@@ -46,7 +45,6 @@ import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
@@ -59,7 +57,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -104,6 +101,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -188,65 +186,35 @@ public class SchemaChangeHandler extends AlterHandler {
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
             List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-            boolean isKey = false;
-            for (Column column : baseSchema) {
-                if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                    isKey = true;
-                    break;
-                }
-            }
+            boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in primary data model table");
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
             List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-            boolean isKey = false;
-            for (Column column : baseSchema) {
-                if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                    isKey = true;
-                    break;
-                }
-            }
-
+            boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in Unique data model table");
             }
-
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
             if (null == targetIndexName) {
                 // drop column in base table
                 long baseIndexId = olapTable.getBaseIndexId();
                 List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-                boolean isKey = false;
-                boolean hasReplaceColumn = false;
-                for (Column column : baseSchema) {
-                    if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                        isKey = true;
-                    } else if (AggregateType.REPLACE == column.getAggregationType() ||
-                            AggregateType.REPLACE_IF_NOT_NULL == column.getAggregationType()) {
-                        hasReplaceColumn = true;
-                    }
-                }
+                boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
+                boolean hasReplaceColumn = baseSchema.stream().map(Column::getAggregationType)
+                        .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
-                    throw new DdlException(
-                            "Can not drop key column when table has value column with REPLACE aggregation method");
+                    throw new DdlException("Can not drop key column when table has value column with REPLACE aggregation method");
                 }
             } else {
                 // drop column in rollup and base index
                 long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
-                // find column
                 List<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
-                boolean isKey = false;
-                boolean hasReplaceColumn = false;
-                for (Column column : targetIndexSchema) {
-                    if (column.isKey() && column.getName().equalsIgnoreCase(dropColName)) {
-                        isKey = true;
-                    } else if (AggregateType.REPLACE == column.getAggregationType() ||
-                            AggregateType.REPLACE_IF_NOT_NULL == column.getAggregationType()) {
-                        hasReplaceColumn = true;
-                    }
-                }
+                boolean isKey = targetIndexSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
+                boolean hasReplaceColumn = targetIndexSchema.stream().map(Column::getAggregationType)
+                        .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
                     throw new DdlException(
                             "Can not drop key column when rollup has value column with REPLACE aggregation method");
@@ -254,68 +222,24 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        Iterator<Index> it = indexes.iterator();
-        while (it.hasNext()) {
-            Index index = it.next();
-            for (String indexCol : index.getColumns()) {
-                if (dropColName.equalsIgnoreCase(indexCol)) {
-                    it.remove();
-                    break;
-                }
-            }
-        }
+        // Remove all Index that contains a column with the name dropColName.
+        indexes.removeIf(index -> index.getColumns().stream().anyMatch(c -> c.equalsIgnoreCase(dropColName)));
 
-        long baseIndexId = olapTable.getBaseIndexId();
         if (targetIndexName == null) {
             // if not specify rollup index, column should be dropped from both base and rollup indexes.
-            List<Long> indexIds = new ArrayList<Long>();
-            indexIds.add(baseIndexId);
-            indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
-
-            // find column in base index and remove it
-            List<Column> baseSchema = indexSchemaMap.get(baseIndexId);
-            boolean found = false;
-            Iterator<Column> baseIter = baseSchema.iterator();
-            while (baseIter.hasNext()) {
-                Column column = baseIter.next();
-                if (column.getName().equalsIgnoreCase(dropColName)) {
-                    baseIter.remove();
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            long baseIndexId = olapTable.getBaseIndexId();
+            boolean removed = indexSchemaMap.get(baseIndexId).removeIf(c -> c.getName().equalsIgnoreCase(dropColName));
+            if (!removed) {
                 throw new DdlException("Column does not exists: " + dropColName);
             }
-
-            // remove column in rollup index if exists (i = 1 to skip base index)
-            for (int i = 1; i < indexIds.size(); i++) {
-                List<Column> rollupSchema = indexSchemaMap.get(indexIds.get(i));
-                Iterator<Column> iter = rollupSchema.iterator();
-                while (iter.hasNext()) {
-                    Column column = iter.next();
-                    if (column.getName().equalsIgnoreCase(dropColName)) {
-                        iter.remove();
-                        break;
-                    }
-                }
-            } // end for index names
+            for (Long indexId : olapTable.getIndexIdListExceptBaseIndex()) {
+                indexSchemaMap.get(indexId).removeIf(c -> c.getName().equalsIgnoreCase(dropColName));
+            }
         } else {
             // if specify rollup index, only drop column from specified rollup index
             long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
-            // find column
-            List<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
-            boolean found = false;
-            Iterator<Column> iter = targetIndexSchema.iterator();
-            while (iter.hasNext()) {
-                Column column = iter.next();
-                if (column.getName().equalsIgnoreCase(dropColName)) {
-                    iter.remove();
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            boolean removed = indexSchemaMap.get(targetIndexId).removeIf(c -> c.getName().equalsIgnoreCase(dropColName));
+            if (!removed) {
                 throw new DdlException("Column does not exists: " + dropColName);
             }
         }
@@ -345,7 +269,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Unique data model table: " +
-                modColumn.getName());
+                        modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.REPLACE, true);
@@ -353,7 +277,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } else {
             if (null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on column in Duplicate data model table: " +
-                modColumn.getName());
+                        modColumn.getName());
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
@@ -537,28 +461,20 @@ public class SchemaChangeHandler extends AlterHandler {
 
         long targetIndexId = olapTable.getIndexIdByName(targetIndexName);
 
-        LinkedList<Column> newSchema = new LinkedList<Column>();
+        LinkedList<Column> newSchema = new LinkedList<>();
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
 
         // check and create new ordered column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (String colName : orderedColNames) {
-            Column oneCol = null;
-            for (Column column : targetIndexSchema) {
-                if (column.getName().equalsIgnoreCase(colName)) {
-                    oneCol = column;
-                    break;
-                }
-            }
-            if (oneCol == null) {
+            Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
+            if (!oneCol.isPresent()) {
                 throw new DdlException("Column[" + colName + "] not exists");
             }
-            newSchema.add(oneCol);
-            if (colNameSet.contains(colName)) {
-                throw new DdlException("Reduplicative column[" + colName + "]");
-            } else {
-                colNameSet.add(colName);
+            if (!colNameSet.add(colName)) {
+                throw new DdlException("Duplicated column[" + colName + "]");
             }
+            newSchema.add(oneCol.get());
         }
         if (newSchema.size() != targetIndexSchema.size()) {
             throw new DdlException("Reorder stmt should contains all columns");
@@ -577,10 +493,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                    Set<String> newColNameSet) throws DdlException {
 
         Column.DefaultValueType defaultValueType = newColumn.getDefaultValueType();
-        // expr like uuid() will support later
         if (defaultValueType == Column.DefaultValueType.VARY) {
-            throw new DdlException("Schema change currently not supported default expr:"
-                    + newColumn.getDefaultExpr().getExpr());
+            throw new DdlException("unsupported default expr:" + newColumn.getDefaultExpr().getExpr());
         }
         String newColName = newColumn.getName();
         // check the validation of aggregation method on column.
@@ -624,8 +538,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Can not assign aggregation method on column in Duplicate data model table: " + newColName);
             }
             if (!newColumn.isKey()) {
-                if (targetIndexId != -1L &&
-                        olapTable.getIndexMetaByIndexId(targetIndexId).getKeysType() == KeysType.AGG_KEYS) {
+                if (targetIndexId != -1L && olapTable.getIndexMetaByIndexId(targetIndexId).getKeysType() == KeysType.AGG_KEYS) {
                     throw new DdlException("Please add non-key column on base table directly");
                 }
                 newColumn.setAggregationType(AggregateType.NONE, true);
@@ -637,30 +550,21 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("HLL type column can only be in Aggregation data model table: " + newColName);
         }
 
-        if (newColumn.getAggregationType() == AggregateType.BITMAP_UNION &&
-                KeysType.AGG_KEYS != olapTable.getKeysType()) {
+        if (newColumn.getAggregationType() == AggregateType.BITMAP_UNION && KeysType.AGG_KEYS != olapTable.getKeysType()) {
             throw new DdlException("BITMAP_UNION must be used in AGG_KEYS");
         }
 
-        if (newColumn.getAggregationType() == AggregateType.PERCENTILE_UNION &&
-                KeysType.AGG_KEYS != olapTable.getKeysType()) {
+        if (newColumn.getAggregationType() == AggregateType.PERCENTILE_UNION && KeysType.AGG_KEYS != olapTable.getKeysType()) {
             throw new DdlException("PERCENTILE_UNION must be used in AGG_KEYS");
         }
 
         if (newColumn.getType().isComplexType() && KeysType.DUP_KEYS != olapTable.getKeysType()) {
-            throw new DdlException(newColumn.getType() + "must be used in DUP_KEYS");
+            throw new DdlException(newColumn.getType() + " must be used in DUP_KEYS");
         }
 
         // check if the new column already exist in base schema.
         // do not support adding new column which already exist in base schema.
-        List<Column> baseSchema = olapTable.getBaseSchema();
-        boolean found = false;
-        for (Column column : baseSchema) {
-            if (column.getName().equalsIgnoreCase(newColName)) {
-                found = true;
-                break;
-            }
-        }
+        boolean found = olapTable.getBaseSchema().stream().anyMatch(c -> c.getName().equalsIgnoreCase(newColName));
         if (found) {
             throw new DdlException("Can not add column which already exists in base table: " + newColName);
         }
@@ -839,10 +743,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
 
-        if (this.hasUnfinishedAlterJob(olapTable.getId())) {
-            throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ALTER job");
-        }
-
         // for now table's state can only be NORMAL
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
 
@@ -971,18 +871,7 @@ public class SchemaChangeHandler extends AlterHandler {
             List<Column> alterSchema = indexSchemaMap.get(alterIndexId);
 
             // 0. check if unchanged
-            boolean hasColumnChange = false;
-            if (alterSchema.size() != originSchema.size()) {
-                hasColumnChange = true;
-            } else {
-                for (int i = 0; i < alterSchema.size(); i++) {
-                    Column alterColumn = alterSchema.get(i);
-                    if (!alterColumn.equals(originSchema.get(i))) {
-                        hasColumnChange = true;
-                        break;
-                    }
-                }
-            }
+            boolean hasColumnChange = !originSchema.equals(alterSchema);
 
             // if has column changed, alter it.
             // else:
@@ -995,15 +884,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 for (Column alterColumn : alterSchema) {
                     String columnName = alterColumn.getName();
 
-                    boolean isOldBfColumn = false;
-                    if (oriBfColumns != null && oriBfColumns.contains(columnName)) {
-                        isOldBfColumn = true;
-                    }
+                    boolean isOldBfColumn = oriBfColumns != null && oriBfColumns.contains(columnName);
 
-                    boolean isNewBfColumn = false;
-                    if (bfColumns != null && bfColumns.contains(columnName)) {
-                        isNewBfColumn = true;
-                    }
+                    boolean isNewBfColumn = bfColumns != null && bfColumns.contains(columnName);
 
                     if (isOldBfColumn != isNewBfColumn) {
                         // bf column change
@@ -1051,79 +934,54 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // 2. check compatible
             for (Column alterColumn : alterSchema) {
-                for (Column oriColumn : originSchema) {
-                    if (alterColumn.nameEquals(oriColumn.getName(), true /* ignore prefix */)) {
-                        if (!alterColumn.equals(oriColumn)) {
-                            // 3.1 check type
-                            oriColumn.checkSchemaChangeAllowed(alterColumn);
-                        }
-                    }
-                } // end for ori
-            } // end for alter
-
-            // 3. check partition key
-            if (hasColumnChange) {
-                PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-                if (partitionInfo.getType() == PartitionType.RANGE) {
-                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                    List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-                    for (Column partitionCol : partitionColumns) {
-                        boolean found = false;
-                        for (Column alterColumn : alterSchema) {
-                            if (alterColumn.nameEquals(partitionCol.getName(), true)) {
-                                // 2.1 partition column cannot be modified
-                                if (!alterColumn.equals(partitionCol)) {
-                                    throw new DdlException("Can not modify partition column["
-                                            + partitionCol.getName() + "]. index["
-                                            + olapTable.getIndexNameById(alterIndexId) + "]");
-                                }
-                                found = true;
-                                break;
-                            }
-                        } // end for alterColumns
-
-                        if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                            // 2.1 partition column cannot be deleted.
-                            throw new DdlException("Partition column[" + partitionCol.getName()
-                                    + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                            // ATTN. partition columns' order also need remaining unchanged.
-                            // for now, we only allow one partition column, so no need to check order.
-                        }
-                    } // end for partitionColumns
-                }
-
-                // 4. check distribution key:
-                DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-                if (distributionInfo.getType() == DistributionInfoType.HASH) {
-                    List<Column> distributionColumns =
-                            ((HashDistributionInfo) distributionInfo).getDistributionColumns();
-                    for (Column distributionCol : distributionColumns) {
-                        boolean found = false;
-                        for (Column alterColumn : alterSchema) {
-                            if (alterColumn.nameEquals(distributionCol.getName(), true)) {
-                                // 3.1 distribution column cannot be modified
-                                if (!alterColumn.equals(distributionCol)) {
-                                    throw new DdlException("Can not modify distribution column["
-                                            + distributionCol.getName() + "]. index["
-                                            + olapTable.getIndexNameById(alterIndexId) + "]");
-                                }
-                                found = true;
-                                break;
-                            }
-                        } // end for alterColumns
-
-                        if (!found && alterIndexId == olapTable.getBaseIndexId()) {
-                            // 2.2 distribution column cannot be deleted.
-                            throw new DdlException("Distribution column[" + distributionCol.getName()
-                                    + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
-                        }
-                    } // end for distributionCols
+                Optional<Column> col = originSchema.stream().filter(c -> c.nameEquals(alterColumn.getName(), true)).findFirst();
+                if (col.isPresent() && !alterColumn.equals(col.get())) {
+                    col.get().checkSchemaChangeAllowed(alterColumn);
                 }
             }
 
+            // 3. check partition key
+            if (hasColumnChange && olapTable.getPartitionInfo().getType() == PartitionType.RANGE) {
+                List<Column> partitionColumns = ((RangePartitionInfo) olapTable.getPartitionInfo()).getPartitionColumns();
+                for (Column partitionCol : partitionColumns) {
+                    String colName = partitionCol.getName();
+                    Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
+                    if (col.isPresent() && !col.get().equals(partitionCol)) {
+                        throw new DdlException("Can not modify partition column[" + colName + "]. index["
+                                + olapTable.getIndexNameById(alterIndexId) + "]");
+                    }
+                    if (!col.isPresent() && alterIndexId == olapTable.getBaseIndexId()) {
+                        // 2.1 partition column cannot be deleted.
+                        throw new DdlException("Partition column[" + partitionCol.getName()
+                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                        // ATTN. partition columns' order also need remaining unchanged.
+                        // for now, we only allow one partition column, so no need to check order.
+                    }
+                } // end for partitionColumns
+            }
+
+            // 4. check distribution key:
+            if (hasColumnChange && olapTable.getDefaultDistributionInfo().getType() == DistributionInfoType.HASH) {
+                List<Column> distributionColumns =
+                        ((HashDistributionInfo) olapTable.getDefaultDistributionInfo()).getDistributionColumns();
+                for (Column distributionCol : distributionColumns) {
+                    String colName = distributionCol.getName();
+                    Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
+                    if (col.isPresent() && !col.get().equals(distributionCol)) {
+                        throw new DdlException("Can not modify distribution column[" + colName + "]. index["
+                                + olapTable.getIndexNameById(alterIndexId) + "]");
+                    }
+                    if (!col.isPresent() && alterIndexId == olapTable.getBaseIndexId()) {
+                        // 2.2 distribution column cannot be deleted.
+                        throw new DdlException("Distribution column[" + distributionCol.getName()
+                                + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
+                    }
+                } // end for distributionCols
+            }
+
             // 5. calc short key
-            short newShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
-                    indexIdToProperties.get(alterIndexId));
+            short newShortKeyColumnCount =
+                    GlobalStateMgr.calcShortKeyColumnCount(alterSchema, indexIdToProperties.get(alterIndexId));
             LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyColumnCount);
             indexIdToShortKeyColumnCount.put(alterIndexId, newShortKeyColumnCount);
 
@@ -1170,8 +1028,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // index state is SHADOW
                 MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, IndexState.SHADOW);
                 MaterializedIndex originIndex = partition.getIndex(originIndexId);
-                TabletMeta shadowTabletMeta =
-                        new TabletMeta(dbId, tableId, partitionId, shadowIndexId, newSchemaHash, medium);
+                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, newSchemaHash, medium);
                 short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partitionId);
                 for (Tablet originTablet : originIndex.getTablets()) {
                     long originTabletId = originTablet.getId();
@@ -1247,7 +1104,6 @@ public class SchemaChangeHandler extends AlterHandler {
     @Override
     protected void runAfterCatalogReady() {
         super.runAfterCatalogReady();
-        runOldAlterJob();
         runAlterJobV2();
     }
 
@@ -1260,123 +1116,9 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    @Deprecated
-    private void runOldAlterJob() {
-        List<AlterJob> cancelledJobs = Lists.newArrayList();
-        List<AlterJob> finishedJobs = Lists.newArrayList();
-
-        for (AlterJob alterJob : alterJobs.values()) {
-            SchemaChangeJob schemaChangeJob = (SchemaChangeJob) alterJob;
-            if (schemaChangeJob.getState() != JobState.FINISHING
-                    && schemaChangeJob.getState() != JobState.FINISHED
-                    && schemaChangeJob.getState() != JobState.CANCELLED) {
-                // cancel the old alter table job
-                cancelledJobs.add(schemaChangeJob);
-                continue;
-            }
-            // it means this is an old type job and current version is real time load version
-            // then kill this job
-            if (alterJob.getTransactionId() < 0) {
-                cancelledJobs.add(alterJob);
-                continue;
-            }
-            JobState state = alterJob.getState();
-            switch (state) {
-                case PENDING: {
-                    if (!alterJob.sendTasks()) {
-                        cancelledJobs.add(alterJob);
-                        LOG.warn("sending schema change job {} tasks failed. cancel it.", alterJob.getTableId());
-                    }
-                    break;
-                }
-                case RUNNING: {
-                    if (alterJob.isTimeout()) {
-                        cancelledJobs.add(alterJob);
-                    } else {
-                        int res = alterJob.tryFinishJob();
-                        if (res == -1) {
-                            cancelledJobs.add(alterJob);
-                            LOG.warn("cancel bad schema change job[{}]", alterJob.getTableId());
-                        }
-                    }
-                    break;
-                }
-                case FINISHING: {
-                    // check if previous load job finished
-                    if (alterJob.isPreviousLoadFinished()) {
-                        LOG.info("schema change job has finished, send clear tasks to all be {}", alterJob);
-                        // if all previous load job finished, then send clear alter tasks to all related be
-                        int res = schemaChangeJob.checkOrResendClearTasks();
-                        if (res != 0) {
-                            if (res == -1) {
-                                LOG.warn("schema change job is in finishing state,but could not finished, "
-                                        + "just finish it, maybe a fatal error {}", alterJob);
-                            } else {
-                                LOG.info("send clear tasks to all be for job [{}] successfully, "
-                                        + "set status to finished", alterJob);
-                            }
-
-                            finishedJobs.add(alterJob);
-                        }
-                    } else {
-                        LOG.info("previous load jobs are not finished. can not finish schema change job: {}",
-                                alterJob.getTableId());
-                    }
-                    break;
-                }
-                case FINISHED: {
-                    break;
-                }
-                case CANCELLED: {
-                    // the alter job could be cancelled in 3 ways
-                    // 1. the table or db is dropped
-                    // 2. user cancels the job
-                    // 3. the job meets errors when running
-                    // for the previous 2 scenarios, user will call jobdone to finish the job and set its state to cancelled
-                    // so that there exists alter job whose state is cancelled
-                    // for the third scenario, the thread will add to cancelled job list and will be dealt by call jobdone
-                    // Preconditions.checkState(false);
-                    break;
-                }
-                default:
-                    Preconditions.checkState(false);
-                    break;
-            }
-        } // end for jobs
-
-        // handle cancelled schema change jobs
-        for (AlterJob alterJob : cancelledJobs) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(alterJob.getDbId());
-            if (db == null) {
-                cancelInternal(alterJob, null, null);
-                continue;
-            }
-
-            db.writeLock();
-            try {
-                OlapTable olapTable = (OlapTable) db.getTable(alterJob.getTableId());
-                alterJob.cancel(olapTable, "cancelled");
-            } finally {
-                db.writeUnlock();
-            }
-            jobDone(alterJob);
-        }
-
-        // handle finished schema change jobs
-        for (AlterJob alterJob : finishedJobs) {
-            alterJob.setState(JobState.FINISHED);
-            // has to remove here, because check is running every interval, it maybe finished but also in job list
-            // some check will failed
-            ((SchemaChangeJob) alterJob).finishJob();
-            jobDone(alterJob);
-            GlobalStateMgr.getCurrentState().getEditLog().logFinishSchemaChange((SchemaChangeJob) alterJob);
-        }
-    }
-
     @Override
     public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
         List<List<Comparable>> schemaChangeJobInfos = new LinkedList<>();
-        getOldAlterJobInfos(db, schemaChangeJobInfos);
         getAlterJobV2Infos(db, schemaChangeJobInfos);
 
         // sort by "JobId", "PartitionName", "CreateTime", "FinishTime", "IndexName", "IndexState"
@@ -1404,44 +1146,6 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void getAlterJobV2Infos(Database db, List<List<Comparable>> schemaChangeJobInfos) {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
-    }
-
-    @Deprecated
-    private void getOldAlterJobInfos(Database db, List<List<Comparable>> schemaChangeJobInfos) {
-        List<AlterJob> selectedJobs = Lists.newArrayList();
-
-        lock();
-        try {
-            // init or running
-            for (AlterJob alterJob : this.alterJobs.values()) {
-                if (alterJob.getDbId() == db.getId()) {
-                    selectedJobs.add(alterJob);
-                }
-            }
-
-            // finished or cancelled
-            for (AlterJob alterJob : this.finishedOrCancelledAlterJobs) {
-                if (alterJob.getDbId() == db.getId()) {
-                    selectedJobs.add(alterJob);
-                }
-            }
-
-        } finally {
-            unlock();
-        }
-
-        db.readLock();
-        try {
-            for (AlterJob selectedJob : selectedJobs) {
-                OlapTable olapTable = (OlapTable) db.getTable(selectedJob.getTableId());
-                if (olapTable == null) {
-                    continue;
-                }
-                selectedJob.getJobInfo(schemaChangeJobInfos, olapTable);
-            }
-        } finally {
-            db.readUnlock();
-        }
     }
 
     @Override
@@ -1481,16 +1185,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
-                        try {
-                            DynamicPartitionUtil
-                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
-                        } catch (DdlException e) {
-                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
-                            throw new DdlException("Table " + db.getOriginName() + "." +
-                                    olapTable.getName() +
-                                    " is not a dynamic partition table. Use command `HELP ALTER TABLE` " +
-                                    "to see how to change a normal table to a dynamic partition table.");
-                        }
+                        DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
                     }
                     GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
                     return null;
@@ -1507,7 +1202,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().hasRunningOverwriteJob(olapTable.getId())) {
                 // because insert overwrite will create tmp partitions
                 throw new DdlException("Table[" + olapTable.getName() + "] is doing insert overwrite job, " +
-                        "please start schema change after insert overwrite");
+                        "please start schema change after insert overwrite finished");
             }
             // the following operations can not be done when there are temp partitions exist.
             if (olapTable.existTempPartitions()) {
@@ -1598,8 +1293,8 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS && metaValue) {
                 if (!olapTable.checkPersistentIndex()) {
-                    throw new DdlException("PrimaryKey table using persistent index don't support " + 
-                         "varchar(char) as key so far, and key length should be no more than 64 Bytes");
+                    throw new DdlException("PrimaryKey table using persistent index don't support " +
+                            "varchar(char) as key so far, and key length should be no more than 64 Bytes");
                 }
             }
         } else {
@@ -1755,7 +1450,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Database[" + dbName + "] does not exist");
         }
 
-        AlterJob schemaChangeJob = null;
         AlterJobV2 schemaChangeJobV2 = null;
         db.writeLock();
         try {
@@ -1777,31 +1471,16 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaChangeJobV2 =
                     schemaChangeJobV2List.size() == 0 ? null : Iterables.getOnlyElement(schemaChangeJobV2List);
             if (schemaChangeJobV2 == null) {
-                schemaChangeJob = getAlterJob(olapTable.getId());
-                Preconditions.checkNotNull(schemaChangeJob, olapTable.getId());
-                if (schemaChangeJob.getState() == JobState.FINISHING
-                        || schemaChangeJob.getState() == JobState.FINISHED
-                        || schemaChangeJob.getState() == JobState.CANCELLED) {
-                    throw new DdlException(
-                            "job is already " + schemaChangeJob.getState().name() + ", can not cancel it");
-                }
-                schemaChangeJob.cancel(olapTable, "user cancelled");
+                throw new DdlException(
+                        "Table[" + tableName + "] is under SCHEMA_CHANGE but job does not exits.");
             }
         } finally {
             db.writeUnlock();
         }
 
         // alter job v2's cancel must be called outside the database lock
-        if (schemaChangeJobV2 != null) {
-            if (!schemaChangeJobV2.cancel("user cancelled")) {
-                throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
-            }
-            return;
-        }
-
-        // handle old alter job
-        if (schemaChangeJob != null && schemaChangeJob.getState() == JobState.CANCELLED) {
-            jobDone(schemaChangeJob);
+        if (!schemaChangeJobV2.cancel("user cancelled")) {
+            throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
         }
     }
 

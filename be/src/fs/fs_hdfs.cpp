@@ -8,6 +8,7 @@
 #include <atomic>
 
 #include "gutil/strings/substitute.h"
+#include "runtime/file_result_writer.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
@@ -218,6 +219,8 @@ public:
         return Status::NotSupported("HdfsFileSystem::get_children");
     }
 
+    Status list_path(const std::string& dir, std::vector<FileStatus>* result) override;
+
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override {
         return Status::NotSupported("HdfsFileSystem::iterate_dir");
     }
@@ -262,9 +265,7 @@ public:
         return Status::NotSupported("HdfsFileSystem::get_file_modified_time");
     }
 
-    Status rename_file(const std::string& src, const std::string& target) override {
-        return Status::NotSupported("HdfsFileSystem::rename_file");
-    }
+    Status rename_file(const std::string& src, const std::string& target) override;
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("HdfsFileSystem::link_file");
@@ -285,6 +286,44 @@ Status HdfsFileSystem::path_exists(const std::string& path) {
         return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
     }
     return _path_exists(handle.hdfs_fs, path);
+}
+
+Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>* result) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(dir, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path {}"_format(dir));
+    }
+    Status status = _path_exists(handle.hdfs_fs, dir);
+    if (!status.ok()) {
+        return status;
+    }
+
+    hdfsFileInfo* fileinfo;
+    int numEntries;
+    fileinfo = hdfsListDirectory(handle.hdfs_fs, dir.data(), &numEntries);
+    if (fileinfo == nullptr) {
+        return Status::InvalidArgument("hdfs list directory error {}"_format(dir));
+    }
+    for (int i = 0; i < numEntries && fileinfo; ++i) {
+        // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
+        int32_t dir_size;
+        if (dir[dir.size() - 1] == '/') {
+            dir_size = dir.size();
+        } else {
+            dir_size = dir.size() + 1;
+        }
+        std::string_view name(fileinfo[i].mName + dir_size);
+        bool is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory;
+        int64_t file_size = fileinfo[i].mSize;
+        result->emplace_back(std::move(name), is_dir, file_size);
+    }
+    if (fileinfo) {
+        hdfsFreeFileInfo(fileinfo, numEntries);
+    }
+    return Status::OK();
 }
 
 Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {
@@ -327,8 +366,15 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     flags |= O_CREAT;
 
     int hdfs_write_buffer_size = 0;
+    // pass zero to hdfsOpenFile will use the default hdfs_write_buffer_size
+    if (_options.result_file_options != nullptr) {
+        hdfs_write_buffer_size = _options.result_file_options->write_buffer_size_kb;
+    }
     if (_options.export_sink != nullptr && _options.export_sink->__isset.hdfs_write_buffer_size_kb) {
         hdfs_write_buffer_size = _options.export_sink->hdfs_write_buffer_size_kb;
+    }
+    if (_options.upload != nullptr && _options.upload->__isset.hdfs_write_buffer_size_kb) {
+        hdfs_write_buffer_size = _options.upload->__isset.hdfs_write_buffer_size_kb;
     }
 
     hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), flags, hdfs_write_buffer_size, 0, 0);
@@ -346,10 +392,13 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     if (handle.type != HdfsFsHandle::Type::HDFS) {
         return Status::InvalidArgument("invalid hdfs path, path={}"_format(path));
     }
-    // pass zero to hdfsOpenFile will use trhe default hdfs_read_buffer_size
+    // pass zero to hdfsOpenFile will use the default hdfs_read_buffer_size
     int hdfs_read_buffer_size = 0;
     if (_options.scan_range_params != nullptr && _options.scan_range_params->__isset.hdfs_read_buffer_size_kb) {
         hdfs_read_buffer_size = _options.scan_range_params->hdfs_read_buffer_size_kb;
+    }
+    if (_options.download != nullptr && _options.download->__isset.hdfs_read_buffer_size_kb) {
+        hdfs_read_buffer_size = _options.download->hdfs_read_buffer_size_kb;
     }
     hdfsFile file = hdfsOpenFile(handle.hdfs_fs, path.c_str(), O_RDONLY, hdfs_read_buffer_size, 0, 0);
     if (file == nullptr) {
@@ -383,6 +432,21 @@ StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_fi
     }
     auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
     return std::make_unique<RandomAccessFile>(std::move(stream), path);
+}
+
+Status HdfsFileSystem::rename_file(const std::string& src, const std::string& target) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(src, &namenode));
+    HdfsFsHandle handle;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, &handle, _options));
+    if (handle.type != HdfsFsHandle::Type::HDFS) {
+        return Status::InvalidArgument("invalid hdfs path {}"_format(src));
+    }
+    int ret = hdfsRename(handle.hdfs_fs, src.data(), target.data());
+    if (ret != 0) {
+        return Status::InvalidArgument("rename file from {} to {} error"_format(src, target));
+    }
+    return Status::OK();
 }
 
 std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options) {

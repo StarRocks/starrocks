@@ -558,6 +558,15 @@ public class Config extends ConfigBase {
     public static int max_mysql_service_task_threads_num = 4096;
 
     /**
+     * modifies the version string returned by following situations:
+     * select version();
+     * handshake packet version.
+     * global variable version.
+     */
+    @ConfField
+    public static String mysql_server_version = "5.1.0";
+
+    /**
      * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
      * Cluster id is usually a random integer generated when master FE start at first time.
      * You can also sepecify one.
@@ -1085,6 +1094,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"max_clone_task_timeout_sec"})
     public static long tablet_sched_max_clone_task_timeout_sec = 2 * 60 * 60L; // 2h
 
+    /**
+     * tablet checker's check interval in seconds
+     */
+    @ConfField
+    public static int tablet_sched_checker_interval_seconds = 20;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
@@ -1351,10 +1366,10 @@ public class Config extends ConfigBase {
     public static long histogram_buckets_size = 64;
 
     /**
-     * default top-n size of histogram statistics
+     * default most common value size of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_topn_size = 100;
+    public static long histogram_mcv_size = 100;
 
     /**
      * default sample ratio of histogram statistics

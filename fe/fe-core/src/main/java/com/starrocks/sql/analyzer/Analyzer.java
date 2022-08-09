@@ -10,8 +10,10 @@ import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
+import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -26,15 +28,18 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
+import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.common.AnalysisException;
@@ -196,8 +201,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitSetStatement(SetStmt stmt, ConnectContext session) {
-            stmt.analyze();
+        public Void visitSetStatement(SetStmt setStmt, ConnectContext session) {
+            SetStmtAnalyzer.analyze(setStmt, session);
             return null;
         }
 
@@ -392,6 +397,24 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext session) {
+            StopRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext session) {
+            ResumeRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
+            PauseRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
         // ------------------------------------------- Analyze Statement ---------------------------------------------------
 
         @Override
@@ -400,7 +423,6 @@ public class Analyzer {
             return null;
         }
 
-        @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext session) {
             AnalyzeStmtAnalyzer.analyze(statement, session);
             return null;
@@ -445,6 +467,18 @@ public class Analyzer {
         @Override
         public Void visitLoadStmt(LoadStmt statement, ConnectContext context) {
             LoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelLoadStmt(CancelLoadStmt statement, ConnectContext context) {
+            CancelLoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
+            BackupStmtAnalyzer.analyze(statement, context);
             return null;
         }
     }

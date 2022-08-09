@@ -72,7 +72,7 @@ class SchemaChangeTest : public testing::Test {
                 base_col->append_datum(datum);
             }
         }
-        RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+        RowsetWriterContext writer_context;
         writer_context.rowset_id = engine->next_rowset_id();
         writer_context.tablet_uid = tablet->tablet_uid();
         writer_context.tablet_id = tablet->tablet_id();
@@ -459,7 +459,7 @@ TEST_F(SchemaChangeTest, convert_from) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -535,7 +535,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -590,7 +590,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -659,7 +659,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -723,7 +723,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();

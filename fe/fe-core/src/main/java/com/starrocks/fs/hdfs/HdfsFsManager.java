@@ -797,7 +797,6 @@ public class HdfsFsManager {
             throw new UserException("file not found: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            fileSystem.closeFileSystem();
             throw new UserException("unknown error when get file status: " + e.getMessage());
         }
         return resultFileStatus;
@@ -811,7 +810,6 @@ public class HdfsFsManager {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (IOException e) {
             LOG.error("errors while delete path " + path);
-            fileSystem.closeFileSystem();
             throw new UserException("delete path " + path + "error");
         }
     }
@@ -833,7 +831,6 @@ public class HdfsFsManager {
             }
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath);
-            fileSystem.closeFileSystem();
             throw new UserException("errors while rename " + srcPath + "to " +  destPath);
         }
     }
@@ -847,7 +844,6 @@ public class HdfsFsManager {
             return isPathExist;
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path);
-            fileSystem.closeFileSystem();
             throw new UserException("errors while check if path " + path + " exist");
         }
     }
@@ -865,7 +861,6 @@ public class HdfsFsManager {
             return fd;
         } catch (IOException e) {
             LOG.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new UserException("could not open file " + path);
         }
     }
@@ -916,7 +911,7 @@ public class HdfsFsManager {
                 }
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
-                throw new UserException("errors while write data to output stream");
+                throw new UserException("errors while read data from stream");
             }
         }
     }
@@ -952,7 +947,6 @@ public class HdfsFsManager {
             return fd;
         } catch (IOException e) {
             LOG.error("errors while open path", e);
-            fileSystem.closeFileSystem();
             throw new UserException("could not open file " + path);
         }
     }

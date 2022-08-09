@@ -46,7 +46,9 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    public static final String ICEBERG_CATALOG = "starrocks.catalog-type";
+    public static final String ICEBERG_CATALOG = "iceberg.catalog.type";
+    @Deprecated
+    public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
     public static final String ICEBERG_DB = "database";
@@ -288,7 +290,7 @@ public class IcebergTable extends Table {
             case LIST:
             case MAP:
             default:
-                return false;
+                return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
     }
 

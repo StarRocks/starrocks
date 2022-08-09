@@ -76,6 +76,12 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    //Routine Statement
+    | stopRoutineLoadStatement                                                              #stopRoutineLoad
+    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
+    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
+    | showRoutineLoadStatement                                                              #showRoutineLoad
+
     // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
@@ -112,6 +118,9 @@ statement
 
     // Load Statement
     | loadStatement                                                                         #load
+    | showLoadStatement                                                                     #showLoad
+    | showLoadWarningsStatement                                                             #showLoadWarnings
+    | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -141,6 +150,9 @@ statement
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    // Backup Restore Satement
+    | backupStatement                                                                        #backup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -457,6 +469,13 @@ alterClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
+    | addColumnClause
+    | addColumnsClause
+    | dropColumnClause
+    | modifyColumnClause
+    | columnRenameClause
+    | reorderColumnsClause
+    | modifyBrokerClause
     ;
 
 addPartitionClause
@@ -523,6 +542,36 @@ modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
+addColumnClause
+    : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+addColumnsClause
+    : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+dropColumnClause
+    : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnClause
+    : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+columnRenameClause
+    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    ;
+
+reorderColumnsClause
+    : ORDER BY identifierList (FROM rollupName=identifier)? properties?
+    ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
@@ -537,6 +586,26 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+stopRoutineLoadStatement
+    : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+resumeRoutineLoadStatement
+    : RESUME ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+pauseRoutineLoadStatement
+    : PAUSE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+showRoutineLoadStatement
+    : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
@@ -674,6 +743,19 @@ resourceDesc
     : WITH RESOURCE name=identifierOrString props=propertyList?
     ;
 
+showLoadStatement
+    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+showLoadWarningsStatement
+    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
+    | SHOW LOAD WARNINGS ON string
+    ;
+
+cancelLoadStatement
+    : CANCEL LOAD (FROM identifier)? (WHERE expression)?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -723,9 +805,14 @@ setStatement
     ;
 
 setVar
-    : varType? identifier '=' setExprOrDefault
-    | userDefineVariable '=' expression
-    | systemVariable '=' setExprOrDefault
+    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    | NAMES (charset = identifierOrString | DEFAULT)
+        (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
+    | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
+    | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
+    | varType? identifier '=' setExprOrDefault                                                  #setVariable
+    | userDefineVariable '=' expression                                                         #setVariable
+    | systemVariable '=' setExprOrDefault                                                       #setVariable
     ;
 
 setExprOrDefault
@@ -898,6 +985,14 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+// ---------------------------------------- Backup Restore Statement -----------------------------------------------------
+backupStatement
+    : BACKUP SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' tableDesc (',' tableDesc) * ')'
+    (PROPERTIES propertyList)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
@@ -1105,6 +1200,10 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+tableDesc
+    : qualifiedName partitionNames?
+    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?

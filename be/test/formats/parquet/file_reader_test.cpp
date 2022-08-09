@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
@@ -30,7 +32,9 @@ public:
 private:
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
 
-    HdfsScannerContext* _create_context();
+    HdfsScannerContext* _create_scan_context();
+
+    HdfsScannerContext* _create_file1_base_context();
     HdfsScannerContext* _create_context_for_partition();
     HdfsScannerContext* _create_context_for_not_exist();
 
@@ -42,33 +46,37 @@ private:
     HdfsScannerContext* _create_context_for_skip_group();
 
     HdfsScannerContext* _create_file3_base_context();
-    HdfsScannerContext* _create_context_for_multi_filter(
-            HdfsScannerContext* base_ctx);
-    HdfsScannerContext* _create_context_for_multi_page(
-            HdfsScannerContext* base_ctx);
+    HdfsScannerContext* _create_context_for_multi_filter();
+    HdfsScannerContext* _create_context_for_late_materialization();
+
+    HdfsScannerContext* _create_file4_base_context();
+    HdfsScannerContext* _create_context_for_struct_solumn();
+
+    void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
+                                   std::vector<ExprContext*>* conjunct_ctxs);
+    void _create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                      std::vector<ExprContext*>* conjunct_ctxs);
 
     static vectorized::ChunkPtr _create_chunk();
+    static vectorized::ChunkPtr _create_struct_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
     static vectorized::ChunkPtr _create_chunk_for_not_exist();
+    static void _append_column_for_chunk(PrimitiveType column_type, vectorized::ChunkPtr* chunk);
 
-    THdfsScanRange* _create_scan_range();
+    THdfsScanRange* _create_scan_range(const std::string& file_path, size_t scan_length = 0);
 
-    void _create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>* conjunct_ctxs);
-    void _create_conjunct_ctxs_for_filter_file(std::vector<ExprContext*>* conjunct_ctxs);
-    void _create_conjunct_ctxs_for_dict_filter(std::vector<ExprContext*>* conjunct_ctxs);
-    void _create_conjunct_ctxs_for_other_filter(std::vector<ExprContext*>* conjunct_ctxs);
-    void _create_conjunct_ctxs_for_multi_page(std::vector<ExprContext*>* conjunct_ctxs);
-    void _create_conjunct_ctxs_for_skip_group(std::vector<ExprContext*>* conjunct_ctxs);
-
+    // Description: A simple parquet file that all columns are null
+    //
     // c1      c2      c3       c4
     // -------------------------------------------
     // NULL    NULL    NULL    NULL
     // NULL    NULL    NULL    NULL
     // NULL    NULL    NULL    NULL
     // NULL    NULL    NULL    NULL
-    std::string _file_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";
-    int64_t _file_size = 729;
+    std::string _file1_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";
 
+    // Description: A simple parquet file contains single page
+    //
     // c1      c2      c3       c4
     // -------------------------------------------
     // 0       10      a       2021-01-01 00:00:00
@@ -82,9 +90,10 @@ private:
     // 8       18      d       2021-01-09 00:00:00
     // 9       19      d       2021-01-10 00:00:00
     // NULL    NULL    NULL    NULL
-    std::string _file_2_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet2";
-    int64_t _file_2_size = 850;
+    std::string _file2_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet2";
 
+    // Description: A parquet file contains multiple pages
+    //
     // c1      c2      c3      c4
     // -------------------------------------------
     // 0       10      a       2022-07-12 03:52:14
@@ -99,9 +108,21 @@ private:
     // 4093   4103     a       2022-07-12 03:52:14
     // 4094   4104     a       2022-07-12 03:52:14
     // 4095   4105     a       2022-07-12 03:52:14
-    // a parquet file with multiple page
-    std::string _file_3_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet3";
-    int64_t _file_3_size = 46654;
+    std::string _file3_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet3";
+
+    // Description: A complex parquet file contains contains struct, array and uppercase columns
+    //
+    //c1    | c2                                       | c3   |                      c4                      | B1
+    // --------------------------------- ------------------------------------------------------------------------
+    // 0    | {'f1': 0, 'f2': 'a', 'f3': [0, 1, 2]}   |  a   |  [{'e1': 0, 'e2': 'a'} {'e1': 1, 'e2': 'a'}]  | A
+    // 1    | {'f1': 1, 'f2': 'a', 'f3': [1, 2, 3]}   |  a   |  [{'e1': 1, 'e2': 'a'} {'e1': 2, 'e2': 'a'}]  | A
+    // 2    | {'f1': 2, 'f2': 'a', 'f3': [2, 3, 4]}   |  a   |  [{'e1': 2, 'e2': 'a'} {'e1': 3, 'e2': 'a'}]  | A
+    // 3    | {'f1': 3, 'f2': 'c', 'f3': [3, 4, 5]}   |  c   |  [{'e1': 3, 'e2': 'c'} {'e1': 4, 'e2': 'c'}]  | C
+    // 4    | {'f1': 4, 'f2': 'c', 'f3': [4, 5, 6]}   |  c   |  [{'e1': 4, 'e2': 'c'} {'e1': 5, 'e2': 'c'}]  | C
+    // 5    | {'f1': 5, 'f2': 'c', 'f3': [5, 6, 7]}   |  c   |  [{'e1': 5, 'e2': 'c'} {'e1': 6, 'e2': 'c'}]  | C
+    // 6    | {'f1': 6, 'f2': 'a', 'f3': [6, 7, 8]}   |  a   |  [{'e1': 6, 'e2': 'a'} {'e1': 7, 'e2': 'a'}]  | A
+    // 7    | {'f1': 7, 'f2': 'a', 'f3': [7, 8, 9]}   |  a   |  [{'e1': 7, 'e2': 'a'} {'e1': 8, 'e2': 'a'}]  | A
+    std::string _file4_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet4";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     ObjectPool _pool;
@@ -112,7 +133,7 @@ struct SlotDesc {
     TypeDescriptor type;
 };
 
-void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, TupleDescriptor** tuple_desc) {
+TupleDescriptor* create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs) {
     TDescriptorTableBuilder table_desc_builder;
 
     TTupleDescriptorBuilder tuple_desc_builder;
@@ -134,8 +155,7 @@ void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, Tuple
     DescriptorTbl::create(pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
-    *tuple_desc = row_desc->tuple_descriptors()[0];
-    return;
+    return row_desc->tuple_descriptors()[0];
 }
 
 void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<HdfsScannerContext::ColumnInfo>* columns) {
@@ -152,290 +172,20 @@ void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<Hdfs
     }
 }
 
-void FileReaderTest::_create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = TExprOpcode::GE;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = 0;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = 1;
-    node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
-    std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
-
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
-}
-
-void FileReaderTest::_create_conjunct_ctxs_for_filter_file(std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = TExprOpcode::GE;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = 4;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = 1;
-    node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
-    std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
-
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
-}
-
-void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = TExprOpcode::EQ;
-    node0.child_type = TPrimitiveType::VARCHAR;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = 2;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::STRING_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
-    node2.num_children = 0;
-    TStringLiteral string_literal;
-    string_literal.value = "c";
-    node2.__set_string_literal(string_literal);
-    node2.use_vectorized = true;
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
-    std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
-
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
-}
-
-void FileReaderTest::_create_conjunct_ctxs_for_other_filter(std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = TExprOpcode::GE;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = 0;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = 4;
-    node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
-    std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
-
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
-}
-
-void FileReaderTest::_create_conjunct_ctxs_for_multi_page(std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = TExprOpcode::GE;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = 0;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = 4080;
-    node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
-    std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
-
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
-}
-
-void FileReaderTest::_create_conjunct_ctxs_for_skip_group(std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = TExprOpcode::GE;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    node0.use_vectorized = true;
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = 0;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.use_vectorized = true;
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = 100000;
-    node2.__set_int_literal(int_literal);
-    node2.use_vectorized = true;
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
-    std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
-
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
-}
-
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
     return *FileSystem::Default()->new_random_access_file(file_path);
 }
 
-HdfsScannerContext* FileReaderTest::_create_context() {
+HdfsScannerContext* FileReaderTest::_create_scan_context() {
     auto* ctx = _pool.add(new HdfsScannerContext());
+    ctx->timezone = "Asia/Shanghai";
+    ctx->stats = &g_hdfs_scan_stats;
+    return ctx;
+}
 
-    TupleDescriptor* tuple_desc;
+HdfsScannerContext* FileReaderTest::_create_file1_base_context() {
+    auto ctx = _create_scan_context();
+
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -443,19 +193,16 @@ HdfsScannerContext* FileReaderTest::_create_context() {
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
             {""},
     };
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range());
-    ctx->stats = &g_hdfs_scan_stats;
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
 
     return ctx;
 }
 
 HdfsScannerContext* FileReaderTest::_create_context_for_partition() {
-    auto* ctx = _pool.add(new HdfsScannerContext());
+    auto ctx = _create_scan_context();
 
-    TupleDescriptor* tuple_desc;
     SlotDesc slot_descs[] = {
             // {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             // {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -464,22 +211,18 @@ HdfsScannerContext* FileReaderTest::_create_context_for_partition() {
             {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &ctx->partition_columns);
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
     auto column = vectorized::ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(1, 1);
     ctx->partition_values.emplace_back(column);
-
-    ctx->scan_ranges.emplace_back(_create_scan_range());
-    ctx->stats = &g_hdfs_scan_stats;
 
     return ctx;
 }
 
 HdfsScannerContext* FileReaderTest::_create_context_for_not_exist() {
-    auto* ctx = _pool.add(new HdfsScannerContext());
+    auto ctx = _create_scan_context();
 
-    TupleDescriptor* tuple_desc;
     SlotDesc slot_descs[] = {
             // {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             // {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -488,18 +231,15 @@ HdfsScannerContext* FileReaderTest::_create_context_for_not_exist() {
             {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
-
-    ctx->scan_ranges.emplace_back(_create_scan_range());
-    ctx->stats = &g_hdfs_scan_stats;
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
 
     return ctx;
 }
 
 HdfsScannerContext* FileReaderTest::_create_file2_base_context() {
-    auto* ctx = _pool.add(new HdfsScannerContext());
+    auto ctx = _create_scan_context();
 
     // tuple desc and conjuncts
     SlotDesc slot_descs[] = {
@@ -509,21 +249,9 @@ HdfsScannerContext* FileReaderTest::_create_file2_base_context() {
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
             {""},
     };
-    TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
-
-    // scan range
-    auto* scan_range = _pool.add(new THdfsScanRange());
-    scan_range->relative_path = _file_2_path;
-    scan_range->offset = 4;
-    scan_range->length = 850;
-    scan_range->file_length = _file_2_size;
-    ctx->scan_ranges.emplace_back(scan_range);
-
-    ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_scan_stats;
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file2_path, 850));
 
     return ctx;
 }
@@ -535,14 +263,11 @@ HdfsScannerContext* FileReaderTest::_create_context_for_min_max() {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    TupleDescriptor* min_max_tuple_desc = nullptr;
-    create_tuple_descriptor(&_pool, min_max_slots, &min_max_tuple_desc);
-    ctx->min_max_tuple_desc = min_max_tuple_desc;
+    ctx->min_max_tuple_desc = create_tuple_descriptor(&_pool, min_max_slots);
 
     // create min max conjuncts
     // c1 >= 1
-    _create_conjunct_ctxs_for_min_max(&ctx->min_max_conjunct_ctxs);
-
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 1, &ctx->min_max_conjunct_ctxs);
     return ctx;
 }
 
@@ -557,16 +282,12 @@ HdfsScannerContext* FileReaderTest::_create_context_for_filter_file() {
             {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-
-    TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
 
     // create conjuncts
     // c5 >= 1
-    ctx->conjunct_ctxs_by_slot[4] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_filter_file(&ctx->conjunct_ctxs_by_slot[4]);
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 4, 1, &ctx->conjunct_ctxs_by_slot[4]);
     return ctx;
 }
 
@@ -574,8 +295,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_dict_filter() {
     auto* ctx = _create_file2_base_context();
     // create conjuncts
     // c3 = "c"
-    ctx->conjunct_ctxs_by_slot[2] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_dict_filter(&ctx->conjunct_ctxs_by_slot[2]);
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 2, "c", &ctx->conjunct_ctxs_by_slot[2]);
     return ctx;
 }
 
@@ -583,8 +303,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_other_filter() {
     auto* ctx = _create_file2_base_context();
     // create conjuncts
     // c1 >= 4
-    ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_other_filter(&ctx->conjunct_ctxs_by_slot[0]);
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 4, &ctx->conjunct_ctxs_by_slot[0]);
     return ctx;
 }
 
@@ -592,13 +311,12 @@ HdfsScannerContext* FileReaderTest::_create_context_for_skip_group() {
     auto* ctx = _create_file2_base_context();
     // create conjuncts
     // c1 > 10000
-    ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_skip_group(&ctx->conjunct_ctxs_by_slot[0]);
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 10000, &ctx->conjunct_ctxs_by_slot[0]);
     return ctx;
 }
 
 HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
-    auto* ctx = _pool.add(new HdfsScannerContext());
+    auto ctx = _create_scan_context();
 
     // tuple desc and conjuncts
     SlotDesc slot_descs[] = {
@@ -608,138 +326,209 @@ HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
             {""},
     };
-    TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
-
-    // scan range
-    auto* scan_range = _pool.add(new THdfsScanRange());
-    scan_range->relative_path = _file_3_path;
-    scan_range->offset = 4;
-    scan_range->length = _file_3_size;
-    scan_range->file_length = _file_3_size;
-    ctx->scan_ranges.emplace_back(scan_range);
-
-    ctx->timezone = "Asia/Shanghai";
-    ctx->stats = &g_hdfs_scan_stats;
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file3_path));
 
     return ctx;
 }
 
-HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter(
-        HdfsScannerContext* base_ctx) {
-    SlotDesc slot_descs[] = {
-            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-            {""},
-    };
-
-    TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    base_ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &base_ctx->materialized_columns);
-
-    base_ctx->conjunct_ctxs_by_slot[2] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_dict_filter(&base_ctx->conjunct_ctxs_by_slot[2]);
-
-    base_ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_other_filter(&base_ctx->conjunct_ctxs_by_slot[0]);
-
-    return base_ctx;
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter() {
+    auto ctx = _create_file3_base_context();
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 2, "c", &ctx->conjunct_ctxs_by_slot[2]);
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 4, &ctx->conjunct_ctxs_by_slot[0]);
+    return ctx;
 }
 
-HdfsScannerContext* FileReaderTest::_create_context_for_multi_page(
-        HdfsScannerContext* base_ctx) {
-    SlotDesc slot_descs[] = {
-            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-            {""},
-    };
-
-    TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
-    base_ctx->tuple_desc = tuple_desc;
-    make_column_info_vector(tuple_desc, &base_ctx->materialized_columns);
-
-    base_ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
-    _create_conjunct_ctxs_for_multi_page(&base_ctx->conjunct_ctxs_by_slot[0]);
-
-    return base_ctx;
+HdfsScannerContext* FileReaderTest::_create_context_for_late_materialization() {
+    auto ctx = _create_file3_base_context();
+    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 4080, &ctx->conjunct_ctxs_by_slot[0]);
+    return ctx;
 }
 
+HdfsScannerContext* FileReaderTest::_create_file4_base_context() {
+    auto ctx = _create_scan_context();
 
-THdfsScanRange* FileReaderTest::_create_scan_range() {
+    // tuple desc and conjuncts
+    // struct columns are not supported now, so we skip reading them
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            // {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            // {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"B1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {""},
+    };
+    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file2_path));
+
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_context_for_struct_solumn() {
+    auto* ctx = _create_file4_base_context();
+    // create conjuncts
+    // c3 = "c", c2 is not in slots, so the slot_id=1
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 1, "c", &ctx->conjunct_ctxs_by_slot[1]);
+    return ctx;
+}
+
+void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
+                                               std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = opcode;
+    node0.child_type = TPrimitiveType::INT;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.use_vectorized = true;
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::INT);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.use_vectorized = true;
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::INT_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::INT);
+    node2.num_children = 0;
+    TIntLiteral int_literal;
+    int_literal.value = value;
+    node2.__set_int_literal(int_literal);
+    node2.use_vectorized = true;
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+}
+
+void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
+                                                  std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = opcode;
+    node0.child_type = TPrimitiveType::VARCHAR;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.use_vectorized = true;
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = slot_id;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.use_vectorized = true;
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::STRING_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node2.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = value;
+    node2.__set_string_literal(string_literal);
+    node2.use_vectorized = true;
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+}
+
+THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path, size_t scan_length) {
     auto* scan_range = _pool.add(new THdfsScanRange());
 
-    scan_range->relative_path = _file_path;
+    scan_range->relative_path = file_path;
+    scan_range->file_length = std::filesystem::file_size(file_path);
     scan_range->offset = 4;
-    scan_range->length = 1024;
-    scan_range->file_length = _file_size;
+    scan_range->length = scan_length > 0 ? scan_length : scan_range->file_length;
 
     return scan_range;
 }
 
+void FileReaderTest::_append_column_for_chunk(PrimitiveType column_type, vectorized::ChunkPtr* chunk) {
+    auto c = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(column_type), true);
+    (*chunk)->append_column(c, (*chunk)->num_columns());
+}
+
 vectorized::ChunkPtr FileReaderTest::_create_chunk() {
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    auto c1 =
-            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT), true);
-    auto c2 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT),
-                                                      true);
-    auto c3 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR),
-                                                      true);
-    auto c4 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME),
-                                                      true);
-    chunk->append_column(c1, 0);
-    chunk->append_column(c2, 1);
-    chunk->append_column(c3, 2);
-    chunk->append_column(c4, 3);
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_BIGINT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_DATETIME, &chunk);
+    return chunk;
+}
 
+vectorized::ChunkPtr FileReaderTest::_create_struct_chunk() {
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     return chunk;
 }
 
 vectorized::ChunkPtr FileReaderTest::_create_chunk_for_partition() {
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    auto c1 =
-            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT), true);
-    chunk->append_column(c1, 0);
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
     return chunk;
 }
 
 vectorized::ChunkPtr FileReaderTest::_create_chunk_for_not_exist() {
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    auto c1 =
-            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT), true);
-    chunk->append_column(c1, 0);
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
     return chunk;
 }
 
 TEST_F(FileReaderTest, TestInit) {
-    // create file
-    auto file = _create_file(_file_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
-
+    auto file = _create_file(_file1_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file1_path));
     // init
-    auto* ctx = _create_context();
+    auto* ctx = _create_file1_base_context();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 }
 
 TEST_F(FileReaderTest, TestGetNext) {
-    // create file
-    auto file = _create_file(_file_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
-
+    auto file = _create_file(_file1_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file1_path));
     // init
-    auto* ctx = _create_context();
+    auto* ctx = _create_file1_base_context();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
@@ -754,12 +543,9 @@ TEST_F(FileReaderTest, TestGetNext) {
 }
 
 TEST_F(FileReaderTest, TestGetNextPartition) {
-    // create file
-    auto file = _create_file(_file_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
-
+    auto file = _create_file(_file1_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file1_path));
     // init
     auto* ctx = _create_context_for_partition();
     Status status = file_reader->init(ctx);
@@ -776,12 +562,9 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
 }
 
 TEST_F(FileReaderTest, TestGetNextEmpty) {
-    // create file
-    auto file = _create_file(_file_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_size);
-
+    auto file = _create_file(_file1_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file1_path));
     // init
     auto* ctx = _create_context_for_not_exist();
     Status status = file_reader->init(ctx);
@@ -798,12 +581,9 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
 }
 
 TEST_F(FileReaderTest, TestMinMaxConjunct) {
-    // create file
-    auto file = _create_file(_file_2_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
-
+    auto file = _create_file(_file2_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path));
     // init
     auto* ctx = _create_context_for_min_max();
     Status status = file_reader->init(ctx);
@@ -823,12 +603,9 @@ TEST_F(FileReaderTest, TestMinMaxConjunct) {
 }
 
 TEST_F(FileReaderTest, TestFilterFile) {
-    // create file
-    auto file = _create_file(_file_2_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
-
+    auto file = _create_file(_file2_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path));
     // init
     auto* ctx = _create_context_for_filter_file();
     Status status = file_reader->init(ctx);
@@ -843,12 +620,9 @@ TEST_F(FileReaderTest, TestFilterFile) {
 }
 
 TEST_F(FileReaderTest, TestGetNextDictFilter) {
-    // create file
-    auto file = _create_file(_file_2_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
-
+    auto file = _create_file(_file2_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path));
     // init
     auto* ctx = _create_context_for_dict_filter();
     Status status = file_reader->init(ctx);
@@ -872,12 +646,9 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
 }
 
 TEST_F(FileReaderTest, TestGetNextOtherFilter) {
-    // create file
-    auto file = _create_file(_file_2_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
-
+    auto file = _create_file(_file2_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path));
     // init
     auto* ctx = _create_context_for_other_filter();
     Status status = file_reader->init(ctx);
@@ -901,49 +672,31 @@ TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     ASSERT_TRUE(status.is_end_of_file());
 }
 
-TEST_F(FileReaderTest, TestMultiFilter) {
-    // create file
-    auto file = _create_file(_file_2_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
-
-    // c3 = "c", c1 >= 4
-    auto* ctx = _create_context_for_multi_filter(_create_file2_base_context());
+TEST_F(FileReaderTest, TestSkipRowGroup) {
+    auto file = _create_file(_file2_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path));
+    // c1 > 10000
+    auto* ctx = _create_context_for_skip_group();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
-
-    // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
-
-    // c0 is other conjunct filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
-    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
-    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
     // get next
     auto chunk = _create_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(2, chunk->num_rows());
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
+    ASSERT_EQ(0, chunk->num_rows());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.is_end_of_file());
 }
 
 TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
-    // create file
-    auto file = _create_file(_file_3_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_3_size);
-
+    auto file = _create_file(_file3_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file3_path));
     // c3 = "c", c1 >= 4
-    auto* ctx = _create_context_for_multi_filter(_create_file3_base_context());
+    auto* ctx = _create_context_for_multi_filter();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
@@ -970,15 +723,11 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
 }
 
 TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
-    // create file
-    auto file = _create_file(_file_3_path);
-
-    // create file reader
-    config::vector_chunk_size = 1024;
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_3_size);
-
+    auto file = _create_file(_file3_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file3_path));
     // c1 >= 4080
-    auto* ctx = _create_context_for_multi_page(_create_file3_base_context());
+    auto* ctx = _create_context_for_late_materialization();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
@@ -1001,26 +750,32 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
     ASSERT_TRUE(status.is_end_of_file());
 }
 
-TEST_F(FileReaderTest, TestSkipRowGroup) {
-    // create file
-    auto file = _create_file(_file_2_path);
-
-    // create file reader
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
-
-    // c1 > 10000
-    auto* ctx = _create_context_for_skip_group();
+TEST_F(FileReaderTest, TestReadStructColumns) {
+    auto file = _create_file(_file4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file4_path));
+    // init
+    auto* ctx = _create_context_for_struct_solumn();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
+    // c3 is dict filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+
     // get next
-    auto chunk = _create_chunk();
+    auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    ASSERT_EQ(0, chunk->num_rows());
+    ASSERT_EQ(3, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
 
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.is_end_of_file());
+    ColumnPtr col = chunk->get_column_by_slot_id(1);
+    Slice s = col->get(0).get_slice();
+    std::string res(s.data, s.size);
+    EXPECT_EQ(res, "c");
 }
 
 } // namespace starrocks::parquet

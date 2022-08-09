@@ -25,12 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2.JobType;
-import com.starrocks.alter.MaterializedViewHandler;
-import com.starrocks.alter.RollupJob;
-import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -61,6 +56,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
+import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.rpc.FrontendServiceProxy;
@@ -74,12 +70,10 @@ import com.starrocks.task.CheckConsistencyTask;
 import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.task.CreateRollupTask;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.PushTask;
-import com.starrocks.task.SchemaChangeTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
@@ -235,16 +229,8 @@ public class LeaderImpl {
                     finishDropReplica(task);
                     break;
                 case SCHEMA_CHANGE:
-                    Preconditions.checkState(request.isSetReport_version());
-                    checkHasTabletInfo(request);
-                    finishTabletInfos = request.getFinish_tablet_infos();
-                    finishSchemaChange(task, finishTabletInfos, request.getReport_version());
-                    break;
                 case ROLLUP:
-                    checkHasTabletInfo(request);
-                    finishTabletInfos = request.getFinish_tablet_infos();
-                    finishRollup(task, finishTabletInfos);
-                    break;
+                    throw new RuntimeException("Old alter job is not supported.");
                 case CLONE:
                     finishClone(task, request);
                     break;
@@ -448,13 +434,15 @@ public class LeaderImpl {
                 if (deleteJob == null) {
                     throw new MetaNotFoundException("cannot find delete job, job[" + transactionId + "]");
                 }
+                Preconditions.checkState(deleteJob instanceof OlapDeleteJob);
+                OlapDeleteJob olapDeleteJob = (OlapDeleteJob) deleteJob;
                 for (int i = 0; i < tabletMetaList.size(); i++) {
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     long tabletId = tabletIds.get(i);
                     Replica replica = findRelatedReplica(olapTable, partition,
                             backendId, tabletId, tabletMeta.getIndexId());
                     if (replica != null) {
-                        deleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
+                        olapDeleteJob.addFinishedReplica(partitionId, pushTabletId, replica);
                         pushTask.countDownLatch(backendId, pushTabletId);
                     }
                 }
@@ -519,10 +507,7 @@ public class LeaderImpl {
         }
         MaterializedIndex index = partition.getIndex(indexId);
         if (index == null) {
-            // this means the index is under rollup
-            MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
-            AlterJob alterJob = materializedViewHandler.getAlterJob(olapTable.getId());
-            if (alterJob == null && olapTable.getState() == OlapTableState.ROLLUP) {
+            if (olapTable.getState() == OlapTableState.ROLLUP) {
                 // this happens when:
                 // a rollup job is finish and a delete job is the next first job (no load job before)
                 // and delete task is first send to base tablet, so it will return 2 tablets info.
@@ -533,14 +518,7 @@ public class LeaderImpl {
                 LOG.warn("Cannot find table[{}].", olapTable.getId());
                 return null;
             }
-            RollupJob rollupJob = (RollupJob) alterJob;
-            MaterializedIndex rollupIndex = rollupJob.getRollupIndex(partition.getId());
-
-            if (rollupIndex == null) {
-                LOG.warn("could not find index for tablet {}", tabletId);
-                return null;
-            }
-            index = rollupIndex;
+            throw new MetaNotFoundException("Could not find rollup index.");
         }
         LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
         if (tablet == null) {
@@ -621,39 +599,12 @@ public class LeaderImpl {
                 return null;
             }
 
-            MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
-            AlterJob alterJob = materializedViewHandler.getAlterJob(olapTable.getId());
-            if (alterJob == null) {
-                // this happends when:
-                // a rollup job is finish and a delete job is the next first job (no load job before)
-                // and delete task is first send to base tablet, so it will return 2 tablets info.
-                // the second tablet is rollup tablet and it is no longer exist in alterJobs queue.
-                // just ignore the rollup tablet info. it will be handled in rollup tablet delete task report.
-
-                // add log to observe
-                LOG.warn("Cannot find table[{}].", olapTable.getId());
-                return null;
-            }
-
-            ((RollupJob) alterJob).updateRollupReplicaInfo(partition.getId(), indexId, tabletId, backendId,
-                    schemaHash, version, rowCount, dataSize);
-            // replica info is saved in rollup job, not in load job
             return null;
         }
 
         int currentSchemaHash = olapTable.getSchemaHashByIndexId(pushIndexId);
         if (schemaHash != currentSchemaHash) {
-            if (pushState == PartitionState.SCHEMA_CHANGE) {
-                SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-                AlterJob alterJob = schemaChangeHandler.getAlterJob(olapTable.getId());
-                if (alterJob != null &&
-                        schemaHash != ((SchemaChangeJob) alterJob).getSchemaHashByIndexId(pushIndexId)) {
-                    // this is a invalid tablet.
-                    throw new MetaNotFoundException("tablet[" + tabletId
-                            + "] schemaHash is not equal to index's switchSchemaHash. "
-                            + ((SchemaChangeJob) alterJob).getSchemaHashByIndexId(pushIndexId) + " vs. " + schemaHash);
-                }
-            } else {
+            if (pushState != PartitionState.SCHEMA_CHANGE) {
                 // this should not happen. observe(cmy)
                 throw new MetaNotFoundException("Diff tablet[" + tabletId + "] schemaHash. index[" + pushIndexId + "]: "
                         + currentSchemaHash + " vs. " + schemaHash);
@@ -684,28 +635,6 @@ public class LeaderImpl {
 
     private void finishDropReplica(AgentTask task) {
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.DROP, task.getSignature());
-    }
-
-    private void finishSchemaChange(AgentTask task, List<TTabletInfo> finishTabletInfos, long reportVersion)
-            throws MetaNotFoundException {
-        Preconditions.checkArgument(finishTabletInfos != null && !finishTabletInfos.isEmpty());
-        Preconditions.checkArgument(finishTabletInfos.size() == 1);
-
-        SchemaChangeTask schemaChangeTask = (SchemaChangeTask) task;
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        schemaChangeHandler.handleFinishedReplica(schemaChangeTask, finishTabletInfos.get(0), reportVersion);
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.SCHEMA_CHANGE, task.getSignature());
-    }
-
-    private void finishRollup(AgentTask task, List<TTabletInfo> finishTabletInfos)
-            throws MetaNotFoundException {
-        Preconditions.checkArgument(finishTabletInfos != null && !finishTabletInfos.isEmpty());
-        Preconditions.checkArgument(finishTabletInfos.size() == 1);
-
-        CreateRollupTask createRollupTask = (CreateRollupTask) task;
-        MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
-        materializedViewHandler.handleFinishedReplica(createRollupTask, finishTabletInfos.get(0), -1L);
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ROLLUP, task.getSignature());
     }
 
     private void finishClone(AgentTask task, TFinishTaskRequest request) {

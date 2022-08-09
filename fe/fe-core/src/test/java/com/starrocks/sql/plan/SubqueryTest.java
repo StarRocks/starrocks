@@ -15,6 +15,21 @@ public class SubqueryTest extends PlanTestBase {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Test
+    public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
+        String sql = "select t0.v1 from t0 where (t0.v2 in (select t1.v4 from t1 where t0.v3 + t1.v5 = 1)) is NULL";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("17:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other predicates: 3: v3 + 14: v5 = 13: expr, CASE WHEN (15: countRows IS NULL) OR (15: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL WHEN 9: v4 IS NOT NULL THEN TRUE WHEN 16: countNotNulls < 15: countRows THEN NULL ELSE FALSE END IS NULL"));
+        Assert.assertTrue(plan.contains("10:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 9: v4 = 2: v2\n" +
+                "  |  other join predicates: 3: v3 + 11: v5 = 10: expr"));
+    }
+
+    @Test
     public void testCountConstantWithSubquery() throws Exception {
         String sql = "SELECT 1 FROM (SELECT COUNT(1) FROM t0 WHERE false) t;";
         String thriftPlan = getThriftPlan(sql);
@@ -333,7 +348,6 @@ public class SubqueryTest extends PlanTestBase {
         String sql = "select * from t0 join t1 on t0.v3 = t1.v6 " +
                 "where t1.v5 > (select t2.v7 from t2) and t1.v4 < (select t3.v10 from t3);";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "  15:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -364,5 +378,153 @@ public class SubqueryTest extends PlanTestBase {
                 "  |    \n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t1");
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryByWhereClause() throws Exception {
+        {
+            String sql = "SELECT * FROM t0\n" +
+                    "WHERE t0.v2 > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4\n" +
+                    ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  \n" +
+                    "  6:SELECT\n" +
+                    "  |  predicates: 2: v2 > 7: expr\n" +
+                    "  |  \n" +
+                    "  5:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  <slot 7> : 9: anyValue\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  \n" +
+                    "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4");
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1), any_value(5: v5)\n" +
+                    "  |  group by: 4: v4");
+        }
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryBySelectClause() throws Exception {
+        {
+            String sql = "SELECT t0.*, (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4\n" +
+                    ") as t1_v5 FROM t0;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  <slot 7> : 9: anyValue\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  \n" +
+                    "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4");
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1), any_value(5: v5)\n" +
+                    "  |  group by: 4: v4");
+        }
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryByHavingClause() throws Exception {
+        {
+            String sql = "SELECT v1, SUM(v2) FROM t0\n" +
+                    "GROUP BY v1\n" +
+                    "HAVING SUM(v2) > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4\n" +
+                    ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  9:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  \n" +
+                    "  8:SELECT\n" +
+                    "  |  predicates: 4: sum > 8: expr\n" +
+                    "  |  \n" +
+                    "  7:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 4> : 4: sum\n" +
+                    "  |  <slot 8> : 10: anyValue\n" +
+                    "  |  <slot 11> : assert_true((9: countRows IS NULL) OR (9: countRows <= 1))\n" +
+                    "  |  \n" +
+                    "  6:HASH JOIN\n" +
+                    "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 5: v4 = 1: v1");
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1), any_value(6: v5)\n" +
+                    "  |  group by: 5: v4");
+        }
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryWithExpression() throws Exception {
+        String sql = "SELECT \n" +
+                "  subt0.v1 \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "          SELECT \n" +
+                "            t2.v7 \n" +
+                "          FROM \n" +
+                "            t2 \n" +
+                "          WHERE \n" +
+                "            t0.v2 = 284082749\n" +
+                "      ) >= 1\n" +
+                "  ) subt0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1), any_value(4: v7)\n" +
+                "  |  group by: 8: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: v7\n" +
+                "  |  <slot 8> : 284082749");
+        sql = "SELECT \n" +
+                "  subt0.v1 \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "          SELECT \n" +
+                "            t2.v7 \n" +
+                "          FROM \n" +
+                "            t2 \n" +
+                "          WHERE \n" +
+                "            t0.v2 = t2.v8 + 1\n" +
+                "      ) >= 1\n" +
+                "  ) subt0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 3:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1), any_value(4: v7)\n" +
+                "  |  group by: 8: add\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: v7\n" +
+                "  |  <slot 8> : 5: v8 + 1");
     }
 }

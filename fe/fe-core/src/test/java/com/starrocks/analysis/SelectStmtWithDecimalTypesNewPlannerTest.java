@@ -620,9 +620,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     @Test
     public void testSumDistinctWithRewriteMultiDistinctByCTERuleTakeEffect() throws Exception {
         int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
-        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
         ctx.getSessionVariable().setNewPlanerAggStage(2);
-        ctx.getSessionVariable().setCboCteReuse(true);
         String sql = "select sum(distinct col_decimal32p9s2), sum(distinct col_decimal64p13s0), " +
                 "sum(distinct col_decimal128p20s3) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
@@ -636,7 +634,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         };
         Assert.assertTrue(Arrays.asList(expectSnippets).stream().allMatch(s -> plan.contains(s)));
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
-        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
     }
 
     @Test
@@ -761,9 +758,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     @Test
     public void testAvgDistinctWithRewriteMultiDistinctByCTERuleTakeEffect() throws Exception {
         int oldStage = ctx.getSessionVariable().getNewPlannerAggStage();
-        boolean oldCboCteReUse = ctx.getSessionVariable().isCboCteReuse();
         ctx.getSessionVariable().setNewPlanerAggStage(2);
-        ctx.getSessionVariable().setCboCteReuse(true);
         String sql = "select avg(distinct col_decimal32p9s2), avg(distinct col_decimal64p13s0), " +
                 "avg(distinct col_decimal128p20s3) from db1.decimal_table";
         String plan = removeSlotIds(UtFrameUtils.getVerboseFragmentPlan(ctx, sql));
@@ -783,7 +778,6 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         };
         Assert.assertTrue(Arrays.asList(expectSnippets).stream().allMatch(s -> plan.contains(removeSlotIds(s))));
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
-        ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
     }
 
     @Test

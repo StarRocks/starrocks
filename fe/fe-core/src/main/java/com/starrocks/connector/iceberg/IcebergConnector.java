@@ -11,6 +11,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_LEGACY;
+
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
 
@@ -26,6 +29,9 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() throws DdlException {
         if (metadata == null) {
+            if (null == properties.get(ICEBERG_CATALOG) || properties.get(ICEBERG_CATALOG).length() == 0) {
+                properties.put(ICEBERG_CATALOG, properties.get(ICEBERG_CATALOG_LEGACY));
+            }
             try {
                 metadata = new IcebergMetadata(properties);
             } catch (Exception e) {

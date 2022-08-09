@@ -26,7 +26,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
-import com.starrocks.alter.AlterJob.JobType;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -155,8 +155,8 @@ public final class MetricRepo {
 
         // running alter job
         Alter alter = GlobalStateMgr.getCurrentState().getAlterInstance();
-        for (JobType jobType : JobType.values()) {
-            if (jobType != JobType.SCHEMA_CHANGE && jobType != JobType.ROLLUP) {
+        for (AlterJobV2.JobType jobType : AlterJobV2.JobType.values()) {
+            if (jobType != AlterJobV2.JobType.SCHEMA_CHANGE && jobType != AlterJobV2.JobType.ROLLUP) {
                 continue;
             }
 
@@ -167,7 +167,7 @@ public final class MetricRepo {
                     if (!GlobalStateMgr.getCurrentState().isLeader()) {
                         return 0L;
                     }
-                    if (jobType == JobType.SCHEMA_CHANGE) {
+                    if (jobType == AlterJobV2.JobType.SCHEMA_CHANGE) {
                         return alter.getSchemaChangeHandler()
                                 .getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.RUNNING);
                     } else {

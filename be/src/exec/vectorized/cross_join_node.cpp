@@ -312,7 +312,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
                     return Status::OK();
                 } else {
                     // should output (*chunk) first before EOS
-                    ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
                     break;
                 }
             }
