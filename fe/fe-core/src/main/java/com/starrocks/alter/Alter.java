@@ -317,6 +317,7 @@ public class Alter {
         db.createTable(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(materializedView.getId(), db.getId(), newMvName);
+        updateTaskDefinition(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
         LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, materializedView.getId());
     }
@@ -330,8 +331,18 @@ public class Alter {
         db.dropTable(oldMaterializedView.getName());
         oldMaterializedView.setName(newMaterializedViewName);
         db.createTable(oldMaterializedView);
+        updateTaskDefinition(oldMaterializedView);
         LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                 newMaterializedViewName, oldMaterializedView.getId());
+    }
+
+    private void updateTaskDefinition(MaterializedView materializedView) {
+        Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
+                TaskBuilder.getMvTaskName(materializedView.getId()));
+        if (currentTask != null) {
+            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
+                    materializedView.getViewDefineSql());
+        }
     }
 
     public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
