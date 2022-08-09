@@ -23,9 +23,6 @@ package com.starrocks.persist;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.DecommissionBackendJob;
-import com.starrocks.alter.RollupJob;
-import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -305,26 +302,6 @@ public class EditLog {
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_START_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISHING_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayFinishing(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_CANCEL_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayCancel(job, globalStateMgr);
-                    break;
-                }
                 case OperationType.OP_DROP_ROLLUP: {
                     DropInfo info = (DropInfo) journal.getData();
                     globalStateMgr.getRollupHandler().replayDropRollup(info, globalStateMgr);
@@ -337,32 +314,6 @@ public class EditLog {
                                 new DropInfo(batchDropInfo.getDbId(), batchDropInfo.getTableId(), indexId, false),
                                 globalStateMgr);
                     }
-                    break;
-                }
-                case OperationType.OP_START_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.info("Begin to unprotect create schema change job. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISHING_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.info("Begin to unprotect replay finishing schema change job. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayFinishing(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    globalStateMgr.getSchemaChangeHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_CANCEL_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.debug("Begin to unprotect cancel schema change. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayCancel(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
@@ -441,18 +392,6 @@ public class EditLog {
                 case OperationType.OP_BACKEND_STATE_CHANGE: {
                     Backend be = (Backend) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
-                    break;
-                }
-                case OperationType.OP_START_DECOMMISSION_BACKEND: {
-                    DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
-                    LOG.debug("{}: {}", opCode, job.getTableId());
-                    globalStateMgr.getClusterHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
-                    DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
-                    LOG.debug("{}: {}", opCode, job.getTableId());
-                    globalStateMgr.getClusterHandler().replayFinish(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
@@ -1122,17 +1061,6 @@ public class EditLog {
         logEdit(OperationType.OP_RECOVER_TABLE, info);
     }
 
-    public void logFinishingRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_FINISHING_ROLLUP, rollupJob);
-    }
-
-    public void logFinishRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_FINISH_ROLLUP, rollupJob);
-    }
-
-    public void logCancelRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_CANCEL_ROLLUP, rollupJob);
-    }
 
     public void logDropRollup(DropInfo info) {
         logEdit(OperationType.OP_DROP_ROLLUP, info);
@@ -1140,18 +1068,6 @@ public class EditLog {
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
         logEdit(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
-    }
-
-    public void logFinishingSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_FINISHING_SCHEMA_CHANGE, schemaChangeJob);
-    }
-
-    public void logFinishSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_FINISH_SCHEMA_CHANGE, schemaChangeJob);
-    }
-
-    public void logCancelSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_CANCEL_SCHEMA_CHANGE, schemaChangeJob);
     }
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
@@ -1256,10 +1172,6 @@ public class EditLog {
 
     public void logDropRole(PrivInfo info) {
         logEdit(OperationType.OP_DROP_ROLE, info);
-    }
-
-    public void logFinishDecommissionBackend(DecommissionBackendJob job) {
-        logEdit(OperationType.OP_FINISH_DECOMMISSION_BACKEND, job);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
