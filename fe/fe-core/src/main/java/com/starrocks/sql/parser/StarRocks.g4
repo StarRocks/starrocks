@@ -136,6 +136,7 @@ statement
     | showBrokerStatement                                                                   #showBroker
     | setStatement                                                                          #setStmt
     | showWarningStatement                                                                  #showWarning
+    | showErrorStatement                                                                    #showError
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -783,6 +784,10 @@ showCharsetStatement
 
 showWarningStatement
     : SHOW WARNINGS (limitElement)?
+    ;
+
+showErrorStatement
+    : SHOW ERRORS (limitElement)?
     ;
 
 showNodesStatement

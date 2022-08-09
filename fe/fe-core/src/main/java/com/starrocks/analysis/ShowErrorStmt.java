@@ -22,9 +22,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.AstVisitor;
 
-
-// Show Warning stmt
-public class ShowWarningStmt extends ShowStmt {
+// SHOW ERRORS [LIMIT [offset,] row_count]
+public class ShowErrorStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Level", ScalarType.createVarchar(20)))
@@ -34,8 +33,8 @@ public class ShowWarningStmt extends ShowStmt {
 
 
     private LimitElement limitElement;
-    public ShowWarningStmt(){}
-    public ShowWarningStmt(LimitElement limitElement) {
+    public ShowErrorStmt(){}
+    public ShowErrorStmt(LimitElement limitElement) {
         this.limitElement = limitElement;
     }
 
@@ -49,7 +48,7 @@ public class ShowWarningStmt extends ShowStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("SHOW WARNINGS");
+        sb.append("SHOW ERRORS");
 
         if (limitElement != null) {
             sb.append(limitElement.toSql());
@@ -59,7 +58,7 @@ public class ShowWarningStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowWarningStatement(this, context);
+        return visitor.visitShowErrorStatement(this, context);
     }
 
     @Override
