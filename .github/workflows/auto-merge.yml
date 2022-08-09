@@ -1,48 +1,73 @@
 name: automerge
-on:
-#   pull_request_target:
-#     types:
-#       - auto_merge_enabled
+# on:
+# #   pull_request_target:
+# #     types:
+# #       - auto_merge_enabled
   
-#   # All other permissions are set to none
-#   checks: write
-#   contents: read
-#   pull-requests: write
-#   pull_request_target:
+# #   # All other permissions are set to none
+# #   checks: write
+# #   contents: read
+# #   pull-requests: write
+# #   pull_request_target:
+# #     types:
+# #       - labeled
+# #       - unlabeled
+# #       - synchronize
+# #       - opened
+# #       - edited
+# #       - ready_for_review
+# #       - reopened
+# #       - unlocked
+#   pull_request_review:
 #     types:
-#       - labeled
-#       - unlabeled
-#       - synchronize
-#       - opened
-#       - edited
-#       - ready_for_review
-#       - reopened
-#       - unlocked
-  pull_request_review:
-    types:
-      - submitted
-  check_suite:
-    types:
-      - completed
-  status: {}
-# permissions: write-all
+#       - submitted
+#   check_suite:
+#     types:
+#       - completed
+#   status: {}
+# # permissions: write-all
+
+# jobs:
+#   automerge:
+#     runs-on: ubuntu-latest
+#     steps:
+# #       - run: sleep 5
+# #       - id: automerge
+# #         name: automerge
+# #         uses: pascalgn/automerge-action@v0.15.3
+# #         env:
+# #           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+# #           MERGE_METHOD: squash
+# #           MERGE_LABELS: automerge
+# #           MERGE_REQUIRED_APPROVALS: 1
+# #           MERGE_COMMIT_MESSAGE: "this pr has been auto merged by action bot"
+# name: Enable automerge on dependabot PRs
+
+on:
+  # See note below about using pull_request_target
+  pull_request_target:
 
 jobs:
   automerge:
+    name: Enable automerge on dependabot PRs
     runs-on: ubuntu-latest
     steps:
-      - run: sleep 5
-      - id: automerge
-        name: automerge
-        uses: pascalgn/automerge-action@v0.15.3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_METHOD: squash
-          MERGE_LABELS: automerge
-          MERGE_REQUIRED_APPROVALS: 1
-          MERGE_COMMIT_MESSAGE: "this pr has been auto merged by action bot"
+      - name: enable automerge
+        uses: daneden/enable-automerge-action@v1
+        with:
+          # A personal access token that you have generated and saved in the
+          # repo or org’s encrypted secrets
+          github-token: ${{ secrets.PAT }}
 
-      - name: feedback
-        if: steps.automerge.outputs.mergeResult == 'merged'
-        run: |
-          echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
+          # The name of the PR author to enable automerge for
+          # Defaults to dependabot[bot]
+          allowed-author: "dependabot[bot]"
+
+          # Allowed values: MERGE | SQUASH | REBASE
+          # Defaults to MERGE
+          merge-method: MERGE
+  
+#       - name: feedback
+#         if: steps.automerge.outputs.mergeResult == 'merged'
+#         run: |
+#           echo "Pull request ${{ steps.automerge.outputs.pullRequestNumber }} merged!"
