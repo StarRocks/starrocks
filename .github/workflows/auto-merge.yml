@@ -62,7 +62,7 @@ jobs:
         with:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: squash
+          merge-method: merge
         #with:
           # A personal access token that you have generated and saved in the
           # repo or org’s encrypted secrets
