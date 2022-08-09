@@ -43,7 +43,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
 
             StatsConstants.HISTOGRAM_BUCKET_NUM,
-            StatsConstants.HISTOGRAM_TOPN_SIZE,
+            StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
 
             //Deprecated , just not throw exception
@@ -55,7 +55,7 @@ public class AnalyzeStmtAnalyzer {
     public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder().addAll(
             Lists.newArrayList(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
-                    StatsConstants.HISTOGRAM_TOPN_SIZE,
+                    StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -183,8 +183,8 @@ public class AnalyzeStmtAnalyzer {
                 }
                 statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
 
-                properties.computeIfAbsent(StatsConstants.HISTOGRAM_TOPN_SIZE,
-                        p -> String.valueOf(Config.histogram_topn_size));
+                properties.computeIfAbsent(StatsConstants.HISTOGRAM_MCV_SIZE,
+                        p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
 

@@ -196,7 +196,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Map<String, String> properties = new HashMap<>();
         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
-        properties.put(StatsConstants.HISTOGRAM_TOPN_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
