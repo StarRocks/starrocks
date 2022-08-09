@@ -1,7 +1,7 @@
 name: automerge
 on:
   workflow_run:
-    workflows: ["check"]
+    workflows: ["check_status"]
     types: ['requested']
 permissions: write-all
 #   # All other permissions are set to none
