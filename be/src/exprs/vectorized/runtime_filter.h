@@ -621,13 +621,13 @@ public:
         return true;
     }
 
-    // filter zonemap by evaluating _min between min_value / max_value
-    // or _max between min_value / max_value
+    // filter zonemap by evaluating
+    // [min_value, max_value] overlapped with [min, max]
     bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
-        if (min_value == nullptr || max_value == nullptr) return false;
-        if (_min >= *min_value && _min <= *max_value) return false;
-        if (_max >= *min_value && _max <= *max_value) return false;
-        return true;
+        if (!_has_min_max || min_value == nullptr || max_value == nullptr) return false;
+        if (*max_value < _min) return true;
+        if (*min_value > _max) return true;
+        return false;
     }
 
 private:

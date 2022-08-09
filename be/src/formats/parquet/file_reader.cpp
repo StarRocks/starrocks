@@ -164,7 +164,9 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             if (!exist) continue;
             bool discard = vectorized::RuntimeFilterHelper::filter_zonemap_with_min_max(
                     slot->type().type, filter, min_chunk->columns()[0].get(), max_chunk->columns()[0].get());
-            return discard;
+            if (discard) {
+                return true;
+            }
         }
     }
 
