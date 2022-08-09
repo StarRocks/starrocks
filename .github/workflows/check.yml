@@ -7,3 +7,10 @@ on:
     types:
       - completed
   status: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Do nothing. Only trigger corresponding workflow_run event"
+        run: echo
