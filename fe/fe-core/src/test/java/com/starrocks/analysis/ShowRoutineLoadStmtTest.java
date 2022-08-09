@@ -28,4 +28,15 @@ public class ShowRoutineLoadStmtTest {
         Assert.assertEquals("Id", stmt.getMetaData().getColumn(0).getName());
     }
 
+    @Test
+    public void testFromDB() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setDatabase("testDb");
+
+        ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb",null), false);
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("SHOW ROUTINE LOAD FROM testDb", stmt.toString());
+        Assert.assertEquals("testDb", stmt.getDbFullName());
+    }
 }
