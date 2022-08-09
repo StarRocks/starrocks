@@ -315,9 +315,12 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
 
         TRY_CATCH_ALLOC_SCOPE_START()
+
+        // NOTE: `TRY_CATCH_ALLOC_SCOPE_START` will catch alloc expection to avoid be crash when `malloc` failed.
+        // However if codes below are expcption unsafe, memory leak may be caused.
+        RETURN_IF_ERROR(_prj_iter->get_next(chunk));
 
         for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());

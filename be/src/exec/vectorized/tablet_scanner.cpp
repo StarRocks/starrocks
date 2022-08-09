@@ -252,10 +252,12 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
     }
     SCOPED_TIMER(_parent->_scan_timer);
     do {
+        TRY_CATCH_ALLOC_SCOPE_START()
+        // NOTE: `TRY_CATCH_ALLOC_SCOPE_START` will catch alloc expection to avoid be crash when `malloc` failed.
+        // However if codes below are expcption unsafe, memory leak may be caused.
         if (Status status = _prj_iter->get_next(chunk); !status.ok()) {
             return status;
         }
-        TRY_CATCH_ALLOC_SCOPE_START()
         for (auto slot : _query_slots) {
             size_t column_index = chunk->schema()->get_field_index_by_name(slot->col_name());
             chunk->set_slot_id_to_index(slot->id(), column_index);
