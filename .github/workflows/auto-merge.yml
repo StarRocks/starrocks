@@ -40,7 +40,7 @@ jobs:
           MERGE_METHOD: squash
           MERGE_LABELS: automerge
           MERGE_REQUIRED_APPROVALS: 1
-          MERGE_COMMIT_MESSAGE: "auto merged"
+          MERGE_COMMIT_MESSAGE: "this pr has been auto merged by action bot"
 
       - name: feedback
         if: steps.automerge.outputs.mergeResult == 'merged'
