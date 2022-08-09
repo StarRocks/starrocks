@@ -27,7 +27,7 @@ public class StatsConstants {
 
     //Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
-    public static final String HISTOGRAM_TOPN_SIZE = "histogram_topn_size";
+    public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
     public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";
 
     /**
