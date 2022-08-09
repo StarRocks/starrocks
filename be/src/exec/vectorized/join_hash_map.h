@@ -489,7 +489,8 @@ private:
             if (hash_table_slot.need_output) {
                 if (to_nullable && !column->is_nullable()) {
                     DCHECK_EQ(column->size(), _probe_state->count);
-                    ColumnPtr dest_column = NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
+                    ColumnPtr dest_column =
+                            NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
                     DCHECK_EQ(column->is_nullable(), to_nullable);
