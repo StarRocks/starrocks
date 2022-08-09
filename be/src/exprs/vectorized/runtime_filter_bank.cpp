@@ -154,8 +154,11 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
 struct FilterZoneMapWithMinMaxOp {
     template <PrimitiveType ptype>
     bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
+        using CppType = RunTimeCppType<ptype>;
         auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
-        return filter->filter_zonemap_with_min_max(min_column, max_column);
+        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ptype>(min_column);
+        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ptype>(max_column);
+        return filter->filter_zonemap_with_min_max(min_value, max_value);
     }
 };
 

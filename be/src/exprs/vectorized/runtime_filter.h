@@ -621,30 +621,12 @@ public:
         return true;
     }
 
-    // filter zonemap by evaluating _min between min_column / max_column
-    // or _max between min_column / max_column
-    bool filter_zonemap_with_min_max(const Column* min_column, const Column* max_column) const {
-        DCHECK(min_column->size() == 1);
-        DCHECK(max_column->size() == 1);
-        if (min_column->has_null()) return false;
-        if (max_column->has_null()) return false;
-
-        auto get_cpp_data = [&](const Column* input_column) {
-            if (input_column->is_constant()) {
-                const auto* const_column = down_cast<const ConstColumn*>(input_column);
-                return down_cast<const ColumnType*>(const_column->data_column().get())->get_data().data();
-            } else if (min_column->is_nullable()) {
-                const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-                return down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data().data();
-            } else {
-                return down_cast<const ColumnType*>(input_column)->get_data().data();
-            }
-        };
-
-        const CppType* min_data = get_cpp_data(min_column);
-        const CppType* max_data = get_cpp_data(max_column);
-        if (_min >= min_data[0] && _min <= max_data[0]) return false;
-        if (_max >= min_data[0] && _max <= max_data[0]) return false;
+    // filter zonemap by evaluating _min between min_value / max_value
+    // or _max between min_value / max_value
+    bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
+        if (min_value == nullptr || max_value == nullptr) return false;
+        if (_min >= *min_value && _min <= *max_value) return false;
+        if (_max >= *min_value && _max <= *max_value) return false;
         return true;
     }
 
