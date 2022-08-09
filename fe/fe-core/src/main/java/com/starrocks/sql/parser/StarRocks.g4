@@ -604,6 +604,7 @@ pauseRoutineLoadStatement
 
 showRoutineLoadStatement
     : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
