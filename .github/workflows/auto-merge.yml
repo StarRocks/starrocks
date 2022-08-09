@@ -56,7 +56,8 @@ jobs:
     steps:
       - name: enable automerge
         if: contains( github.event.pull_request.labels.*.name, 'automerge')
-        uses: daneden/enable-automerge-action@v1
+        uses: alexwilson/enable-github-automerge-action@1.0.0
+        #uses: daneden/enable-automerge-action@v1
         with:
           # A personal access token that you have generated and saved in the
           # repo or org’s encrypted secrets
@@ -64,11 +65,11 @@ jobs:
 
           # The name of the PR author to enable automerge for
           # Defaults to dependabot[bot]
-          allowed-author: "dependabot[bot]"
+          #allowed-author: "dependabot[bot]"
 
           # Allowed values: MERGE | SQUASH | REBASE
           # Defaults to MERGE
-          merge-method: MERGE
+          #merge-method: MERGE
   
 #       - name: feedback
 #         if: steps.automerge.outputs.mergeResult == 'merged'
