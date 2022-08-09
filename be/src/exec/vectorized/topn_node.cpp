@@ -219,7 +219,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                 _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
     } else {
         context_factory = std::make_shared<SortContextFactory>(
-                runtime_state(), _tnode.sort_node.topn_type, is_merging, _limit, degree_of_parallelism,
+                runtime_state(), _tnode.sort_node.topn_type, is_merging, _offset, _limit, degree_of_parallelism,
                 _sort_exec_exprs.lhs_ordering_expr_ctxs(), _is_asc_order, _is_null_first);
     }
 
