@@ -1,9 +1,9 @@
 name: automerge
 on:
-  workflow_run:
-    workflows: ["check_status"]
-    types: ['requested']
-permissions: write-all
+  pull_request_target:
+    types:
+      - auto_merge_enabled
+  
 #   # All other permissions are set to none
 #   checks: write
 #   contents: read
