@@ -6,7 +6,7 @@ Release date: August 9, 2022
 
 ### Improvements
 
-Added two parameters, `bdbje_cleaner_threads` and `bdbje_replay_cost_percent`, to speed up metadata cleanup in BDB JE.
+Added two parameters, `bdbje_cleaner_threads` and `bdbje_replay_cost_percent`, to speed up metadata cleanup in BDB JE. [#8371](https://github.com/StarRocks/starrocks/pull/8371)
 
 ### Bug Fixes
 
