@@ -296,11 +296,6 @@ void ScrollParser::_append_null(Column* column) {
     column->append_default();
 }
 
-Status ScrollParser::test_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
-                                                     const rapidjson::Value& col, bool pure_doc_value) {
-    return _append_value_from_json_val(column, type_desc, col, pure_doc_value);
-}
-
 Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
                                                  const rapidjson::Value& col, bool pure_doc_value) {
     PrimitiveType type = type_desc.type;
@@ -521,7 +516,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
     const auto& child_type = type_desc.children[0];
     DCHECK(child_type.type != INVALID_TYPE);
 
-    // In ElasticSearch, n-dimensional array will be flattened into one-dimensional array.
+    // In Elasticsearch, n-dimensional array will be flattened into one-dimensional array.
     // https://www.elastic.co/guide/en/elasticsearch/reference/8.3/array.html
     // So we do not support user to create nested array column.
     // TODO: We should prevent user to create nested array column in FE, but we don't do any schema validation now.

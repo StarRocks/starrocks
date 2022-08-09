@@ -33,10 +33,6 @@ public:
 
     void set_params(const TupleDescriptor* descs, const std::map<std::string, std::string>* docvalue_context);
 
-    // This method is used to test private function _append_value_from_json_val
-    Status test_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc, const rapidjson::Value& col,
-                                           bool pure_doc_value);
-
 private:
     static bool _is_pure_doc_value(const rapidjson::Value& obj);
 
@@ -61,8 +57,8 @@ private:
     template <PrimitiveType type, typename T = RunTimeCppType<type>>
     static Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
-    // In ES, array maybe stored as two different format, we should deal with it separately.
-    // Here we parse it according to the doc_values format.
+    // The representation of array value in _source and doc_value (column storage) is inconsistent
+    // in Elasticsearch, we need to do different processing to show consistent behavior.
     // For examples:
     // origin array: [1] -> _source: "1" -> doc_values: "[1]"
     // origin array: [1, 2] -> _source: "[1, 2]" -> doc_values: "[1, 2]"

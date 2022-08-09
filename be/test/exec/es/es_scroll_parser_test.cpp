@@ -28,10 +28,10 @@ TEST(ScrollParserTest, ArrayTest) {
         ColumnPtr column = ColumnHelper::create_column(t, true);
         if (pure_doc_value) {
             const rapidjson::Value& val = document["fields"]["array"];
-            EXPECT_TRUE(scroll_parser->test_append_value_from_json_val(column.get(), t, val, pure_doc_value).ok());
+            EXPECT_TRUE(scroll_parser->_append_value_from_json_val(column.get(), t, val, pure_doc_value).ok());
         } else {
             const rapidjson::Value& val = document["_source"]["array"];
-            EXPECT_TRUE(scroll_parser->test_append_value_from_json_val(column.get(), t, val, pure_doc_value).ok());
+            EXPECT_TRUE(scroll_parser->_append_value_from_json_val(column.get(), t, val, pure_doc_value).ok());
         }
         return column;
     };
