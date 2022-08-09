@@ -52,6 +52,10 @@ export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export PID_DIR=`cd "$curdir"; pwd`
 
+# https://github.com/aws/aws-cli/issues/5623
+# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+export AWS_EC2_METADATA_DISABLED=true
+
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
 
@@ -100,9 +104,6 @@ export LIBHDFS_OPTS=$final_java_opt
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
-# https://github.com/aws/aws-cli/issues/5623
-# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-export AWS_EC2_METADATA_DISABLED=true
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
