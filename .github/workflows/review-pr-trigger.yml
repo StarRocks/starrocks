@@ -15,19 +15,19 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
         
-    - name: create-file
-      run: |
-        if [[ ${{ steps.approved.outputs.approved }} == 'true' ]]; then
-           echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
-        else
-           echo 'false' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
-        fi
+#     - name: create-file
+#       run: |
+#         if [[ ${{ steps.approved.outputs.approved }} == 'true' ]]; then
+#            echo '${{ steps.approved.outputs.approved }}' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
+#         else
+#            echo 'false' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
+#         fi
       
 #     - run: echo 'false' >> ${{ github.workspace }}/${{ github.event.pull_request.number }}
 #       if: steps.approved.outputs.approved != 'true'
       
-    - uses: actions/upload-artifact@v3
-      with:
-        name: review
-        path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
-        retention-days: 0
+#     - uses: actions/upload-artifact@v3
+#       with:
+#         name: review
+#         path: ${{ github.workspace }}/${{ github.event.pull_request.number }}
+#         retention-days: 0
