@@ -3,11 +3,11 @@ on:
   workflow_run:
     workflows: ["check"]
     types: ['requested']
-permissions:
-  # All other permissions are set to none
-  checks: write
-  contents: read
-  pull-requests: write
+permissions: write-all
+#   # All other permissions are set to none
+#   checks: write
+#   contents: read
+#   pull-requests: write
 #   pull_request_target:
 #     types:
 #       - labeled
