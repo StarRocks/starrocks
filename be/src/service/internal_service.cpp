@@ -396,7 +396,6 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
     watch.start();
 
     if (!_async_thread_pool.try_offer([&]() {
-            watch.stop();
             timeout -= watch.elapsed_time() / 1000 / 1000;
             _get_info_impl(request, response, &latch, timeout);
         })) {
@@ -415,6 +414,11 @@ void PInternalServiceImplBase<T>::_get_info_impl(
         const PProxyRequest* request, PProxyResult* response,
         GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout) {
     DeferOp defer([latch] { latch->count_down(); });
+
+    if (timeout <= 0) {
+        Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
+        return;
+    }
 
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
@@ -451,8 +455,15 @@ void PInternalServiceImplBase<T>::_get_info_impl(
         for (auto offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
+
+            auto timeout_left = timeout - watch.elapsed_time() / 1000 / 1000;
+            if (timeout_left <= 0) {
+                Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
+                return;
+            }
+
             Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, timeout - watch.elapsed_time() / 1000 / 1000);
+                    offset_req, &beginning_offsets, &latest_offsets, timeout_left);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -466,7 +477,6 @@ void PInternalServiceImplBase<T>::_get_info_impl(
                 return;
             }
         }
-        watch.stop();
     }
     Status::OK().to_protobuf(response->mutable_status());
 }
