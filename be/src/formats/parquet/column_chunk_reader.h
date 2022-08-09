@@ -33,7 +33,13 @@ public:
 
     Status init(int chunk_size);
 
-    Status next_page();
+    Status load_header();
+
+    Status load_page();
+
+    Status skip_page();
+
+    bool current_page_is_dict();
 
     uint32_t num_values() const { return _num_values; }
 
@@ -79,13 +85,18 @@ public:
 
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }
 
-    Status get_dict_values(vectorized::Column* column) { return _cur_decoder->get_dict_values(column); }
+    Status get_dict_values(vectorized::Column* column) {
+        RETURN_IF_ERROR(_try_load_dictionary());
+        return _cur_decoder->get_dict_values(column);
+    }
 
     Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) {
+        RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, column);
     }
 
     Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
+        RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_codes(dict_values, dict_codes);
     }
 
@@ -93,7 +104,7 @@ private:
     Status _parse_page_header();
     Status _parse_page_data();
 
-    Status _try_load_dictionary(int chunk_size);
+    Status _try_load_dictionary();
     Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
@@ -122,6 +133,7 @@ private:
     LevelDecoder _def_level_decoder;
     LevelDecoder _rep_level_decoder;
 
+    int _chunk_size = 0;
     size_t _num_values = 0;
 
     std::unique_ptr<uint8_t[]> _uncompressed_buf;
@@ -130,6 +142,7 @@ private:
     PageParseState _page_parse_state = INITIALIZED;
     Slice _data;
 
+    bool _dict_page_parsed = false;
     Decoder* _cur_decoder = nullptr;
     std::unordered_map<int, std::unique_ptr<Decoder>> _decoders;
 };

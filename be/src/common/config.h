@@ -709,6 +709,7 @@ CONF_Int32(orc_file_cache_max_size, "2097152");
 CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
+CONF_Bool(parquet_late_materialization_enable, "true");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");

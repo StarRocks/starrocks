@@ -38,6 +38,14 @@ private:
     HdfsScannerContext* _create_context_for_min_max();
     HdfsScannerContext* _create_context_for_filter_file();
     HdfsScannerContext* _create_context_for_dict_filter();
+    HdfsScannerContext* _create_context_for_other_filter();
+    HdfsScannerContext* _create_context_for_skip_group();
+
+    HdfsScannerContext* _create_file3_base_context();
+    HdfsScannerContext* _create_context_for_multi_filter(
+            HdfsScannerContext* base_ctx);
+    HdfsScannerContext* _create_context_for_multi_page(
+            HdfsScannerContext* base_ctx);
 
     static vectorized::ChunkPtr _create_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
@@ -48,6 +56,9 @@ private:
     void _create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>* conjunct_ctxs);
     void _create_conjunct_ctxs_for_filter_file(std::vector<ExprContext*>* conjunct_ctxs);
     void _create_conjunct_ctxs_for_dict_filter(std::vector<ExprContext*>* conjunct_ctxs);
+    void _create_conjunct_ctxs_for_other_filter(std::vector<ExprContext*>* conjunct_ctxs);
+    void _create_conjunct_ctxs_for_multi_page(std::vector<ExprContext*>* conjunct_ctxs);
+    void _create_conjunct_ctxs_for_skip_group(std::vector<ExprContext*>* conjunct_ctxs);
 
     // c1      c2      c3       c4
     // -------------------------------------------
@@ -73,6 +84,25 @@ private:
     // NULL    NULL    NULL    NULL
     std::string _file_2_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet2";
     int64_t _file_2_size = 850;
+
+    // c1      c2      c3      c4
+    // -------------------------------------------
+    // 0       10      a       2022-07-12 03:52:14
+    // 1       11      a       2022-07-12 03:52:14
+    // 2       12      a       2022-07-12 03:52:14
+    // 3       13      c       2022-07-12 03:52:14
+    // 4       14      c       2022-07-12 03:52:14
+    // 5       15      c       2022-07-12 03:52:14
+    // 6       16      a       2022-07-12 03:52:14
+    // ...    ...     ...      ...
+    // 4092   4102     a       2022-07-12 03:52:14
+    // 4093   4103     a       2022-07-12 03:52:14
+    // 4094   4104     a       2022-07-12 03:52:14
+    // 4095   4105     a       2022-07-12 03:52:14
+    // a parquet file with multiple page
+    std::string _file_3_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet3";
+    int64_t _file_3_size = 46654;
+
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     ObjectPool _pool;
 };
@@ -260,6 +290,144 @@ void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprConte
     Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
 }
 
+void FileReaderTest::_create_conjunct_ctxs_for_other_filter(std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = TExprOpcode::GE;
+    node0.child_type = TPrimitiveType::INT;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.use_vectorized = true;
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::INT);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.use_vectorized = true;
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::INT_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::INT);
+    node2.num_children = 0;
+    TIntLiteral int_literal;
+    int_literal.value = 4;
+    node2.__set_int_literal(int_literal);
+    node2.use_vectorized = true;
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+}
+
+void FileReaderTest::_create_conjunct_ctxs_for_multi_page(std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = TExprOpcode::GE;
+    node0.child_type = TPrimitiveType::INT;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.use_vectorized = true;
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::INT);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.use_vectorized = true;
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::INT_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::INT);
+    node2.num_children = 0;
+    TIntLiteral int_literal;
+    int_literal.value = 4080;
+    node2.__set_int_literal(int_literal);
+    node2.use_vectorized = true;
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+}
+
+void FileReaderTest::_create_conjunct_ctxs_for_skip_group(std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = TExprOpcode::GE;
+    node0.child_type = TPrimitiveType::INT;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.use_vectorized = true;
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::INT);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 0;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.use_vectorized = true;
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::INT_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::INT);
+    node2.num_children = 0;
+    TIntLiteral int_literal;
+    int_literal.value = 100000;
+    node2.__set_int_literal(int_literal);
+    node2.use_vectorized = true;
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+}
+
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
     return *FileSystem::Default()->new_random_access_file(file_path);
 }
@@ -408,6 +576,100 @@ HdfsScannerContext* FileReaderTest::_create_context_for_dict_filter() {
     _create_conjunct_ctxs_for_dict_filter(&ctx->conjunct_ctxs_by_slot[2]);
     return ctx;
 }
+
+HdfsScannerContext* FileReaderTest::_create_context_for_other_filter() {
+    auto* ctx = _create_file2_base_context();
+    // create conjuncts
+    // c1 >= 4
+    ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_other_filter(&ctx->conjunct_ctxs_by_slot[0]);
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_context_for_skip_group() {
+    auto* ctx = _create_file2_base_context();
+    // create conjuncts
+    // c1 > 10000
+    ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_skip_group(&ctx->conjunct_ctxs_by_slot[0]);
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
+    auto* ctx = _pool.add(new HdfsScannerContext());
+
+    // tuple desc and conjuncts
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {""},
+    };
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+
+    // scan range
+    auto* scan_range = _pool.add(new THdfsScanRange());
+    scan_range->relative_path = _file_3_path;
+    scan_range->offset = 4;
+    scan_range->length = _file_3_size;
+    scan_range->file_length = _file_3_size;
+    ctx->scan_ranges.emplace_back(scan_range);
+
+    ctx->timezone = "Asia/Shanghai";
+    ctx->stats = &g_hdfs_scan_stats;
+
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_filter(
+        HdfsScannerContext* base_ctx) {
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {""},
+    };
+
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    base_ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &base_ctx->materialized_columns);
+
+    base_ctx->conjunct_ctxs_by_slot[2] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_dict_filter(&base_ctx->conjunct_ctxs_by_slot[2]);
+
+    base_ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_other_filter(&base_ctx->conjunct_ctxs_by_slot[0]);
+
+    return base_ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_context_for_multi_page(
+        HdfsScannerContext* base_ctx) {
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {""},
+    };
+
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    base_ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &base_ctx->materialized_columns);
+
+    base_ctx->conjunct_ctxs_by_slot[0] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_multi_page(&base_ctx->conjunct_ctxs_by_slot[0]);
+
+    return base_ctx;
+}
+
 
 THdfsScanRange* FileReaderTest::_create_scan_range() {
     auto* scan_range = _pool.add(new THdfsScanRange());
@@ -602,6 +864,158 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
+
+TEST_F(FileReaderTest, TestGetNextOtherFilter) {
+    // create file
+    auto file = _create_file(_file_2_path);
+
+    // create file reader
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
+
+    // init
+    auto* ctx = _create_context_for_other_filter();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // c1 is other conjunct filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
+    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
+
+    // get next
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(6, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
+
+TEST_F(FileReaderTest, TestMultiFilter) {
+    // create file
+    auto file = _create_file(_file_2_path);
+
+    // create file reader
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
+
+    // c3 = "c", c1 >= 4
+    auto* ctx = _create_context_for_multi_filter(_create_file2_base_context());
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // c3 is dict filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+
+    // c0 is other conjunct filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
+    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
+
+    // get next
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
+
+TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
+    // create file
+    auto file = _create_file(_file_3_path);
+
+    // create file reader
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_3_size);
+
+    // c3 = "c", c1 >= 4
+    auto* ctx = _create_context_for_multi_filter(_create_file3_base_context());
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // c3 is dict filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+
+    // c0 is conjunct filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
+    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
+
+    // get next
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_FALSE(status.is_end_of_file());
+}
+
+TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
+    // create file
+    auto file = _create_file(_file_3_path);
+
+    // create file reader
+    config::vector_chunk_size = 1024;
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_3_size);
+
+    // c1 >= 4080
+    auto* ctx = _create_context_for_multi_page(_create_file3_base_context());
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // c0 is conjunct filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
+    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
+
+    // get next
+    while (!status.is_end_of_file()) {
+        auto chunk = _create_chunk();
+        status = file_reader->get_next(&chunk);
+        if (!status.ok()) {
+            break;
+        }
+        for (int i = 0; i < chunk->num_rows(); ++i) {
+            std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+        }
+    }
+    ASSERT_TRUE(status.is_end_of_file());
+}
+
+TEST_F(FileReaderTest, TestSkipRowGroup) {
+    // create file
+    auto file = _create_file(_file_2_path);
+
+    // create file reader
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), _file_2_size);
+
+    // c1 > 10000
+    auto* ctx = _create_context_for_skip_group();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // get next
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(0, chunk->num_rows());
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.is_end_of_file());

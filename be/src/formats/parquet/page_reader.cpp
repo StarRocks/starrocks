@@ -62,4 +62,12 @@ Status PageReader::read_bytes(const uint8_t** buffer, size_t size) {
     return Status::OK();
 }
 
+Status PageReader::skip_bytes(size_t size) {
+    if (_offset + size > _next_header_pos) {
+        return Status::InternalError("Size to skip exceed page size");
+    }
+    _offset += size;
+    return Status::OK();
+}
+
 } // namespace starrocks::parquet

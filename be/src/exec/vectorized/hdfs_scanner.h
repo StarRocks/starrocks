@@ -44,6 +44,8 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+    // late materialization
+    int64_t skip_read_rows = 0;
 
     int64_t get_cpu_time_ns() const {
         // TODO: make it more accurate
