@@ -207,6 +207,12 @@ public class MaterializedViewHandler extends AlterHandler {
 
         olapTable.setState(OlapTableState.ROLLUP);
 
+        boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(addMVClause.getProperties(),
+                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
+        if (isColocateMv) {
+            olapTable.addColocateMaterializedView(rollupJobV2.getRollupIndexName());
+        }
+
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2);
         LOG.info("finished to create materialized view job: {}", rollupJobV2.getJobId());
     }
@@ -750,6 +756,8 @@ public class MaterializedViewHandler extends AlterHandler {
             String mvName = dropMaterializedViewStmt.getMvName();
             // Step1: check drop mv index operation
             checkDropMaterializedView(mvName, olapTable);
+            // check whether it is colocate mv, then remove if so
+            olapTable.removeColocateMaterializedView(mvName);
             // Step2; drop data in memory
             long mvIndexId = dropMaterializedView(mvName, olapTable);
             // Step3: log drop mv operation
