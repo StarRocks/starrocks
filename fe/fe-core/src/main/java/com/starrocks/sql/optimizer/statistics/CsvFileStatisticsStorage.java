@@ -118,11 +118,20 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
                     maxValue = getLongFromDateTime(LocalDateTime.parse(statisticsEntry.max, dtf));
                 }
             } else {
-                if (statisticsEntry.isSetMin() && !statisticsEntry.min.isEmpty()) {
-                    minValue = Double.parseDouble(statisticsEntry.min);
+                try {
+                    if (statisticsEntry.isSetMin() && !statisticsEntry.min.isEmpty()) {
+                        minValue = Double.parseDouble(statisticsEntry.min);
+                    }
+                } catch (Exception m) {
+                    minValue = Double.MIN_VALUE;
                 }
-                if (statisticsEntry.isSetMax() && !statisticsEntry.max.isEmpty()) {
-                    maxValue = Double.parseDouble(statisticsEntry.max);
+
+                try {
+                    if (statisticsEntry.isSetMax() && !statisticsEntry.max.isEmpty()) {
+                        maxValue = Double.parseDouble(statisticsEntry.max);
+                    }
+                } catch (Exception e) {
+                    maxValue = Double.MAX_VALUE;
                 }
             }
         } catch (Exception e) {
@@ -131,12 +140,18 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         }
 
         return builder.setMinValue(minValue).
+
                 setMaxValue(maxValue).
+
                 setDistinctValuesCount(Double.parseDouble(statisticsEntry.distinctCount)).
-                setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) * 1.0 /
+
+                setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) /
                         Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).
-                setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) * 1.0 /
-                        Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).build();
+
+                setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) /
+                        Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).
+
+                build();
     }
 
     @Override

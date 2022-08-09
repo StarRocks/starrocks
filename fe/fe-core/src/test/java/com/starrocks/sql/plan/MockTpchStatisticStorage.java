@@ -1,10 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.statistics;
+package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.time.LocalDate;

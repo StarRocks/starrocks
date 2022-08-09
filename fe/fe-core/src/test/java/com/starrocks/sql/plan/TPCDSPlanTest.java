@@ -31,17 +31,17 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ1() throws Exception {
-        getFragmentPlan(Q1);
+        getFragmentPlan(Q01);
     }
 
     @Test
     public void testQ2() throws Exception {
-        getFragmentPlan(Q2);
+        getFragmentPlan(Q02);
     }
 
     @Test
     public void testQ3() throws Exception {
-        String costPlanFragment = getCostExplain(Q3);
+        String costPlanFragment = getCostExplain(Q03);
         Assert.assertTrue(costPlanFragment.contains("hasNullableGenerateChild: true"));
         Assert.assertTrue(costPlanFragment.contains(" column statistics: \n" +
                 "     * i_item_sk-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
@@ -50,32 +50,32 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ4() throws Exception {
-        getFragmentPlan(Q4);
+        getFragmentPlan(Q04);
     }
 
     @Test
     public void testQ5() throws Exception {
-        getFragmentPlan(Q5);
+        getFragmentPlan(Q05);
     }
 
     @Test
     public void testQ6() throws Exception {
-        getFragmentPlan(Q6);
+        getFragmentPlan(Q06);
     }
 
     @Test
     public void testQ7() throws Exception {
-        getFragmentPlan(Q7);
+        getFragmentPlan(Q07);
     }
 
     @Test
     public void testQ8() throws Exception {
-        getFragmentPlan(Q8);
+        getFragmentPlan(Q08);
     }
 
     @Test
     public void testQ9() throws Exception {
-        getFragmentPlan(Q9);
+        getFragmentPlan(Q09);
     }
 
     @Test
@@ -100,7 +100,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ14() throws Exception {
-        getFragmentPlan(Q14);
+        getFragmentPlan(Q14_1);
     }
 
     @Test
@@ -145,12 +145,12 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ23() throws Exception {
-        getFragmentPlan(Q23);
+        getFragmentPlan(Q23_1);
     }
 
     @Test
     public void testQ24() throws Exception {
-        getFragmentPlan(Q24);
+        getFragmentPlan(Q24_1);
     }
 
     @Test
@@ -225,7 +225,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ39() throws Exception {
-        getFragmentPlan(Q39);
+        getFragmentPlan(Q39_1);
     }
 
     @Test
@@ -530,13 +530,13 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ80_2() throws Exception {
-        String planFragment = getFragmentPlan(Q80_2);
+        String planFragment = getFragmentPlan(Q80);
         Assert.assertFalse(planFragment.contains("cross join"));
     }
 
     @Test
     public void testQ95_2() throws Exception {
-        String planFragment = getFragmentPlan(Q95_2);
+        String planFragment = getFragmentPlan(Q95);
         Assert.assertFalse(planFragment.contains("cross join"));
     }
 
