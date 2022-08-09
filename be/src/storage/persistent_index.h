@@ -80,7 +80,8 @@ public:
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
     // |idxes|: the target indexes of keys
-    virtual Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found, const std::vector<size_t>& idxes) const = 0;
+    virtual Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
+                       const std::vector<size_t>& idxes) const = 0;
 
     // batch upsert and get old value
     // |keys|: key array as raw buffer
@@ -89,8 +90,8 @@ public:
     // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
     // |idxes|: the target indexes of keys
-    virtual Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          KeysInfo* not_found, size_t* num_found, const std::vector<size_t>& idxes) = 0;
+    virtual Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
+                          size_t* num_found, const std::vector<size_t>& idxes) = 0;
 
     // batch upsert
     // |keys|: key array as raw buffer
@@ -135,8 +136,7 @@ public:
     virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
 
     // load according meta
-    virtual Status load(const std::pair<size_t, size_t>& offset_and_size,
-                        std::unique_ptr<RandomAccessFile>& read_file) = 0;
+    virtual Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) = 0;
 
     // get dump total size of hashmaps of shards
     virtual size_t dump_bound() = 0;
@@ -163,6 +163,8 @@ public:
     virtual void reserve(size_t size) = 0;
 
     virtual size_t memory_usage() = 0;
+
+    static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 };
 
 class ShardByLengthMutableIndex {
@@ -265,6 +267,8 @@ public:
     size_t memory_usage();
 
 private:
+    friend class PersistentIndex;
+
     template <int N>
     void _init_loop_helper();
 
@@ -272,14 +276,14 @@ private:
     constexpr static size_t kSliceMaxFixLength = 64;
     uint32_t _fixed_key_size = -1;
     uint64_t _offset = 0;
+    uint64_t _page_size = 0;
     std::string _path;
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;
     std::vector<std::unique_ptr<MutableIndex>> _shards;
-    std::vector<uint64_t> _page_sizes;
     std::vector<size_t> _sizes;
     // <key size, <shard offset, shard size>>
-    std::map<uint32_t, std::pair<uint32_t, uint32_t>> _key_shard_offset_and_sizes;
+    std::map<uint32_t, std::pair<uint32_t, uint32_t>> _shard_info_by_key_size;
 };
 
 class ImmutableIndex {

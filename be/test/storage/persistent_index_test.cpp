@@ -38,7 +38,6 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     }
     ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key), "./PersistentIndexTest_test_mutable_index"));
 
-    // test insert
     ASSERT_OK(idx->insert(keys.size(), key_slices.data(), values.data()));
     // insert duplicate should return error
     ASSERT_FALSE(idx->insert(keys.size(), key_slices.data(), values.data()).ok());
