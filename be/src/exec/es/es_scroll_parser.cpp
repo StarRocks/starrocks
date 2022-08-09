@@ -552,7 +552,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 }
 
 Status ScrollParser::_append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
-                                                 Column* column) {
+                                                     Column* column) {
     for (auto& item : val.GetArray()) {
         RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, item, true));
     }
@@ -560,7 +560,7 @@ Status ScrollParser::_append_array_val_from_docvalue(const rapidjson::Value& val
 }
 
 Status ScrollParser::_append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
-                                              Column* column) {
+                                                   Column* column) {
     if (val.IsNull()) {
         // Ignore null item in _source.
         return Status::OK();

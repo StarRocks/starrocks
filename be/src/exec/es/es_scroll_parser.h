@@ -68,10 +68,11 @@ private:
                              bool pure_doc_value);
 
     Status _append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
-                                       Column* column);
+                                           Column* column);
 
     // This is a recursive function.
-    Status _append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc, Column* column);
+    Status _append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+                                         Column* column);
 
     const TupleDescriptor* _tuple_desc;
     const std::map<std::string, std::string>* _doc_value_context;
