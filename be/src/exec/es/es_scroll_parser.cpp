@@ -556,28 +556,28 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
     return Status::OK();
 }
 
-Status ScrollParser::_append_doc_value_array_val(const rapidjson::Value& col, const TypeDescriptor& child_type_desc,
+Status ScrollParser::_append_doc_value_array_val(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                                  Column* column) {
-    for (auto& item : col.GetArray()) {
+    for (auto& item : val.GetArray()) {
         RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, item, true));
     }
     return Status::OK();
 }
 
-Status ScrollParser::_append_source_array_val(const rapidjson::Value& col, const TypeDescriptor& child_type_desc,
+Status ScrollParser::_append_source_array_val(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
                                               Column* column) {
-    if (col.IsNull()) {
+    if (val.IsNull()) {
         // Ignore null item in _source.
         return Status::OK();
     }
 
-    if (!col.IsArray()) {
+    if (!val.IsArray()) {
         // For one item situation, like "1" should be treated as "[1]".
-        RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, col, false));
+        RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, val, false));
         return Status::OK();
     }
 
-    for (auto& item : col.GetArray()) {
+    for (auto& item : val.GetArray()) {
         RETURN_IF_ERROR(_append_source_array_val(item, child_type_desc, column));
     }
     return Status::OK();
