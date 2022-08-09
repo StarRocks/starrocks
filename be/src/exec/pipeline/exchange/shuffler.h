@@ -81,7 +81,7 @@ private:
     void local_exchange_shuffle(std::vector<uint32_t>& shuffle_channel_ids, std::vector<uint32_t>& hash_values,
                                 size_t num_rows) {
         for (int32_t i = 0; i < num_rows; ++i) {
-            uint32_t driver_sequence = ReduceOp()(HashUtil::xorshift32(hash_values[i]), _num_shuffles_per_channel);
+            uint32_t driver_sequence = ReduceOp()(HashUtil::xorshift32(hash_values[i]), _num_channels);
             shuffle_channel_ids[i] = driver_sequence;
         }
     }

@@ -431,6 +431,9 @@ struct ModuloOp {
 };
 
 // https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
+// avoid div/modulo operations
+// mapping l to the range [0, r]
+// we weed to ensure that l is randomly and uniformly distributed in [0, 2^32]
 struct ReduceOp {
     uint32_t operator()(uint32_t l, uint32_t r) { return ((uint64_t)l * (uint64_t)r) >> 32; }
 };

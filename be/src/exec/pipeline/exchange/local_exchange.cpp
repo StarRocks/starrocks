@@ -14,8 +14,8 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
     int32_t num_partitions = _source->get_sources().size();
 
     if (_shuffler == nullptr) {
-        _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, false, _part_type, -1,
-                                               _source->get_sources().size());
+        _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, false, _part_type,
+                                               _source->get_sources().size(), 1);
     }
 
     for (size_t i = 0; i < _partitions_columns.size(); ++i) {
