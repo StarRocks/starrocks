@@ -634,7 +634,7 @@ public class SystemInfoService {
         }
 
         List<Backend> backends = Lists.newArrayList();
-        if (Config.enable_choose_backends_on_the_same_host) {
+        if (Config.enable_replicas_on_the_same_host) {
             backends = srcBackends;
         } else {
             // host -> BE list

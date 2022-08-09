@@ -806,8 +806,8 @@ public class Config extends ConfigBase {
      * NOTE: This config should not be used on the production because data's replicas on the
      * same host may cause data lost when the host is broken down.
      */
-    @ConfField(mutable = true)
-    public static boolean enable_choose_backends_on_the_same_host = false;
+    @ConfField(mutable = false)
+    public static boolean enable_replicas_on_the_same_host = false;
 
     /**
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
