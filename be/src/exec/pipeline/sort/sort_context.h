@@ -24,11 +24,12 @@ using vectorized::SortedRuns;
 
 class SortContext final : public ContextWithDependency {
 public:
-    explicit SortContext(RuntimeState* state, const TTopNType::type topn_type, int64_t limit,
+    explicit SortContext(RuntimeState* state, const TTopNType::type topn_type, int64_t offset, int64_t limit,
                          const int32_t num_right_sinkers, const std::vector<ExprContext*> sort_exprs,
                          const SortDescs& sort_descs)
             : _state(state),
               _topn_type(topn_type),
+              _offset(offset),
               _limit(limit),
               _num_partition_sinkers(num_right_sinkers),
               _sort_exprs(sort_exprs),
@@ -62,6 +63,7 @@ private:
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;
+    int64_t _offset;
     const int64_t _limit;
     const int32_t _num_partition_sinkers;
     const std::vector<ExprContext*> _sort_exprs;
@@ -78,8 +80,8 @@ private:
 
 class SortContextFactory {
 public:
-    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t limit,
-                       int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
+    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t offset,
+                       int64_t limit, int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
                        const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);
@@ -93,6 +95,7 @@ private:
     // LocalMergeSortSourceOperator respectively for scenarios of AnalyticNode with partition by.
     const bool _is_merging;
     std::vector<SortContextPtr> _sort_contexts;
+    const int64_t _offset;
     const int64_t _limit;
     const int32_t _num_right_sinkers;
     const std::vector<ExprContext*> _sort_exprs;
