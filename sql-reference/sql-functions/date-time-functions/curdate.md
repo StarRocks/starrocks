@@ -1,16 +1,16 @@
 # curdate
 
-## description
+## 功能
 
-### Syntax
+获取当前的日期，以DATE类型返回。
+
+## 语法
 
 ```Haskell
 DATE CURDATE()
 ```
 
-获取当前的日期，以DATE类型返回
-
-## Examples
+## 示例
 
 ```Plain Text
 MySQL > SELECT CURDATE();

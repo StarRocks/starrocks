@@ -1,19 +1,21 @@
 # array_cum_sum
 
-## description
+## 功能
 
-### Syntax
+对数组中元素进行向前累加。
+
+## 语法
 
 ```Haskell
 array_cum_sum(array(bigint))
 array_cum_sum(array(double))
 ```
 
-对数组中元素进行向前累加。
+## 参数说明
 
 `array`：需要处理的数组。支持的type数据类型为 BIGINT(8 字节有符号整型),DOUBLE (8 字节浮点数)。
 
-## example
+## 示例
 
 ```plain text
 mysql> select array_cum_sum([11, 11, 12]);

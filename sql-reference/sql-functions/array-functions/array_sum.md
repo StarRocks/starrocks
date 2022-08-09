@@ -1,16 +1,16 @@
 # array_sum
 
-## description
+## 功能
 
-### Syntax
+对一个ARRAY中的所有数据做和，返回这个结果。
+
+## 语法
 
 ```Haskell
 array_sum(array(type))
 ```
 
-对一个ARRAY中的所有数据做和，返回这个结果。
-
-## example
+## 示例
 
 ```plain text
 mysql> select array_sum([11, 11, 12]);

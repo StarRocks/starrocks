@@ -1,16 +1,10 @@
 # from_unixtime
 
-## description
+## 功能
 
-### Syntax
+将 UNIX 时间戳转化为对应的 TIME 格式，返回的格式由 `string_format` 指定。默认为 yyyy-MM-dd HH:mm:ss ,也支持date_format中的格式。
 
-`DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
-
-将 unix 时间戳转化为对应的 time 格式，返回的格式由 `string_format` 指定
-
-默认为 yyyy-MM-dd HH:mm:ss ,也支持date_format中的format格式
-
-传入的是整形，返回的是字符串类型
+传入的是整形，返回的是字符串类型。
 
 目前 `string_format` 支持格式：
 
@@ -23,13 +17,17 @@
 %s：秒。例：59，01
 ```
 
-其余 `string_format` 格式是非法的，返回NULL
+其余 `string_format` 格式是非法的，返回NULL。
 
 如果给定的时间戳小于 0 或大于 253402271999，则返回 NULL。即时间戳范围是：
 
 1970-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
-## example
+## 语法
+
+`DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+
+## 示例
 
 ```plain text
 MySQL > select from_unixtime(1196440219);

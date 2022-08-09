@@ -22,7 +22,7 @@ BITMAP_EMPTY()
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 

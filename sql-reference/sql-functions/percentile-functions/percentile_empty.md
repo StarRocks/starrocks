@@ -20,7 +20,7 @@ PERCENTILE_EMPTY();
 
 ## 示例
 
-建表
+建表。
 
 ```sql
 CREATE TABLE `aggregate_tbl` (
@@ -41,7 +41,7 @@ PROPERTIES (
 );
 ```
 
-插入数据
+插入数据。
 
 ```sql
 insert into aggregate_tbl values (5, '2020-02-23', 'city_code', 555, percentile_empty());

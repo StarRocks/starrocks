@@ -24,7 +24,7 @@ SQUARE(arg)
 
 ## 示例
 
-示例一：计算数值类型的平方数值
+示例一：计算数值类型的平方数值。
 
 ```Plain Text
 mysql>  select square(11);

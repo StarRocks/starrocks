@@ -2,9 +2,9 @@
 
 ## 功能
 
-通过 `format` 指定的方式将 `str` 转化为 `DATE` 类型, 如果转化结果不对返回 NULL
+通过 `format` 指定的方式将 `str` 转化为 `DATE` 类型, 如果转化结果不对返回 NULL。
 
->注：功能与 [str_to_date](../date-time-functions/str_to_date.md) 函数相同，只是返回值数据类型不同
+>注：功能与 [str_to_date](../date-time-functions/str_to_date.md) 函数相同，只是返回值数据类型不同。
 
 ## 语法
 
@@ -14,13 +14,13 @@ str2date(str, format);
 
 ## 参数说明
 
-`str`: 支持的数据类型为 VARCHAR
+`str`: 支持的数据类型为 VARCHAR。
 
-`format`: 支持的数据类型为 VARCHAR
+`format`: 支持的数据类型为 VARCHAR。
 
 ## 返回值说明
 
-返回值的数据类型为 DATE，精确到年-月-日
+返回值的数据类型为 DATE，精确到年-月-日。
 
 ## 示例
 

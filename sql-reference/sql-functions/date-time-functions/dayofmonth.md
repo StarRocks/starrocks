@@ -1,18 +1,18 @@
 # dayofmonth
 
-## description
+## 功能
 
-### Syntax
+获得日期中的天信息，返回值范围从1-31。
+
+参数为Date或者Datetime类型。
+
+## 语法
 
 ```Haskell
 INT DAYOFMONTH(DATETIME date)
 ```
 
-获得日期中的天信息，返回值范围从1-31。
-
-参数为Date或者Datetime类型
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select dayofmonth('1987-01-31');

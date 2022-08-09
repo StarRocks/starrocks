@@ -2,7 +2,7 @@
 
 ## 功能
 
-对字符串 str 进行正则匹配, 抽取符合 pattern 的第 pos 个匹配部分, 需要 pattern 完全匹配 str 中的某部分, 才能返回 pattern 部分中需匹配部分, 如果没有匹配就返回空字符串
+对字符串 str 进行正则匹配, 抽取符合 pattern 的第 pos 个匹配部分, 需要 pattern 完全匹配 str 中的某部分, 才能返回 pattern 部分中需匹配部分, 如果没有匹配就返回空字符串。
 
 ## 语法
 
@@ -12,15 +12,15 @@ regexp_extract(str, pattern, pos)
 
 ## 参数说明
 
-`str`: 支持的数据类型为 VARCHAR
+`str`: 支持的数据类型为 VARCHAR。
 
-`pattern`: 支持的数据类型为 VARCHAR
+`pattern`: 支持的数据类型为 VARCHAR。
 
-`pos`: 支持的数据类型为 INT
+`pos`: 支持的数据类型为 INT。
 
 ## 返回值说明
 
-返回值的数据类型为 VARCHAR
+返回值的数据类型为 VARCHAR。
 
 ## 示例
 

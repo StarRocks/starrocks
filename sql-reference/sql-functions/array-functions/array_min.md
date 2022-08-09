@@ -1,16 +1,16 @@
 # array_min
 
-## description
+## 功能
 
-### Syntax
+求取一个ARRAY中的所有数据中的最小值，返回这个结果。
+
+## 语法
 
 ```Haskell
 array_min(array(type))
 ```
 
-求取一个ARRAY中的所有数据中的最小值，返回这个结果。
-
-## example
+## 示例
 
 ```plain text
 mysql> select array_min([113, 11, 12]);

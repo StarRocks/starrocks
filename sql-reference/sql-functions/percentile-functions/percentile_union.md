@@ -20,7 +20,7 @@ percentile_union(expr);
 
 ## 示例
 
-percentile物化视图使用
+percentile物化视图使用。
 
 ```sql
 CREATE TABLE sales_records(
@@ -33,14 +33,14 @@ CREATE TABLE sales_records(
 properties("replication_num" = "1");
 ```
 
-对sale_amt建立percentile类型物化视图表
+对`sale_amt`建立PERCENTILE类型物化视图表。
 
 ```sql
 create materialized view mv as
 select store_id, percentile_union(percentile_hash(sale_amt)) from sales_records group by store_id;
 ```
 
-创建包含percentile类型的聚合表
+创建包含PERCENTILE类型的聚合表。
 
 ```sql
 CREATE TABLE sales_records(
@@ -59,13 +59,13 @@ PROPERTIES (
 );
 ```
 
-查询percentile类型列
+查询PERCENTILE类型列。
 
 ```sql
 select percentile_approx_raw(percentile_union(sale_amt_per), 0.99) from sales_records;
 ```
 
-导入包含percentile的聚合表
+导入包含PERCENTILE的聚合表。
 
 ```sql
 curl --location-trusted -u root -H "columns: record_id, seller_id, store_id,tmp, sale_amt_per =percentile_hash(tmp)" -H "column_separator:," -T a http://ip:port/api/test/sales_records/_stream_load

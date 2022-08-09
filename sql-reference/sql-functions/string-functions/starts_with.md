@@ -2,7 +2,7 @@
 
 ## 功能
 
-如果字符串以指定前缀开头返回 1, 否则返回 0, 任意参数为 NULL 则返回 NULL
+如果字符串以指定前缀开头返回 1, 否则返回 0, 任意参数为 NULL 则返回 NULL。
 
 ## 语法
 
@@ -12,13 +12,13 @@ starts_with(str, prefix)
 
 ## 参数说明
 
-`str`: 支持的数据类型为 VARCHAR
+`str`: 支持的数据类型为 VARCHAR。
 
-`perfix`: 支持的数据类型为 VARCHAR
+`perfix`: 支持的数据类型为 VARCHAR。
 
 ## 返回值说明
 
-返回值的数据类型为 BOOLEAN
+返回值的数据类型为 BOOLEAN。
 
 ## 示例
 

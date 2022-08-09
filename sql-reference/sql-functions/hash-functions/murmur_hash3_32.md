@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回输入字符串的 32 位 murmur3 hash 值
+返回输入字符串的 32 位 murmur3 hash 值。
 
 ## 语法
 
@@ -12,11 +12,11 @@ MURMUR_HASH3_32(input, ...)
 
 ## 参数说明
 
-`input`: 支持的数据类型为 VARCHAR
+`input`: 支持的数据类型为 VARCHAR。
 
 ## 返回值说明
 
-返回值的数据类型为 INT
+返回值的数据类型为 INT。
 
 ## 示例
 

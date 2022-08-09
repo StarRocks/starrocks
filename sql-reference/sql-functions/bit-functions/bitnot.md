@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回参数 `x` 进行取反运算后的结果
+返回参数 `x` 进行取反运算后的结果。
 
 ## 语法
 
@@ -12,11 +12,11 @@ BITNOT(x);
 
 ## 参数说明
 
-`x`: 支持的数据类型为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT
+`x`: 支持的数据类型为 TINYINT、SMALLINT、INT、BIGINT、LARGEINT。
 
 ## 返回值说明
 
-返回值的数据类型与 `x` 类型一致
+返回值的数据类型与 `x` 类型一致。
 
 ## 示例
 

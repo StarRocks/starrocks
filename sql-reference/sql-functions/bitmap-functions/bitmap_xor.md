@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算得到 **lhs** 独有或者 **rhs** 独有的元素所构成的集合, 逻辑上等价于 `bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))`(补集)
+计算得到 **lhs** 独有或者 **rhs** 独有的元素所构成的集合, 逻辑上等价于 `bitmap_andnot(bitmap_or(lhs, rhs), bitmap_and(lhs, rhs))`(补集)。
 
 ## 语法
 
@@ -12,13 +12,13 @@ bitmap_xor(lhs, rhs)
 
 ## 参数说明
 
-`lhs`: 支持的数据类型为 BITMAP
+`lhs`: 支持的数据类型为 BITMAP。
 
-`rhs`: 支持的数据类型为 BITMAP
+`rhs`: 支持的数据类型为 BITMAP。
 
 ## 返回值说明
 
-返回值的数据类型为 BITMAP
+返回值的数据类型为 BITMAP。
 
 ## 示例
 

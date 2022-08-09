@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回参数 `x` 的绝对值
+返回参数 `x` 的绝对值。
 
 ## 语法
 
@@ -12,11 +12,11 @@ ABS(x);
 
 ## 参数说明
 
-`x`: 支持的数据类型为 DOUBLE、FLOAT、LARGEINT、BIGINT、INT、SMALLINT、TINYINT、DECIMALV2VAL、DECIMAL32、DECIMAL64、DECIMAL128
+`x`: 支持的数据类型为 DOUBLE、FLOAT、LARGEINT、BIGINT、INT、SMALLINT、TINYINT、DECIMALV2VAL、DECIMAL32、DECIMAL64、DECIMAL128。
 
 ## 返回值说明
 
-返回值的数据类型为 与 `x` 类型一致
+返回值的数据类型为 与 `x` 类型一致。
 
 ## 示例
 

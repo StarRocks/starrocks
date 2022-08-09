@@ -1,18 +1,18 @@
 # str_to_date
 
-## description
+## 功能
 
-### Syntax
+通过`format`指定的方式将`str`转化为DATE类型，如果转化结果有误，则返回NULL。
+
+支持的`format`格式与 date_format 函数一致。
+
+## 语法
 
 ```Haskell
 DATETIME STR_TO_DATE(VARCHAR str, VARCHAR format)
 ```
 
-通过format指定的方式将str转化为DATE类型，如果转化结果不对返回NULL
-
-支持的format格式与 date_format 一致
-
-## example
+## 示例
 
 ```Plain Text
 MySQL > select str_to_date('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');

@@ -2,7 +2,7 @@
 
 ## 功能
 
-判断几何图形 `shape1` 是否完全能够包含几何图形 `shape2`
+判断几何图形 `shape1` 是否完全能够包含几何图形 `shape2`。
 
 ## 语法
 
@@ -12,13 +12,13 @@ ST_Contains(shape1, shape2)
 
 ## 参数说明
 
-`shape1`: 几何图形 1，包含图形, 支持的数据类型为 GEOMETRY
+`shape1`: 几何图形 1，包含图形, 支持的数据类型为 GEOMETRY。
 
-`shape2`: 几何图形 2，被包含图形, 支持的数据类型为 GEOMETRY
+`shape2`: 几何图形 2，被包含图形, 支持的数据类型为 GEOMETRY。
 
 ## 返回值说明
 
-返回值的数据类型为 BOOL
+返回值的数据类型为 BOOLEAN。
 
 ## 示例
 

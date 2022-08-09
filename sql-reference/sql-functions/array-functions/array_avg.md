@@ -1,16 +1,16 @@
 # array_avg
 
-## description
+## 功能
 
-### Syntax
+求取一个ARRAY中的所有数据的平均数，返回这个结果。
+
+## 语法
 
 ```Haskell
 array_avg(array(type))
 ```
 
-求取一个ARRAY中的所有数据的平均数，返回这个结果。
-
-## example
+## 示例
 
 ```plain text
 mysql> select array_avg([11, 11, 12]);
