@@ -57,8 +57,9 @@ TEST_F(ParquetPageReaderTest, Normal) {
     size_t total_size = buffer.size();
 
     RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(buffer)), "string-file");
+    DefaultBufferedInputStream stream(&file, 0, total_size);
 
-    PageReader reader(&file, 0, total_size);
+    PageReader reader(&stream, 0, total_size);
 
     // read page 1
     auto st = reader.next_header();

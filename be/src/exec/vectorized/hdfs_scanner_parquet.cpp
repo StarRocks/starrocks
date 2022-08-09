@@ -9,8 +9,11 @@ namespace starrocks::vectorized {
 
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
+Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    return Status::OK();
+}
+
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
-    // read & decode
     RuntimeProfile::Counter* level_decode_timer = nullptr;
     RuntimeProfile::Counter* value_decode_timer = nullptr;
     RuntimeProfile::Counter* page_read_timer = nullptr;
@@ -45,10 +48,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(group_chunk_read_timer, _stats.group_chunk_read_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _stats.group_dict_decode_ns);
-}
-
-Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    return Status::OK();
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

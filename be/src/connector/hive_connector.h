@@ -60,8 +60,7 @@ private:
     Status _init_scanner(RuntimeState* state);
 
     // =====================================
-    ObjectPool _obj_pool;
-    ObjectPool* _pool = &_obj_pool;
+    ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     vectorized::HdfsScanner* _scanner = nullptr;
 

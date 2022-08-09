@@ -282,7 +282,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_ORC_ROWS(scanner, exp)                                                    \
+#define READ_SCANNER_ROWS(scanner, exp)                                                \
     do {                                                                               \
         auto chunk = vectorized::ChunkHelper::new_chunk(*tuple_desc, 0);               \
         uint64_t records = 0;                                                          \
@@ -297,13 +297,15 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
                 break;                                                                 \
             }                                                                          \
             if (chunk->num_rows() > 0) {                                               \
-                std::cout << "orc row#0: " << chunk->debug_row(0) << std::endl;        \
+                std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
                 EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
             }                                                                          \
             records += chunk->num_rows();                                              \
         }                                                                              \
         EXPECT_EQ(records, exp);                                                       \
     } while (0)
+
+// ====================================================================================================
 
 static SlotDesc mtypes_orc_descs[] = {
         {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
@@ -354,7 +356,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -433,7 +435,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 0);
+    READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
     scanner->close(_runtime_state);
 }
@@ -466,7 +468,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -499,16 +501,12 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
 
-static SlotDesc string_key_value_orc_desc[] = {
-        {"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {""}};
-std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
+// ====================================================================================================
 
 /**
 File be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd has 2 stripes
@@ -540,6 +538,11 @@ Total length: 48800
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
+    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                            {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                            {""}};
+    const std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
+
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(string_key_value_orc_file, 0, 0);
@@ -581,15 +584,14 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1000);
+    READ_SCANNER_ROWS(scanner, 1000);
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
     scanner->close(_runtime_state);
 }
 
-static SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
-std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
+// ====================================================================================================
 
 /**
  *
@@ -645,6 +647,9 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
+    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
+    const std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
+
     _create_runtime_state("GMT");
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
@@ -680,15 +685,12 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 4640);
+    READ_SCANNER_ROWS(scanner, 4640);
     EXPECT_EQ(scanner->raw_rows_read(), 4640);
     scanner->close(_runtime_state);
 }
 
-static SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
-                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-                                               {""}};
-std::string padding_char_varchar_orc_file = "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
+// ====================================================================================================
 
 /**
 Type: struct<c0:char(100),c1:varchar(100)>
@@ -748,6 +750,12 @@ Padding ratio: 0%
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
+    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+                                            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                            {""}};
+    const std::string padding_char_varchar_orc_file =
+            "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
+
     auto scanner = std::make_shared<HdfsOrcScanner>();
 
     auto* range = _create_scan_range(padding_char_varchar_orc_file, 0, 0);
@@ -787,19 +795,14 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1000);
+    READ_SCANNER_ROWS(scanner, 1000);
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
     scanner->close(_runtime_state);
 }
 
-static SlotDesc timezone_datetime_slot_descs[] = {
-        {"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-        {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
-        {""}};
-static const std::string timzone_datetime_shanghai_orc_file =
-        "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
+// ====================================================================================================
 
 /*
 
@@ -830,8 +833,6 @@ Stripes:
  
 */
 
-static const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
-
 /*
 
 Structure for writer_tz_utc.orc
@@ -861,6 +862,14 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
+    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
+                                               {""}};
+
+    const std::string timzone_datetime_shanghai_orc_file =
+            "./be/test/exec/test_data/orc_scanner/writer_tz_shanghai.orc";
+    const std::string timzone_datetime_utc_orc_file = "./be/test/exec/test_data/orc_scanner/writer_tz_utc.orc";
+
     struct Case {
         std::string file;
         std::string literal;
@@ -911,9 +920,106 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         scanner->disable_use_orc_sargs();
         status = scanner->open(_runtime_state);
         EXPECT_TRUE(status.ok()) << status.to_string();
-        READ_ORC_ROWS(scanner, c.exp);
+        READ_SCANNER_ROWS(scanner, c.exp);
         scanner->close(_runtime_state);
     }
+}
+
+// ====================================================================================================
+/**
+ * Processing data file 00000-26-85109feb-fc85-4ad2-9a97-4102e245220d-00001.orc [length: 1109]
+Structure for 00000-26-85109feb-fc85-4ad2-9a97-4102e245220d-00001.orc
+File Version: 0.12 with ORC_14 by ORC Java
+Rows: 1
+Compression: ZLIB
+Compression size: 262144
+Calendar: Julian/Gregorian
+Type: struct<col_boolean:boolean,col_int:int,col_long:bigint,col_float:float,col_double:double,col_decimal:decimal(38,18),col_date:date,col_timestamp:timestamp with local time zone,col_string:string,col_binary:binary,col_struct:struct<a:string,b:int>,col_map:map<string,int * 
+
+Stripes:
+  Stripe: offset: 3 data: 60 rows: 1 tail: 160 index: 338
+    Stream: column 0 section ROW_INDEX start: 3 length 11
+    Stream: column 1 section ROW_INDEX start: 14 length 22
+    Stream: column 2 section ROW_INDEX start: 36 length 21
+    Stream: column 3 section ROW_INDEX start: 57 length 21
+    Stream: column 4 section ROW_INDEX start: 78 length 24
+    Stream: column 5 section ROW_INDEX start: 102 length 24
+    Stream: column 6 section ROW_INDEX start: 126 length 22
+    Stream: column 7 section ROW_INDEX start: 148 length 19
+    Stream: column 8 section ROW_INDEX start: 167 length 19
+    Stream: column 9 section ROW_INDEX start: 186 length 19
+    Stream: column 10 section ROW_INDEX start: 205 length 21
+    Stream: column 11 section ROW_INDEX start: 226 length 17
+    Stream: column 12 section ROW_INDEX start: 243 length 18
+    Stream: column 13 section ROW_INDEX start: 261 length 20
+    Stream: column 14 section ROW_INDEX start: 281 length 22
+    Stream: column 15 section ROW_INDEX start: 303 length 18
+    Stream: column 16 section ROW_INDEX start: 321 length 20
+    Stream: column 1 section PRESENT start: 341 length 5
+    Stream: column 1 section DATA start: 346 length 0
+    Stream: column 2 section PRESENT start: 346 length 5
+    Stream: column 2 section DATA start: 351 length 0
+    Stream: column 3 section PRESENT start: 351 length 5
+    Stream: column 3 section DATA start: 356 length 0
+    Stream: column 4 section PRESENT start: 356 length 5
+    Stream: column 4 section DATA start: 361 length 0
+    Stream: column 5 section PRESENT start: 361 length 5
+    Stream: column 5 section DATA start: 366 length 0
+    Stream: column 6 section PRESENT start: 366 length 5
+    Stream: column 6 section DATA start: 371 length 0
+    Stream: column 6 section SECONDARY start: 371 length 0
+    Stream: column 7 section PRESENT start: 371 length 5
+    Stream: column 7 section DATA start: 376 length 0
+    Stream: column 8 section PRESENT start: 376 length 5
+    Stream: column 8 section DATA start: 381 length 0
+    Stream: column 8 section SECONDARY start: 381 length 0
+    Stream: column 9 section PRESENT start: 381 length 5
+    Stream: column 9 section DATA start: 386 length 0
+    Stream: column 9 section LENGTH start: 386 length 0
+    Stream: column 9 section DICTIONARY_DATA start: 386 length 0
+    Stream: column 10 section PRESENT start: 386 length 5
+    Stream: column 10 section DATA start: 391 length 0
+    Stream: column 10 section LENGTH start: 391 length 0
+    Stream: column 11 section PRESENT start: 391 length 5
+    Stream: column 12 section DATA start: 396 length 0
+    Stream: column 12 section LENGTH start: 396 length 0
+    Stream: column 12 section DICTIONARY_DATA start: 396 length 0
+    Stream: column 13 section DATA start: 396 length 0
+    Stream: column 14 section PRESENT start: 396 length 5
+    Stream: column 14 section LENGTH start: 401 length 0
+    Stream: column 15 section DATA start: 401 length 0
+    Stream: column 15 section LENGTH start: 401 length 0
+    Stream: column 15 section DICTIONARY_DATA start: 401 length 0
+    Stream: column 16 section DATA start: 401 length 0
+ */
+TEST_F(HdfsScannerTest, TestZeroSizeStream) {
+    SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BOOLEAN)},
+                             {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                             {"col_long", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                             {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
+                             {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
+                             {"col_date", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
+                             {"col_timestamp", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+                             {"col_string", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                             {"col_binary", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                             {""}};
+
+    const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_zero_size_stream.orc";
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 1);
+    scanner->close(_runtime_state);
 }
 
 } // namespace starrocks::vectorized

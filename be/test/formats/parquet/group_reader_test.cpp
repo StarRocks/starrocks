@@ -350,18 +350,25 @@ TEST_F(GroupReaderTest, TestInit) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(config::vector_chunk_size, file, file_meta, 0));
+    param->chunk_size = config::vector_chunk_size;
+    param->file = file;
+    param->file_metadata = file_meta;
+    auto* group_reader = _pool.add(new GroupReader(*param, 0));
 
     // init row group reader
-    status = group_reader->init(*param);
-    ASSERT_TRUE(status.is_end_of_file());
+    status = group_reader->init();
+    // timezone is empty
+    ASSERT_FALSE(status.ok());
+    //ASSERT_TRUE(status.is_end_of_file());
 }
 
 static void replace_column_readers(GroupReader* group_reader, GroupReaderParam* param) {
     group_reader->_column_readers.clear();
+    group_reader->_active_column_indices.clear();
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto r = std::make_unique<MockColumnReader>(param->read_cols[i].col_type_in_parquet);
         group_reader->_column_readers[i] = std::move(r);
+        group_reader->_active_column_indices.push_back(i);
     }
     group_reader->_direct_read_columns = param->read_cols;
 }
@@ -377,11 +384,14 @@ TEST_F(GroupReaderTest, TestGetNext) {
     ASSERT_TRUE(status.ok());
 
     // create row group reader
-    auto* group_reader = _pool.add(new GroupReader(config::vector_chunk_size, file, file_meta, 0));
+    param->chunk_size = config::vector_chunk_size;
+    param->file = file;
+    param->file_metadata = file_meta;
+    auto* group_reader = _pool.add(new GroupReader(*param, 0));
 
     // init row group reader
-    status = group_reader->init(*param);
-    ASSERT_TRUE(status.is_end_of_file());
+    status = group_reader->init();
+    ASSERT_FALSE(status.ok());
 
     // replace column readers
     replace_column_readers(group_reader, param);
