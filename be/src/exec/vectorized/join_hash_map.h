@@ -488,7 +488,8 @@ private:
             auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
             if (hash_table_slot.need_output) {
                 if (to_nullable && !column->is_nullable()) {
-                    ColumnPtr dest_column = NullableColumn::create(column, NullColumn::create(column->size()));
+                    DCHECK_EQ(column->size(), _probe_state->count);
+                    ColumnPtr dest_column = NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
                     DCHECK_EQ(column->is_nullable(), to_nullable);
@@ -511,16 +512,9 @@ private:
             if (hash_table_slot.need_output) {
                 // always output nulls.
                 DCHECK(to_nullable);
-                if (!column->is_nullable()) {
-                    ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
-                    dest_column->append_nulls(_probe_state->count);
-                    (*chunk)->append_column(std::move(dest_column), slot->id());
-                } else {
-                    ColumnPtr dest_column = column->clone_empty();
-                    auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
-                    null_column->append_nulls(_probe_state->count);
-                    (*chunk)->append_column(std::move(dest_column), slot->id());
-                }
+                ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                dest_column->append_nulls(_probe_state->count);
+                (*chunk)->append_column(std::move(dest_column), slot->id());
             } else {
                 ColumnPtr default_column =
                         ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
