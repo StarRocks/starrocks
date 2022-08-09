@@ -4483,10 +4483,6 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void onEraseDatabase(long dbId) {
-        // remove jobs
-        stateMgr.getRollupHandler().removeDbAlterJob(dbId);
-        stateMgr.getSchemaChangeHandler().removeDbAlterJob(dbId);
-
         // remove database transaction manager
         stateMgr.getGlobalTransactionMgr().removeDatabaseTransactionMgr(dbId);
     }
@@ -4532,9 +4528,6 @@ public class LocalMetastore implements ConnectorMetadata {
         if (fullNameToDb != null) {
             fullNameToDb.clear();
         }
-
-        stateMgr.getRollupHandler().unprotectedGetAlterJobs().clear();
-        stateMgr.getSchemaChangeHandler().unprotectedGetAlterJobs().clear();
         System.gc();
     }
 

@@ -29,8 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.alter.Alter;
-import com.starrocks.alter.AlterJob;
-import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -261,7 +259,6 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -1259,8 +1256,8 @@ public class GlobalStateMgr {
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
         long newChecksum = checksum;
-        for (JobType type : JobType.values()) {
-            if (type == JobType.DECOMMISSION_BACKEND) {
+        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
+            if (type == AlterJobV2.JobType.DECOMMISSION_BACKEND) {
                 if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
                     newChecksum = loadAlterJob(dis, newChecksum, type);
                 }
@@ -1272,69 +1269,39 @@ public class GlobalStateMgr {
         return newChecksum;
     }
 
-    public long loadAlterJob(DataInputStream dis, long checksum, JobType type) throws IOException {
-        Map<Long, AlterJob> alterJobs = null;
-        ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
-        Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == JobType.ROLLUP) {
-            alterJobs = this.getRollupHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getRollupHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-        } else if (type == JobType.SCHEMA_CHANGE) {
-            alterJobs = this.getSchemaChangeHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getSchemaChangeHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-            alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        } else if (type == JobType.DECOMMISSION_BACKEND) {
-            alterJobs = this.getClusterHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getClusterHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-        }
-
+    public long loadAlterJob(DataInputStream dis, long checksum, AlterJobV2.JobType type) throws IOException {
         // alter jobs
         int size = dis.readInt();
-        long newChecksum = checksum ^ size;
-        for (int i = 0; i < size; i++) {
-            long tableId = dis.readLong();
-            newChecksum ^= tableId;
-            AlterJob job = AlterJob.read(dis);
-            alterJobs.put(tableId, job);
-
-            // init job
-            Database db = getDb(job.getDbId());
-            // should check job state here because the job is finished but not removed from alter jobs list
-            if (db != null && (job.getState() == com.starrocks.alter.AlterJob.JobState.PENDING
-                    || job.getState() == com.starrocks.alter.AlterJob.JobState.RUNNING)) {
-                job.replayInitJob(db);
-            }
+        if (size > 0) {
+            // It may be upgraded from an earlier version, which is dangerous
+            throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                    "and then from version 2.4 to the current version.");
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
             // finished or cancelled jobs
-            long currentTimeMs = System.currentTimeMillis();
             size = dis.readInt();
-            newChecksum ^= size;
-            for (int i = 0; i < size; i++) {
-                long tableId = dis.readLong();
-                newChecksum ^= tableId;
-                AlterJob job = AlterJob.read(dis);
-                if ((currentTimeMs - job.getCreateTimeMs()) / 1000 <= Config.history_job_keep_max_second) {
-                    // delete history jobs
-                    finishedOrCancelledAlterJobs.add(job);
-                }
+            if (size > 0) {
+                // It may be upgraded from an earlier version, which is dangerous
+                throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                        "and then from version 2.4 to the current version.");
             }
         }
 
+        long newChecksum = checksum;
         // alter job v2
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
                 AlterJobV2 alterJobV2 = AlterJobV2.read(dis);
-                if (type == JobType.ROLLUP || type == JobType.SCHEMA_CHANGE) {
-                    if (type == JobType.ROLLUP) {
+                if (type == AlterJobV2.JobType.ROLLUP || type == AlterJobV2.JobType.SCHEMA_CHANGE) {
+                    if (type == AlterJobV2.JobType.ROLLUP) {
                         this.getRollupHandler().addAlterJobV2(alterJobV2);
                     } else {
-                        alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                        this.getSchemaChangeHandler().addAlterJobV2(alterJobV2);
                     }
-                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpointed
+                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
                     // to prevent TabletInvertedIndex data loss,
                     // So just use AlterJob.replay() instead of AlterHandler.replay().
                     if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
@@ -1342,7 +1309,7 @@ public class GlobalStateMgr {
                         LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
                     }
                 } else {
-                    alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                    LOG.warn("Unknown job type:" + type.name());
                 }
             }
         }
@@ -1482,17 +1449,17 @@ public class GlobalStateMgr {
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum) throws IOException {
-        for (JobType type : JobType.values()) {
+        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
             checksum = saveAlterJob(dos, checksum, type);
         }
         return checksum;
     }
 
-    public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
+    public long saveAlterJob(DataOutputStream dos, long checksum, AlterJobV2.JobType type) throws IOException {
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == JobType.ROLLUP) {
+        if (type == AlterJobV2.JobType.ROLLUP) {
             alterJobsV2 = this.getRollupHandler().getAlterJobsV2();
-        } else if (type == JobType.SCHEMA_CHANGE) {
+        } else if (type == AlterJobV2.JobType.SCHEMA_CHANGE) {
             alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
         }
 
