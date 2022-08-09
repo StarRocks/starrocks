@@ -135,6 +135,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -1675,16 +1676,12 @@ public class PlanFragmentBuilder {
                 }
                 // 1. Get distributionMode
                 JoinNode.DistributionMode distributionMode;
-                if (leftFragmentPlanRoot instanceof ExchangeNode &&
-                        ((ExchangeNode) leftFragmentPlanRoot).getDistributionType()
-                                .equals(DistributionSpec.DistributionType.SHUFFLE) &&
-                        rightFragmentPlanRoot instanceof ExchangeNode &&
-                        ((ExchangeNode) rightFragmentPlanRoot).getDistributionType()
-                                .equals(DistributionSpec.DistributionType.SHUFFLE)) {
+                if (isExchangeWithDistributionType(leftFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE) &&
+                        isExchangeWithDistributionType(rightFragmentPlanRoot,
+                                DistributionSpec.DistributionType.SHUFFLE)) {
                     distributionMode = JoinNode.DistributionMode.PARTITIONED;
-                } else if (rightFragmentPlanRoot instanceof ExchangeNode &&
-                        ((ExchangeNode) rightFragmentPlanRoot).getDistributionType()
-                                .equals(DistributionSpec.DistributionType.BROADCAST)) {
+                } else if (isExchangeWithDistributionType(rightFragmentPlanRoot,
+                        DistributionSpec.DistributionType.BROADCAST)) {
                     distributionMode = JoinNode.DistributionMode.BROADCAST;
                 } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
                         !(rightFragmentPlanRoot instanceof ExchangeNode)) {
@@ -1897,6 +1894,14 @@ public class PlanFragmentBuilder {
                     return leftFragment;
                 }
             }
+        }
+
+        private boolean isExchangeWithDistributionType(PlanNode node, DistributionSpec.DistributionType expectedType) {
+            if (!(node instanceof ExchangeNode)) {
+                return false;
+            }
+            ExchangeNode exchangeNode = (ExchangeNode) node;
+            return Objects.equals(exchangeNode.getDistributionType(), expectedType);
         }
 
         private boolean isColocateJoin(OptExpression optExpression) {
