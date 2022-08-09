@@ -721,6 +721,8 @@ CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
+// Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
+// https://docs.aws.amazon.com/zh_cn/sdk-for-cpp/v1/developer-guide/logging.html
 CONF_mBool(aws_sdk_logging_trace_enabled, "false");
 
 // default: 16MB
