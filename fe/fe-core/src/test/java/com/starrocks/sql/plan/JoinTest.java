@@ -2579,4 +2579,22 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "PREDICATES: 3: v3 IS NOT NULL");
     }
 
+    @Test
+    public void testJoinWithAnalytic() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT t0.*, cnt\n" +
+                "FROM t0\n" +
+                "left outer JOIN (\n" +
+                "    SELECT *,\n" +
+                "    count(*) over(partition by v1) as cnt\n" +
+                "    FROM t0 \n" +
+                ") b\n" +
+                "ON t0.v1 = b.v1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 1: v1 = 4: v1");
+        FeConstants.runningUnitTest = false;
+    }
 }
