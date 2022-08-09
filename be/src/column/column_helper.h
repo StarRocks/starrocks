@@ -5,6 +5,10 @@
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
+#if defined(__ARM_NEON__) || defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
+#endif
 
 #include <runtime/types.h>
 
@@ -282,7 +286,7 @@ public:
 
 #ifdef __AVX2__
         const uint8_t* f_data = filter.data();
-        size_t data_type_size = sizeof(T);
+        constexpr size_t data_type_size = sizeof(T);
 
         constexpr size_t kBatchNums = 256 / (8 * sizeof(uint8_t));
         const __m256i all0 = _mm256_setzero_si256();
@@ -308,6 +312,36 @@ public:
             }
 
             start_offset += kBatchNums;
+        }
+#elif defined(__ARM_NEON__) || defined(__aarch64__)
+        const uint8_t* f_data = filter.data() + from;
+        constexpr size_t data_type_size = sizeof(T);
+
+        constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
+        while (start_offset + kBatchNums < to) {
+            uint8x16_t filter = vld1q_u8(f_data);
+            if (vmaxvq_u8(filter) == 0) {
+                // skip
+            } else if (vminvq_u8(filter)) {
+                memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                result_offset += kBatchNums;
+            } else {
+                for (int i = 0; i < kBatchNums; ++i) {
+                    // the index for vgetq_lane_u8 should be a literal integer
+                    // but in ASAN/DEBUG the loop is unrolled. so we won't call vgetq_lane_u8
+                    // in ASAN/DEBUG
+#ifndef NDEBUG
+                    if (vgetq_lane_u8(filter, i)) {
+#else
+                    if (f_data[i]) {
+#endif
+                        *(data + result_offset++) = *(data + start_offset + i);
+                    }
+                }
+            }
+
+            start_offset += kBatchNums;
+            f_data += kBatchNums;
         }
 #endif
         for (auto i = start_offset; i < to; ++i) {
