@@ -3187,7 +3187,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Unknown properties: " + properties);
             }
         } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+            throw new DdlException(e.getMessage(), e);
         }
         boolean createMvSuccess;
         Set<Long> tabletIdSet = new HashSet<>();
@@ -3231,34 +3231,39 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
-        // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
+        // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         if (createMvSuccess) {
-            if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
-                // create task
-                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-                MaterializedView.AsyncRefreshContext asyncRefreshContext =
-                        materializedView.getRefreshScheme().getAsyncRefreshContext();
-                if (asyncRefreshContext.getTimeUnit() != null) {
-                    long startTime = asyncRefreshContext.getStartTime();
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
-                            asyncRefreshContext.getStep(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
-                    task.setSchedule(taskSchedule);
-                    task.setType(Constants.TaskType.PERIODICAL);
-                } else {
-                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
-                }
-                if (optHints != null) {
-                    Map<String, String> taskProperties = task.getProperties();
-                    taskProperties.putAll(optHints);
-                }
-                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.createTask(task, false);
-                // for async type, run task
-                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
-                        task.getType() != Constants.TaskType.PERIODICAL) {
-                    taskManager.executeTask(task.getName());
-                }
+            createTaskForMaterializedView(dbName, materializedView, optHints);
+        }
+    }
+
+    private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
+                                               Map<String, String> optHints) throws DdlException {
+        if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
+            // create task
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                    materializedView.getRefreshScheme().getAsyncRefreshContext();
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                long startTime = asyncRefreshContext.getStartTime();
+                TaskSchedule taskSchedule = new TaskSchedule(startTime,
+                        asyncRefreshContext.getStep(),
+                        TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                task.setSchedule(taskSchedule);
+                task.setType(Constants.TaskType.PERIODICAL);
+            } else {
+                task.setType(Constants.TaskType.EVENT_TRIGGERED);
+            }
+            if (optHints != null) {
+                Map<String, String> taskProperties = task.getProperties();
+                taskProperties.putAll(optHints);
+            }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.createTask(task, false);
+            // for async type, run task
+            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
+                    task.getType() != Constants.TaskType.PERIODICAL) {
+                taskManager.executeTask(task.getName());
             }
         }
     }

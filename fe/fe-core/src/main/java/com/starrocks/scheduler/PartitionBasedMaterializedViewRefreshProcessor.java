@@ -91,10 +91,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     public void processTaskRun(TaskRunContext context) throws Exception {
         prepare(context);
 
-        InsertStmt insertStmt;
-        ExecPlan execPlan;
+        InsertStmt insertStmt = null;
+        ExecPlan execPlan = null;
         int retryNum = 0;
-        while (true) {
+        boolean checked = false;
+        while (!checked) {
             // sync partitions between materialized view and base tables out of lock
             // do it outside lock because it is a time-cost operation
             syncPartitions();
@@ -117,10 +118,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     LOG.info("base partition has changed. retry to sync partitions, retryNum:{}", retryNum);
                     continue;
                 }
-
+                checked = true;
                 Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView();
                 LOG.debug("materialized view partitions to refresh:{}", partitionsToRefresh);
                 if (partitionsToRefresh.isEmpty()) {
+                    LOG.info("no partitions to refresh:{} for materialized view", materializedView.getName());
                     return;
                 }
 
@@ -130,7 +132,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 // create ExecPlan
                 insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
                 execPlan = generateRefreshPlan(mvContext.getCtx(), insertStmt);
-                break;
             } finally {
                 database.readUnlock();
             }
@@ -225,8 +226,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private Pair<OlapTable, Column> getPartitionTableAndColumn(Map<Long, OlapTable> olapTables) {
-        OlapTable partitionTable = null;
-        Column partitionColumn = null;
         List<SlotRef> slotRefs = Lists.newArrayList();
         Expr partitionExpr = getPartitionExpr();
         partitionExpr.collect(SlotRef.class, slotRefs);
@@ -235,11 +234,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         SlotRef slotRef = slotRefs.get(0);
         for (OlapTable olapTable : olapTables.values()) {
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
-                partitionTable = olapTable;
-                partitionColumn = partitionTable.getColumn(slotRef.getColumnName());
+                return Pair.create(olapTable, olapTable.getColumn(slotRef.getColumnName()));
             }
         }
-        return Pair.create(partitionTable, partitionColumn);
+        return Pair.create(null, null);
     }
 
     private void syncPartitionsForExpr() {
@@ -338,7 +336,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
             // check partition table
             if (partitionExpr instanceof SlotRef) {
-                // TODO(hkp) : should change getNeedRefreshPartitionNames to consider that partitions are dropped in base table
                 Set<String> baseChangedPartitionNames = materializedView.getNeedRefreshPartitionNames(partitionTable);
                 for (String basePartitionName : baseChangedPartitionNames) {
                     needRefreshMvPartitionNames.addAll(mvContext.baseToMvNameRef.get(basePartitionName));
@@ -383,8 +380,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private ExecPlan generateRefreshPlan(ConnectContext ctx, InsertStmt insertStmt) throws AnalysisException {
-        ExecPlan execPlan = new StatementPlanner().plan(insertStmt, ctx);
-        return execPlan;
+        return new StatementPlanner().plan(insertStmt, ctx);
     }
 
     private InsertStmt generateInsertStmt(Set<String> materializedViewPartitions,
@@ -448,6 +444,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     @VisibleForTesting
     public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+        Preconditions.checkNotNull(execPlan);
+        Preconditions.checkNotNull(insertStmt);
         ConnectContext ctx = mvContext.getCtx();
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);

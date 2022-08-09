@@ -63,10 +63,7 @@ public class SyncPartitionUtils {
             return true;
         }
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
-        if (deletes != null && !deletes.isEmpty()) {
-            return true;
-        }
-        return false;
+        return deletes != null && !deletes.isEmpty();
     }
 
     public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
@@ -314,7 +311,7 @@ public class SyncPartitionUtils {
 
         for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeLinkMap.entrySet()) {
             boolean found = false;
-            for (Map.Entry<String, Range<PartitionKey>> dstEntry : dstRangeMap.entrySet()) {
+            for (Map.Entry<String, Range<PartitionKey>> dstEntry : dstRangeLinkMap.entrySet()) {
                 Range<PartitionKey> dstRange = dstEntry.getValue();
                 int lowerCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.lowerEndpoint());
                 int upperCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.upperEndpoint());
