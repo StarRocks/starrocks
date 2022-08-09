@@ -25,7 +25,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     " $mcv," +
                     " NOW()" +
                     " FROM (SELECT $columnName FROM $dbName.$tableName where rand() <= $sampleRatio" +
-                    " and $columnName is not null $topNExclude" +
+                    " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
@@ -53,12 +53,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
-        long topN = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_TOPN_SIZE));
+        long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
 
         for (String column : columns) {
-            String sql = buildCollectMCV(db, table, topN, column);
+            String sql = buildCollectMCV(db, table, mcvSize, column);
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            List<TStatisticData> mcv = statisticExecutor.queryTopN(sql);
+            List<TStatisticData> mcv = statisticExecutor.queryMCV(sql);
 
             Map<String, String> mostCommonValues = new HashMap<>();
             for (TStatisticData tStatisticData : mcv) {
@@ -121,10 +121,10 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         if (!mostCommonValues.isEmpty()) {
-            context.put("topNExclude", " and " + columnName + " not in (" +
+            context.put("MCVExclude", " and " + columnName + " not in (" +
                     Joiner.on(",").join(mostCommonValues.keySet()) + ")");
         } else {
-            context.put("topNExclude", "");
+            context.put("MCVExclude", "");
         }
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
