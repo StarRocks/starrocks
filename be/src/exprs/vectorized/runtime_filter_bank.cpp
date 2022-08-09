@@ -120,8 +120,9 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
     return Status::OK();
 }
 
-StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_as_runtime_filter(ObjectPool* pool, ExprContext* conjunct,
-                                                                      Chunk* chunk) {
+StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
+                                                                                      ExprContext* conjunct,
+                                                                                      Chunk* chunk) {
     auto left_child = conjunct->root()->get_child(0);
     auto right_child = conjunct->root()->get_child(1);
     // all of the child(1) in expr is in build chunk
@@ -217,6 +218,12 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (not_found) {
         return Status::NotFound("plan node id not found. node_id = " + std::to_string(node_id));
     }
+    return Status::OK();
+}
+
+Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_expr_ctx) {
+    _filter_id = filter_id;
+    _probe_expr_ctx = probe_expr_ctx;
     return Status::OK();
 }
 

@@ -1033,6 +1033,58 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
     scanner->close(_runtime_state);
 }
 
+TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // c1 max is 99999
+    RuntimeFilterProbeCollector rf_collector;
+    RuntimeFilterProbeDescriptor rf_probe_desc;
+    ColumnRef c1ref(tuple_desc->slots()[0]);
+    ExprContext probe_expr_ctx(&c1ref);
+    Status status;
+    {
+        status = probe_expr_ctx.prepare(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        status = probe_expr_ctx.open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        // build runtime filter.
+        JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, PrimitiveType::TYPE_BIGINT);
+        f->init(10);
+        ColumnPtr column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
+        auto c = ColumnHelper::cast_to_raw<PrimitiveType::TYPE_BIGINT>(column);
+        c->append(1000000);
+        RuntimeFilterHelper::fill_runtime_bloom_filter(column, PrimitiveType::TYPE_BIGINT, f, 0, false);
+
+        rf_probe_desc.init(0, &probe_expr_ctx);
+        rf_probe_desc.set_runtime_filter(f);
+        rf_collector.add_descriptor(&rf_probe_desc);
+        param->runtime_filter_collector = &rf_collector;
+    }
+
+    status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    READ_SCANNER_ROWS(scanner, 0);
+
+    scanner->close(_runtime_state);
+    probe_expr_ctx.close(_runtime_state);
+}
+
 // =============================================================================
 
 /*
