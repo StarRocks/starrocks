@@ -41,7 +41,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
-    private final ConcurrentHashMap<String, Catalog> catalogs = new ConcurrentHashMap<>();
+    private final Map<String, Catalog> catalogs = new HashMap<>();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
@@ -247,12 +247,17 @@ public class CatalogMgr {
         public ProcResult fetchResult() {
             BaseProcResult result = new BaseProcResult();
             result.setNames(CATALOG_PROC_NODE_TITLE_NAMES);
-            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
-                Catalog catalog = entry.getValue();
-                if (catalog == null) {
-                    continue;
+            readLock();
+            try {
+                for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+                    Catalog catalog = entry.getValue();
+                    if (catalog == null) {
+                        continue;
+                    }
+                    catalog.getProcNodeData(result);
                 }
-                catalog.getProcNodeData(result);
+            } finally {
+                readUnlock();
             }
             result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
             return result;
