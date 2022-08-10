@@ -463,6 +463,7 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | truncatePartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
@@ -488,6 +489,10 @@ dropIndexClause
 
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
