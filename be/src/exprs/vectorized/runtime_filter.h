@@ -628,6 +628,15 @@ public:
         return true;
     }
 
+    // filter zonemap by evaluating
+    // [min_value, max_value] overlapped with [min, max]
+    bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
+        if (!_has_min_max || min_value == nullptr || max_value == nullptr) return false;
+        if (*max_value < _min) return true;
+        if (*min_value > _max) return true;
+        return false;
+    }
+
 private:
     CppType _min;
     CppType _max;

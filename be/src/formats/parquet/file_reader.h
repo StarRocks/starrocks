@@ -56,8 +56,8 @@ private:
 
     // make min/max chunk from stats of row group meta
     // exist=true: group meta contain statistics info
-    Status _read_min_max_chunk(const tparquet::RowGroup& row_group, vectorized::ChunkPtr* min_chunk,
-                               vectorized::ChunkPtr* max_chunk, bool* exist) const;
+    Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
+                               vectorized::ChunkPtr* min_chunk, vectorized::ChunkPtr* max_chunk, bool* exist) const;
 
     Status _get_next_internal(vectorized::ChunkPtr* chunk);
 
