@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 
 /*
  *
- * Rewrite single count(distinct xx) group by x
+ * Rewrite count(distinct xx) group by x when distinct columns satisfy scan distribution
  *
  * e.g.
  * select count(distinct xx) from t group by x
