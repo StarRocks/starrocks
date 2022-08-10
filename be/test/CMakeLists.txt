@@ -18,6 +18,7 @@ set(EXEC_FILES
         ./column/vectorized_schema_test.cpp
         ./common/config_test.cpp
         ./common/status_test.cpp
+<<<<<<< HEAD
         ./env/compressed_file_test.cpp
         ./env/env_broker_test.cpp
         ./env/env_posix_test.cpp
@@ -25,6 +26,16 @@ set(EXEC_FILES
         ./env/output_stream_wrapper_test.cpp
         ./exec/buffered_reader_test.cpp
         ./exec/es_query_builder_test.cpp
+=======
+        ./common/tracer_test.cpp
+        ./common/s3_uri_test.cpp
+        ./fs/fs_broker_test.cpp
+        ./fs/fs_posix_test.cpp
+        ./fs/fs_memory_test.cpp
+        ./fs/fs_s3_test.cpp
+        ./fs/fs_test.cpp
+        ./fs/output_stream_wrapper_test.cpp
+>>>>>>> 6ae4a62d5 ([StarRocks On ES] Support array format. (#9693))
         ./exec/column_value_range_test.cpp
         ./exec/plain_text_line_reader_bzip_test.cpp
         ./exec/plain_text_line_reader_gzip_test.cpp
@@ -41,6 +52,13 @@ set(EXEC_FILES
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/vectorized/table_function_node_test.cpp
         ./exec/vectorized/analytor_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/es/es_query_builder_test.cpp
+        ./exec/es/es_scan_reader_test.cpp
+        ./exec/es/es_scroll_parser_test.cpp
+        ./exec/vectorized/hdfs_scan_node_test.cpp
+>>>>>>> 6ae4a62d5 ([StarRocks On ES] Support array format. (#9693))
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
