@@ -120,9 +120,9 @@ public class AnalyzeStmtTest {
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
 
-        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, StatsConstants.AnalyzeType.FULL,
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, null, StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 100%]",
+        Assert.assertEquals("[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
 
         sql = "show histogram meta";
