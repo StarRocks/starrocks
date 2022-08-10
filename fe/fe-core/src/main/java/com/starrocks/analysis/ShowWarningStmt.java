@@ -38,7 +38,6 @@ public class ShowWarningStmt extends ShowStmt {
     public ShowWarningStmt(LimitElement limitElement) {
         this.limitElement = limitElement;
     }
-
     public long getLimitNum() {
         if (limitElement != null && limitElement.hasLimit()) {
             return limitElement.getLimit();

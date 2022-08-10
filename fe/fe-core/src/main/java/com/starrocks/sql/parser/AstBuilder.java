@@ -144,7 +144,6 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowErrorStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowLoadStmt;
@@ -608,14 +607,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowWarningStmt();
     }
-    @Override
-    public ParseNode visitShowErrorStatement(StarRocksParser.ShowErrorStatementContext context) {
-        if (context.limitElement() != null) {
-            return new ShowErrorStmt((LimitElement) visit(context.limitElement()));
-        }
-        return new ShowErrorStmt();
-    }
-
     @Override
     public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
         boolean temporary = context.TEMPORARY() != null;

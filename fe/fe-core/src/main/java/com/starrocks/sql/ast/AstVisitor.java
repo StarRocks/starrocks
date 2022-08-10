@@ -90,7 +90,6 @@ import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowErrorStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
 import com.starrocks.analysis.ShowLoadStmt;
@@ -260,9 +259,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowWarningStatement(ShowWarningStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitShowErrorStatement(ShowErrorStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
