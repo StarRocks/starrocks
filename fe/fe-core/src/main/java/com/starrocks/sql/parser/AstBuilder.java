@@ -2501,7 +2501,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private BrokerDesc getBrokerDesc(StarRocksParser.BrokerDescContext context) {
         if (context != null) {
-            String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
             Map<String, String> properties = null;
             if (context.props != null) {
                 properties = Maps.newHashMap();
@@ -2510,7 +2509,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     properties.put(property.getKey(), property.getValue());
                 }
             }
-            return new BrokerDesc(brokerName, properties);
+            if (context.identifierOrString() != null) {
+                String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
+                return new BrokerDesc(brokerName, properties);
+            } else {
+                return new BrokerDesc(properties);
+            }
+            
         }
         return null;
     }
