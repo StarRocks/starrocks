@@ -7,6 +7,7 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/vectorized/runtime_filter_bank.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
 #include "fs/fs.h"
@@ -109,12 +110,14 @@ int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_gr
 }
 
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
+    // filter by min/max conjunct ctxs.
     if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {
-        auto min_chunk = ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
-        auto max_chunk = ChunkHelper::new_chunk(*_scanner_ctx->min_max_tuple_desc, 0);
+        const TupleDescriptor& tuple_desc = *(_scanner_ctx->min_max_tuple_desc);
+        auto min_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
+        auto max_chunk = ChunkHelper::new_chunk(tuple_desc, 0);
 
         bool exist = false;
-        RETURN_IF_ERROR(_read_min_max_chunk(row_group, &min_chunk, &max_chunk, &exist));
+        RETURN_IF_ERROR(_read_min_max_chunk(row_group, tuple_desc.slots(), &min_chunk, &max_chunk, &exist));
         if (!exist) {
             return false;
         }
@@ -132,14 +135,50 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
         }
     }
 
+    // filter by min/max in runtime filter.
+    if (_scanner_ctx->runtime_filter_collector) {
+        std::vector<SlotDescriptor*> min_max_slots(1);
+
+        const TupleDescriptor& tuple_desc = *(_scanner_ctx->tuple_desc);
+        const std::vector<SlotDescriptor*>& slots = tuple_desc.slots();
+
+        for (auto& it : _scanner_ctx->runtime_filter_collector->descriptors()) {
+            vectorized::RuntimeFilterProbeDescriptor* rf_desc = it.second;
+            const vectorized::JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+            SlotId probe_slot_id;
+            if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
+            // !!linear search slot by slot_id.
+            SlotDescriptor* slot = nullptr;
+            for (SlotDescriptor* s : slots) {
+                if (s->id() == probe_slot_id) {
+                    slot = s;
+                    break;
+                }
+            }
+            if (!slot) continue;
+            min_max_slots[0] = slot;
+            auto min_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
+            auto max_chunk = ChunkHelper::new_chunk(min_max_slots, 0);
+            bool exist = false;
+            RETURN_IF_ERROR(_read_min_max_chunk(row_group, min_max_slots, &min_chunk, &max_chunk, &exist));
+            if (!exist) continue;
+            bool discard = vectorized::RuntimeFilterHelper::filter_zonemap_with_min_max(
+                    slot->type().type, filter, min_chunk->columns()[0].get(), max_chunk->columns()[0].get());
+            if (discard) {
+                return true;
+            }
+        }
+    }
+
     return false;
 }
 
-Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vectorized::ChunkPtr* min_chunk,
-                                       vectorized::ChunkPtr* max_chunk, bool* exist) const {
+Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
+                                       vectorized::ChunkPtr* min_chunk, vectorized::ChunkPtr* max_chunk,
+                                       bool* exist) const {
     const vectorized::HdfsScannerContext& ctx = *_scanner_ctx;
-    for (size_t i = 0; i < ctx.min_max_tuple_desc->slots().size(); i++) {
-        const auto* slot = ctx.min_max_tuple_desc->slots()[i];
+    for (size_t i = 0; i < slots.size(); i++) {
+        const SlotDescriptor* slot = slots[i];
         const auto* column_meta = _get_column_meta(row_group, slot->col_name());
         if (column_meta == nullptr) {
             int col_idx = _get_partition_column_idx(slot->col_name());
