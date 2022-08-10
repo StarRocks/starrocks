@@ -441,14 +441,7 @@ public class Alter {
                     throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
                 }
             } else if (currentAlterOps.hasTruncatePartitionOp()) {
-                // this logic is use to adapt mysql syntax, and cannot be executed after adding a write lock
-                // ALTER TABLE test TRUNCATE PARTITION p1;
-                db.writeUnlock();
-                TruncatePartitionClause clause = (TruncatePartitionClause) alterClauses.get(0);
-                TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
-                TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-                GlobalStateMgr.getCurrentState().truncateTable(tStmt);
-                return;
+                needProcessOutsideDatabaseLock = true;
             } else if (currentAlterOps.hasRenameOp()) {
                 processRename(db, olapTable, alterClauses);
             } else if (currentAlterOps.hasSwapOp()) {
@@ -459,9 +452,7 @@ public class Alter {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
             }
         } finally {
-            if (!currentAlterOps.hasTruncatePartitionOp()) {
-                db.writeUnlock();
-            }
+            db.writeUnlock();
         }
 
         // the following ops should done outside db lock. because it contain synchronized create operation
@@ -473,6 +464,13 @@ public class Alter {
                     DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                 }
                 GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
+            } else if (alterClause instanceof TruncatePartitionClause) {
+                // This logic is use to adapt mysql syntax.
+                // ALTER TABLE test TRUNCATE PARTITION p1;
+                TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
+                TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
+                TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
+                GlobalStateMgr.getCurrentState().truncateTable(tStmt);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();
