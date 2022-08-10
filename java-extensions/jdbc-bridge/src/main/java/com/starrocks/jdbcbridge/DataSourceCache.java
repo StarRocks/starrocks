@@ -16,12 +16,18 @@ public class DataSourceCache {
         return instance;
     }
 
-    public synchronized HikariDataSource getSource(String driver, String user, String passwd, String url) {
-        return sources.get(driver + user + passwd + url);
+    public synchronized HikariDataSource getSource(String driverId) {
+        return sources.get(driverId);
     }
 
-    public synchronized void put(String driver, String user, String passwd, String url, HikariDataSource source) {
-        sources.put(driver + user + passwd + url, source);
+    public synchronized void putIfAbsent(String driverId, HikariDataSource source) {
+        sources.putIfAbsent(driverId, source);
     }
 
+    public synchronized void release(String driverId, HikariDataSource source) {
+        final HikariDataSource cached = sources.get(driverId);
+        if (cached != source) {
+            source.close();
+        }
+    }
 }
