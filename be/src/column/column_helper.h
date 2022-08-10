@@ -132,6 +132,12 @@ public:
 
         return dst_column;
     }
+    static ColumnPtr duplicate_column(ColumnPtr src, MutableColumnPtr desc, UInt32Column::Ptr offsets) {
+        for (int i = 0; i < src->size(); ++i) {
+            desc->append_value_multiple_times(*src, i, offsets->get_data()[i + 1] - offsets->get_data()[i]);
+        }
+        return desc;
+    }
 
     // Update column according to whether the dest column and source column are nullable or not.
     static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,

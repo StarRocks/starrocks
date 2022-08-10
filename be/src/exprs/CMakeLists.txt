@@ -76,6 +76,8 @@ set(EXPR_FILES
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   vectorized/java_function_call_expr.cpp
+  vectorized/lambda_function.cpp
+  vectorized/transform_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

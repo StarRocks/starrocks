@@ -33,6 +33,10 @@ class BaseBinaryFunction {
 public:
     template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
     static ColumnPtr vector_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
+        auto str = v1->debug_string() + "name: " + v1->get_name();
+        DCHECK(str.size() > 0);
+        auto str1 = v2->debug_string() + "name: " + v2->get_name();
+        DCHECK(str1.size() > 0);
         auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
         auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
 

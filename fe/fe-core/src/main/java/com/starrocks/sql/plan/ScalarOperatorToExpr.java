@@ -27,6 +27,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LambdaFunction;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.NullLiteral;
@@ -35,6 +36,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
@@ -53,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -120,6 +123,11 @@ public class ScalarOperatorToExpr {
                 Expr expr = buildExpr.build(context.projectOperatorMap.get(node), context);
                 context.colRefToExpr.put(node, expr);
                 return expr;
+            }
+            if (node.isLambdaArgument()) {
+                Expr col = new SlotRef(new TableName("select", "select"), node.getName());
+                col.setType(node.getType());
+                return col;
             }
 
             Preconditions.checkState(context.colRefToExpr.containsKey(node));
@@ -471,6 +479,16 @@ public class ScalarOperatorToExpr {
 
             CaseExpr result = new CaseExpr(caseExpr, list, elseExpr);
             result.setType(operator.getType());
+            return result;
+        }
+
+        @Override
+        public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
+            // lambda arguments
+            final ScalarOperator call = operator.getLambdaExpr();
+            final Expr callExpr = buildExpr.build(call, context);
+            Expr result = new LambdaFunction(callExpr);
+            result.setType(Type.FUNCTION);
             return result;
         }
 

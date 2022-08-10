@@ -26,6 +26,8 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LambdaArguments;
+import com.starrocks.analysis.LambdaFunction;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -93,10 +95,23 @@ public class ExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        for (Expr expr : expression.getChildren()) {
-            bottomUpAnalyze(visitor, expr, scope);
+        if (expression.hasLambdaFunction()) {
+            // the last child is lambdaFunction
+            int childSize = expression.getChildren().size();
+            List<Type> typeList = Lists.newArrayList();
+            for (int i = 0; i < childSize - 1; ++i) {
+                Expr expr = expression.getChild(i);
+                bottomUpAnalyze(visitor, expr, scope);
+                typeList.add(((ArrayType) expr.getType()).getItemType());
+            }
+            scope.setLambdaInputTypes(typeList);
+            // visit LambdaFunction
+            visitor.visit(expression.getChild(childSize - 1), scope);
+        } else {
+            for (Expr expr : expression.getChildren()) {
+                bottomUpAnalyze(visitor, expr, scope);
+            }
         }
-
         visitor.visit(expression, scope);
     }
 
@@ -212,6 +227,25 @@ public class ExpressionAnalyzer {
                         "-> operator could only be used for json column, but got " + item.getType());
             }
             node.setType(Type.JSON);
+            return null;
+        }
+
+        @Override
+        public Void visitLambdaFunction(LambdaFunction node, Scope scope) {
+            ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, scope, this.session);
+            // construct a new scope to analyze the lambda function
+            Scope lambdaScope = scope.getLambdaScope();
+            ExpressionAnalyzer.analyzeExpression(node.getChild(1), this.analyzeState, lambdaScope, this.session);
+            node.setType(Type.FUNCTION);
+            return null;
+        }
+
+        @Override
+        public Void visitLambdaArguments(LambdaArguments node, Scope scope) {
+            for (int i = 0; i < node.getNames().size(); ++i) {
+                node.putTypes(scope.getLambdaInputTypes());
+                scope.putLambdaArg(node.getNames().get(i));
+            }
             return null;
         }
 
@@ -344,7 +378,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -357,7 +391,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -543,7 +577,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {

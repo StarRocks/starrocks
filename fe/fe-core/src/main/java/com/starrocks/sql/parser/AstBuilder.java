@@ -83,6 +83,8 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.KillStmt;
 import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.LambdaArguments;
+import com.starrocks.analysis.LambdaFunction;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
@@ -2925,6 +2927,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return visit(context.expression());
         }
+    }
+
+    @Override
+    public ParseNode visitLambdaFunction(StarRocksParser.LambdaFunctionContext context) {
+        List<String> names = Lists.newLinkedList();
+        if (context.identifierList() != null) {
+            final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            names = identifierList.stream().map(Identifier::getValue).collect(toList());
+        } else {
+            names.add(((Identifier) visit(context.identifier())).getValue());
+        }
+        LambdaArguments argument = new LambdaArguments(names);
+        Expr expr = (Expr) visit(context.expression());
+        return new LambdaFunction(argument, expr);
+    }
+
+    @Override
+    public ParseNode visitTruncateTableStatement(StarRocksParser.TruncateTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new TruncateTableStmt(new TableRef(targetTableName, null, partitionNames));
     }
 
     @Override

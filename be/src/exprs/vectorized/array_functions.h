@@ -162,6 +162,7 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains_any);
     DEFINE_VECTORIZED_FN(array_contains_all);
+    DEFINE_VECTORIZED_FN(transform);
 
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 
