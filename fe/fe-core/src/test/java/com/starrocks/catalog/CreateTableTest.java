@@ -43,6 +43,13 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+<<<<<<< HEAD
+=======
+        Backend be = UtFrameUtils.addMockBackend(10002);
+        be.setIsDecommissioned(true);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockBackend(10004);
+>>>>>>> 057ab8732 ([Enhancement] Validate replica number by BE count in CREATE/ALTER TABLE (#9555))
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
