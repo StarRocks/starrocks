@@ -204,7 +204,7 @@ public:
         bool use_merged_selection;
         std::vector<uint32_t> hash_values;
         const std::vector<int32_t>* bucketseq_to_partition;
-        bool compatibility;
+        bool compatibility = true;
     };
 
     virtual void evaluate(Column* input_column, RunningContext* ctx) const = 0;

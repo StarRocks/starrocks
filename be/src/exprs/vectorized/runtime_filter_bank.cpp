@@ -306,7 +306,7 @@ void RuntimeFilterProbeCollector::do_evaluate(vectorized::Chunk* chunk, RuntimeB
         auto& selection = eval_context.running_context.selection;
         eval_context.running_context.use_merged_selection = false;
         eval_context.running_context.compatibility =
-                _runtime_state->func_version() <= 3 && _runtime_state->enable_pipeline_engine();
+                _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
         for (auto& kv : eval_context.selectivity) {
             RuntimeFilterProbeDescriptor* rf_desc = kv.second;
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
@@ -372,7 +372,7 @@ void RuntimeFilterProbeCollector::update_selectivity(vectorized::Chunk* chunk,
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
     eval_context.running_context.compatibility =
-            _runtime_state->func_version() <= 3 && _runtime_state->enable_pipeline_engine();
+            _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
     use_merged_selection = true;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
