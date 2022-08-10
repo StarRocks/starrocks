@@ -23,7 +23,8 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0) {}
+          _num_active_fragments(0),
+          _query_statistics(std::make_shared<QueryStatistics>()) {}
 
 QueryContext::~QueryContext() {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
@@ -100,6 +101,15 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
     }
 
     return st;
+}
+
+void QueryContext::update_query_statistic() {
+    if (!_query_statistics) {
+        return;
+    }
+    _query_statistics->add_scan_stats(cur_scan_rows_num(), get_scan_bytes());
+    _query_statistics->add_cpu_costs(cpu_cost());
+    _query_statistics->add_mem_costs(mem_cost_bytes());
 }
 
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {

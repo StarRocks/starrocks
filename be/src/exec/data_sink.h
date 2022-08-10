@@ -73,9 +73,7 @@ public:
     // Returns the runtime profile for the sink.
     virtual RuntimeProfile* profile() = 0;
 
-    virtual void set_query_statistics(std::shared_ptr<QueryStatistics> statistics) {
-        _query_statistics = std::move(statistics);
-    }
+    virtual void set_query_statistics(std::shared_ptr<QueryStatistics> statistics) { _query_statistics = statistics; }
 
 protected:
     RuntimeState* _runtime_state = nullptr;

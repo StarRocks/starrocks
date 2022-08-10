@@ -31,6 +31,7 @@
 
 #include "column/chunk.h"
 #include "common/logging.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
@@ -280,6 +281,11 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     SCOPED_TIMER(_parent->_send_request_timer);
 
     request->set_sequence(_request_seq);
+    if (request->eos() && _parent->_runtime_state->query_ctx()) {
+        auto statistic = request->mutable_query_statistics();
+        _parent->_runtime_state->query_ctx()->update_query_statistic();
+        _parent->_query_statistics->to_pb(statistic);
+    }
     if (_is_transfer_chain && (_send_query_statistics_with_every_batch || request->eos())) {
         auto statistic = request->mutable_query_statistics();
         _parent->_query_statistics->to_pb(statistic);

@@ -381,6 +381,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink));
     }
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
+    datasink->set_query_statistics(_query_ctx->query_statistic());
 
     size_t driver_id = 0;
     for (auto n = 0; n < pipelines.size(); ++n) {

@@ -12,6 +12,7 @@
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/profile_report_worker.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
@@ -116,6 +117,8 @@ public:
     void set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace);
 
     starrocks::debug::QueryTrace* query_trace() { return _query_trace.get(); }
+    std::shared_ptr<QueryStatistics> query_statistic() { return _query_statistics; }
+    void update_query_statistic();
 
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
 
@@ -141,6 +144,7 @@ private:
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
+    std::shared_ptr<QueryStatistics> _query_statistics;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
