@@ -84,6 +84,10 @@ public class AlterOperations {
         return currentOps.contains(AlterOpType.SWAP);
     }
 
+    public boolean hasTruncatePartitionOp() {
+        return currentOps.contains(AlterOpType.TRUNCATE_PARTITION);
+    }
+
     public boolean contains(AlterOpType op) {
         return currentOps.contains(op);
     }

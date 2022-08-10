@@ -27,6 +27,7 @@ import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -41,8 +42,12 @@ import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TruncatePartitionClause;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -55,10 +60,13 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -82,6 +90,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+
+import mockit.Mock;
+import mockit.MockUp;
+
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -93,6 +105,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -2182,5 +2195,38 @@ public class AlterTest {
         clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(clause.getRollupName(), "testRollup");
         Assert.assertEquals("ORDER BY `k1`, `k2` IN `testRollup`", clause.toString());
+    }
+
+
+    @Test(expected = DdlException.class)
+    public void testFindTruncatePartitionEntrance() throws Exception {
+
+        Database db = new Database();
+        OlapTable table = new OlapTable(TableType.OLAP);
+        table.setState(OlapTableState.NORMAL);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String name) {
+                return db;
+            }
+            @Mock
+            public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+                throw new DdlException("test DdlException");
+            }
+        };
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return table;
+            }
+        };
+        List<AlterClause> cList = new ArrayList<>();
+        PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
+        TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
+        cList.add(clause);
+        Alter alter = new Alter();
+        TableName tableName = new TableName("test_db", "test_table");
+        AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
+        alter.processAlterTable(stmt);
     }
 }

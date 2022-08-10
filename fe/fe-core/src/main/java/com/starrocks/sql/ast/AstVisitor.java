@@ -117,6 +117,7 @@ import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 
@@ -565,6 +566,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropPartitionClause(DropPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitTruncatePartitionClause(TruncatePartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 
