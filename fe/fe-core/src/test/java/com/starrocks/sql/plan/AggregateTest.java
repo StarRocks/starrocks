@@ -1366,7 +1366,6 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
 
-
         int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
         try {
             connectContext.getSessionVariable().setNewPlanerAggStage(3);
@@ -1402,14 +1401,16 @@ public class AggregateTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n");
 
-        sql = "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
+        sql =
+                "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1a <=> 13: t1a");
 
-        sql = "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
+        sql =
+                "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
