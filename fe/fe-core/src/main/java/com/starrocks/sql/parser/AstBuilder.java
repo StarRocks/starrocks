@@ -76,6 +76,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -2366,6 +2367,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     // ------------------------------------------- Privilege Statement -------------------------------------------------
+
+    @Override
+    public ParseNode visitDropUser(StarRocksParser.DropUserContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        return new DropUserStmt(user.getUserIdentity());
+    }
 
     @Override
     public ParseNode visitCreateUser(StarRocksParser.CreateUserContext context) {

@@ -25,6 +25,7 @@ import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LoadStmt;
@@ -246,6 +247,12 @@ public class Analyzer {
         public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
+        }
+
+        @Override
+        public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return  null;
         }
 
         @Override
