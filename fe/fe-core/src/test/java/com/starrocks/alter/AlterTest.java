@@ -45,6 +45,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -59,6 +60,9 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
@@ -329,6 +333,12 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "alter materialized view test.mv1 rename mv2";
         alterMaterializedView(alterStmt, false);
+        MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().
+                getDb("default_cluster:test").getTable("mv2");
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1` AS `k1`," +
+                " `test`.`testTable1`.`k2` AS `k2` FROM `test`.`testTable1`", task.getDefinition());
         dropMaterializedView("drop materialized view test.mv2");
     }
 
