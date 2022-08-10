@@ -2,12 +2,73 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.common.NotImplementedException;
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TStorageMedium;
+
+import java.util.List;
+import java.util.Map;
 
 public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
+    private final LakeTable table;
+
+    public LakeTableAlterJobV2Builder(LakeTable table) {
+        this.table = table;
+    }
+
     @Override
     public AlterJobV2 build() throws UserException {
-        throw new NotImplementedException("does not support alter lake table yet");
+        if (newIndexSchema.isEmpty() && !hasIndexChanged) {
+            throw new DdlException("Nothing is changed. please check your alter stmt.");
+        }
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        StarOSAgent starOSAgent = globalStateMgr.getStarOSAgent();
+
+        long tableId = table.getId();
+        LakeTableSchemaChangeJob schemaChangeJob = new LakeTableSchemaChangeJob(jobId, dbId, tableId, table.getName(), timeoutMs);
+        schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
+        schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
+        schemaChangeJob.setStartTime(startTime);
+        schemaChangeJob.setStorageFormat(newStorageFormat);
+        for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
+            long originIndexId = entry.getKey();
+            // 1. get new schema version/schema version hash, short key column count
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PRFIX + table.getIndexNameById(originIndexId);
+            short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
+            long shadowIndexId = globalStateMgr.getNextId();
+
+            // create SHADOW index for each partition
+            for (Partition partition : table.getPartitions()) {
+                long partitionId = partition.getId();
+                TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+
+                List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
+                List<Long> shadowTabletIds = starOSAgent.createShards(originTablets.size(), table.getShardStorageInfo());
+                Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
+
+                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium);
+                MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
+                for (int i = 0; i < originTablets.size(); i++) {
+                    Tablet originTablet = originTablets.get(i);
+                    Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
+                    shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
+                    schemaChangeJob.addTabletIdMap(partitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
+                }
+                schemaChangeJob.addPartitionShadowIndex(partitionId, shadowIndexId, shadowIndex);
+            } // end for partition
+            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newShortKeyColumnCount,
+                    entry.getValue());
+        } // end for index
+        return schemaChangeJob;
     }
 }
