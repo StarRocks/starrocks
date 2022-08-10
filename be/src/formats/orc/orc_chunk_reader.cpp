@@ -1833,7 +1833,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_BOOLEAN_TYPE(type)                                      \
     case type: {                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
-        if (xrf == nullptr) return false;                              \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;       \
         auto lower = orc::Literal(bool(xrf->min_value()));             \
         auto upper = orc::Literal(bool(xrf->max_value()));             \
         ADD_RF_TO_BUILDER                                              \
@@ -1842,7 +1842,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_INT_TYPE(type)                                          \
     case type: {                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
-        if (xrf == nullptr) return false;                              \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;       \
         auto lower = orc::Literal(int64_t(xrf->min_value()));          \
         auto upper = orc::Literal(int64_t(xrf->max_value()));          \
         ADD_RF_TO_BUILDER                                              \
@@ -1851,7 +1851,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_DOUBLE_TYPE(type)                                       \
     case type: {                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
-        if (xrf == nullptr) return false;                              \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;       \
         auto lower = orc::Literal(double(xrf->min_value()));           \
         auto upper = orc::Literal(double(xrf->max_value()));           \
         ADD_RF_TO_BUILDER                                              \
@@ -1860,7 +1860,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_STRING_TYPE(type)                                                 \
     case type: {                                                                 \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf);           \
-        if (xrf == nullptr) return false;                                        \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;                 \
         auto lower = orc::Literal(xrf->min_value().data, xrf->min_value().size); \
         auto upper = orc::Literal(xrf->max_value().data, xrf->max_value().size); \
         ADD_RF_TO_BUILDER                                                        \
@@ -1869,7 +1869,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_DATE_TYPE(type)                                                                              \
     case type: {                                                                                            \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf);                                      \
-        if (xrf == nullptr) return false;                                                                   \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;                                            \
         auto lower = orc::Literal(orc::PredicateDataType::DATE, native_date_to_orc_date(xrf->min_value())); \
         auto upper = orc::Literal(orc::PredicateDataType::DATE, native_date_to_orc_date(xrf->max_value())); \
         ADD_RF_TO_BUILDER                                                                                   \
@@ -1878,7 +1878,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_DECIMALV2_TYPE(type)                                                                                    \
     case type: {                                                                                                       \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf);                                                 \
-        if (xrf == nullptr) return false;                                                                              \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;                                                       \
         auto lower =                                                                                                   \
                 orc::Literal(to_orc128(xrf->min_value().value()), xrf->min_value().PRECISION, xrf->min_value().SCALE); \
         auto upper =                                                                                                   \
@@ -1889,7 +1889,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 #define ADD_RF_DECIMALV3_TYPE(xtype)                                                                          \
     case xtype: {                                                                                             \
         auto* xrf = dynamic_cast<const RuntimeBloomFilter<xtype>*>(rf);                                       \
-        if (xrf == nullptr) return false;                                                                     \
+        if (xrf == nullptr || !xrf->has_min_max()) return false;                                              \
         auto lower = orc::Literal(orc::Int128(xrf->min_value()), slot->type().precision, slot->type().scale); \
         auto upper = orc::Literal(orc::Int128(xrf->max_value()), slot->type().precision, slot->type().scale); \
         ADD_RF_TO_BUILDER                                                                                     \
@@ -1956,6 +1956,7 @@ void OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>&
             }
         }
     }
+
     if (ok) {
         builder->end();
         std::unique_ptr<orc::SearchArgument> sargs = builder->build();
