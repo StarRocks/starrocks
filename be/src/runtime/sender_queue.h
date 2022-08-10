@@ -102,7 +102,6 @@ private:
 
     typedef std::list<ChunkItem> ChunkQueue;
     ChunkQueue _chunk_queue;
-    serde::ProtobufChunkMeta _chunk_meta;
 
     std::unordered_set<int> _sender_eos_set;          // sender_id
     std::unordered_map<int, int64_t> _packet_seq_map; // be_number => packet_seq
