@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import avro.shaded.com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -53,7 +54,10 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         // if not, we have to choose one materialized column from scan operator output columns
         // with the minimal cost.
         if (!containsMaterializedColumn(scanOperator, scanColumns)) {
-            List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
+            List<ColumnRefOperator> preOutputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
+            List<ColumnRefOperator> outputColumns = preOutputColumns.stream()
+                    .filter(column -> !column.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
+                    .collect(Collectors.toList());
 
             int smallestIndex = -1;
             int smallestColumnLength = Integer.MAX_VALUE;
