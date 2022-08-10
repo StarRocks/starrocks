@@ -35,7 +35,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -191,7 +190,7 @@ public class CatalogMgr {
 
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
-        data.catalogs = new HashMap<>(catalogs);
+        data.catalogs = catalogs;
         checksum ^= data.catalogs.size();
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(dos, s);
@@ -201,7 +200,6 @@ public class CatalogMgr {
     private static class SerializeData {
         @SerializedName("catalogs")
         public Map<String, Catalog> catalogs;
-
     }
 
     public List<List<String>> getCatalogsInfo() {
