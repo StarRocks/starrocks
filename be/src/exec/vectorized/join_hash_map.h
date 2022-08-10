@@ -449,27 +449,21 @@ public:
                bool* has_remain) {
         DCHECK_EQ(0, _table_items->row_count);
         *has_remain = false;
-        _probe_state->count = (*probe_chunk)->num_rows();
         switch (_table_items->join_type) {
-        case TJoinOp::RIGHT_SEMI_JOIN:
-        case TJoinOp::RIGHT_ANTI_JOIN: {
-            // output default values for probe-columns as placeholder.
-            if (!_table_items->with_other_conjunct) {
-                _probe_null_output(chunk, _probe_state->count);
-            } else {
-                _probe_output(probe_chunk, chunk);
-            }
+        case TJoinOp::FULL_OUTER_JOIN:
+        case TJoinOp::LEFT_ANTI_JOIN:
+        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
+        case TJoinOp::LEFT_OUTER_JOIN: {
+            _probe_state->count = (*probe_chunk)->num_rows();
+            _probe_output(probe_chunk, chunk);
             _build_output(chunk);
+            _probe_state->count = 0;
             break;
         }
         default: {
-            _probe_output(probe_chunk, chunk);
-            // build output is always nullable.
-            _build_output(chunk);
             break;
         }
         }
-        _probe_state->count = 0;
         return;
     }
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) {
@@ -481,15 +475,6 @@ public:
     }
 
 private:
-    void _probe_null_output(ChunkPtr* chunk, size_t count) {
-        SCOPED_TIMER(_probe_state->output_probe_column_timer);
-        for (size_t i = 0; i < _table_items->probe_column_count; i++) {
-            SlotDescriptor* slot = _table_items->probe_slots[i].slot;
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), true);
-            column->append_nulls(count);
-            (*chunk)->append_column(std::move(column), slot->id());
-        }
-    }
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_probe_column_timer);
         bool to_nullable = _table_items->left_to_nullable;
@@ -500,7 +485,8 @@ private:
             if (hash_table_slot.need_output) {
                 if (to_nullable && !column->is_nullable()) {
                     DCHECK_EQ(column->size(), _probe_state->count);
-                    ColumnPtr dest_column = NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
+                    ColumnPtr dest_column =
+                            NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
                     DCHECK_EQ(column->is_nullable(), to_nullable);

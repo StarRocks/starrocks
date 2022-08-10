@@ -2380,8 +2380,8 @@ TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist3) {
 TEST_F(JoinHashMapTest, EmptyHashMapTest) {
     check_empty_hash_map(TJoinOp::LEFT_OUTER_JOIN, 5, 5, 6);
     check_empty_hash_map(TJoinOp::FULL_OUTER_JOIN, 5, 5, 6);
-    check_empty_hash_map(TJoinOp::LEFT_ANTI_JOIN, 5, 5, 3);
-    check_empty_hash_map(TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN, 5, 5, 3);
+    check_empty_hash_map(TJoinOp::LEFT_ANTI_JOIN, 5, 5, 6);
+    check_empty_hash_map(TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN, 5, 5, 6);
     check_empty_hash_map(TJoinOp::INNER_JOIN, 5, 0, 0);
     check_empty_hash_map(TJoinOp::LEFT_SEMI_JOIN, 5, 0, 0);
     check_empty_hash_map(TJoinOp::RIGHT_SEMI_JOIN, 5, 0, 0);
