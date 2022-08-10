@@ -32,6 +32,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -192,11 +193,7 @@ public class PropertyAnalyzer {
             } catch (Exception e) {
                 throw new AnalysisException(e.getMessage());
             }
-
-            if (replicationNum <= 0) {
-                throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
-            }
-
+            checkAvailableBackendsIsEnough(replicationNum);
             properties.remove(PROPERTIES_REPLICATION_NUM);
         }
         return replicationNum;
@@ -211,10 +208,19 @@ public class PropertyAnalyzer {
             key = PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         }
         short replicationNum = Short.parseShort(properties.get(key));
+        checkAvailableBackendsIsEnough(replicationNum);
+        return replicationNum;
+    }
+
+    private static void checkAvailableBackendsIsEnough(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
         }
-        return replicationNum;
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        if (replicationNum > backendIds.size()) {
+            throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
+            + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+        }
     }
 
     public static String analyzeColumnSeparator(Map<String, String> properties, String oldColumnSeparator) {

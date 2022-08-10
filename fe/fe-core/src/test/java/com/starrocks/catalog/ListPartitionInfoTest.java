@@ -9,10 +9,13 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.utframe.UtFrameUtils;
+
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.DataInputStream;
@@ -32,6 +35,13 @@ public class ListPartitionInfoTest {
 
     private ListPartitionInfo listPartitionInfo;
     private ListPartitionInfo listPartitionInfoForMulti;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+    }
 
     @Before
     public void setUp() throws DdlException, AnalysisException {

@@ -30,6 +30,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+
+import mockit.Expectations;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,6 +41,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -227,6 +231,7 @@ public class ColocateTableTest {
 
     @Test
     public void testReplicationNum() throws Exception {
+        
         createTable("create table " + dbName + "." + tableName1 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
@@ -241,6 +246,16 @@ public class ColocateTableTest {
 
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables must have same replication num: 1");
+
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+                minTimes = 0;
+                result = Arrays.asList(10001, 10002, 10003);
+            }
+        };
+        
         createTable("create table " + dbName + "." + tableName2 + " (\n" +
                 " `k1` int NULL COMMENT \"\",\n" +
                 " `k2` varchar(10) NULL COMMENT \"\"\n" +
