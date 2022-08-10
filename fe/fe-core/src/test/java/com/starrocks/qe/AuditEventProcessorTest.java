@@ -53,10 +53,12 @@ public class AuditEventProcessorTest {
                 .setScanRows(200000)
                 .setReturnRows(1)
                 .setStmtId(1234)
-                .setStmt("select * from tbl1").build();
+                .setStmt("select * from tbl1")
+                .setCatalog("catalog1").build();
 
         Assert.assertEquals("127.0.0.1", event.clientIp);
         Assert.assertEquals(200000, event.scanRows);
+        Assert.assertEquals("catalog1", event.catalog);
     }
 
     @Test
