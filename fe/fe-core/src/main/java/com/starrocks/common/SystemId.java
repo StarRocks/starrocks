@@ -17,16 +17,9 @@
 
 package com.starrocks.common;
 
-import java.util.concurrent.atomic.AtomicLong;
-
 // used for system table.
 // cannot bigger than 10000(GlobalStateMgr.NEXT_ID_INIT_VALUE)
 public class SystemId {
-    public static AtomicLong nextId = new AtomicLong(0);
-
-    public static long getNextId() {
-        return nextId.getAndIncrement();
-    }
 
     public static final long INFORMATION_SCHEMA_DB_ID = 1L;
 
