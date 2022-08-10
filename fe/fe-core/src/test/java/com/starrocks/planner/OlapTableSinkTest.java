@@ -23,25 +23,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PartitionType;
-import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.*;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -268,5 +250,71 @@ public class OlapTableSinkTest {
         Assert.assertEquals(3, nodes.size());
         Collections.sort(nodes);
         Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
+    }
+
+    @Test
+    public void testSingleListPartition() throws UserException{
+        TupleDescriptor tuple = getTuple();
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("province",Type.STRING)));
+        listPartitionInfo.setValues(1,Lists.newArrayList("beijing","shanghai"));
+        listPartitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+        Partition partition = new Partition(1, "p1", index, distInfo);
+
+        new Expectations() {{
+            dstTable.getId();
+            result = 1;
+            dstTable.getPartitions();
+            result = Lists.newArrayList(partition);
+            dstTable.getPartition(1L);
+            result = partition;
+            dstTable.getPartitionInfo();
+            result = listPartitionInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L));
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+    }
+
+    @Test
+    public void testMultiListPartition() throws UserException{
+        TupleDescriptor tuple = getTuple();
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("dt",Type.STRING), new Column("province",Type.STRING)));
+        List<String> multiItems = Lists.newArrayList("dt","shanghai");
+        List<List<String>> multiValues = new ArrayList<>();
+        multiValues.add(multiItems);
+
+        listPartitionInfo.setMultiValues(1,multiValues);
+        listPartitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+        Partition partition = new Partition(1, "p1", index, distInfo);
+
+        new Expectations() {{
+            dstTable.getId();
+            result = 1;
+            dstTable.getPartitions();
+            result = Lists.newArrayList(partition);
+            dstTable.getPartition(1L);
+            result = partition;
+            dstTable.getPartitionInfo();
+            result = listPartitionInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L));
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 }

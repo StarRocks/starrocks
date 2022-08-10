@@ -176,6 +176,9 @@ struct TOlapTablePartition {
 
     6: optional list<Exprs.TExprNode> start_keys
     7: optional list<Exprs.TExprNode> end_keys
+
+    8: optional list<string> values
+    9: optional list<list<string>> multiValues
 }
 
 struct TOlapTablePartitionParam {
