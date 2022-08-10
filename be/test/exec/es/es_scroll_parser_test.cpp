@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2022-present, StarRocks Limited.
 
-#include "exec/es/es_scroll_parser.h"
+#include "exec/vectorized/es_http_components.h"
 
 #include <gtest/gtest.h>
 
