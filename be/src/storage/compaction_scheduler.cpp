@@ -87,7 +87,7 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
     });
     // to compatible with old compaction framework
     // TODO: can be optimized to use just one lock
-    int64_t last_failure_ms;
+    int64_t last_failure_ts;
     DataDir* data_dir = tablet->data_dir();
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
@@ -106,7 +106,7 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
                       << ", running num:" << num;
             return false;
         }
-        last_failure_ms = tablet->last_cumu_compaction_failure_time();
+        last_failure_ts = tablet->last_cumu_compaction_failure_time();
     } else {
         std::unique_lock lk(tablet->get_base_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
@@ -120,13 +120,13 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
                       << ", running num:" << num;
             return false;
         }
-        last_failure_ms = tablet->last_base_compaction_failure_time();
+        last_failure_ts = tablet->last_base_compaction_failure_time();
     }
-    int64_t now_ms = UnixMillis();
-    if (now_ms - last_failure_ms <= config::min_compaction_failure_interval_sec * 1000) {
-        LOG(INFO) << "Too often to schedule compaction, skip it."
+    if (UnixMillis() - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+        LOG(INFO) << "Too often to schedule failure compaction, skip it."
                   << "compaction_type=" << compaction_task->compaction_type()
-                  << ", last_failure_time_ms=" << last_failure_ms << ", tablet_id=" << tablet->tablet_id();
+                  << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                  << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
         return false;
     }
 
