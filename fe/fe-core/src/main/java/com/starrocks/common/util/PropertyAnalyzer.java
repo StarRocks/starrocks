@@ -216,8 +216,8 @@ public class PropertyAnalyzer {
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
         if (replicationNum > backendIds.size()) {
-            throw new AnalysisException("Replication num should less than current alive be node count" + 
-            ", current alive be node count is [" + backendIds.size() + "]");
+            throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
+            + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
         }
     }
 
