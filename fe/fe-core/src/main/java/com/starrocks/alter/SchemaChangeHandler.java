@@ -52,18 +52,14 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -77,7 +73,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.Util;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -88,7 +83,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TStorageFormat;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -372,7 +366,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             // handle other indices
             // 1 find other indices which contain this column
-            List<Long> otherIndexIds = new ArrayList<Long>();
+            List<Long> otherIndexIds = new ArrayList<>();
             for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
                 if (entry.getKey() == indexIdForFindingColumn) {
                     // skip the index we used to find column. it has been handled before
@@ -852,20 +846,19 @@ public class SchemaChangeHandler extends AlterHandler {
         TStorageFormat storageFormat = PropertyAnalyzer.analyzeStorageFormat(propertyMap);
 
         // create job
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        long jobId = globalStateMgr.getNextId();
-        SchemaChangeJobV2 schemaChangeJob =
-                new SchemaChangeJobV2(jobId, dbId, olapTable.getId(), olapTable.getName(), timeoutSecond * 1000);
-        schemaChangeJob.setBloomFilterInfo(hasBfChange, bfColumns, bfFpp);
-        schemaChangeJob.setAlterIndexInfo(hasIndexChange, indexes);
-        schemaChangeJob.setStartTime(ConnectContext.get().getStartTime());
-        schemaChangeJob.setStorageFormat(storageFormat);
+        AlterJobV2Builder jobBuilder = olapTable.alterTable();
+        jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
+                .withDbId(dbId)
+                .withTimeoutSeconds(timeoutSecond)
+                .withAlterIndexInfo(hasIndexChange, indexes)
+                .withStartTime(ConnectContext.get().getStartTime())
+                .withNewStorageFormat(storageFormat)
+                .withBloomFilterColumns(bfColumns, bfFpp)
+                .withBloomFilterColumnsChanged(hasBfChange);
 
         // begin checking each table
         // ATTN: DO NOT change any meta in this loop
         long tableId = olapTable.getId();
-        Map<Long, Short> indexIdToShortKeyColumnCount = Maps.newHashMap();
-        Map<Long, List<Column>> changedIndexIdToSchema = Maps.newHashMap();
         for (Long alterIndexId : indexSchemaMap.keySet()) {
             List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
             List<Column> alterSchema = indexSchemaMap.get(alterIndexId);
@@ -980,115 +973,15 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 5. calc short key
-            short newShortKeyColumnCount =
-                    GlobalStateMgr.calcShortKeyColumnCount(alterSchema, indexIdToProperties.get(alterIndexId));
-            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyColumnCount);
-            indexIdToShortKeyColumnCount.put(alterIndexId, newShortKeyColumnCount);
+            short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, indexIdToProperties.get(alterIndexId));
+            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
 
-            // 6. store the changed columns for edit log
-            changedIndexIdToSchema.put(alterIndexId, alterSchema);
+            jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
 
             LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
         } // end for indices
 
-        if (changedIndexIdToSchema.isEmpty() && !hasIndexChange) {
-            throw new DdlException("Nothing is changed. please check your alter stmt.");
-        }
-
-        // the following operations are done outside the 'for indices' loop
-        // to avoid partial check success
-
-        /*
-         * Create schema change job
-         * 1. For each index which has been changed, create a SHADOW index, and save the mapping of origin index to SHADOW index.
-         * 2. Create all tablets and replicas of all SHADOW index, add them to tablet inverted index.
-         * 3. Change table's state as SCHEMA_CHANGE
-         */
-        for (Map.Entry<Long, List<Column>> entry : changedIndexIdToSchema.entrySet()) {
-            long originIndexId = entry.getKey();
-            MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(originIndexId);
-            // 1. get new schema version/schema version hash, short key column count
-            int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
-            int newSchemaVersion = currentSchemaVersion + 1;
-            // generate schema hash for new index has to generate a new schema hash not equal to current schema hash
-            int currentSchemaHash = currentIndexMeta.getSchemaHash();
-            int newSchemaHash = Util.generateSchemaHash();
-            while (currentSchemaHash == newSchemaHash) {
-                newSchemaHash = Util.generateSchemaHash();
-            }
-            String newIndexName = SHADOW_NAME_PRFIX + olapTable.getIndexNameById(originIndexId);
-            short newShortKeyColumnCount = indexIdToShortKeyColumnCount.get(originIndexId);
-            long shadowIndexId = globalStateMgr.getNextId();
-
-            // create SHADOW index for each partition
-            List<Tablet> addedTablets = Lists.newArrayList();
-            for (Partition partition : olapTable.getPartitions()) {
-                long partitionId = partition.getId();
-                TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-                // index state is SHADOW
-                MaterializedIndex shadowIndex = new MaterializedIndex(shadowIndexId, IndexState.SHADOW);
-                MaterializedIndex originIndex = partition.getIndex(originIndexId);
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, newSchemaHash, medium);
-                short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partitionId);
-                for (Tablet originTablet : originIndex.getTablets()) {
-                    long originTabletId = originTablet.getId();
-                    long shadowTabletId = globalStateMgr.getNextId();
-
-                    LocalTablet shadowTablet = new LocalTablet(shadowTabletId);
-                    shadowIndex.addTablet(shadowTablet, shadowTabletMeta);
-                    addedTablets.add(shadowTablet);
-
-                    schemaChangeJob.addTabletIdMap(partitionId, shadowIndexId, shadowTabletId, originTabletId);
-                    List<Replica> originReplicas = ((LocalTablet) originTablet).getImmutableReplicas();
-
-                    int healthyReplicaNum = 0;
-                    for (Replica originReplica : originReplicas) {
-                        long shadowReplicaId = globalStateMgr.getNextId();
-                        long backendId = originReplica.getBackendId();
-
-                        if (originReplica.getState() == Replica.ReplicaState.CLONE
-                                || originReplica.getState() == Replica.ReplicaState.DECOMMISSION
-                                || originReplica.getLastFailedVersion() > 0) {
-                            LOG.info(
-                                    "origin replica {} of tablet {} state is {}, and last failed version is {}, " +
-                                            "skip creating shadow replica",
-                                    originReplica.getId(), originReplica, originReplica.getState(),
-                                    originReplica.getLastFailedVersion());
-                            continue;
-                        }
-                        Preconditions
-                                .checkState(originReplica.getState() == ReplicaState.NORMAL, originReplica.getState());
-                        // replica's init state is ALTER, so that tablet report process will ignore its report
-                        Replica shadowReplica = new Replica(shadowReplicaId, backendId, ReplicaState.ALTER,
-                                Partition.PARTITION_INIT_VERSION,
-                                newSchemaHash);
-                        shadowTablet.addReplica(shadowReplica);
-                        healthyReplicaNum++;
-                    }
-
-                    if (healthyReplicaNum < replicationNum / 2 + 1) {
-                        /*
-                         * TODO(cmy): This is a bad design.
-                         * Because in the schema change job, we will only send tasks to the shadow replicas that
-                         * have been created, without checking whether the quorum of replica number are satisfied.
-                         * This will cause the job to fail until we find that the quorum of replica number
-                         * is not satisfied until the entire job is done.
-                         * So here we check the replica number strictly and do not allow to submit the job
-                         * if the quorum of replica number is not satisfied.
-                         */
-                        for (Tablet tablet : addedTablets) {
-                            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
-                        }
-                        throw new DdlException(
-                                "tablet " + originTabletId + " has few healthy replica: " + healthyReplicaNum);
-                    }
-                }
-
-                schemaChangeJob.addPartitionShadowIndex(partitionId, shadowIndexId, shadowIndex);
-            } // end for partition
-            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newSchemaVersion, newSchemaHash,
-                    newShortKeyColumnCount, entry.getValue());
-        } // end for index
+        AlterJobV2 schemaChangeJob = jobBuilder.build();
 
         // set table state
         olapTable.setState(OlapTableState.SCHEMA_CHANGE);

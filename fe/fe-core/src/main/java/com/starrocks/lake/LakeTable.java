@@ -4,6 +4,8 @@ package com.starrocks.lake;
 
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
+import com.starrocks.alter.AlterJobV2Builder;
+import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -123,5 +125,10 @@ public class LakeTable extends OlapTable {
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
         return replay ? null : new DeleteLakeTableTask(this);
+    }
+
+    @Override
+    public AlterJobV2Builder alterTable() {
+        return new LakeTableAlterJobV2Builder();
     }
 }

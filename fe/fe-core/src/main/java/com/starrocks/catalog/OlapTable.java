@@ -27,7 +27,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
@@ -155,7 +157,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "colocateMv")
     protected Set<String> colocateMaterializedViewNames = Sets.newHashSet();
     @SerializedName(value = "isInColocateMvGroup")
-    protected  boolean isInColocateMvGroup = false;
+    protected boolean isInColocateMvGroup = false;
 
     @SerializedName(value = "indexes")
     protected TableIndexes indexes;
@@ -1878,6 +1880,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public AlterJobV2Builder alterTable() {
+        return new OlapTableAlterJobV2Builder(this);
     }
 
     private static class DeleteOlapTableTask implements Runnable {
