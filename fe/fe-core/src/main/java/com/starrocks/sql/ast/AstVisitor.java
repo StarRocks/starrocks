@@ -52,6 +52,7 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FrontendClause;
@@ -437,6 +438,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropUserStatement(DropUserStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

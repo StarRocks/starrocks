@@ -144,6 +144,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | DROP USER user                                                                        #dropUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -364,7 +365,7 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-    
+
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
