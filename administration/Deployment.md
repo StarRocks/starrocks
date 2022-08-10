@@ -2,7 +2,7 @@
 
 本文介绍如何部署 StarRocks 集群 FE 节点高可用集群。
 
-FE 的高可用集群采用主从复制架构，可避免 FE 单点故障。FE 采用了类 Raft 的 Berkeley DB Java Edition（BDBJE）协议完成选主，日志复制和故障切换。在 FE 集群中，多实例分为两种角色：Follower 和 Observer。前者为复制协议的可投票成员，参与选主和提交日志，一般数量为奇数（2n+1），使用多数派（n+1）确认，可容忍少数派（n）故障；后者属于非投票成员，用于异步订阅复制日志，Observer 的状态落后于 Follower，类似其他复制协议中的 Learner 角色。
+FE 的高可用集群采用主从复制架构，可避免 FE 单点故障。FE 采用了类 Paxos 的 Berkeley DB Java Edition（BDBJE）协议完成选主，日志复制和故障切换。在 FE 集群中，多实例分为两种角色：Follower 和 Observer。前者为复制协议的可投票成员，参与选主和提交日志，一般数量为奇数（2n+1），使用多数派（n+1）确认，可容忍少数派（n）故障；后者属于非投票成员，用于异步订阅复制日志，Observer 的状态落后于 Follower，类似其他复制协议中的 Learner 角色。
 
 FE 集群从 Follower 中自动选出 Leader 节点，所有更改状态操作都由 Leader 节点执行。最新状态可以从 FE Leader 节点读取。更改操作可以由非 Leader 节点发起，继而转发给 Leader 节点执行，非 Leader 节点在复制日志中的 LSN 记录最近一次更改操作。读操作可以直接在非 Leader 节点上执行，但需要等待非 Leader 节点的状态已经同步到最近一次更改操作的 LSN，因此非 Leader 节点的读写操作满足顺序一致性。Observer 节点能够增加 FE 集群的读负载能力，对时效性要求放宽的非紧要用户可以选择读 Observer 节点。
 
