@@ -15,6 +15,9 @@ ColumnRef::ColumnRef(const SlotDescriptor* desc) : Expr(desc->type(), true), _co
 ColumnRef::ColumnRef(const TypeDescriptor& type, SlotId slot) : Expr(type, true), _column_id(slot) {}
 
 int ColumnRef::get_slot_ids(std::vector<SlotId>* slot_ids) const {
+    if(_column_id ==0 && _tuple_id ==0) {
+        return 0;
+    }
     slot_ids->push_back(_column_id);
     return 1;
 }
@@ -41,8 +44,15 @@ ColumnPtr ColumnRef::evaluate(ExprContext* context, Chunk* ptr) {
 
 vectorized::ColumnPtr& ColumnRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
     ColumnRef* ref = (ColumnRef*)expr;
-    ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
-    return column;
+    if (!chunk->is_slot_exist(ref->slot_id())) {
+        ColumnPtr& column = (chunk)->get_column_by_slot_id(111);
+        return column;
+    } else {
+        auto str = ref->debug_string();
+        DCHECK(str.size() > 0);
+        ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
+        return column;
+    }
 }
 
 } // namespace starrocks::vectorized

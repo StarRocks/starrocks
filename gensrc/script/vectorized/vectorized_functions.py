@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # encoding: utf-8
 
 # This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
@@ -747,4 +747,7 @@ vectorized_functions = [
 
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
+
+    [160100, 'transform','ANY_ARRAY',['ANY_ARRAY'],'ArrayFunctions::transform'],
+    [160101, 'transform','ANY_ARRAY',['ANY_ARRAY','FUNCTION'],'ArrayFunctions::transform'],
 ]

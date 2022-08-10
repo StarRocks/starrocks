@@ -23,6 +23,8 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LambdaArguments;
+import com.starrocks.analysis.LambdaFunction;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
@@ -61,6 +63,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -175,9 +178,12 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Void context) {
+            if (node.getTblNameWithoutAnalyzed().getTbl() == "select") {
+                return new ColumnRefOperator(-1, node.getType(), node.getColumnName(), node.isNullable(), true);
+            }
             ResolvedField resolvedField =
                     expressionMapping.getScope().resolveField(node, expressionMapping.getOuterScopeRelationId());
-
+            // TODO(fzh) how to bind the relations between resolvedField and columnRefIndex?
             ColumnRefOperator columnRefOperator =
                     expressionMapping.getColumnRefWithIndex(resolvedField.getRelationFieldIndex());
 
@@ -233,6 +239,19 @@ public final class SqlToScalarOperatorTranslator {
                     Type.JSON,
                     arguments,
                     func);
+        }
+
+        @Override
+        public ScalarOperator visitLambdaFunction(LambdaFunction node, Void context) {
+            Preconditions.checkArgument(node.getChildren().size() == 2);
+            LambdaArguments args = (LambdaArguments) node.getChild(0);
+            List<ColumnRefOperator> refs = Lists.newArrayList();
+            for (int i = 0; i < args.getNames().size(); ++i) {
+                ColumnRefOperator ref = new ColumnRefOperator(-i - 1, args.getTypes().get(i), args.getNames().get(i), true, true);
+                refs.add(ref);
+            }
+            ScalarOperator arg = visit(node.getChild(1));
+            return new LambdaFunctionOperator(refs, arg, Type.FUNCTION);
         }
 
         @Override

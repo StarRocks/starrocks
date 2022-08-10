@@ -1,9 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.CTERelation;
 
 import java.util.List;
@@ -20,9 +23,43 @@ public class Scope {
     private final RelationFields relationFields;
     private final Map<String, CTERelation> cteQueries = Maps.newLinkedHashMap();
 
+    private List<String> lambdaArgumentNames = Lists.newArrayList();
+
+    private List<Type> lambdaInputTypes = Lists.newArrayList();
+
+    private boolean isLambdaScope = false;
+
     public Scope(RelationId relationId, RelationFields relation) {
         this.relationId = relationId;
         this.relationFields = relation;
+    }
+
+    public Scope(List<Type> typeList, List<String> nameList, Scope parent) {
+        this.relationId = RelationId.anonymous();
+        List<Field> fieldList = Lists.newArrayList();
+        for (int i = 0; i < typeList.size(); ++i) {
+            fieldList.add(new Field(nameList.get(i), typeList.get(i), new TableName("select", "select"),
+                    null, false));
+        }
+        relationFields = new RelationFields(fieldList);
+        this.parent = parent;
+        isLambdaScope = true;
+    }
+
+    public Scope getLambdaScope() {
+        return new Scope(lambdaInputTypes, lambdaArgumentNames, this);
+    }
+
+    public void setLambdaInputTypes(List<Type> inputTypes) {
+        lambdaInputTypes = inputTypes;
+    }
+
+    public List<Type> getLambdaInputTypes() {
+        return lambdaInputTypes;
+    }
+
+    public void putLambdaArg(String name) {
+        lambdaArgumentNames.add(name);
     }
 
     public RelationId getRelationId() {
@@ -63,7 +100,7 @@ public class Scope {
         } else {
             if (parent != null
                     //Correlated subqueries currently only support accessing properties in the first level outer layer
-                    && !relationId.equals(outerRelationId)) {
+                    && !relationId.equals(outerRelationId) || isLambdaScope) {
                 return parent.resolveField(expression, fieldIndexOffset + relationFields.getAllFields().size(),
                         outerRelationId);
             }

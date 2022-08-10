@@ -295,6 +295,9 @@ public class SlotRef extends Expr {
 
     @Override
     public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
+        if (getTblNameWithoutAnalyzed().getTbl() == "select") { // skip lambda argument
+            return;
+        }
         Preconditions.checkState(type.isValid());
         Preconditions.checkState(desc != null);
         if (slotIds != null) {

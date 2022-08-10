@@ -897,6 +897,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return this instanceof LiteralExpr;
     }
 
+    public boolean isLambdaArg() {
+        return this instanceof LambdaArguments;
+    }
     /**
      * Returns true if this expression should be treated as constant. I.e. if the frontend
      * and backend should assume that two evaluations of the expression within a query will
@@ -1316,6 +1319,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public void setFn(Function fn) {
         this.fn = fn;
+    }
+
+    public boolean hasLambdaFunction() {
+        if (children.size() < 2) {
+            return false;
+        }
+        return children.get(children.size()-1) instanceof LambdaFunction;
     }
 
     public boolean isSelfMonotonic() {
