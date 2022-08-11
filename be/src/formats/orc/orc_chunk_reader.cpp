@@ -1956,6 +1956,7 @@ void OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>&
             }
         }
     }
+
     if (ok) {
         builder->end();
         std::unique_ptr<orc::SearchArgument> sargs = builder->build();
