@@ -29,10 +29,10 @@ public class CTEPlanTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 2000000);
     }
 

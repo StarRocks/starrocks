@@ -44,7 +44,7 @@ public class ShowLoadStmtTest {
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD");
-        Assert.assertEquals("SHOW LOAD FROM `default_cluster:test`", stmt.toString());
+        Assert.assertEquals("SHOW LOAD FROM `test`", stmt.toString());
         stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
         Assert.assertEquals("SHOW LOAD FROM `test`", stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();

@@ -1371,7 +1371,7 @@ public class PlanTestBase {
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        return globalStateMgr.getDb("default_cluster:test").getTable(t);
+        return globalStateMgr.getDb("test").getTable(t);
     }
 
     public OlapTable getOlapTable(String t) {

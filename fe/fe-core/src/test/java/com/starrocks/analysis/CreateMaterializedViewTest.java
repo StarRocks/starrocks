@@ -211,7 +211,7 @@ public class CreateMaterializedViewTest {
                         "properties('replication_num'='1');")
                 .useDatabase("test");
         currentState = GlobalStateMgr.getCurrentState();
-        testDb = currentState.getDb("default_cluster:test");
+        testDb = currentState.getDb("test");
     }
 
     private void dropMv(String mvName) throws Exception {
@@ -1519,7 +1519,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Can not find database:default_cluster:db1", e.getMessage());
+            Assert.assertEquals("Can not find database:db1", e.getMessage());
         }
     }
 

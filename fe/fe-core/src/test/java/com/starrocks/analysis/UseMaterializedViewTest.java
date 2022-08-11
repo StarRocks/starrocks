@@ -110,7 +110,7 @@ public class UseMaterializedViewTest {
     public void testDropMaterializedView() {
         String sql = "drop materialized view mv_to_drop";
         try {
-            Database database = starRocksAssert.getCtx().getGlobalStateMgr().getDb("default_cluster:test");
+            Database database = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
             Assert.assertTrue(database != null);
             Table table = database.getTable("mv_to_drop");
             Assert.assertTrue(table != null);

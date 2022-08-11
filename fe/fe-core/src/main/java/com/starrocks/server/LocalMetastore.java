@@ -342,8 +342,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
-        // used for remove cluster from stmt
-        dbName = ClusterNamespace.getFullName(dbName);
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -391,8 +389,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-        // used for remove cluster from stmt
-        dbName = ClusterNamespace.getFullName(dbName);
         // 1. check if database exists
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -510,8 +506,8 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
         }
 
-        // used for remove cluster from stmt
-        Database db = recycleBin.recoverDatabase(ClusterNamespace.getFullName(recoverStmt.getDbName()));
+
+        Database db = recycleBin.recoverDatabase(recoverStmt.getDbName());
 
         // add db to globalStateMgr
         if (!tryLock(false)) {
@@ -653,9 +649,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
-        // used for remove cluster from stmt
-        String fullDbName = ClusterNamespace.getFullName(stmt.getDbName());
-        String newFullDbName = ClusterNamespace.getFullName(stmt.getNewDbName());
+        String fullDbName = stmt.getDbName();
+        String newFullDbName = stmt.getNewDbName();
 
         if (fullDbName.equals(newFullDbName)) {
             throw new DdlException("Same database name");
@@ -2827,8 +2822,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public Database getDb(String name) {
-        // used for remove cluster from stmt
-        name = ClusterNamespace.getFullName(name);
         if (name == null) {
             return null;
         }
@@ -2841,7 +2834,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                return fullNameToDb.get(ClusterNamespace.getFullName(dbName.toLowerCase()));
+                return fullNameToDb.get(dbName.toLowerCase());
             }
         }
         return null;

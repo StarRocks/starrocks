@@ -333,7 +333,7 @@ public class MaterializedViewTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable baseTable = ((OlapTable) testDb.getTable("tbl1"));
 
         RangePartitionInfo partitionInfo = generateRangePartitionInfo(testDb, baseTable);
@@ -410,7 +410,7 @@ public class MaterializedViewTest {
         String alterSql = "alter materialized view mv_to_rename rename mv_new_name;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterSql);
         stmtExecutor.execute();
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_new_name"));
         Assert.assertNotNull(mv);
         Assert.assertEquals("mv_new_name", mv.getName());
@@ -462,7 +462,7 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_drop group by k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
         String dropSql = "drop table tbl_drop;";
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, dropSql);
@@ -565,7 +565,7 @@ public class MaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select /*+ SET_VAR(query_timeout = 500) */ k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_with_hint"));
         String mvTaskName = "mv-" + mv.getId();
         Task task = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName);

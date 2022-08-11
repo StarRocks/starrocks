@@ -57,7 +57,7 @@ public class InsertOverwriteJobRunnerTest {
 
     @Test
     public void testReplayInsertOverwrite() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:insert_overwrite_test");
+        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
@@ -97,7 +97,7 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
-        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:insert_overwrite_test");
+        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;

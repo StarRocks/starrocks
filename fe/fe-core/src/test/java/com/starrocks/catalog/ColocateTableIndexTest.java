@@ -43,9 +43,15 @@ public class ColocateTableIndexTest {
         List<List<String>> infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         // group1->table1_1
         Assert.assertEquals(1, infos.size());
+<<<<<<< HEAD
         Assert.assertTrue(infos.get(0).get(1).contains("group1"));
         Table table1_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_1");
         Assert.assertEquals(String.format("%d", table1_1.getId()), infos.get(0).get(2));
+=======
+        Map<String, List<String>> map = groupByName(infos);
+        Table table1_1 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_1");
+        Assert.assertEquals(String.format("%d", table1_1.getId()), map.get("group1").get(2));
+>>>>>>> 866275b05 (remove default_cluster from default_cluster:db (#9403))
         LOG.info("after create db1.table1_1: {}", infos);
 
         // create table1_2->group1
@@ -59,9 +65,15 @@ public class ColocateTableIndexTest {
         // group1 -> table1_1, table1_2
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(1, infos.size());
+<<<<<<< HEAD
         Assert.assertTrue(infos.get(0).get(1).contains("group1"));
         Table table1_2 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_2");
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), infos.get(0).get(2));
+=======
+        map = groupByName(infos);
+        Table table1_2 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_2");
+        Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
+>>>>>>> 866275b05 (remove default_cluster from default_cluster:db (#9403))
         LOG.info("after create db1.table1_2: {}", infos);
 
         // create db2
@@ -80,11 +92,18 @@ public class ColocateTableIndexTest {
         // group2 -> table2_l
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(2, infos.size());
+<<<<<<< HEAD
         Assert.assertTrue(infos.get(0).get(1).contains("group1"));
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), infos.get(0).get(2));
         Table table2_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getTable("table2_1");
         Assert.assertTrue(infos.get(1).get(1).contains("group2"));
         Assert.assertEquals(String.format("%d", table2_1.getId()), infos.get(1).get(2));
+=======
+        map = groupByName(infos);
+        Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
+        Table table2_1 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_1");
+        Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
+>>>>>>> 866275b05 (remove default_cluster from default_cluster:db (#9403))
         LOG.info("after create db2.table2_1: {}", infos);
 
         // drop db1.table1_1
@@ -128,6 +147,33 @@ public class ColocateTableIndexTest {
         Assert.assertTrue(infos.get(1).get(1).contains("group2"));
         Assert.assertEquals(String.format("%d*", table2_1.getId()), infos.get(1).get(2));
         LOG.info("after drop db2: {}", infos);
+<<<<<<< HEAD
+=======
+
+        // create & drop db2 again
+        createDbStmtStr = "create database db2;";
+        createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        // create table2_1 -> group2
+        sql = "CREATE TABLE db2.table2_3 (k1 int, k2 int, k3 varchar(32))\n" +
+                "PRIMARY KEY(k1)\n" +
+                "DISTRIBUTED BY HASH(k1)\n" +
+                "BUCKETS 4\n" +
+                "PROPERTIES(\"colocate_with\"=\"group3\", \"replication_num\" = \"1\");\n";
+        createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Table table2_3 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_3");
+        sql = "DROP DATABASE db2;";
+        dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
+        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        map = groupByName(infos);
+        LOG.info("after create & drop db2: {}", infos);
+        Assert.assertEquals(3, infos.size());
+        Assert.assertEquals(String.format("%d*, %d*", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
+        Assert.assertEquals(String.format("%d*", table2_1.getId()), map.get("group2").get(2));
+        Assert.assertEquals(String.format("%d*", table2_3.getId()), map.get("group3").get(2));
+>>>>>>> 866275b05 (remove default_cluster from default_cluster:db (#9403))
     }
 
     @Test

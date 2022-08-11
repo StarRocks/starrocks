@@ -18,19 +18,19 @@ public class DistributedEnvTPCDSPlanTest extends TPCDSPlanTestBase {
         TPCDSPlanTest.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable customer_address =
-                (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("customer_address");
+                (OlapTable) globalStateMgr.getDb("test").getTable("customer_address");
         setTableStatistics(customer_address, 1000000);
 
-        OlapTable customer = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("customer");
+        OlapTable customer = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
         setTableStatistics(customer, 2000000);
 
-        OlapTable store_sales = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("store_sales");
+        OlapTable store_sales = (OlapTable) globalStateMgr.getDb("test").getTable("store_sales");
         setTableStatistics(store_sales, 287997024);
 
-        OlapTable date_dim = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("date_dim");
+        OlapTable date_dim = (OlapTable) globalStateMgr.getDb("test").getTable("date_dim");
         setTableStatistics(date_dim, 73048);
 
-        OlapTable item = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("item");
+        OlapTable item = (OlapTable) globalStateMgr.getDb("test").getTable("item");
         setTableStatistics(item, 203999);
 
         UtFrameUtils.addMockBackend(10002);

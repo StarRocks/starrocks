@@ -21,7 +21,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getDb("default_cluster:test");
+        Database database = globalStateMgr.getDb("test");
         Table table = database.getTable("lineorder_flat_for_mv");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
@@ -31,7 +31,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     @Test
     public void testKeyColumnsMatch() throws Exception {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getDb("default_cluster:test");
+        Database database = globalStateMgr.getDb("test");
         Table table = database.getTable("lineorder_flat_for_mv");
         OlapTable baseTable = (OlapTable) table;
 
