@@ -29,9 +29,7 @@ public class JDBCScanner {
 
     public void open() throws Exception {
 
-        dataSource = DataSourceCache.getInstance().getSource(driverLocation);
-        if (dataSource == null) {
-            // create new datasource
+        dataSource = DataSourceCache.getInstance().getSource(driverLocation, () -> {
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
             config.setJdbcUrl(scanContext.getJdbcURL());
@@ -39,8 +37,8 @@ public class JDBCScanner {
             config.setPassword(scanContext.getPassword());
             config.setMaximumPoolSize(scanContext.getConnectionPoolSize());
             dataSource = new HikariDataSource(config);
-            DataSourceCache.getInstance().putIfAbsent(driverLocation, dataSource);
-        }
+            return dataSource;
+        });
 
         connection = dataSource.getConnection();
         statement = connection.createStatement();
@@ -69,7 +67,7 @@ public class JDBCScanner {
         int columnCount = resultSetMetaData.getColumnCount();
         List<List<Object>> chunk = new ArrayList<>(columnCount);
         for (int i = 0; i < columnCount; i++) {
-            chunk.add(new ArrayList<Object>(chunkSize));
+            chunk.add(new ArrayList<>(chunkSize));
         }
         int numRows = 0;
         do {
@@ -90,9 +88,6 @@ public class JDBCScanner {
         }
         if (connection != null) {
             connection.close();
-        }
-        if (dataSource != null) {
-            DataSourceCache.getInstance().release(driverLocation, dataSource);
         }
     }
 }

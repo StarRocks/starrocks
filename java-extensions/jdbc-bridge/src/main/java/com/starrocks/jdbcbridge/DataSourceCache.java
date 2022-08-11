@@ -4,12 +4,13 @@ package com.starrocks.jdbcbridge;
 
 import com.zaxxer.hikari.HikariDataSource;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 // a cache for get datasource
 public class DataSourceCache {
-    private final Map<String, HikariDataSource> sources = new HashMap<>();
+    private final Map<String, HikariDataSource> sources = new ConcurrentHashMap<>();
     private static final DataSourceCache instance = new DataSourceCache();
 
     public static DataSourceCache getInstance() {
@@ -20,14 +21,16 @@ public class DataSourceCache {
         return sources.get(driverId);
     }
 
-    public synchronized void putIfAbsent(String driverId, HikariDataSource source) {
-        sources.putIfAbsent(driverId, source);
-    }
-
-    public synchronized void release(String driverId, HikariDataSource source) {
-        final HikariDataSource cached = sources.get(driverId);
-        if (cached != source) {
-            source.close();
+    public HikariDataSource getSource(String driverId, Supplier<HikariDataSource> provider) {
+        HikariDataSource targetSource = sources.get(driverId);
+        if (targetSource == null) {
+            synchronized (this) {
+                if (targetSource == null) {
+                    sources.put(driverId, provider.get());
+                }
+            }
+            targetSource = sources.get(driverId);
         }
+        return targetSource;
     }
 }
