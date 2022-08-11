@@ -80,6 +80,10 @@ public class HdfsScanNode extends ScanNode {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+        }
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -114,6 +118,10 @@ public class HdfsScanNode extends ScanNode {
         if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(
