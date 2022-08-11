@@ -416,7 +416,7 @@ public class SubqueryTest extends PlanTestBase {
             String sql = "SELECT * FROM t0\n" +
                     "WHERE t0.v2 > (\n" +
                     "      SELECT t1.v5 FROM t1\n" +
-                    "      WHERE t0.v1 = t1.v4 and t1.v4 = 10\n" +
+                    "      WHERE t0.v1 = t1.v4 and t1.v4 = 10 and t1.v5 < 2\n" +
                     ");";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  7:Project\n" +
@@ -437,11 +437,22 @@ public class SubqueryTest extends PlanTestBase {
                     "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 4: v4\n" +
-                    "  |  other predicates: 4: v4 = 10");
+                    "  |  equal join conjunct: 1: v1 = 4: v4");
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: count(1), any_value(5: v5)\n" +
-                    "  |  group by: 4: v4");
+                    "  |  group by: 4: v4\n" +
+                    "  |  \n" +
+                    "  1:OlapScanNode\n" +
+                    "     TABLE: t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 4: v4 = 10, 5: v5 < 2\n" +
+                    "     partitions=0/1\n" +
+                    "     rollup: t1\n" +
+                    "     tabletRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     cardinality=0\n" +
+                    "     avgRowSize=2.0\n" +
+                    "     numNodes=0");
         }
     }
 

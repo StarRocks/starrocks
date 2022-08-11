@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -112,6 +113,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
             rightChild = OptExpression.create(new LogicalProjectOperator(rightChildProjectMap), rightChild);
         }
 
+        // Non-correlated predicates
+        if (apply.getPredicate() != null) {
+            rightChild = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), rightChild);
+        }
+
         /*
          * Step1: build agg
          *      output: count(1) as countRows, any_value(t1.v2) as anyValue
@@ -150,11 +156,12 @@ public class ScalarApply2JoinRule extends TransformationRule {
         LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
                 .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
                 .setOnPredicate(Utils.compoundAnd(correlationPredicatePair.first))
-                .setPredicate(apply.getPredicate())
                 .build();
         OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
 
-        // Step3: build project
+        /*
+         * Step3: build project
+         */
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         // Other columns
         projectMap.put(countRows, countRows);
