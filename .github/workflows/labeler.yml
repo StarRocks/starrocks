@@ -8,7 +8,7 @@ on:
       - unlabeled
 
 jobs:
-  pr-label:
+  autolabel:
     runs-on: ubuntu-latest
     steps: 
       - uses: dorny/paths-filter@v2
