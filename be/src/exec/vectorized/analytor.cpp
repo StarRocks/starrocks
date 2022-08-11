@@ -579,6 +579,32 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
     DCHECK_GE(_current_row_position, 0);
 }
 
+<<<<<<< HEAD
+=======
+std::string Analytor::debug_string() const {
+    std::stringstream ss;
+    ss << std::boolalpha;
+
+    ss << "current_row_position=" << _current_row_position << ", partition=(" << _partition_start << ", "
+       << _partition_end << ", " << _found_partition_end.second << "/" << _found_partition_end.first
+       << "), peer_group=(" << _peer_group_start << ", " << _peer_group_end << ")"
+       << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")";
+
+    return ss.str();
+}
+
+Status Analytor::check_has_error() {
+    for (const auto* ctx : _agg_fn_ctxs) {
+        if (ctx != nullptr) {
+            if (ctx->has_error()) {
+                return Status::RuntimeError(ctx->error_msg());
+            }
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> f392656e9 ([BugFix] Fix user-defined function get a wrong result (#9887))
 void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                              int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {

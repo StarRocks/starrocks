@@ -77,6 +77,7 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
     _analytor->remove_unused_buffer_values(state);
 
+<<<<<<< HEAD
     for (size_t i = 0; i < _analytor->agg_fn_ctxs().size(); i++) {
         for (size_t j = 0; j < _analytor->agg_expr_ctxs()[i].size(); j++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _analytor->agg_expr_ctxs()[i][j]->evaluate(chunk.get()));
@@ -103,8 +104,12 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     }
 
     _analytor->input_chunks().emplace_back(chunk);
+=======
+    RETURN_IF_ERROR(_analytor->add_chunk(chunk));
+    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
+>>>>>>> f392656e9 ([BugFix] Fix user-defined function get a wrong result (#9887))
 
-    return (this->*_process_by_partition_if_necessary)();
+    return _analytor->check_has_error();
 }
 
 Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_other() {

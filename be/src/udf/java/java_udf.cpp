@@ -884,7 +884,7 @@ void UDAFFunction::reset(int state) {
     auto obj = helper.convert_handle_to_jobject(_function_context, state);
     LOCAL_REF_GUARD(obj);
     jmethodID reset = _ctx->reset->get_method_id();
-    env->CallVoidMethod(_udaf_handle, reset, state);
+    env->CallVoidMethod(_udaf_handle, reset, obj);
     CHECK_UDF_CALL_EXCEPTION(env, _function_context);
 }
 
