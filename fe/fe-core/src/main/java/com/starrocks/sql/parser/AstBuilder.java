@@ -2461,12 +2461,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> colList = null;
         if (context.colList != null) {
             List<Identifier> identifiers = visit(context.colList.identifier(), Identifier.class);
-            colList = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            colList = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
         List<String> colFromPath = null;
         if (context.colFromPath != null) {
             List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
-            colFromPath = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            colFromPath = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
         return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
                 colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
