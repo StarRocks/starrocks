@@ -3,6 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -674,5 +675,36 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "\n" +
                 "  10:OlapScanNode\n" +
                 "     TABLE: customer_demographics");
+    }
+
+    @Test
+    public void testQuery33LeftDeepJoinReorderAvoidInnerJoinOnMaybeSameTable() throws Exception {
+        setTPCDSFactor(1);
+        FeConstants.runningUnitTest = true;
+        SessionVariable sv = connectContext.getSessionVariable();
+        int v = sv.getCboMaxReorderNodeUseExhaustive();
+        sv.setCboMaxReorderNodeUseExhaustive(1);
+        sv.disableDPJoinReorder();
+        sv.disableGreedyJoinReorder();
+        String sql =
+                "select t0.cd_demo_sk, t1.cd_demo_sk from customer_demographics t0 join customer_demographics t1 join store s " +
+                        "on t0.cd_demo_sk = t1.cd_demo_sk and t1.cd_dep_count = s.s_company_id and t0.cd_dep_count = s.s_company_id;";
+        String plan = getFragmentPlan(sql);
+        sv.setCboMaxReorderNodeUseExhaustive(v);
+        sv.enableDPJoinReorder();
+        sv.enableGreedyJoinReorder();
+        FeConstants.runningUnitTest = false;
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: cd_dep_count = 35: s_company_id\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: customer_demographics\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: customer_demographics");
     }
 }

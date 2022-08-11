@@ -846,6 +846,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboDebugAliveBackendNumber;
     }
 
+    public void setCboDebugAliveBackendNumber(int v) {
+        cboDebugAliveBackendNumber = v;
+    }
+
     public long getTransactionVisibleWaitTimeout() {
         return transactionVisibleWaitTimeout;
     }
@@ -856,6 +860,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getCboMaxReorderNodeUseExhaustive() {
         return cboMaxReorderNodeUseExhaustive;
+    }
+
+    public void setCboMaxReorderNodeUseExhaustive(int v) {
+        cboMaxReorderNodeUseExhaustive = v;
     }
 
     public int getNewPlannerAggStage() {
