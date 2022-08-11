@@ -47,7 +47,7 @@ public class RefreshMaterializedViewTest {
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
         String dbName = alterMvStmt.getMvName().getDb();
         String mvName = alterMvStmt.getMvName().getTbl();
-        Assert.assertEquals("default_cluster:test", dbName);
+        Assert.assertEquals("test", dbName);
         Assert.assertEquals("mv_to_refresh", mvName);
     }
 }

@@ -65,10 +65,6 @@ public class TableName implements Writable {
             if (Strings.isNullOrEmpty(db)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
-        } else {
-            if (CatalogMgr.isInternalCatalog(catalog)) {
-                db = ClusterNamespace.getFullName(db);
-            }
         }
 
         if (Strings.isNullOrEmpty(tbl)) {
@@ -89,10 +85,6 @@ public class TableName implements Writable {
                 db = connectContext.getDatabase();
                 if (Strings.isNullOrEmpty(db)) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-                }
-            } else {
-                if (CatalogMgr.isInternalCatalog(catalog)) {
-                    db = ClusterNamespace.getFullName(db);
                 }
             }
 
@@ -145,12 +137,7 @@ public class TableName implements Writable {
         if (db == null) {
             return tbl;
         } else {
-            String dbName = ClusterNamespace.getNameFromFullName(db);
-            if (dbName == null) {
-                return db + "." + tbl;
-            } else {
-                return dbName + "." + tbl;
-            }
+            return db + "." + tbl;
         }
     }
 
@@ -193,12 +180,13 @@ public class TableName implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, db);
+        // compatible with old version
+        Text.writeString(out, ClusterNamespace.getFullName(db));
         Text.writeString(out, tbl);
     }
 
     public void readFields(DataInput in) throws IOException {
-        db = Text.readString(in);
+        db = ClusterNamespace.getNameFromFullName(Text.readString(in));
         tbl = Text.readString(in);
     }
 }

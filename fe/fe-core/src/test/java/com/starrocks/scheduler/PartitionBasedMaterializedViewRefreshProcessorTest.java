@@ -112,7 +112,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     if (tableName.getTbl().equals("tbl1")) {
                         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
                         for (Partition partition : tbl1.getPartitions()) {
@@ -131,7 +131,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 }
             }
         };
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
@@ -193,7 +193,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
     @Test
     public void testInactive() {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
         materializedView.setActive(false);
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
