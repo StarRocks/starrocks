@@ -12,7 +12,7 @@ Release date: July 29, 2022
 
 - A global dictionary supports updates during real-time data ingestion，thus optimizing query performance and doubling query performance of string data.
 
-- The CREATE TABLE AS SELECT statement can be executed asynchronously and write results to a new table. For more information, see [CREATE TABLE AS SELECT](sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md#create-table-as-select).
+- The CREATE TABLE AS SELECT statement can be executed asynchronously and write results to a new table. For more information, see [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md).
 
 - Support the following resource group-related features:
   - Monitor resource groups: You can use the audit log to view a query in which resource group  and call API operations to obtain the monitoring metrics about specific resource groups. For more information, see [Monitor and Alerting](../administration/Monitor_and_Alert.md#monitor-and-alerting).
@@ -25,8 +25,8 @@ Release date: July 29, 2022
 - Add the following functions:
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
   - [ntile](../using_starrocks/Window_function.md)
-  - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)、[base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)、[array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
-  - [week](../sql-reference/sql-functions/date-time-functions/week.md)、[time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
+  - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md), [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md), [array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
+  - [week](../sql-reference/sql-functions/date-time-functions/week.md), [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
 
 ### Improvements
 
@@ -60,7 +60,7 @@ Fix the following bugs:
 
 - Problems cause the "fail to prepare tablet reader" error message to occur.
 
-- The FEs fail to restart.[#5642](https://github.com/StarRocks/starrocks/issues/5642 )、[#4969](https://github.com/StarRocks/starrocks/issues/4969 )、[#5580](https://github.com/StarRocks/starrocks/issues/5580)
+- The FEs fail to restart.[#5642](https://github.com/StarRocks/starrocks/issues/5642 )  [#4969](https://github.com/StarRocks/starrocks/issues/4969 )  [#5580](https://github.com/StarRocks/starrocks/issues/5580)
 
 - The CTAS statement cannot be run successfully when the statement includes a JSON function. [#6498](https://github.com/StarRocks/starrocks/issues/6498)
 
