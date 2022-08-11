@@ -152,6 +152,8 @@ public:
 
     std::string debug_string() const;
 
+    Status check_has_error();
+
 #ifdef NDEBUG
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
 #else
