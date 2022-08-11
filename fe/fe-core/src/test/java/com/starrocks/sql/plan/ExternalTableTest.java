@@ -186,7 +186,7 @@ public class ExternalTableTest extends PlanTestBase {
     @Test
     public void testJoinWithMysqlTable() throws Exception {
         // set data size and row count for the olap table
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("jointest");
         for (Partition partition : tbl.getPartitions()) {
             partition.updateVisibleVersion(2);

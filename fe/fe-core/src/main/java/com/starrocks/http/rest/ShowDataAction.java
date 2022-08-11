@@ -72,7 +72,7 @@ public class ShowDataAction extends RestBaseAction {
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
-            Database db = fullNameToDb.get("default_cluster:" + dbName);
+            Database db = fullNameToDb.get(dbName);
             if (db == null) {
                 response.getContent().append("database " + dbName + " not found.");
                 sendResult(request, response, HttpResponseStatus.NOT_FOUND);

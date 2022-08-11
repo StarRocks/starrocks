@@ -51,16 +51,16 @@ public class DescribeStmtTest {
     public void testDescribeTable() {
         DescribeStmt stmt = new DescribeStmt(new TableName("testDb", "testTbl"), false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("DESCRIBE `default_cluster:testDb.testTbl`", stmt.toString());
+        Assert.assertEquals("DESCRIBE `testDb.testTbl`", stmt.toString());
         Assert.assertEquals(6, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
+        Assert.assertEquals("testDb", stmt.getDb());
         Assert.assertEquals("testTbl", stmt.getTableName());
 
         DescribeStmt stmtAll = new DescribeStmt(new TableName("testDb", "testTbl"), true);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmtAll, ctx);
-        Assert.assertEquals("DESCRIBE `default_cluster:testDb.testTbl` ALL", stmtAll.toString());
+        Assert.assertEquals("DESCRIBE `testDb.testTbl` ALL", stmtAll.toString());
         Assert.assertEquals(6, stmt.getMetaData().getColumnCount());
-        Assert.assertEquals("default_cluster:testDb", stmt.getDb());
+        Assert.assertEquals("testDb", stmt.getDb());
         Assert.assertEquals("testTbl", stmt.getTableName());
     }
 

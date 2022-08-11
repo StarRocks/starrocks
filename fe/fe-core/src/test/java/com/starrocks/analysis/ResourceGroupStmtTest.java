@@ -181,7 +181,7 @@ public class ResourceGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -403,7 +403,7 @@ public class ResourceGroupStmtTest {
         starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
         starRocksAssert.getCtx().setRemoteIP(remoteIp);
         {
-            long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId();
+            long dbId = GlobalStateMgr.getCurrentState().getDb("db1").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
             ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
@@ -412,7 +412,7 @@ public class ResourceGroupStmtTest {
             Assert.assertEquals("rg5", wg.getName());
         }
         {
-            long dbId = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId();
+            long dbId = GlobalStateMgr.getCurrentState().getDb("db2").getId();
             Set<Long> dbIds = ImmutableSet.of(dbId);
             ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
@@ -423,8 +423,8 @@ public class ResourceGroupStmtTest {
         }
         {
             Set<Long> dbIds = ImmutableSet.of(
-                    GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getId(),
-                    GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getId());
+                    GlobalStateMgr.getCurrentState().getDb("db1").getId(),
+                    GlobalStateMgr.getCurrentState().getDb("db2").getId());
             ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     starRocksAssert.getCtx(),
                     ResourceGroupClassifier.QueryType.SELECT,
@@ -446,7 +446,7 @@ public class ResourceGroupStmtTest {
                 starRocksAssert.getCtx(), false);
         String result = rowsToString(rows);
         String expect = "" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')\n" +
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
                 "rg1|10|20.0%|0|0|0|11|NORMAL|(weight=4.459375, user=rg1_user1, role=rg1_role1, query_type in (SELECT), source_ip=192.168.2.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))";
         Assert.assertEquals(result, expect);
@@ -501,7 +501,7 @@ public class ResourceGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='default_cluster:db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }

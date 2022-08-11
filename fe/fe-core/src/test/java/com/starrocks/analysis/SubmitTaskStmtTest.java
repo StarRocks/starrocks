@@ -49,7 +49,7 @@ public class SubmitTaskStmtTest {
         String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
-        Assert.assertEquals(submitTaskStmt.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt.getDbName(), "test");
         Assert.assertNull(submitTaskStmt.getTaskName());
         Assert.assertEquals(submitTaskStmt.getProperties().size(), 0);
 
@@ -57,7 +57,7 @@ public class SubmitTaskStmtTest {
                 "create table temp as select count(*) as cnt from tbl1";
 
         SubmitTaskStmt submitTaskStmt2 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL2, ctx);
-        Assert.assertEquals(submitTaskStmt2.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt2.getDbName(), "test");
         Assert.assertNull(submitTaskStmt2.getTaskName());
         Assert.assertEquals(submitTaskStmt2.getProperties().size(), 1);
         Map<String, String> properties = submitTaskStmt2.getProperties();
@@ -69,14 +69,14 @@ public class SubmitTaskStmtTest {
         String submitSQL3 = "submit task task_name as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt3 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL3, ctx);
 
-        Assert.assertEquals(submitTaskStmt3.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt3.getDbName(), "test");
         Assert.assertEquals(submitTaskStmt3.getTaskName(), "task_name");
         Assert.assertEquals(submitTaskStmt3.getProperties().size(), 0);
 
         String submitSQL4 = "submit task test.task_name as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt4 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL4, ctx);
 
-        Assert.assertEquals(submitTaskStmt4.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt4.getDbName(), "test");
         Assert.assertEquals(submitTaskStmt4.getTaskName(), "task_name");
         Assert.assertEquals(submitTaskStmt4.getProperties().size(), 0);
     }

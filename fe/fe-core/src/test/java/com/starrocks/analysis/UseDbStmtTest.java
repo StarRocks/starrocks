@@ -63,7 +63,7 @@ public class UseDbStmtTest {
                 result = new Database();
                 minTimes = 0;
 
-                auth.checkDbPriv(ctx, "default_cluster:db", PrivPredicate.SHOW);
+                auth.checkDbPriv(ctx, "db", PrivPredicate.SHOW);
                 result = true;
             }
         };
@@ -73,6 +73,6 @@ public class UseDbStmtTest {
         executor.execute();
 
         Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
-        Assert.assertEquals("default_cluster:db", ctx.getDatabase());
+        Assert.assertEquals("db", ctx.getDatabase());
     }
 }

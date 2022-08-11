@@ -564,7 +564,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze();
@@ -587,7 +587,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze();
@@ -629,7 +629,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db_mv");
+        starRocksAssert.getCtx().setDatabase("db_mv");
 
         TablePattern db1TablePattern = new TablePattern("db_mv", "*");
         db1TablePattern.analyze();
@@ -652,7 +652,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("db1");
 
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze();
@@ -675,7 +675,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setQualifiedUser("test");
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
         starRocksAssert.getCtx().setRemoteIP("%");
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("db1");
         TablePattern db1TablePattern = new TablePattern("*", "*");
         db1TablePattern.analyze();
 
@@ -804,7 +804,7 @@ public class PrivilegeCheckerTest {
         TablePattern pattern = new TablePattern("*", "*");
         pattern.analyze();
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("db1");
 
         String sql = "grant impersonate on test2 to test";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -820,7 +820,7 @@ public class PrivilegeCheckerTest {
     public void testExecuteAs() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
-        starRocksAssert.getCtx().setDatabase("default_cluster:db1");
+        starRocksAssert.getCtx().setDatabase("db1");
 
         String sql = "execute as test2 with no revert";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());

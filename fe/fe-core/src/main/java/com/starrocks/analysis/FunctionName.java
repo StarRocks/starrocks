@@ -119,8 +119,6 @@ public class FunctionName implements Writable {
         String db = db_;
         if (db == null) {
             db = analyzer.getDefaultDb();
-        } else {
-            db = ClusterNamespace.getFullName(db);
         }
         return db;
     }
@@ -144,8 +142,6 @@ public class FunctionName implements Writable {
             if (Strings.isNullOrEmpty(db_)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
-        } else {
-            db_ = ClusterNamespace.getFullName(db_);
         }
     }
 
@@ -164,7 +160,8 @@ public class FunctionName implements Writable {
     public void write(DataOutput out) throws IOException {
         if (db_ != null) {
             out.writeBoolean(true);
-            Text.writeString(out, db_);
+            // compatible with old version
+            Text.writeString(out, ClusterNamespace.getFullName(db_));
         } else {
             out.writeBoolean(false);
         }
@@ -173,7 +170,8 @@ public class FunctionName implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         if (in.readBoolean()) {
-            db_ = Text.readString(in);
+            // compatible with old version
+            db_ = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
         fn_ = Text.readString(in);
     }

@@ -265,7 +265,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
-import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -1114,7 +1113,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
                     properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
+            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
                     qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
             throw new ParsingException("error task name ");

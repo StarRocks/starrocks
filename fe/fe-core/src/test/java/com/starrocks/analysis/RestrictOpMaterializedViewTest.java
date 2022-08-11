@@ -127,7 +127,7 @@ public class RestrictOpMaterializedViewTest {
         String sql1 = "LOAD LABEL db1.label0 (DATA INFILE('/path/file1') INTO TABLE mv1) with broker 'broker0';";
         try {
             LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql1, ctx.getSessionVariable().getSqlMode()).get(0);
-            Deencapsulation.setField(loadStmt, "label", new LabelName("default_cluster:db1", "mv1"));
+            Deencapsulation.setField(loadStmt, "label", new LabelName("db1", "mv1"));
             com.starrocks.sql.analyzer.Analyzer.analyze(loadStmt, ctx);
             Assert.fail();
         } catch (Exception e) {
@@ -137,12 +137,12 @@ public class RestrictOpMaterializedViewTest {
 
     @Test
     public void testRoutineLoad() {
-        LabelName labelName = new LabelName("default_cluster:db1", "job1");
+        LabelName labelName = new LabelName("db1", "job1");
         CreateRoutineLoadStmt createRoutineLoadStmt = new CreateRoutineLoadStmt(labelName, "mv1",
                 new ArrayList<>(), Maps.newHashMap(),
                 LoadDataSourceType.KAFKA.name(), Maps.newHashMap());
 
-        Deencapsulation.setField(createRoutineLoadStmt, "dbName", "default_cluster:db1");
+        Deencapsulation.setField(createRoutineLoadStmt, "dbName", "db1");
 
         try {
             KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
