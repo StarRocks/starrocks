@@ -68,3 +68,4 @@
 - 【Preview】提供集群管理工具 StarGo，提供集群部署、启停、升级、回滚、多集群管理等多种能力。相关文档，请参见[通过 StarGo 部署 StarRocks 集群](../administration/stargo.md)。
 - 支持在 AWS 上使用 CloudFormation 快速创建 StarRocks 集群。相关文档，请参见[在 AWS 上使用 AWS CloudFormation 部署 StarRocks 集群](../administration/AWS_cloudformation.md)。
 - 部署或者升级至 2.3 版本，默认开启 Pipeline 执行引擎，预期在高并发小查询、复杂大查询场景下获得明显的性能优势。如果使用 2.3 版本时遇到明显的性能回退，则可以通过设置 `SET GLOBAL enable_pipeline_engine = false;`，关闭 Pipeline 执行引擎。
+- [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 语句兼容 MySQL语法，返回授予用户权限的 GRANT 语句。
