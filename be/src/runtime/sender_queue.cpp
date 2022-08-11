@@ -665,26 +665,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                        ::google::protobuf::Closure** done) {
+    DCHECK(!request.has_is_pipeline_level_shuffle() || !request.is_pipeline_level_shuffle());
     bool use_pass_through = request.use_pass_through();
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
-    if (_is_cancelled) {
-        return Status::OK();
-    }
-
-    {
-        std::lock_guard<Mutex> l(_lock);
-
-        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
-            _max_processed_sequences[be_number] = -1;
-        }
-
-        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
-            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkList>();
-        }
-    }
-
     if (_is_cancelled || _num_remaining_senders <= 0) {
         return Status::OK();
     }
@@ -693,6 +678,14 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
     {
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
+
+        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
+            _max_processed_sequences[be_number] = -1;
+        }
+
+        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
+            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkList>();
+        }
         // We only need to build chunk meta on first chunk and not use_pass_through
         // By using pass through, chunks are transmitted in shared memory without ser/deser
         // So there is no need to build chunk meta.
@@ -706,7 +699,6 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
     ChunkList local_chunk_queue;
-    _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
 
     if (use_pass_through) {
         ChunkUniquePtrVector swap_chunks;
@@ -732,11 +724,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
     } else {
         for (auto i = 0; i < request.chunks().size(); i++) {
             auto& pchunk = request.chunks().Get(i);
-            int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            local_chunk_queue.emplace_back(ChunkItem::create(chunk_bytes, driver_sequence, nullptr, std::move(chunk)));
+            local_chunk_queue.emplace_back(ChunkItem::create(chunk_bytes, -1, nullptr, std::move(chunk)));
             total_chunk_bytes += chunk_bytes;
         }
         COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
@@ -775,30 +766,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
             // Now, all the packets with sequance <= unprocessed_sequence have been received
             // so chunks of unprocessed_sequence can be flushed to ready queue
             for (auto& item : unprocessed_chunk_queue) {
-                // This chunks may contains different driver_sequence when enable local pass through
-                // So we use driver_sequence of each chunk instead of request's driver_sequence
-                if (_is_pipeline_level_shuffle) {
-                    // Some pipelines may be short-circuit, so we just drop the chunk we received
-                    if (_short_circuit_driver_sequences.find(item.driver_sequence) !=
-                        _short_circuit_driver_sequences.end()) {
-                        // We may buffered closure in last reception, but the branch of the driver_sequence may
-                        // become short-circuit now, so we make sure to invoke the closure
-                        if (item.closure != nullptr) {
-                            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
-                            item.closure->Run();
-                        }
-                        continue;
-                    }
-                    size_t chunk_bytes = item.chunk_bytes;
-                    _chunk_queues[item.driver_sequence].enqueue(std::move(item));
-                    _total_chunks++;
-                    _recvr->_num_buffered_bytes += chunk_bytes;
-                } else {
-                    size_t chunk_bytes = item.chunk_bytes;
-                    _chunk_queues[0].enqueue(*_producer_token, std::move(item));
-                    _total_chunks++;
-                    _recvr->_num_buffered_bytes += chunk_bytes;
-                }
+                size_t chunk_bytes = item.chunk_bytes;
+                _chunk_queues[0].enqueue(*_producer_token, std::move(item));
+                _total_chunks++;
+                _recvr->_num_buffered_bytes += chunk_bytes;
             }
 
             chunk_queues.erase(it);
