@@ -49,6 +49,7 @@ import com.starrocks.persist.StorageInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -345,15 +346,17 @@ public class NodeMgr {
             }
             getNewImageOnStartup(rightHelperNode, "");
             if (Config.integrate_starmgr) { // get star mgr image
-                // do nothing for now
                 // subdir might not exist
-                // String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
-                // File dir = new File(subDir);
-                // if (!dir.exists()) {
-                //     LOG.info("create image dir for {}.", dir.getAbsolutePath());
-                //     dir.mkdir();
-                // }
-                // getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
+                String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+                File dir = new File(subDir);
+                if (!dir.exists()) { // subDir might not exist
+                    LOG.info("create image dir for {}.", dir.getAbsolutePath());
+                    if (!dir.mkdir()) {
+                        LOG.error("create image dir for star mgr failed! exit now.");
+                        System.exit(-1);
+                    }
+                }
+                getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
             }
         }
 
@@ -665,9 +668,9 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, editLogPort);
-            if (fe != null) {
-                throw new DdlException("frontend already exists " + fe);
+            Frontend fe = getFeByHost(host);
+            if (null != fe) {
+                throw new DdlException("frontend use host [" + host + "] already exists ");
             }
 
             String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);

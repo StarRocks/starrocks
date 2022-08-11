@@ -45,6 +45,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -55,6 +56,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -224,7 +226,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         int totalReplicaNum = 0;
         for (MaterializedIndex shadowIdx : partitionIndexMap.values()) {
             for (Tablet tablet : shadowIdx.getTablets()) {
-                totalReplicaNum += ((LocalTablet) tablet).getReplicas().size();
+                totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
@@ -270,7 +272,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
-                        List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getReplicas();
+                        List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         for (Replica shadowReplica : shadowReplicas) {
                             long backendId = shadowReplica.getBackendId();
                             countDownLatch.addMark(backendId, shadowTabletId);
@@ -307,7 +309,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     Config.max_create_table_timeout_second * 1000L);
             boolean ok = false;
             try {
-                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
+                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
                 ok = false;
@@ -434,7 +436,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         long originTabletId = partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId);
-                        for (Replica shadowReplica : ((LocalTablet) shadowTablet).getReplicas()) {
+                        for (Replica shadowReplica : ((LocalTablet) shadowTablet).getImmutableReplicas()) {
                             AlterReplicaTask rollupTask = new AlterReplicaTask(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, originIdxId,
@@ -525,7 +527,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     MaterializedIndex shadowIdx = entry.getValue();
 
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
-                        List<Replica> replicas = ((LocalTablet) shadowTablet).getReplicas();
+                        List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
                             if (replica.getLastFailedVersion() < 0
@@ -561,6 +563,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     private void onFinished(OlapTable tbl) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        // 
+        // partition visible version won't update in schema change, so we need make global
+        // dictionary invalid after schema change.
+        for (Column column : tbl.getColumns()) {
+            if (Type.VARCHAR.equals(column.getType())) {
+                IDictManager.getInstance().removeGlobalDict(tbl.getId(), column.getName());
+            }
+        }
         // replace the origin index with shadow index, set index state as NORMAL
         for (Partition partition : tbl.getPartitions()) {
             TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium();
@@ -590,7 +600,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash, medium);
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
-                    for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         // set the replica state from ReplicaState.ALTER to ReplicaState.NORMAL since the schema change is done.
                         replica.setState(ReplicaState.NORMAL);
                         invertedIndex.addReplica(tablet.getId(), replica);
@@ -740,7 +750,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                 for (Tablet shadownTablet : shadowIndex.getTablets()) {
                     invertedIndex.addTablet(shadownTablet.getId(), shadowTabletMeta);
-                    for (Replica shadowReplica : ((LocalTablet) shadownTablet).getReplicas()) {
+                    for (Replica shadowReplica : ((LocalTablet) shadownTablet).getImmutableReplicas()) {
                         invertedIndex.addReplica(shadownTablet.getId(), shadowReplica);
                     }
                 }

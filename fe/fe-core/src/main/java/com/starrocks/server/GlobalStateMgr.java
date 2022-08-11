@@ -29,8 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.alter.Alter;
-import com.starrocks.alter.AlterJob;
-import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -95,7 +93,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.MysqlTable;
@@ -261,7 +258,6 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -306,7 +302,7 @@ public class GlobalStateMgr {
     private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
     private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
-    private JournalWriter journalWriter; // master only: write journal log
+    private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
@@ -479,7 +475,7 @@ public class GlobalStateMgr {
         return feStartTime;
     }
 
-    public ConnectorMetadata getLocalMetastore() {
+    public LocalMetastore getLocalMetastore() {
         return localMetastore;
     }
 
@@ -688,6 +684,10 @@ public class GlobalStateMgr {
     // use this to get correct ClusterInfoService instance
     public static SystemInfoService getCurrentSystemInfo() {
         return getCurrentState().getClusterInfo();
+    }
+
+    public static StarOSAgent getCurrentStarOSAgent() {
+        return getCurrentState().getStarOSAgent();
     }
 
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
@@ -934,18 +934,13 @@ public class GlobalStateMgr {
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
-            long replayStartTime = System.currentTimeMillis();
-            // replay journals. -1 means replay all the journals larger than current journal id.
-            replayJournal(JournalCursor.CUROSR_END_KEY);
-            long replayEndTime = System.currentTimeMillis();
-            LOG.info("finish replay in " + (replayEndTime - replayStartTime) + " msec");
-
+            long maxJournalId = journal.getMaxJournalId();
+            replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
-
-            journalWriter.init(journal.getMaxJournalId());
+            journalWriter.init(maxJournalId);
         } catch (Exception e) {
             // TODO: gracefully exit
-            LOG.error("failed to init journal after transfer to master! will exit", e);
+            LOG.error("failed to init journal after transfer to leader! will exit", e);
             System.exit(-1);
         }
 
@@ -978,8 +973,8 @@ public class GlobalStateMgr {
                 initDefaultCluster();
             }
 
-            // MUST set master ip before starting checkpoint thread.
-            // because checkpoint thread need this info to select non-master FE to push image
+            // MUST set leader ip before starting checkpoint thread.
+            // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
 
             // start all daemon threads that only running on MASTER FE
@@ -993,13 +988,13 @@ public class GlobalStateMgr {
             canRead.set(true);
             isReady.set(true);
 
-            String msg = "master finished to replay journal, can write now.";
+            String msg = "leaer finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
-            // for master, there are some new thread pools need to register metric
+            // for leader, there are some new thread pools need to register metric
             ThreadPoolManager.registerAllThreadPoolMetric();
         } catch (Throwable t) {
-            LOG.warn("transfer to master failed with error", t);
+            LOG.warn("transfer to leader failed with error", t);
             feType = oldType;
             throw t;
         }
@@ -1260,8 +1255,8 @@ public class GlobalStateMgr {
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
         long newChecksum = checksum;
-        for (JobType type : JobType.values()) {
-            if (type == JobType.DECOMMISSION_BACKEND) {
+        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
+            if (type == AlterJobV2.JobType.DECOMMISSION_BACKEND) {
                 if (GlobalStateMgr.getCurrentStateJournalVersion() >= 5) {
                     newChecksum = loadAlterJob(dis, newChecksum, type);
                 }
@@ -1273,69 +1268,39 @@ public class GlobalStateMgr {
         return newChecksum;
     }
 
-    public long loadAlterJob(DataInputStream dis, long checksum, JobType type) throws IOException {
-        Map<Long, AlterJob> alterJobs = null;
-        ConcurrentLinkedQueue<AlterJob> finishedOrCancelledAlterJobs = null;
-        Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == JobType.ROLLUP) {
-            alterJobs = this.getRollupHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getRollupHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-        } else if (type == JobType.SCHEMA_CHANGE) {
-            alterJobs = this.getSchemaChangeHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getSchemaChangeHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-            alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
-        } else if (type == JobType.DECOMMISSION_BACKEND) {
-            alterJobs = this.getClusterHandler().unprotectedGetAlterJobs();
-            finishedOrCancelledAlterJobs = this.getClusterHandler().unprotectedGetFinishedOrCancelledAlterJobs();
-        }
-
+    public long loadAlterJob(DataInputStream dis, long checksum, AlterJobV2.JobType type) throws IOException {
         // alter jobs
         int size = dis.readInt();
-        long newChecksum = checksum ^ size;
-        for (int i = 0; i < size; i++) {
-            long tableId = dis.readLong();
-            newChecksum ^= tableId;
-            AlterJob job = AlterJob.read(dis);
-            alterJobs.put(tableId, job);
-
-            // init job
-            Database db = getDb(job.getDbId());
-            // should check job state here because the job is finished but not removed from alter jobs list
-            if (db != null && (job.getState() == com.starrocks.alter.AlterJob.JobState.PENDING
-                    || job.getState() == com.starrocks.alter.AlterJob.JobState.RUNNING)) {
-                job.replayInitJob(db);
-            }
+        if (size > 0) {
+            // It may be upgraded from an earlier version, which is dangerous
+            throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                    "and then from version 2.4 to the current version.");
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
             // finished or cancelled jobs
-            long currentTimeMs = System.currentTimeMillis();
             size = dis.readInt();
-            newChecksum ^= size;
-            for (int i = 0; i < size; i++) {
-                long tableId = dis.readLong();
-                newChecksum ^= tableId;
-                AlterJob job = AlterJob.read(dis);
-                if ((currentTimeMs - job.getCreateTimeMs()) / 1000 <= Config.history_job_keep_max_second) {
-                    // delete history jobs
-                    finishedOrCancelledAlterJobs.add(job);
-                }
+            if (size > 0) {
+                // It may be upgraded from an earlier version, which is dangerous
+                throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
+                        "and then from version 2.4 to the current version.");
             }
         }
 
+        long newChecksum = checksum;
         // alter job v2
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             size = dis.readInt();
             newChecksum ^= size;
             for (int i = 0; i < size; i++) {
                 AlterJobV2 alterJobV2 = AlterJobV2.read(dis);
-                if (type == JobType.ROLLUP || type == JobType.SCHEMA_CHANGE) {
-                    if (type == JobType.ROLLUP) {
+                if (type == AlterJobV2.JobType.ROLLUP || type == AlterJobV2.JobType.SCHEMA_CHANGE) {
+                    if (type == AlterJobV2.JobType.ROLLUP) {
                         this.getRollupHandler().addAlterJobV2(alterJobV2);
                     } else {
-                        alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                        this.getSchemaChangeHandler().addAlterJobV2(alterJobV2);
                     }
-                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpointed
+                    // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
                     // to prevent TabletInvertedIndex data loss,
                     // So just use AlterJob.replay() instead of AlterHandler.replay().
                     if (alterJobV2.getJobState() == AlterJobV2.JobState.PENDING) {
@@ -1343,7 +1308,7 @@ public class GlobalStateMgr {
                         LOG.info("replay pending alter job when load alter job {} ", alterJobV2.getJobId());
                     }
                 } else {
-                    alterJobsV2.put(alterJobV2.getJobId(), alterJobV2);
+                    LOG.warn("Unknown job type:" + type.name());
                 }
             }
         }
@@ -1483,17 +1448,17 @@ public class GlobalStateMgr {
     }
 
     public long saveAlterJob(DataOutputStream dos, long checksum) throws IOException {
-        for (JobType type : JobType.values()) {
+        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
             checksum = saveAlterJob(dos, checksum, type);
         }
         return checksum;
     }
 
-    public long saveAlterJob(DataOutputStream dos, long checksum, JobType type) throws IOException {
+    public long saveAlterJob(DataOutputStream dos, long checksum, AlterJobV2.JobType type) throws IOException {
         Map<Long, AlterJobV2> alterJobsV2 = Maps.newHashMap();
-        if (type == JobType.ROLLUP) {
+        if (type == AlterJobV2.JobType.ROLLUP) {
             alterJobsV2 = this.getRollupHandler().getAlterJobsV2();
-        } else if (type == JobType.SCHEMA_CHANGE) {
+        } else if (type == AlterJobV2.JobType.SCHEMA_CHANGE) {
             alterJobsV2 = this.getSchemaChangeHandler().getAlterJobsV2();
         }
 
@@ -1616,10 +1581,10 @@ public class GlobalStateMgr {
                         lastMetaOutOfDateLogTime = currentTimeMs;
                     }
                     if (hasLog || feType == FrontendNodeType.UNKNOWN) {
-                        // 1. if we read log from BDB, which means master is still alive.
+                        // 1. if we read log from BDB, which means leader is still alive.
                         // So we need to set meta out of date.
                         // 2. if we didn't read any log from BDB and feType is UNKNOWN,
-                        // which means this non-master node is disconnected with master.
+                        // which means this non-leader node is disconnected with leader.
                         // So we need to set meta out of date either.
                         metaReplayState.setOutOfDate(currentTimeMs, synchronizedTimeMs);
                         canRead.set(false);
@@ -1637,6 +1602,7 @@ public class GlobalStateMgr {
                 super.run();
                 if (cursor != null) {
                     cursor.close();
+                    LOG.info("quit replay at {}", replayedJournalId.get());
                 }
             }
         };
@@ -1644,18 +1610,25 @@ public class GlobalStateMgr {
         replayer.setMetaContext(metaContext);
     }
 
-
     /**
-      * Replay journal from replayedJournalId + 1 to toJournalId
-      * used by checkpointer/replay after state change
-      */
-    public boolean replayJournal(long toJournalId) throws JournalException {
-        LOG.info("start to replay journal from {} to {}", replayedJournalId.get() + 1, toJournalId);
-        boolean hasLog = false;
+     * Replay journal from replayedJournalId + 1 to toJournalId
+     * used by checkpointer/replay after state change
+     * toJournalId is a definite number and cannot set to -1/JournalCursor.CUROSR_END_KEY
+     */
+    public void replayJournal(long toJournalId) throws JournalException {
+        if (toJournalId <= replayedJournalId.get()) {
+            LOG.info("skip replay journal because {} <= {}", toJournalId, replayedJournalId.get());
+            return;
+        }
+
+        long startJournalId = replayedJournalId.get() + 1;
+        long replayStartTime = System.currentTimeMillis();
+        LOG.info("start to replay journal from {} to {}", startJournalId, toJournalId);
+
         JournalCursor cursor = null;
         try {
-            cursor = journal.read(replayedJournalId.get() + 1, toJournalId);
-            hasLog = replayJournalInner(cursor, false);
+            cursor = journal.read(startJournalId, toJournalId);
+            replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
             // TODO exit gracefully
@@ -1666,7 +1639,16 @@ public class GlobalStateMgr {
                 cursor.close();
             }
         }
-        return hasLog;
+
+        // verify if all log is replayed
+        if (toJournalId != replayedJournalId.get()) {
+            throw new JournalException(String.format(
+                    "should replay to %d but actual replayed journal id is %d",
+                    toJournalId, replayedJournalId.get()));
+        }
+
+        long replayInterval = System.currentTimeMillis() - replayStartTime;
+        LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
 
     /**
@@ -2279,14 +2261,6 @@ public class GlobalStateMgr {
 
     public void replayCreateMaterializedView(String dbName, MaterializedView materializedView) {
         localMetastore.replayCreateMaterializedView(dbName, materializedView);
-    }
-
-    public void replayAddMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
-        localMetastore.replayAddMvPartitionVersionInfo(info);
-    }
-
-    public void replayRemoveMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
-        localMetastore.replayRemoveMvPartitionVersionInfo(info);
     }
 
     // Drop table
@@ -3134,12 +3108,8 @@ public class GlobalStateMgr {
         localMetastore.onEraseDatabase(dbId);
     }
 
-    public HashMap<Long, AgentBatchTask> onEraseOlapOrLakeTable(OlapTable olapTable, boolean isReplay) {
-        return localMetastore.onEraseOlapOrLakeTable(olapTable, isReplay);
-    }
-
-    public void onErasePartition(Partition partition) {
-        localMetastore.onErasePartition(partition);
+    public Set<Long> onErasePartition(Partition partition) {
+        return localMetastore.onErasePartition(partition);
     }
 
     public long getImageJournalId() {
@@ -3175,6 +3145,11 @@ public class GlobalStateMgr {
             routineLoadManager.cleanOldRoutineLoadJobs();
         } catch (Throwable t) {
             LOG.warn("routine load manager clean old routine load jobs failed", t);
+        }
+        try {
+            backupHandler.removeOldJobs();
+        } catch (Throwable t) {
+            LOG.warn("backup handler clean old jobs failed", t);
         }
     }
 

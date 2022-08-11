@@ -5,13 +5,18 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.proc.DbsProcDir;
+import com.starrocks.common.proc.ExternalDbsProcDir;
+import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
@@ -30,13 +35,12 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
-    private final ConcurrentHashMap<String, Catalog> catalogs = new ConcurrentHashMap<>();
+    private final Map<String, Catalog> catalogs = new HashMap<>();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
@@ -186,7 +190,7 @@ public class CatalogMgr {
 
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
-        data.catalogs = new HashMap<>(catalogs);
+        data.catalogs = catalogs;
         checksum ^= data.catalogs.size();
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(dos, s);
@@ -196,7 +200,6 @@ public class CatalogMgr {
     private static class SerializeData {
         @SerializedName("catalogs")
         public Map<String, Catalog> catalogs;
-
     }
 
     public List<List<String>> getCatalogsInfo() {
@@ -223,18 +226,38 @@ public class CatalogMgr {
         this.catalogLock.writeLock().unlock();
     }
 
-    public class CatalogProcNode implements ProcNodeInterface {
+    public class CatalogProcNode implements ProcDirInterface {
+
+        @Override
+        public boolean register(String name, ProcNodeInterface node) {
+            return false;
+        }
+
+        @Override
+        public ProcNodeInterface lookup(String catalogName) throws AnalysisException {
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                return new DbsProcDir(GlobalStateMgr.getCurrentState());
+            }
+            return new ExternalDbsProcDir(catalogName);
+        }
+
         @Override
         public ProcResult fetchResult() {
             BaseProcResult result = new BaseProcResult();
             result.setNames(CATALOG_PROC_NODE_TITLE_NAMES);
-            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
-                Catalog catalog = entry.getValue();
-                if (catalog == null) {
-                    continue;
+            readLock();
+            try {
+                for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+                    Catalog catalog = entry.getValue();
+                    if (catalog == null) {
+                        continue;
+                    }
+                    catalog.getProcNodeData(result);
                 }
-                catalog.getProcNodeData(result);
+            } finally {
+                readUnlock();
             }
+            result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
             return result;
         }
     }

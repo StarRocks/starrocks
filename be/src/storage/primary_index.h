@@ -115,16 +115,20 @@ public:
 
     bool enable_persistent_index() { return _persistent_index != nullptr; }
 
+    size_t key_size() { return _key_size; }
+
 private:
     void _set_schema(const vectorized::Schema& pk_schema);
 
     Status _do_load(Tablet* tablet);
 
     Status _build_persistent_values(uint32_t rssid, uint32_t rowid_start, uint32_t idx_begin, uint32_t idx_end,
-                                    std::vector<uint64_t>* values);
+                                    std::vector<uint64_t>* values) const;
 
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
-                                    uint32_t idx_end, std::vector<uint64_t>* values);
+                                    uint32_t idx_end, std::vector<uint64_t>* values) const;
+
+    const Slice* _build_persistent_keys(const vectorized::Column& pks, std::vector<Slice>* key_slices) const;
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
 
@@ -144,6 +148,7 @@ private:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
     Status _status;
+    size_t _key_size = 0;
     int64_t _table_id = 0;
     int64_t _tablet_id = 0;
     vectorized::Schema _pk_schema;

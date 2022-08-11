@@ -373,7 +373,7 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(tablet);
                 tablet.getId();
                 result = tabletId;
-                tablet.getReplicas();
+                tablet.getImmutableReplicas();
                 result = Lists.newArrayList(replica);
                 replica.getId();
                 result = replicaId;

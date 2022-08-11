@@ -29,6 +29,11 @@ class Column;
 
 namespace csv {
 
+enum class ArrayFormatType {
+    kDefault = 0,
+    kHive,
+};
+
 class Converter {
 public:
     struct Options {
@@ -41,6 +46,27 @@ public:
         // For importing, both the integral values and textual representation are supported.
         // TODO: user configurable.
         bool bool_alpha = true;
+
+        // Here used to control array parse format.
+        // Considering Hive array format is different from traditional array format,
+        // so here we provide some variables to customize array format, and you can
+        // also add variables to customize array format in the future.
+        // If you decide to parse default array format, you don't need to change variable's value,
+        // default value is enough.
+        // Default array format like: [[1,2], [3, 4]]
+        // Hive array format like: 1^C2^B3^4
+        ArrayFormatType array_format_type = ArrayFormatType::kDefault;
+        // [Only used in Hive now!]
+        // Control hive array's element delimiter.
+        char array_hive_collection_delimiter = '\002';
+        // [Only used in Hive now!]
+        // mapkey_delimiter is the separator between key and value in map.
+        // For example, {"smith": age} mapkey_delimiter is ':', array_hive_mapkey_delimiter is
+        // used to generate collection delimiter in Hive.
+        char array_hive_mapkey_delimiter = '\003';
+        // [Only used in Hive now!]
+        // Control array nested level, used to generate collection delimiter in Hive.
+        size_t array_hive_nested_level = 1;
 
         // type desc of the slot we are dealing with now.
         const TypeDescriptor* type_desc = nullptr;

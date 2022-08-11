@@ -6,6 +6,6 @@
 
 namespace starrocks {
 
-std::unique_ptr<FileSystem> new_fs_s3();
+std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options);
 
 } // namespace starrocks

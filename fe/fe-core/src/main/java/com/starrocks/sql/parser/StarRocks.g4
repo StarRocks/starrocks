@@ -76,6 +76,12 @@ statement
     | updateStatement                                                                       #update
     | deleteStatement                                                                       #delete
 
+    //Routine Statement
+    | stopRoutineLoadStatement                                                              #stopRoutineLoad
+    | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
+    | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
+    | showRoutineLoadStatement                                                              #showRoutineLoad
+
     // Admin Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
@@ -83,7 +89,6 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
-    | SET setVarList                                                                        #setStmt
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -101,17 +106,21 @@ statement
     | showHistogramMetaStatement                                                            #showHistogramMeta
 
     // Work Group Statement
-    | createResourceGroupStatement                                                              #createResourceGroup
-    | dropResourceGroupStatement                                                                #dropResourceGroup
-    | alterResourceGroupStatement                                                               #alterResourceGroup
-    | showResourceGroupStatement                                                                #showResourceGroup
+    | createResourceGroupStatement                                                          #createResourceGroup
+    | dropResourceGroupStatement                                                            #dropResourceGroup
+    | alterResourceGroupStatement                                                           #alterResourceGroup
+    | showResourceGroupStatement                                                            #showResourceGroup
 
     //UDF
     | showFunctionsStatement                                                                #showFunctions
     | dropFunctionStatement                                                                 #dropFunctionst
     | createFunctionStatement                                                               #createFunction
 
-
+    // Load Statement
+    | loadStatement                                                                         #load
+    | showLoadStatement                                                                     #showLoad
+    | showLoadWarningsStatement                                                             #showLoadWarnings
+    | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
     | USE qualifiedName                                                                     #useDb
@@ -126,6 +135,8 @@ statement
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
     | showCollationStatement                                                                #showCollation
+    | setStatement                                                                          #setStmt
+    | showWarningStatement                                                                  #showWarning
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -135,12 +146,16 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | DROP USER user                                                                        #dropUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
 
     // proc
     | showProcStatement                                                                      #showProc
+
+    // Backup Restore Satement
+    | backupStatement                                                                        #backup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -352,7 +367,7 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-    
+
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
@@ -454,9 +469,17 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | truncatePartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
+    | addColumnClause
+    | addColumnsClause
+    | dropColumnClause
+    | modifyColumnClause
+    | columnRenameClause
+    | reorderColumnsClause
+    | modifyBrokerClause
     ;
 
 addPartitionClause
@@ -473,6 +496,10 @@ dropIndexClause
 
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
@@ -523,6 +550,36 @@ modifyPartitionClause
     : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
+addColumnClause
+    : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+addColumnsClause
+    : ADD COLUMN '(' columnDesc (',' columnDesc)* ')' ((TO | IN) rollupName=identifier)? properties?
+    ;
+
+dropColumnClause
+    : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+modifyColumnClause
+    : MODIFY COLUMN columnDesc (FIRST | AFTER identifier)? (FROM rollupName=identifier)? properties?
+    ;
+
+columnRenameClause
+    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    ;
+
+reorderColumnsClause
+    : ORDER BY identifierList (FROM rollupName=identifier)? properties?
+    ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
+    ;
+
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
@@ -537,6 +594,26 @@ updateStatement
 
 deleteStatement
     : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+// ------------------------------------------- Routine Statement -----------------------------------------------------------
+
+stopRoutineLoadStatement
+    : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+resumeRoutineLoadStatement
+    : RESUME ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+pauseRoutineLoadStatement
+    : PAUSE ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+    ;
+
+showRoutineLoadStatement
+    : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
@@ -625,6 +702,69 @@ typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
 
+// ------------------------------------------- Load Statement ----------------------------------------------------------
+
+loadStatement
+    : LOAD LABEL label=labelName
+        data=dataDescList?
+        broker=brokerDesc?
+        (BY system=identifierOrString)?
+        (PROPERTIES props=propertyList)?
+    | LOAD LABEL label=labelName
+        data=dataDescList?
+        resource=resourceDesc
+        (PROPERTIES props=propertyList)?
+    ;
+
+labelName
+    : (db=identifier '.')? label=identifier
+    ;
+
+dataDescList
+    : '(' dataDesc (',' dataDesc)* ')'
+    ;
+
+dataDesc
+    : DATA INFILE srcFiles=stringList
+        NEGATIVE?
+        INTO TABLE dstTableName=identifier
+        partitions=partitionNames?
+        (COLUMNS TERMINATED BY colSep=string)?
+        format=fileFormat?
+        colList=columnAliases?
+        (COLUMNS FROM PATH AS colFromPath=identifierList)?
+        (SET colMappingList=classifier)?
+        (WHERE where=expression)?
+    | DATA FROM TABLE srcTableName=identifier
+        NEGATIVE?
+        INTO TABLE dstTableName=identifier
+        partitions=partitionNames?
+        (SET colMappingList=classifier)?
+        (WHERE where=expression)?
+    ;
+
+brokerDesc
+    : WITH BROKER name=identifierOrString props=propertyList?
+    | WITH BROKER props=propertyList?
+    ;
+
+resourceDesc
+    : WITH RESOURCE name=identifierOrString props=propertyList?
+    ;
+
+showLoadStatement
+    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    ;
+
+showLoadWarningsStatement
+    : SHOW LOAD WARNINGS (FROM identifier)? (WHERE expression)? limitElement?
+    | SHOW LOAD WARNINGS ON string
+    ;
+
+cancelLoadStatement
+    : CANCEL LOAD (FROM identifier)? (WHERE expression)?
+    ;
+
 // ------------------------------------------- Other Statement ---------------------------------------------------------
 
 showDatabasesStatement
@@ -661,6 +801,10 @@ showCharsetStatement
     : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showWarningStatement
+    : SHOW (WARNINGS | ERRORS) (limitElement)?
+    ;
+
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
@@ -673,18 +817,26 @@ showCollationStatement
     : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-varType
-    : GLOBAL
-    | LOCAL
-    | SESSION
+setStatement
+    : SET setVar (',' setVar)*
     ;
 
 setVar
-    : varType? IDENTIFIER '=' expression
+    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    | NAMES (charset = identifierOrString | DEFAULT)
+        (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
+    | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
+    | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
+    | varType? identifier '=' setExprOrDefault                                                  #setVariable
+    | AT identifierOrString '=' expression                                                      #setVariable
+    | AT AT (varType '.')? identifier '=' setExprOrDefault                                      #setVariable
     ;
 
-setVarList
-    : setVar (',' setVar)*
+setExprOrDefault
+    : DEFAULT
+    | ON
+    | ALL
+    | expression
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -813,7 +965,7 @@ outerAndSemiJoinType
     ;
 
 bracketHint
-    : '[' IDENTIFIER (',' IDENTIFIER)* ']'
+    : '[' identifier (',' identifier)* ']'
     ;
 
 setVarHint
@@ -821,7 +973,7 @@ setVarHint
     ;
 
 hintMap
-    : k=IDENTIFIER '=' v=literalExpression
+    : k=identifierOrString '=' v=literalExpression
     ;
 
 joinCriteria
@@ -850,6 +1002,14 @@ showProcedureStatement
 // ------------------------------------------- Proc Statement ---------------------------------------------------------
 showProcStatement
     : SHOW PROC path=string
+    ;
+
+// ---------------------------------------- Backup Restore Statement -----------------------------------------------------
+backupStatement
+    : BACKUP SNAPSHOT qualifiedName
+    TO identifier
+    ON '(' tableDesc (',' tableDesc) * ')'
+    (PROPERTIES propertyList)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------
@@ -974,7 +1134,7 @@ aggregationFunction
     ;
 
 variable
-    : AT AT ((GLOBAL | SESSION | LOCAL) '.')? identifier
+    : AT AT (varType '.')? identifier
     ;
 
 columnReference
@@ -1052,6 +1212,10 @@ frameBound
     ;
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
+
+tableDesc
+    : qualifiedName partitionNames?
+    ;
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
@@ -1137,6 +1301,12 @@ property
     : key=string '=' value=string
     ;
 
+varType
+    : GLOBAL
+    | LOCAL
+    | SESSION
+    ;
+
 comment
     : COMMENT string
     ;
@@ -1220,10 +1390,10 @@ qualifiedName
     ;
 
 identifier
-    : IDENTIFIER             #unquotedIdentifier
+    : LETTER_IDENTIFIER      #unquotedIdentifier
     | nonReserved            #unquotedIdentifier
-    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
+    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     ;
 
 identifierList

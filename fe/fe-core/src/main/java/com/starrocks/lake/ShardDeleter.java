@@ -9,20 +9,19 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.lake.proto.DropTabletRequest;
-import com.starrocks.lake.proto.DropTabletResponse;
+import com.starrocks.lake.proto.DeleteTabletRequest;
+import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.persist.ShardInfo;
-import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
-import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ShardDeleter extends LeaderDaemon {
@@ -70,23 +69,18 @@ public class ShardDeleter extends LeaderDaemon {
             Set<Long> shards = entry.getValue();
 
             // 1. drop tablet
-            TNetworkAddress address = new TNetworkAddress();
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
-
-            LakeServiceClient client = new LakeServiceClient(address);
-            DropTabletRequest request = new DropTabletRequest();
+            DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
             try {
-                Future<DropTabletResponse> responseFuture = client.dropTablet(request);
-                DropTabletResponse response = responseFuture.get();
+                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                DeleteTabletResponse response = lakeService.deleteTablet(request);
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.info("failedTablets is {}", response.failedTablets);
                     response.failedTablets.forEach(shards::remove);
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOG.error(e);
                 continue;
             }

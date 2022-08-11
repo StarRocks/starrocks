@@ -41,6 +41,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.staros.StarMgrServer;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -114,6 +115,21 @@ public class StarRocksFE {
 
             StateChangeExecutor.getInstance().setMetaContext(
                     GlobalStateMgr.getCurrentState().getMetaContext());
+
+            if (Config.integrate_starmgr) {
+                Journal journal = GlobalStateMgr.getCurrentState().getJournal();
+                if (journal instanceof BDBJEJournal) {
+                    BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment,
+                            GlobalStateMgr.getCurrentState().getImageDir());
+                } else {
+                    LOG.error("journal type should be BDBJE for star mgr!");
+                    System.exit(-1);
+                }
+
+                StateChangeExecutor.getInstance().registerStateChangeExecution(
+                        StarMgrServer.getCurrentState().getStateChangeExecution());
+            }
 
             StateChangeExecutor.getInstance().registerStateChangeExecution(
                     GlobalStateMgr.getCurrentState().getStateChangeExecution());

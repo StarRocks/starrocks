@@ -104,6 +104,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.tuple_desc = _scanner_params.tuple_desc;
     ctx.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
     ctx.scan_ranges = _scanner_params.scan_ranges;
+    ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
     ctx.timezone = _runtime_state->timezone();

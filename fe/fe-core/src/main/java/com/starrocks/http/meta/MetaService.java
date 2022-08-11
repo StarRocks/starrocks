@@ -33,6 +33,7 @@ import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -208,8 +209,7 @@ public class MetaService {
                 subDirStr = "";
                 maxJournalId = GlobalStateMgr.getCurrentState().getMaxJournalId();
             } else { // star mgr
-                // do nothing for now
-                // maxJournalId = StarMgrServer.getCurrentState().getMaxJournalId();
+                maxJournalId = StarMgrServer.getCurrentState().getMaxJournalId();
             }
 
             // do not accept image whose version is bigger than max journalId
@@ -274,8 +274,7 @@ public class MetaService {
             if (Strings.isNullOrEmpty(prefixStr)) { // default GlobalStateMgr
                 id = GlobalStateMgr.getCurrentState().getReplayedJournalId();
             } else { // star mgr
-                // do nothing for now
-                // id = StarMgrServer.getCurrentState().getReplayId();
+                id = StarMgrServer.getCurrentState().getReplayId();
             }
 
             response.updateHeader("id", Long.toString(id));

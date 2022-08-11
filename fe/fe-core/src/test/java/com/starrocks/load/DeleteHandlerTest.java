@@ -223,7 +223,7 @@ public class DeleteHandlerTest {
         TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
-        new MockUp<DeleteJob>() {
+        new MockUp<OlapDeleteJob>() {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);
@@ -279,7 +279,7 @@ public class DeleteHandlerTest {
         TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
-        new MockUp<DeleteJob>() {
+        new MockUp<OlapDeleteJob>() {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);
@@ -336,7 +336,7 @@ public class DeleteHandlerTest {
         TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
-        new MockUp<DeleteJob>() {
+        new MockUp<OlapDeleteJob>() {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);
@@ -400,7 +400,7 @@ public class DeleteHandlerTest {
         TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
-        new MockUp<DeleteJob>() {
+        new MockUp<OlapDeleteJob>() {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);
@@ -464,7 +464,7 @@ public class DeleteHandlerTest {
         TabletDeleteInfo tabletDeleteInfo = new TabletDeleteInfo(PARTITION_ID, TABLET_ID);
         tabletDeleteInfo.getFinishedReplicas().addAll(finishedReplica);
 
-        new MockUp<DeleteJob>() {
+        new MockUp<OlapDeleteJob>() {
             @Mock
             public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
                 return Lists.newArrayList(tabletDeleteInfo);

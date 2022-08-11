@@ -20,6 +20,13 @@ ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profi
           _chunk_token(nullptr),
           _executor_type(executor_type) {}
 
+Status ChunkSource::prepare(RuntimeState* state) {
+    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _io_task_wait_timer = ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
+    _io_task_exec_timer = ADD_TIMER(_runtime_profile, "IOTaskExecTime");
+    return Status::OK();
+}
+
 StatusOr<vectorized::ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
     vectorized::ChunkPtr chunk = nullptr;
     _chunk_buffer.try_get(_scan_operator_seq, &chunk);

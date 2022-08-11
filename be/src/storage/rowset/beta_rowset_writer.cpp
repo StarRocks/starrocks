@@ -37,6 +37,7 @@
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/merge_iterator.h"
+#include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
@@ -59,23 +60,13 @@ BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
 Status BetaRowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
              _context.tablet_schema->contains_format_v2_column()));
-    auto real_data_format = _context.storage_format_version;
-    auto tablet_format = real_data_format;
-    if (_context.tablet_schema->contains_format_v1_column()) {
-        tablet_format = kDataFormatV1;
-    } else if (_context.tablet_schema->contains_format_v2_column()) {
-        tablet_format = kDataFormatV2;
-    }
-
-    // StarRocks is built on earlier work on Apache Doris and is compatible with its data format but
-    // has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
+    // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
     // When loading data into a tablet created by Apache Doris, the real data format will
     // be different from the tablet schema, so here we create a new schema matched with the
     // real data format to init `SegmentWriter`.
-    if (real_data_format != tablet_format) {
-        _rowset_schema = _context.tablet_schema->convert_to_format(real_data_format);
+    if (_context.tablet_schema->contains_format_v1_column()) {
+        _rowset_schema = _context.tablet_schema->convert_to_format(kDataFormatV2);
     }
-
     _rowset_meta = std::make_shared<RowsetMeta>();
     _rowset_meta->set_rowset_id(_context.rowset_id);
     _rowset_meta->set_partition_id(_context.partition_id);
@@ -93,7 +84,6 @@ Status BetaRowsetWriter::init() {
     }
     _rowset_meta->set_tablet_uid(_context.tablet_uid);
 
-    _writer_options.storage_format_version = _context.storage_format_version;
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
@@ -127,6 +117,8 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
+            RETURN_IF(_num_segment != _rowset_txn_meta_pb->partial_rowset_footers().size(),
+                      Status::InternalError("segment number not equal to partial_rowset_footers size"));
             for (auto i = 0; i < _context.partial_update_tablet_schema->columns().size(); ++i) {
                 const auto& tablet_column = _context.partial_update_tablet_schema->column(i);
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
@@ -845,9 +837,15 @@ Status VerticalBetaRowsetWriter::flush_columns() {
 Status VerticalBetaRowsetWriter::final_flush() {
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
-        if (auto st = segment_writer->finalize_footer(&segment_size); !st.ok()) {
+        uint64_t footer_position = 0;
+        if (auto st = segment_writer->finalize_footer(&segment_size, &footer_position); !st.ok()) {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
+        }
+        if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+            auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
+            partial_rowset_footer->set_position(footer_position);
+            partial_rowset_footer->set_size(segment_size - footer_position);
         }
         {
             std::lock_guard<std::mutex> l(_lock);

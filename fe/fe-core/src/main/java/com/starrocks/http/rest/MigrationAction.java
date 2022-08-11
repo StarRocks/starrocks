@@ -44,7 +44,6 @@ import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
 
 import java.util.Collections;
 import java.util.List;
@@ -108,7 +107,7 @@ public class MigrationAction extends RestBaseAction {
                         row.add(partitionName);
                         row.add(tablet.getId());
                         row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             row.add(replica.getBackendId());
                             break;
                         }
@@ -134,7 +133,7 @@ public class MigrationAction extends RestBaseAction {
                             row.add(partitionName);
                             row.add(tablet.getId());
                             row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 row.add(replica.getBackendId());
                                 break;
                             }
@@ -152,18 +151,7 @@ public class MigrationAction extends RestBaseAction {
         Collections.sort(rows, comparator);
 
         // to json response
-        String result = "";
-        ObjectMapper mapper = new ObjectMapper();
-        try {
-            result = mapper.writeValueAsString(rows);
-        } catch (Exception e) {
-            //  do nothing
-        }
-
-        // send result
-        response.setContentType("application/json");
-        response.getContent().append(result);
-        sendResult(request, response);
+        sendResultByJson(request, response, rows);
     }
 
     public static void print(String msg) {

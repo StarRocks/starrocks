@@ -41,7 +41,9 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
-import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.EmptyRpcCallback;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -50,7 +52,6 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,7 +77,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            List<TransactionState> readyTransactionStates = globalTransactionMgr.getReadyToPublishTransactions();
+            List<TransactionState> readyTransactionStates =
+                    globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
@@ -133,6 +135,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             AgentTaskExecutor.submit(batchTask);
         }
 
+        if (Config.enable_new_publish_mechanism) {
+            publishVersionNew(globalTransactionMgr, readyTransactionStates);
+            return;
+        }
+
         // try to finish the transaction, if failed just retry in next loop
         for (TransactionState transactionState : readyTransactionStates) {
             Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
@@ -143,7 +150,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 if (publishVersionTask.isFinished()) {
                     // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
                     // and it will upload the failed tabletinfo to fe and fe will deal with them
-                    Set<Long> errReplicas = publishVersionTask.collectErrorReplicas();
+                    Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
                     if (!errReplicas.isEmpty()) {
                         publishErrorReplicaIds.addAll(errReplicas);
                     }
@@ -180,6 +187,33 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
             }
         } // end for readyTransactionStates
+    }
+
+    private void publishVersionNew(GlobalTransactionMgr globalTransactionMgr, List<TransactionState> txns) {
+        for (TransactionState transactionState : txns) {
+            Set<Long> publishErrorReplicas = Sets.newHashSet();
+            if (!transactionState.allPublishTasksFinishedOrQuorumWaitTimeout(publishErrorReplicas)) {
+                continue;
+            }
+            try {
+                if (transactionState.checkCanFinish()) {
+                    globalTransactionMgr.finishTransactionNew(transactionState, publishErrorReplicas);
+                }
+                if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
+                    transactionState.updateSendTaskTime();
+                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                            transactionState, transactionState.getErrorReplicas().size());
+                } else {
+                    for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
+                        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
+                    }
+                    // clear publish version tasks to reduce memory usage when state changed to visible.
+                    transactionState.clearPublishVersionTasks();
+                }
+            } catch (UserException e) {
+                LOG.error("errors while publish version to all backends", e);
+            }
+        }
     }
 
     // TODO: support mix OlapTable with LakeTable
@@ -297,11 +331,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 finished = false;
                 continue;
             }
-            TNetworkAddress address = new TNetworkAddress();
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
 
-            LakeServiceClient client = new LakeServiceClient(address);
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = partitionCommitInfo.getVersion() - 1;
             request.newVersion = partitionCommitInfo.getVersion();
@@ -309,10 +339,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             request.txnIds = Lists.newArrayList(txnId);
 
             try {
-                Future<PublishVersionResponse> responseFuture = client.publishVersion(request);
+                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<PublishVersionResponse> responseFuture = lakeService.publishVersion(request, new EmptyRpcCallback<>());
                 responseList.add(responseFuture);
                 backendList.add(backend);
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOG.warn(e);
                 finished = false;
             }

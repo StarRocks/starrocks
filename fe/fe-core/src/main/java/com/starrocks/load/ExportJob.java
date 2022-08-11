@@ -58,6 +58,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
@@ -71,6 +72,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -208,6 +210,11 @@ public class ExportJob implements Writable {
         }
 
         this.sql = stmt.toSql();
+
+        // TODO Support snapshot of lake table
+        if (exportTable.isLakeTable()) {
+            this.state = JobState.EXPORTING;
+        }
     }
 
     private void genExecFragment(ExportStmt stmt) throws UserException {
@@ -306,6 +313,7 @@ public class ExportJob implements Writable {
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
+            case LAKE:
                 scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
@@ -336,6 +344,7 @@ public class ExportJob implements Writable {
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
+            case LAKE:
                 fragment = new PlanFragment(
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;
@@ -349,8 +358,12 @@ public class ExportJob implements Writable {
         fragment.setOutputExprs(createOutputExprs());
 
         scanNode.setFragmentId(fragment.getFragmentId());
+        THdfsProperties hdfsProperties = new THdfsProperties();
+        if (!brokerDesc.hasBroker()) {
+            HdfsUtil.getTProperties(exportTempPath, brokerDesc, hdfsProperties);
+        }
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, brokerDesc));
+                rowDelimiter, brokerDesc, hdfsProperties));
         try {
             fragment.finalize(analyzer, false);
         } catch (Exception e) {
@@ -383,7 +396,7 @@ public class ExportJob implements Writable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = new Coordinator(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
             coord.setExecMemoryLimit(getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, task idx: {}, task query id: {}",
@@ -622,7 +635,11 @@ public class ExportJob implements Writable {
 
         // try to remove exported temp files
         try {
-            BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            if (!brokerDesc.hasBroker()) {
+                HdfsUtil.deletePath(exportTempPath, brokerDesc);
+            } else {
+                BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            }
             LOG.info("remove export temp path success, path: {}", exportTempPath);
         } catch (UserException e) {
             LOG.warn("remove export temp path fail, path: {}", exportTempPath);
@@ -630,7 +647,11 @@ public class ExportJob implements Writable {
         // try to remove exported files
         for (String exportedFile : exportedFiles) {
             try {
-                BrokerUtil.deletePath(exportedFile, brokerDesc);
+                if (!brokerDesc.hasBroker()) {
+                    HdfsUtil.deletePath(exportTempPath, brokerDesc);
+                } else {
+                    BrokerUtil.deletePath(exportedFile, brokerDesc);
+                }
                 LOG.info("remove exported file success, path: {}", exportedFile);
             } catch (UserException e) {
                 LOG.warn("remove exported file fail, path: {}", exportedFile);
@@ -649,7 +670,11 @@ public class ExportJob implements Writable {
 
         // try to remove exported temp files
         try {
-            BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            if (!brokerDesc.hasBroker()) {
+                HdfsUtil.deletePath(exportTempPath, brokerDesc);
+            } else {
+                BrokerUtil.deletePath(exportTempPath, brokerDesc);
+            }
             LOG.info("remove export temp path success, path: {}", exportTempPath);
         } catch (UserException e) {
             LOG.warn("remove export temp path fail, path: {}", exportTempPath);

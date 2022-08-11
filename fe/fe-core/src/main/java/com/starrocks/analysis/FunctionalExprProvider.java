@@ -126,6 +126,7 @@ public abstract class FunctionalExprProvider<U> {
      */
     protected abstract boolean delegatePostRowFilter(ConnectContext ctx, U row);
 
+    @Deprecated
     public void analyze(Analyzer analyzer, Expr predicate, List<OrderByElement> orderByElements, LimitElement limit)
             throws AnalysisException {
         this.connCtx = analyzer.getContext();
@@ -139,6 +140,18 @@ public abstract class FunctionalExprProvider<U> {
         analyzeLimit(limit);
     }
 
+    public void analyze(ConnectContext connCtx, Expr predicate, List<OrderByElement> orderByElements, LimitElement limit)
+            throws AnalysisException {
+        this.connCtx = connCtx;
+        // analyze where clase
+        predicateChain = null;
+        analyzeWhere(predicate);
+        connectPredicate(row -> delegatePostRowFilter(connCtx, row));
+        // analyze order by
+        analyzeOrder(orderByElements);
+        // analyze limit
+        analyzeLimit(limit);
+    }
     /**
      * Generated and connected predicates that is used in `List.stream().filter()` to filter instances(`<U>`).
      */

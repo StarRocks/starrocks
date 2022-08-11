@@ -683,7 +683,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
 
             // task info
-            jobInfo.add("cluster:" + getResourceName() + "; timeout(s):" + timeoutSecond
+            jobInfo.add("resource:" + getResourceName() + "; timeout(s):" + timeoutSecond
                     + "; max_filter_ratio:" + maxFilterRatio);
 
             // error msg

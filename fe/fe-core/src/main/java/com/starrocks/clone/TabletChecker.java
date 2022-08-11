@@ -62,8 +62,6 @@ import java.util.stream.Collectors;
 public class TabletChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
-    private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
-
     private GlobalStateMgr globalStateMgr;
     private SystemInfoService infoService;
     private TabletScheduler tabletScheduler;
@@ -117,7 +115,7 @@ public class TabletChecker extends LeaderDaemon {
 
     public TabletChecker(GlobalStateMgr globalStateMgr, SystemInfoService infoService, TabletScheduler tabletScheduler,
                          TabletSchedulerStat stat) {
-        super("tablet checker", CHECK_INTERVAL_MS);
+        super("tablet checker", Config.tablet_sched_checker_interval_seconds * 1000L);
         this.globalStateMgr = globalStateMgr;
         this.infoService = infoService;
         this.tabletScheduler = tabletScheduler;
@@ -174,10 +172,10 @@ public class TabletChecker extends LeaderDaemon {
     protected void runAfterCatalogReady() {
         int pendingNum = tabletScheduler.getPendingNum();
         int runningNum = tabletScheduler.getRunningNum();
-        if (pendingNum > Config.max_scheduling_tablets
-                || runningNum > Config.max_scheduling_tablets) {
+        if (pendingNum > Config.tablet_sched_max_scheduling_tablets
+                || runningNum > Config.tablet_sched_max_scheduling_tablets) {
             LOG.info("too many tablets are being scheduled. pending: {}, running: {}, limit: {}. skip check",
-                    pendingNum, runningNum, Config.max_scheduling_tablets);
+                    pendingNum, runningNum, Config.tablet_sched_max_scheduling_tablets);
             return;
         }
 
@@ -216,7 +214,16 @@ public class TabletChecker extends LeaderDaemon {
      * to the queue again in the next `TabletChecker` round.
      */
     private boolean tryChooseSrcBeforeSchedule(TabletSchedCtx tabletCtx) {
-        return !(tabletCtx.needCloneFromSource() && tabletCtx.getHealthyReplicas().size() == 0);
+        if (tabletCtx.needCloneFromSource()) {
+            if (tabletCtx.getReplicas().size() == 1 && Config.recover_with_empty_tablet) {
+                // in this case, we need to forcefully create an empty replica to recover
+                return true;
+            } else {
+                return tabletCtx.getHealthyReplicas().size() != 0;
+            }
+        } else {
+            return true;
+        }
     }
 
     private void doCheck(boolean checkInPrios) {
@@ -307,7 +314,7 @@ public class TabletChecker extends LeaderDaemon {
 
                                 unhealthyTabletNum++;
 
-                                if (!localTablet.readyToBeRepaired(statusWithPrio.second)) {
+                                if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
                                     tabletNotReady++;
                                     continue;
                                 }

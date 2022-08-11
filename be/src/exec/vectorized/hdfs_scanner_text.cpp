@@ -98,17 +98,43 @@ Status HdfsScannerCSVReader::_fill_buffer() {
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
+
+    // All delimiters will not be empty.
+    // Even if the user has not set it, there will be a default value.
+    DCHECK(!text_file_desc.field_delim.empty());
+    DCHECK(!text_file_desc.line_delim.empty());
+    DCHECK(!text_file_desc.collection_delim.empty());
+    DCHECK(!text_file_desc.mapkey_delim.empty());
+
+    // _field_delimiter and _record_delimiter should use std::string,
+    // because the CSVReader is using std::string type as delimiter.
     _field_delimiter = text_file_desc.field_delim;
-    // we should cast string to char now since csv reader only support record delimiter by char
+    // we should cast string to char now since csv reader only support record delimiter by char.
     _record_delimiter = text_file_desc.line_delim.front();
+
+    // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
+    // but in fact, only the first character of the delimiter will take effect.
+    // So here, we only use the first character of collection_delim and mapkey_delim.
+    if (text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
+        // During the StarRocks upgrade process, collection_delim and mapkey_delim may be empty,
+        // in order to prevent crash, we set _collection_delimiter
+        // and _mapkey_delimiter a default value here.
+        _collection_delimiter = '\002';
+        _mapkey_delimiter = '\003';
+    } else {
+        _collection_delimiter = text_file_desc.collection_delim.front();
+        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    }
+
     return Status::OK();
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
-    for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
-        auto slot = _scanner_params.materialize_slots[i];
+    for (const auto slot : _scanner_params.materialize_slots) {
+        // TODO slot maybe null?
+        DCHECK(slot != nullptr);
         ConverterPtr conv = csv::get_converter(slot->type(), true);
         RETURN_IF_ERROR(_get_hive_column_index(slot->col_name()));
         if (conv == nullptr) {
@@ -133,7 +159,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
         // do evaluation.
         SCOPED_RAW_TIMER(&_stats.expr_filter_ns);
-        ExecNode::eval_conjuncts(it.second, ck.get());
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(it.second, ck.get()));
         if (ck->num_rows() == 0) {
             break;
         }
@@ -154,6 +180,11 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     }
 
     csv::Converter::Options options;
+    // Use to custom Hive array format
+    options.array_format_type = csv::ArrayFormatType::kHive;
+    options.array_hive_collection_delimiter = _collection_delimiter;
+    options.array_hive_mapkey_delimiter = _mapkey_delimiter;
+    options.array_hive_nested_level = 1;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -190,6 +221,10 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                                            _scanner_params.hive_column_names->size(), fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
+            // TODO slot maybe null?
+            const auto slot = _scanner_params.materialize_slots[j];
+            DCHECK(slot != nullptr);
+
             int index = _scanner_params.materialize_index_in_chunk[j];
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
             Column* column = _column_raw_ptrs[index];

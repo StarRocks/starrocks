@@ -204,6 +204,7 @@ public:
         bool use_merged_selection;
         std::vector<uint32_t> hash_values;
         const std::vector<int32_t>* bucketseq_to_partition;
+        bool compatibility;
     };
 
     virtual void evaluate(Column* input_column, RunningContext* ctx) const = 0;
@@ -354,11 +355,17 @@ public:
                                             std::vector<uint32_t>& hash_values, size_t num_rows) const {
         typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
 
-        auto compute_hash = [&input_column, &num_rows, &hash_values, this](HashFuncType hash_func,
-                                                                           size_t num_hash_partitions) {
+        auto compute_hash = [&input_column, &num_rows, &hash_values, this](
+                                    HashFuncType hash_func, size_t num_hash_partitions, bool fast_reduce) {
             (input_column->*hash_func)(hash_values.data(), 0, num_rows);
-            for (size_t i = 0; i < num_rows; i++) {
-                hash_values[i] %= num_hash_partitions;
+            if (fast_reduce) {
+                for (size_t i = 0; i < num_rows; i++) {
+                    hash_values[i] = ReduceOp()(hash_values[i], num_hash_partitions);
+                }
+            } else {
+                for (size_t i = 0; i < num_rows; i++) {
+                    hash_values[i] %= num_hash_partitions;
+                }
             }
         };
 
@@ -370,7 +377,7 @@ public:
         case TRuntimeFilterBuildJoinMode::PARTITIONED:
         case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
             hash_values.assign(num_rows, HashUtil::FNV_SEED);
-            compute_hash(&Column::fnv_hash, _num_hash_partitions);
+            compute_hash(&Column::fnv_hash, _num_hash_partitions, !running_ctx->compatibility);
             break;
         }
         case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
@@ -380,7 +387,7 @@ public:
             // instances. we can use crc32_hash to compute out bucket_seq that the row belongs to, then use
             // the bucketseq_to_partition array to translate bucket_seq into partition index of the grf.
             const auto& bucketseq_to_partition = *running_ctx->bucketseq_to_partition;
-            compute_hash(&Column::crc32_hash, bucketseq_to_partition.size());
+            compute_hash(&Column::crc32_hash, bucketseq_to_partition.size(), false);
             for (auto i = 0; i < num_rows; ++i) {
                 hash_values[i] = bucketseq_to_partition[hash_values[i]];
             }
@@ -619,6 +626,15 @@ public:
             if (!eq) return false;
         }
         return true;
+    }
+
+    // filter zonemap by evaluating
+    // [min_value, max_value] overlapped with [min, max]
+    bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
+        if (!_has_min_max || min_value == nullptr || max_value == nullptr) return false;
+        if (*max_value < _min) return true;
+        if (*min_value > _max) return true;
+        return false;
     }
 
 private:

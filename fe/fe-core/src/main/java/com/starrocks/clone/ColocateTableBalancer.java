@@ -129,7 +129,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
      *  A    B    C    D
      */
     private void relocateAndBalanceGroup() {
-        if (Config.disable_colocate_balance) {
+        if (Config.tablet_sched_disable_colocate_balance) {
             return;
         }
 
@@ -162,7 +162,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
-                LOG.info("balance group {}. now backends per bucket sequence is: {}", groupId,
+                LOG.info("balance colocate group {}. now backends per bucket sequence is: {}", groupId,
                         balancedBackendsPerBucketSeq);
             }
         }
@@ -177,6 +177,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
         TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
+        long checkStartTime = System.currentTimeMillis();
 
         // check each group
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
@@ -217,33 +218,47 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                     backendBucketsSeq.size() + " vs. " + index.getTablets().size());
                             int idx = 0;
                             for (Long tabletId : index.getTabletIdsInOrder()) {
-                                Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
-                                Preconditions.checkState(bucketsSeq.size() == replicationNum,
-                                        bucketsSeq.size() + " vs. " + replicationNum);
                                 LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
-                                        replicationNum, bucketsSeq);
-                                if (st != TabletStatus.HEALTHY) {
-                                    isGroupStable = false;
-                                    LOG.debug("get unhealthy tablet {} in colocate table. status: {}", tablet.getId(),
-                                            st);
+                                // Tablet has already been scheduled, no need to schedule again
+                                if (!tabletScheduler.containsTablet(tablet.getId())) {
+                                    Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
+                                    Preconditions.checkState(bucketsSeq.size() == replicationNum,
+                                            bucketsSeq.size() + " vs. " + replicationNum);
+                                    TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
+                                            replicationNum, bucketsSeq);
+                                    if (st != TabletStatus.HEALTHY) {
+                                        isGroupStable = false;
+                                        Priority colocateUnhealthyPrio = Priority.HIGH;
+                                        // We should also check if the tablet is ready to be repaired like
+                                        // `TabletChecker` did. Slightly delay the repair action can avoid unnecessary
+                                        // clone in situation like temporarily restart BE Nodes.
+                                        if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
+                                            LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
+                                                    tablet.getId(),
+                                                    st);
 
-                                    TabletSchedCtx tabletCtx = new TabletSchedCtx(
-                                            TabletSchedCtx.Type.REPAIR,
-                                            db.getId(), tableId, partition.getId(), index.getId(), tablet.getId(),
-                                            System.currentTimeMillis());
-                                    // the tablet status will be set again when being scheduled
-                                    tabletCtx.setTabletStatus(st);
-                                    // using HIGH priority, cause we want to stabilize the colocate group as soon as possible
-                                    tabletCtx.setOrigPriority(Priority.HIGH);
-                                    tabletCtx.setTabletOrderIdx(idx);
+                                            TabletSchedCtx tabletCtx = new TabletSchedCtx(
+                                                    TabletSchedCtx.Type.REPAIR,
+                                                    db.getId(), tableId, partition.getId(), index.getId(),
+                                                    tablet.getId(),
+                                                    System.currentTimeMillis());
+                                            // the tablet status will be set again when being scheduled
+                                            tabletCtx.setTabletStatus(st);
+                                            // using HIGH priority, because we want to stabilize the colocate group
+                                            // as soon as possible
+                                            tabletCtx.setOrigPriority(colocateUnhealthyPrio);
+                                            tabletCtx.setTabletOrderIdx(idx);
 
-                                    AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
-                                    if (res == AddResult.LIMIT_EXCEED) {
-                                        // tablet in scheduler exceed limit, skip this group and check next one.
-                                        LOG.info("number of scheduling tablets in tablet scheduler"
-                                                + " exceed to limit. stop colocate table check");
-                                        break OUT;
+                                            AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
+                                            if (res == AddResult.LIMIT_EXCEED) {
+                                                // tablet in scheduler exceed limit, skip this group and check next one.
+                                                LOG.info("number of scheduling tablets in tablet scheduler"
+                                                        + " exceed to limit. stop colocate table check");
+                                                break OUT;
+                                            }
+                                        }
+                                    } else {
+                                        tablet.setLastStatusCheckTime(checkStartTime);
                                     }
                                 }
                                 idx++;
@@ -539,7 +554,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             // 1. BE is dead for a long time
             // 2. BE is under decommission
             if ((!be.isAlive() &&
-                    (currTime - be.getLastUpdateMs()) > Config.tablet_repair_delay_factor_second * 1000 * 2)
+                    (currTime - be.getLastUpdateMs()) > Config.tablet_sched_repair_delay_factor_second * 1000 * 2)
                     || be.isDecommissioned()) {
                 return false;
             }

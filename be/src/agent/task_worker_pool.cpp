@@ -1097,7 +1097,6 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
         if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
-            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
             sleep(1);
             continue;
         }
@@ -1137,7 +1136,6 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
         if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
-            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
             sleep(config::sleep_one_second);
             continue;
         }
@@ -1196,7 +1194,6 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
         if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
-            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
             sleep(config::sleep_one_second);
             continue;
         }
@@ -1243,7 +1240,6 @@ void* TaskWorkerPool::_report_workgroup_thread_callback(void* arg_this) {
         if (master_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
-            LOG(INFO) << "Waiting to receive first heartbeat from frontend";
             sleep(config::sleep_one_second);
             continue;
         }
@@ -1284,8 +1280,7 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
 
         std::map<int64_t, std::vector<std::string>> tablet_files;
         SnapshotLoader loader(worker_pool_this->_env, upload_request.job_id, agent_task_req->signature);
-        Status status = loader.upload(upload_request.src_dest_map, upload_request.broker_addr,
-                                      upload_request.broker_prop, &tablet_files);
+        Status status = loader.upload(upload_request.src_dest_map, upload_request, &tablet_files);
 
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
@@ -1333,8 +1328,7 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
         // TODO: download
         std::vector<int64_t> downloaded_tablet_ids;
         SnapshotLoader loader(worker_pool_this->_env, download_request.job_id, agent_task_req->signature);
-        Status status = loader.download(download_request.src_dest_map, download_request.broker_addr,
-                                        download_request.broker_prop, &downloaded_tablet_ids);
+        Status status = loader.download(download_request.src_dest_map, download_request, &downloaded_tablet_ids);
 
         if (!status.ok()) {
             status_code = TStatusCode::RUNTIME_ERROR;

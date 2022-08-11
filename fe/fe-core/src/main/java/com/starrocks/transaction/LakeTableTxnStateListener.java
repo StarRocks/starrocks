@@ -16,11 +16,11 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.AbortTxnRequest;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.EmptyRpcCallback;
+import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
-import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,6 +71,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             finishedTabletsOfThisTable.add(finishedTablets.get(i).getTabletId());
         }
 
+        List<Long> unfinishedTablets = null;
         for (Long partitionId : dirtyPartitionSet) {
             Partition partition = table.getPartition(partitionId);
             List<MaterializedIndex> allIndices = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
@@ -80,9 +81,16 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                 if (!unfinishedTablet.isPresent()) {
                     continue;
                 }
-                long tabletId = unfinishedTablet.get().getId();
-                throw new TransactionCommitFailedException("table '" + table.getName() + "\" has unfinished tablet: " + tabletId);
+                if (unfinishedTablets == null) {
+                    unfinishedTablets = Lists.newArrayList();
+                }
+                unfinishedTablets.add(unfinishedTablet.get().getId());
             }
+        }
+
+        if (unfinishedTablets != null && !unfinishedTablets.isEmpty()) {
+            throw new TransactionCommitFailedException(
+                    "table '" + table.getName() + "\" has unfinished tablets: " + unfinishedTablets);
         }
     }
 
@@ -137,12 +145,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             request.txnIds.add(txnState.getTransactionId());
             request.tabletIds = entry.getValue();
 
-            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
-            LakeServiceClient client = new LakeServiceClient(address);
             try {
-                // Does not care about the response.
-                client.abortTxn(request);
-            } catch (RpcException e) {
+                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                lakeService.abortTxn(request, new EmptyRpcCallback<>());
+            } catch (Throwable e) {
                 LOG.error(e);
             }
         }

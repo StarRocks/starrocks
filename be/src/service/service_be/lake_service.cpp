@@ -145,25 +145,16 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     (void)controller;
 
     // TODO: move the execution to TaskWorkerPool
-    // This rpc never fail.
+    auto tablet_mgr = _env->lake_tablet_manager();
     for (auto tablet_id : request->tablet_ids()) {
-        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
-        if (!tablet.ok()) {
-            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
-            continue;
-        }
-        // TODO: batch deletion
-        for (const auto& txn_id : request->txn_ids()) {
-            VLOG(3) << "Deleting " << tablet->txn_log_location(txn_id);
-            auto st = tablet->delete_txn_log(txn_id);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
-        }
+        tablet_mgr->abort_txn(tablet_id, request->txn_ids().data(), request->txn_ids_size());
     }
 }
 
-void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
-                                  const ::starrocks::lake::DropTabletRequest* request,
-                                  ::starrocks::lake::DropTabletResponse* response, ::google::protobuf::Closure* done) {
+void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controller,
+                                    const ::starrocks::lake::DeleteTabletRequest* request,
+                                    ::starrocks::lake::DeleteTabletResponse* response,
+                                    ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -173,7 +164,7 @@ void LakeServiceImpl::drop_tablet(::google::protobuf::RpcController* controller,
     }
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto res = _env->lake_tablet_manager()->drop_tablet(tablet_id);
+        auto res = _env->lake_tablet_manager()->delete_tablet(tablet_id);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
             response->add_failed_tablets(tablet_id);
@@ -240,6 +231,83 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     if (!st.ok() && !st.is_not_found()) {
         LOG(ERROR) << "Fail to remove " << location << ": " << st;
         cntl->SetFailed(st.get_error_msg());
+    }
+}
+
+void LakeServiceImpl::delete_data(::google::protobuf::RpcController* controller,
+                                  const ::starrocks::lake::DeleteDataRequest* request,
+                                  ::starrocks::lake::DeleteDataResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_delete_predicate()) {
+        cntl->SetFailed("missing delete_predicate");
+        return;
+    }
+
+    for (auto tablet_id : request->tablet_ids()) {
+        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        if (!tablet.ok()) {
+            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
+            response->add_failed_tablets(tablet_id);
+            continue;
+        }
+
+        auto res = tablet->delete_data(request->txn_id(), request->delete_predicate());
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to delete data. tablet_id: " << tablet_id << ", txn_id: " << request->txn_id()
+                         << ", error: " << res;
+            response->add_failed_tablets(tablet_id);
+        }
+    }
+}
+
+void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::TabletStatRequest* request,
+                                       ::starrocks::lake::TabletStatResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_infos_size() == 0) {
+        cntl->SetFailed("missing tablet_infos");
+        return;
+    }
+
+    for (const auto& tablet_info : request->tablet_infos()) {
+        int64_t tablet_id = tablet_info.tablet_id();
+        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
+        if (!tablet.ok()) {
+            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
+            continue;
+        }
+
+        int64_t version = tablet_info.version();
+        auto tablet_metadata = tablet->get_metadata(version);
+        if (!tablet_metadata.ok()) {
+            LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
+                         << ", error: " << tablet.status();
+            continue;
+        }
+
+        int64_t num_rows = 0;
+        int64_t data_size = 0;
+        for (const auto& rowset : (*tablet_metadata)->rowsets()) {
+            num_rows += rowset.num_rows();
+            data_size += rowset.data_size();
+        }
+        auto tablet_stat = response->add_tablet_stats();
+        tablet_stat->set_tablet_id(tablet_id);
+        tablet_stat->set_num_rows(num_rows);
+        tablet_stat->set_data_size(data_size);
     }
 }
 

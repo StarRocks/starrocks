@@ -649,10 +649,27 @@ public class HiveMetaClient {
     }
 
     public TextFileFormatDesc getTextFileFormatDesc(StorageDescriptor sd) {
-        // get properties like 'field.delim' and 'line.delim' from StorageDescriptor
+        // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
+        // Detail refer to:
+        // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
+
+        Map<String, String> parameters = sd.getSerdeInfo().getParameters();
+
+        // Here is for compatibility with Hive 2.x version.
+        // There is a typo in Hive 2.x version, and fixed in Hive 3.x version.
+        // https://issues.apache.org/jira/browse/HIVE-16922
+        String collectionDelim;
+        if (parameters.containsKey("colelction.delim")) {
+            collectionDelim = parameters.get("colelction.delim");
+        } else {
+            collectionDelim = parameters.getOrDefault("collection.delim", "\002");
+        }
+
         return new TextFileFormatDesc(
-                sd.getSerdeInfo().getParameters().getOrDefault("field.delim", "\001"),
-                sd.getSerdeInfo().getParameters().getOrDefault("line.delim", "\n"));
+                parameters.getOrDefault("field.delim", "\001"),
+                parameters.getOrDefault("line.delim", "\n"),
+                collectionDelim,
+                parameters.getOrDefault("mapkey.delim", "\003"));
     }
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,

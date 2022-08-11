@@ -80,7 +80,7 @@ public class MetaScanNode extends ScanNode {
                                     ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());
                         } else {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
                             }
                         }

@@ -769,7 +769,7 @@ public class RoutineLoadManagerTest {
     public void testLoadImageWithoutExpiredJob() throws Exception {
         UtFrameUtils.setUpForPersistTest();
 
-        Config.label_keep_max_second = 2;
+        Config.label_keep_max_second = 10;
         Config.enable_dict_optimize_routine_load = true;
         ConnectContext connectContext = new ConnectContext();
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -780,6 +780,7 @@ public class RoutineLoadManagerTest {
                 "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\");";
 
         RoutineLoadManager leaderLoadManager = new RoutineLoadManager();
+        long now = System.currentTimeMillis();
 
         // 1. create a job that will be discard after image load
         long discardJobId = 1L;
@@ -787,8 +788,7 @@ public class RoutineLoadManagerTest {
         discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, DB);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED, new ErrorReason(InternalErrorCode.CREATE_TASKS_ERR, "fake"), false);
-
-        Thread.sleep(3000);
+        discardJob.endTimestamp = now - Config.label_keep_max_second * 2 * 1000L;
 
         // 2. create a new job that will keep for a while
         long goodJobId = 2L;
@@ -813,8 +813,6 @@ public class RoutineLoadManagerTest {
         // discard expired job
         Assert.assertNull(leaderLoadManager.getJob(discardJobId));
         Assert.assertNotNull(leaderLoadManager.getJob(goodJobId));
-
-        Config.label_keep_max_second = 10;
 
         UtFrameUtils.tearDownForPersisTest();
     }

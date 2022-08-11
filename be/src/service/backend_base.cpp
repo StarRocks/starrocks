@@ -65,7 +65,7 @@ std::unique_ptr<ThriftServer> BackendServiceBase::create(ExecEnv* exec_env, int 
     auto thread_factory = std::make_shared<ThreadFactory>();
     auto processor = std::make_shared<BackendServiceProcessor>(handler);
 
-    LOG(INFO) << "StarRocksInternalService listening on " << port;
+    LOG(INFO) << "StarRocksInternalService has started listening port on " << port;
     // TODO: May be rename be_service_threads to thrift_service_threads ?
     return std::make_unique<ThriftServer>("BackendService", processor, port, exec_env->metrics(),
                                           config::be_service_threads);

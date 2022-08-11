@@ -75,7 +75,7 @@ using LargeBinaryColumn = BinaryColumnBase<uint64_t>;
 template <typename T>
 constexpr bool is_decimal_column = false;
 template <typename T>
-constexpr bool is_decimal_column<DecimalV3Column<T>> = true;
+inline constexpr bool is_decimal_column<DecimalV3Column<T>> = true;
 template <typename ColumnType>
 using DecimalColumnType = std::enable_if_t<is_decimal_column<ColumnType>, ColumnType>;
 

@@ -31,6 +31,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Table.Cell;
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
@@ -60,9 +61,11 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -74,10 +77,12 @@ import com.starrocks.task.DownloadTask;
 import com.starrocks.task.ReleaseSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTaskType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -775,7 +780,7 @@ public class RestoreJob extends AbstractJob {
                     restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
                 GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
+                for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                     CreateReplicaTask task = new CreateReplicaTask(restoreReplica.getBackendId(), dbId,
                             localTbl.getId(), restorePart.getId(), restoredIdx.getId(),
@@ -843,7 +848,7 @@ public class RestoreJob extends AbstractJob {
                 List<Long> beIds =
                         GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(restoreReplicationNum, true,
                                 true);
-                if (beIds == null) {
+                if (CollectionUtils.isEmpty(beIds)) {
                     status = new Status(ErrCode.COMMON_ERROR,
                             "failed to get enough backends for creating replica of tablet "
                                     + newTabletId + ". need: " + restoreReplicationNum);
@@ -872,7 +877,7 @@ public class RestoreJob extends AbstractJob {
                 LocalTablet localTablet = (LocalTablet) localIdx.getTablets().get(i);
                 BackupTabletInfo backupTabletInfo = backupIdxInfo.tablets.get(i);
                 LOG.debug("get tablet mapping: {} to {}, index {}", backupTabletInfo.id, localTablet.getId(), i);
-                for (Replica localReplica : localTablet.getReplicas()) {
+                for (Replica localReplica : localTablet.getImmutableReplicas()) {
                     IdChain src = new IdChain(remoteTblId, backupPartInfo.id, backupIdxInfo.id, backupTabletInfo.id,
                             -1L /* no replica id */);
                     IdChain dest = new IdChain(localTbl.getId(), localPartition.getId(),
@@ -935,7 +940,7 @@ public class RestoreJob extends AbstractJob {
                             restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                     for (Tablet restoreTablet : restoreIdx.getTablets()) {
                         GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                        for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
+                        for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                             GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
                         }
                     }
@@ -953,7 +958,7 @@ public class RestoreJob extends AbstractJob {
                                 restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
                         for (Tablet restoreTablet : restoreIdx.getTablets()) {
                             GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
-                            for (Replica restoreReplica : ((LocalTablet) restoreTablet).getReplicas()) {
+                            for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
                                 GlobalStateMgr.getCurrentInvertedIndex()
                                         .addReplica(restoreTablet.getId(), restoreReplica);
                             }
@@ -1023,12 +1028,23 @@ public class RestoreJob extends AbstractJob {
                             beId, batchNum, totalNum, this);
 
                     List<FsBroker> brokerAddrs = Lists.newArrayList();
-                    Status st = repo.getBrokerAddress(beId, globalStateMgr, brokerAddrs);
-                    if (!st.ok()) {
-                        status = st;
-                        return;
+                    THdfsProperties hdfsProperties = new THdfsProperties();
+                    if (repo.getStorage().hasBroker()) {
+                        Status st = repo.getBrokerAddress(beId, globalStateMgr, brokerAddrs);
+                        if (!st.ok()) {
+                            status = st;
+                            return;
+                        }
+                        Preconditions.checkState(brokerAddrs.size() == 1);
+                    } else {
+                        BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
+                        try {
+                            HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                        } catch (UserException e) {
+                            status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
+                            return;    
+                        }
                     }
-                    Preconditions.checkState(brokerAddrs.size() == 1);
 
                     // allot tasks
                     int index = 0;
@@ -1102,8 +1118,14 @@ public class RestoreJob extends AbstractJob {
                             LOG.debug("create download src path: {}, dest path: {}", src, dest);
                         }
                         long signature = globalStateMgr.getNextId();
-                        DownloadTask task = new DownloadTask(null, beId, signature, jobId, dbId,
+                        DownloadTask task;
+                        if (repo.getStorage().hasBroker()) {
+                            task = new DownloadTask(null, beId, signature, jobId, dbId,
                                 srcToDest, brokerAddrs.get(0), repo.getStorage().getProperties());
+                        } else {
+                            task = new DownloadTask(null, beId, signature, jobId, dbId,
+                            srcToDest, null, repo.getStorage().getProperties(), hdfsProperties);
+                        }
                         batchTask.addTask(task);
                         unfinishedSignatureToId.put(signature, beId);
                     }
@@ -1216,7 +1238,7 @@ public class RestoreJob extends AbstractJob {
                     // we also need to update the replica version of these overwritten restored partitions
                     for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                         for (Tablet tablet : idx.getTablets()) {
-                            for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {
                                     replica.updateRowCount(part.getVisibleVersion(),
                                             replica.getDataSize(), replica.getRowCount());

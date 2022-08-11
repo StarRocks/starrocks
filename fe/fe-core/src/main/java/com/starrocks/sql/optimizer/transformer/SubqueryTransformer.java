@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SubqueryTransformer {
@@ -46,7 +45,7 @@ public class SubqueryTransformer {
     }
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
-                                           Map<Integer, ExpressionMapping> cteContext) {
+                                           CTETransformerContext cteContext) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
@@ -59,7 +58,7 @@ public class SubqueryTransformer {
 
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
-                                                 Expr expression, Map<Integer, ExpressionMapping> cteContext) {
+                                                 Expr expression, CTETransformerContext cteContext) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
@@ -108,11 +107,11 @@ public class SubqueryTransformer {
     private static class SubqueryContext {
         public OptExprBuilder builder;
         public boolean useSemiAnti;
-        public Map<Integer, ExpressionMapping> cteContext;
+        public CTETransformerContext cteContext;
         public List<Expr> outerExprs;
 
         public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
-                               Map<Integer, ExpressionMapping> cteContext) {
+                               CTETransformerContext cteContext) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -120,7 +119,7 @@ public class SubqueryTransformer {
         }
 
         public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti,
-                               Map<Integer, ExpressionMapping> cteContext, List<Expr> outerExprs) {
+                               CTETransformerContext cteContext, List<Expr> outerExprs) {
             this.builder = builder;
             this.useSemiAnti = useSemiAnti;
             this.cteContext = cteContext;
@@ -138,7 +137,7 @@ public class SubqueryTransformer {
         }
 
         private LogicalPlan getLogicalPlan(QueryRelation relation, ConnectContext session, ExpressionMapping outer,
-                                           Map<Integer, ExpressionMapping> cteContext) {
+                                           CTETransformerContext cteContext) {
             if (!(relation instanceof SelectRelation)) {
                 throw new SemanticException("Currently only subquery of the Select type are supported");
             }
@@ -287,11 +286,6 @@ public class SubqueryTransformer {
             LogicalPlan subqueryPlan =
                     getLogicalPlan(queryRelation, session, context.builder.getExpressionMapping(),
                             context.cteContext);
-            if (!subqueryPlan.getCorrelation().isEmpty() && queryRelation instanceof SelectRelation
-                    && !((SelectRelation) queryRelation).hasAggregation()) {
-                throw new SemanticException("Correlated scalar subquery should aggregation query");
-            }
-
             if (subqueryPlan.getOutputColumn().size() != 1) {
                 throw new SemanticException("Scalar subquery should output one column");
             }

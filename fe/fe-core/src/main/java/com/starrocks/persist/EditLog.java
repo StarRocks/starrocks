@@ -23,9 +23,6 @@ package com.starrocks.persist;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.DecommissionBackendJob;
-import com.starrocks.alter.RollupJob;
-import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -36,7 +33,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -71,6 +67,8 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.staros.StarMgrJournal;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -194,16 +192,6 @@ public class EditLog {
                     globalStateMgr.replayAddPartition(info);
                     break;
                 }
-                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
-                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
-                    globalStateMgr.replayAddMvPartitionVersionInfo(info);
-                    break;
-                }
-                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
-                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
-                    globalStateMgr.replayRemoveMvPartitionVersionInfo(info);
-                    break;
-                }
                 case OperationType.OP_ADD_PARTITION: {
                     PartitionPersistInfo info = (PartitionPersistInfo) journal.getData();
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
@@ -215,6 +203,13 @@ public class EditLog {
                 case OperationType.OP_ADD_PARTITIONS: {
                     AddPartitionsInfo infos = (AddPartitionsInfo) journal.getData();
                     for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
+                        globalStateMgr.replayAddPartition(info);
+                    }
+                    break;
+                }
+                case OperationType.OP_ADD_PARTITIONS_V2: {
+                    AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
+                    for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
                         globalStateMgr.replayAddPartition(info);
                     }
                     break;
@@ -303,26 +298,6 @@ public class EditLog {
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_START_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISHING_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayFinishing(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_CANCEL_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayCancel(job, globalStateMgr);
-                    break;
-                }
                 case OperationType.OP_DROP_ROLLUP: {
                     DropInfo info = (DropInfo) journal.getData();
                     globalStateMgr.getRollupHandler().replayDropRollup(info, globalStateMgr);
@@ -335,32 +310,6 @@ public class EditLog {
                                 new DropInfo(batchDropInfo.getDbId(), batchDropInfo.getTableId(), indexId, false),
                                 globalStateMgr);
                     }
-                    break;
-                }
-                case OperationType.OP_START_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.info("Begin to unprotect create schema change job. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISHING_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.info("Begin to unprotect replay finishing schema change job. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayFinishing(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    globalStateMgr.getSchemaChangeHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_CANCEL_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.debug("Begin to unprotect cancel schema change. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayCancel(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
@@ -439,18 +388,6 @@ public class EditLog {
                 case OperationType.OP_BACKEND_STATE_CHANGE: {
                     Backend be = (Backend) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
-                    break;
-                }
-                case OperationType.OP_START_DECOMMISSION_BACKEND: {
-                    DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
-                    LOG.debug("{}: {}", opCode, job.getTableId());
-                    globalStateMgr.getClusterHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
-                    DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
-                    LOG.debug("{}: {}", opCode, job.getTableId());
-                    globalStateMgr.getClusterHandler().replayFinish(job, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
@@ -925,6 +862,11 @@ public class EditLog {
                     globalStateMgr.getShardManager().getShardDeleter().replayDeleteUnusedShard(shardInfo);
                     break;
                 }
+                case OperationType.OP_STARMGR: {
+                    StarMgrJournal j = (StarMgrJournal) journal.getData();
+                    StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1083,6 +1025,10 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_PARTITIONS, info);
     }
 
+    public void logAddPartitions(AddPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
+    }
+
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
     }
@@ -1115,17 +1061,6 @@ public class EditLog {
         logEdit(OperationType.OP_RECOVER_TABLE, info);
     }
 
-    public void logFinishingRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_FINISHING_ROLLUP, rollupJob);
-    }
-
-    public void logFinishRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_FINISH_ROLLUP, rollupJob);
-    }
-
-    public void logCancelRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_CANCEL_ROLLUP, rollupJob);
-    }
 
     public void logDropRollup(DropInfo info) {
         logEdit(OperationType.OP_DROP_ROLLUP, info);
@@ -1133,18 +1068,6 @@ public class EditLog {
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
         logEdit(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
-    }
-
-    public void logFinishingSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_FINISHING_SCHEMA_CHANGE, schemaChangeJob);
-    }
-
-    public void logFinishSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_FINISH_SCHEMA_CHANGE, schemaChangeJob);
-    }
-
-    public void logCancelSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_CANCEL_SCHEMA_CHANGE, schemaChangeJob);
     }
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
@@ -1249,10 +1172,6 @@ public class EditLog {
 
     public void logDropRole(PrivInfo info) {
         logEdit(OperationType.OP_DROP_ROLE, info);
-    }
-
-    public void logFinishDecommissionBackend(DecommissionBackendJob job) {
-        logEdit(OperationType.OP_FINISH_DECOMMISSION_BACKEND, job);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
@@ -1557,11 +1476,8 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
-    public void logAddMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
-        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
+    public void logStarMgrOperation(StarMgrJournal journal) {
+        logEdit(OperationType.OP_STARMGR, journal);
     }
 
-    public void logRemoveMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
-        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
-    }
 }

@@ -678,7 +678,7 @@ public class ReportHandler extends Daemon {
                         // if state is PENDING / ROLLUP / CLONE
                         // it's normal that the replica is not created in BE but exists in meta.
                         // so we do not delete it.
-                        List<Replica> replicas = tablet.getReplicas();
+                        List<Replica> replicas = tablet.getImmutableReplicas();
                         if (replicas.size() <= 1) {
                             LOG.error("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
                                             + "replica num setting is [{}]",
@@ -751,7 +751,7 @@ public class ReportHandler extends Daemon {
                                 currentBackendReportVersion);
 
                         // check for clone
-                        replicas = tablet.getReplicas();
+                        replicas = tablet.getImmutableReplicas();
                         if (replicas.size() == 0) {
                             LOG.error("invalid situation. tablet[{}] is empty", tabletId);
                         }
@@ -825,7 +825,7 @@ public class ReportHandler extends Daemon {
                             // from some BE, but the BE's tablet report doesn't see this deletion and still report
                             // the deleted tablet info to FE.
                             if (e.getErrorCode() != InternalErrorCode.REPLICA_ENOUGH_ERR) {
-                                LOG.warn("failed add to meta. tablet[{}], backend[{}]. {}",
+                                LOG.debug("failed add to meta. tablet[{}], backend[{}]. {}",
                                         tabletId, backendId, e.getMessage());
                             }
                             needDelete = true;
@@ -903,7 +903,7 @@ public class ReportHandler extends Daemon {
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 PublishVersionTask task =
-                        new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null,
+                        new PublishVersionTask(backendId, txnId, dbId, commitTime, map.get(txnId), null, null,
                                 createPublishVersionTaskTime);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
@@ -1271,14 +1271,14 @@ public class ReportHandler extends Daemon {
             } else {
                 // replica is enough. check if this tablet is already in meta
                 // (status changed between 'tabletReport()' and 'addReplica()')
-                for (Replica replica : tablet.getReplicas()) {
+                for (Replica replica : tablet.getImmutableReplicas()) {
                     if (replica.getBackendId() == backendId) {
                         // tablet is already in meta. return true
                         return;
                     }
                 }
                 throw new MetaNotFoundException(InternalErrorCode.REPLICA_ENOUGH_ERR,
-                        "replica is enough[" + tablet.getReplicas().size() + "-" + replicationNum + "]");
+                        "replica is enough[" + tablet.getImmutableReplicas().size() + "-" + replicationNum + "]");
             }
         } finally {
             db.writeUnlock();

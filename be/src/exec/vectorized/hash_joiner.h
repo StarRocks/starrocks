@@ -253,13 +253,15 @@ private:
 
         return Status::OK();
     }
-    void _filter_post_probe_output_chunk(ChunkPtr& chunk) {
+
+    Status _filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
         if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
             // TODO(satanson): _conjunct_ctxs should including local runtime in-filters.
-            _process_where_conjunct(&chunk);
+            RETURN_IF_ERROR(_process_where_conjunct(&chunk));
         }
+        return Status::OK();
     }
 
     Status _create_runtime_in_filters(RuntimeState* state) {

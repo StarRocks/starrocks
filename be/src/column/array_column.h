@@ -137,11 +137,11 @@ public:
 
     void reset_column() override;
 
-    const Column& elements() const;
-    ColumnPtr& elements_column();
+    const Column& elements() const { return *_elements; }
+    ColumnPtr& elements_column() { return _elements; }
 
-    const UInt32Column& offsets() const;
-    UInt32Column::Ptr& offsets_column();
+    const UInt32Column& offsets() const { return *_offsets; }
+    UInt32Column::Ptr& offsets_column() { return _offsets; }
 
     bool is_nullable() const override { return false; }
 

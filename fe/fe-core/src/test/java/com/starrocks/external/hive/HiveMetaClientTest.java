@@ -8,6 +8,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.external.hive.text.TextFileFormatDesc;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -27,11 +28,14 @@ import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.Partition;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
+import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -235,6 +239,34 @@ public class HiveMetaClientTest {
         Assert.assertEquals(partitionStats.getNumNulls(), 10L);
         Assert.assertEquals(partitionStats.getNumDistinctValues(), 2L);
         Assert.assertTrue(doubleEqual(partitionStats.getAvgSize(), 7f));
+    }
+
+    @Test
+    public void testGetTextFileFormatDesc() throws Exception {
+        HiveMetaClient client = new HiveMetaClient("localhost");
+
+        // Check is using default delimiter
+        StorageDescriptor emptySd = new StorageDescriptor();
+        emptySd.setSerdeInfo(new SerDeInfo("test", "test", new HashMap<>()));
+        TextFileFormatDesc emptyDesc = client.getTextFileFormatDesc(emptySd);
+        Assert.assertEquals("\001", emptyDesc.getFieldDelim());
+        Assert.assertEquals("\n", emptyDesc.getLineDelim());
+        Assert.assertEquals("\002", emptyDesc.getCollectionDelim());
+        Assert.assertEquals("\003", emptyDesc.getMapkeyDelim());
+
+        // Check is using custom delimiter
+        StorageDescriptor customSd = new StorageDescriptor();
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("field.delim", ",");
+        parameters.put("line.delim", "\004");
+        parameters.put("collection.delim", "\006");
+        parameters.put("mapkey.delim", ":");
+        customSd.setSerdeInfo(new SerDeInfo("test", "test", parameters));
+        TextFileFormatDesc customDesc = client.getTextFileFormatDesc(customSd);
+        Assert.assertEquals(",", customDesc.getFieldDelim());
+        Assert.assertEquals("\004", customDesc.getLineDelim());
+        Assert.assertEquals("\006", customDesc.getCollectionDelim());
+        Assert.assertEquals(":", customDesc.getMapkeyDelim());
     }
 
     private boolean doubleEqual(double v1, double v2) {

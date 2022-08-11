@@ -34,8 +34,11 @@ public:
     // after one next_header can not exceede the page's compressed_page_size.
     Status read_bytes(const uint8_t** buffer, size_t size);
 
+    Status skip_bytes(size_t size);
+
     // seek to read position, this position must be a start of a page header.
     void seek_to_offset(uint64_t offset) {
+        _stream->seek_to(offset);
         _offset = offset;
         _next_header_pos = offset;
     }

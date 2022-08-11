@@ -265,6 +265,24 @@ public class Config extends ConfigBase {
     public static boolean ignore_unknown_log_id = false;
 
     /**
+     * hdfs_read_buffer_size_kb for reading hdfs
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_read_buffer_size_kb = 8192;
+
+    /**
+     * hdfs_write_buffer_size_kb for writing hdfs
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_write_buffer_size_kb = 1024;
+
+    /**
+     * expire seconds for unused file system manager
+     */
+    @ConfField(mutable = true)
+    public static int hdfs_file_sytem_expire_seconds = 300;
+
+    /**
      * Non-master FE will stop offering service
      * if meta data delay gap exceeds *meta_delay_toleration_second*
      */
@@ -360,7 +378,7 @@ public class Config extends ConfigBase {
      *
      * <p>To disable the retention of these additional files, set this
      * parameter to zero.</p>
-     *
+     * <p>
      * If the bdb dir expands, set this param to 0.
      */
     @ConfField
@@ -538,6 +556,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_mysql_service_task_threads_num = 4096;
+
+    /**
+     * modifies the version string returned by following situations:
+     * select version();
+     * handshake packet version.
+     * global variable version.
+     */
+    @ConfField
+    public static String mysql_server_version = "5.1.0";
 
     /**
      * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
@@ -729,7 +756,7 @@ public class Config extends ConfigBase {
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
-    @ConfField(mutable = false)
+    @ConfField
     public static int async_load_task_pool_size = 10;
 
     /**
@@ -763,7 +790,7 @@ public class Config extends ConfigBase {
 
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
-     *
+     * <p>
      * The default value should better set to true because if user
      * has a deployment with only SSD or HDD medium storage paths,
      * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
@@ -778,20 +805,14 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String default_storage_medium = "HDD";
-    /**
-     * When create a table(or partition), you can specify its storage medium(HDD or SSD).
-     * If set to SSD, this specifies the default duration that tablets will stay on SSD.
-     * After that, tablets will be moved to HDD automatically.
-     * You can set storage cooldown time in CREATE TABLE stmt.
-     */
-    @ConfField(mutable = true)
-    public static long storage_cooldown_second = -1L; // won't cool down by default
+
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
      * And this specifies the maximal data retention time. After time, the data will be deleted permanently.
      */
     @ConfField(mutable = true)
     public static long catalog_trash_expire_second = 86400L; // 1day
+
     /**
      * Parallel load fragment instance num in single host
      */
@@ -837,7 +858,7 @@ public class Config extends ConfigBase {
     /**
      * Size of export task thread pool, default is 5.
      */
-    @ConfField(mutable = false)
+    @ConfField
     public static int export_task_pool_size = 5;
 
     // Configurations for consistency check
@@ -867,37 +888,12 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_connection_scheduler_threads_num = 4096;
-    /**
-     * Limit on the number of expr children of an expr tree.
-     * Exceed this limit may cause long analysis time while holding database read lock.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int expr_children_limit = 10000;
-    /**
-     * Limit on the depth of an expr tree.
-     * Exceed this limit may cause long analysis time while holding db read lock.
-     * Do not set this if you know what you are doing.
-     */
-    @ConfField(mutable = true)
-    public static int expr_depth_limit = 3000;
 
     /**
      * Used to limit element num of InPredicate in delete statement.
      */
     @ConfField(mutable = true)
     public static int max_allowed_in_element_num_of_delete = 10000;
-
-    /**
-     * The multi cluster feature will be deprecated in version 0.12
-     * set this config to true will disable all operations related to cluster feature, include:
-     * create/drop cluster
-     * add free backend/add backend to cluster/decommission cluster balance
-     * change the backends num of cluster
-     * link/migration db
-     */
-    @ConfField(mutable = true)
-    public static boolean disable_cluster_feature = true;
 
     /**
      * control materialized view
@@ -952,10 +948,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int backup_job_default_timeout_ms = 86400 * 1000; // 1 day
 
-    // If use k8s deploy manager locally, set this to true and prepare the certs files
-    @ConfField
-    public static boolean with_k8s_certs = false;
-
     // Set runtime locale when exec some cmds
     @ConfField
     public static String locale = "zh_CN.UTF-8";
@@ -963,7 +955,7 @@ public class Config extends ConfigBase {
     /**
      * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a Backend storage path.
      * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a Backend storage path.
-     * If both limitations are reached, this storage path can not be chose as tablet balance destination.
+     * If both limitations are reached, this storage path can not be chosen as tablet balance destination.
      * But for tablet recovery, we may exceed these limit for keeping data integrity as much as possible.
      */
     @ConfField(mutable = true)
@@ -1018,24 +1010,46 @@ public class Config extends ConfigBase {
     public static boolean disable_hadoop_load = false;
 
     /**
-     * the factor of delay time before deciding to repair tablet.
-     * if priority is VERY_HIGH, repair it immediately.
-     * HIGH, delay tablet_repair_delay_factor_second * 1;
-     * NORMAL: delay tablet_repair_delay_factor_second * 2;
-     * LOW: delay tablet_repair_delay_factor_second * 3;
-     */
-    @ConfField(mutable = true)
-    public static long tablet_repair_delay_factor_second = 60;
-
-    /**
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
-    @ConfField(mutable = true)
-    public static int schedule_slot_num_per_path = 2;
+    @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
+    public static int tablet_sched_slot_num_per_path = 2;
 
-    @ConfField
-    public static String tablet_balancer_strategy = "disk_and_tablet";
+    // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
+    // skip checking.
+    @ConfField(mutable = true, aliases = {"max_scheduling_tablets"})
+    public static int tablet_sched_max_scheduling_tablets = 2000;
+
+    /**
+     * if set to true, TabletScheduler will not do balance.
+     */
+    @ConfField(mutable = true, aliases = {"disable_balance"})
+    public static boolean tablet_sched_disable_balance = false;
+
+    /**
+     * The following 1 configs can set to true to disable the automatic colocate tables's relocate and balance.
+     * if *disable_colocate_balance* is set to true, ColocateTableBalancer will not balance colocate tables.
+     */
+    @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
+    public static boolean tablet_sched_disable_colocate_balance = false;
+
+    @ConfField(aliases = {"tablet_balancer_strategy"})
+    public static String tablet_sched_balancer_strategy = "disk_and_tablet";
+
+    // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
+    // no more balance check
+    @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
+    public static int tablet_sched_max_balancing_tablets = 100;
+
+    /**
+     * When create a table(or partition), you can specify its storage medium(HDD or SSD).
+     * If set to SSD, this specifies the default duration that tablets will stay on SSD.
+     * After that, tablets will be moved to HDD automatically.
+     * You can set storage cooldown time in CREATE TABLE stmt.
+     */
+    @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
+    public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
      * FOR BeLoadBalancer:
@@ -1047,31 +1061,44 @@ public class Config extends ConfigBase {
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
      */
-    @ConfField(mutable = true)
-    public static double balance_load_score_threshold = 0.1; // 10%
+    @ConfField(mutable = true, aliases = {"balance_load_score_threshold"})
+    public static double tablet_sched_balance_load_score_threshold = 0.1; // 10%
 
     /**
      * For DiskAndTabletLoadBalancer:
      * if all backends disk usage is lower than this threshold, disk balance will never happen
      */
-    @ConfField(mutable = true)
-    public static double balance_load_disk_safe_threshold = 0.5; // 50%
+    @ConfField(mutable = true, aliases = {"balance_load_disk_safe_threshold"})
+    public static double tablet_sched_balance_load_disk_safe_threshold = 0.5; // 50%
 
     /**
-     * if set to true, TabletScheduler will not do balance.
+     * the factor of delay time before deciding to repair tablet.
+     * if priority is VERY_HIGH, repair it immediately.
+     * HIGH, delay tablet_repair_delay_factor_second * 1;
+     * NORMAL: delay tablet_repair_delay_factor_second * 2;
+     * LOW: delay tablet_repair_delay_factor_second * 3;
      */
-    @ConfField(mutable = true)
-    public static boolean disable_balance = false;
+    @ConfField(mutable = true, aliases = {"tablet_repair_delay_factor_second"})
+    public static long tablet_sched_repair_delay_factor_second = 60;
 
-    // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
-    // skip checking.
-    @ConfField(mutable = true)
-    public static int max_scheduling_tablets = 2000;
+    /**
+     * min_clone_task_timeout_sec and max_clone_task_timeout_sec is to limit the
+     * min and max timeout of a clone task.
+     * Under normal circumstances, the timeout of a clone task is estimated by
+     * the amount of data and the minimum transmission speed(5MB/s).
+     * But in special cases, you may need to manually set these two configs
+     * to ensure that the clone task will not fail due to timeout.
+     */
+    @ConfField(mutable = true, aliases = {"min_clone_task_timeout_sec"})
+    public static long tablet_sched_min_clone_task_timeout_sec = 3 * 60L; // 3min
+    @ConfField(mutable = true, aliases = {"max_clone_task_timeout_sec"})
+    public static long tablet_sched_max_clone_task_timeout_sec = 2 * 60 * 60L; // 2h
 
-    // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
-    // no more balance check
-    @ConfField(mutable = true)
-    public static int max_balancing_tablets = 100;
+    /**
+     * tablet checker's check interval in seconds
+     */
+    @ConfField
+    public static int tablet_sched_checker_interval_seconds = 20;
 
     @Deprecated
     @ConfField(mutable = true)
@@ -1159,22 +1186,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static String small_file_dir = StarRocksFE.STARROCKS_HOME_DIR + "/small_files";
-
-    /**
-     * The following 1 configs can set to true to disable the automatic colocate tables's relocate and balance.
-     * if *disable_colocate_balance* is set to true, ColocateTableBalancer will not balance colocate tables.
-     */
-    @ConfField(mutable = true)
-    public static boolean disable_colocate_balance = false;
-
-    /**
-     * If set to true, the insert stmt with processing error will still return a label to user.
-     * And user can use this label to check the load job's status.
-     * The default value is false, which means if insert operation encounter errors,
-     * exception will be thrown to user client directly without load label.
-     */
-    @ConfField(mutable = true)
-    public static boolean using_old_load_usage_pattern = false;
 
     /**
      * control rollup job concurrent limit
@@ -1275,19 +1286,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean recover_with_empty_tablet = false;
 
-    /**
-     * min_clone_task_timeout_sec and max_clone_task_timeout_sec is to limit the
-     * min and max timeout of a clone task.
-     * Under normal circumstances, the timeout of a clone task is estimated by
-     * the amount of data and the minimum transmission speed(5MB/s).
-     * But in special cases, you may need to manually set these two configs
-     * to ensure that the clone task will not fail due to timeout.
-     */
-    @ConfField(mutable = true)
-    public static long min_clone_task_timeout_sec = 3 * 60; // 3min
-    @ConfField(mutable = true)
-    public static long max_clone_task_timeout_sec = 2 * 60 * 60; // 2h
-
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
 
@@ -1296,7 +1294,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_manager_sleep_time_sec = 60; // 60s
-
 
     /**
      * Analyze status keep time in catalog
@@ -1369,10 +1366,10 @@ public class Config extends ConfigBase {
     public static long histogram_buckets_size = 64;
 
     /**
-     * default top-n size of histogram statistics
+     * default most common value size of histogram statistics
      */
     @ConfField(mutable = true)
-    public static long histogram_topn_size = 100;
+    public static long histogram_mcv_size = 100;
 
     /**
      * default sample ratio of histogram statistics
@@ -1584,6 +1581,14 @@ public class Config extends ConfigBase {
     public static String starmgr_address = "127.0.0.1:6090";
     @ConfField
     public static boolean integrate_starmgr = false;
+    @ConfField
+    public static String starmgr_s3_bucket = "";
+    @ConfField
+    public static String starmgr_s3_endpoint = "";
+    @ConfField
+    public static String starmgr_s3_ak = "";
+    @ConfField
+    public static String starmgr_s3_sk = "";
 
     /**
      * default bucket number when create OLAP table without buckets info
@@ -1671,4 +1676,7 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static long experimental_lake_compaction_max_interval_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static boolean enable_new_publish_mechanism = false;
 }

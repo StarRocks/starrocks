@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.OutFileClause;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -83,14 +84,14 @@ public class ResultSink extends DataSink {
     }
 
     public boolean needBroker() {
-        return !Strings.isNullOrEmpty(brokerName);
+        return fileSinkOptions.isSetUse_broker() && fileSinkOptions.use_broker;
     }
 
     public String getBrokerName() {
         return brokerName;
     }
 
-    public void setOutfileInfo(OutFileClause outFileClause) {
+    public void setOutfileInfo(OutFileClause outFileClause) throws AnalysisException {
         sinkType = TResultSinkType.FILE;
         fileSinkOptions = outFileClause.toSinkOptions();
         brokerName = outFileClause.getBrokerDesc() == null ? null : outFileClause.getBrokerDesc().getName();

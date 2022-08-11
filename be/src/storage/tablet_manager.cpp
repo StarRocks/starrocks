@@ -142,7 +142,34 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     int32_t schema_hash = request.tablet_schema.schema_hash;
     LOG(INFO) << "Creating tablet " << tablet_id;
 
-    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
+    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id), std::defer_lock);
+    std::shared_lock<std::shared_mutex> base_rlock;
+
+    // If do schema change, both the shard where the source tablet is located and
+    // the shard where the target tablet is located need to be locked.
+    // In order to prevent deadlock, the order of locking needs to be fixed.
+    if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
+        int shard_idx = _get_tablets_shard_idx(tablet_id);
+        int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
+
+        if (shard_idx == base_shard_idx) {
+            wlock.lock();
+        } else {
+            std::shared_lock tmp_rlock(_get_tablets_shard_lock(request.base_tablet_id), std::defer_lock);
+            base_rlock = std::move(tmp_rlock);
+
+            if (shard_idx < base_shard_idx) {
+                wlock.lock();
+                base_rlock.lock();
+            } else {
+                base_rlock.lock();
+                wlock.lock();
+            }
+        }
+    } else {
+        wlock.lock();
+    }
+
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, true, nullptr);
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
@@ -207,9 +234,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
     // should remove the tablet's pending_id no matter create-tablet success or not
     DataDir* data_dir = tablet->data_dir();
 
-    // TODO(yiguolei)
-    // the following code is very difficult to understand because it mixed alter tablet v2
-    // and alter tablet v1 should remove alter tablet v1 code after v0.12
     Status status;
     bool is_tablet_added = false;
     do {
@@ -239,15 +263,10 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
         }
         if (is_schema_change) {
             if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
-                LOG(INFO) << "request for alter-tablet v2, do not add alter task to tablet";
                 // if this is a new alter tablet, has to set its state to not ready
                 // because schema change hanlder depends on it to check whether history data
                 // convert finished
                 tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
-            } else {
-                // add alter task to new tablet if it is a new tablet during schema change
-                tablet->add_alter_task(base_tablet->tablet_id(), base_tablet->schema_hash(), std::vector<Version>(),
-                                       alter_type);
             }
             // Possible cases:
             // 1. Because system time may rollback, creation_time of new table will be earlier
@@ -316,89 +335,6 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
 Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     return _drop_tablet_unlocked(tablet_id, flag);
-}
-
-// Drop specified tablet, the main logical is as follows:
-// 1. tablet not in schema change:
-//      drop specified tablet directly;
-// 2. tablet in schema change:
-//      a. schema change not finished && the dropping tablet is a base-tablet:
-//          base-tablet cannot be dropped;
-//      b. other cases:
-//          drop specified tablet directly and clear schema change info.
-Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
-    StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
-
-    // Fetch tablet which need to be dropped
-    TabletSharedPtr tablet_to_drop = _get_tablet_unlocked(tablet_id);
-    if (tablet_to_drop == nullptr) {
-        LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": not exist";
-        return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
-    }
-    LOG(INFO) << "Dropping tablet " << tablet_id;
-
-    // Try to get schema change info, we can drop tablet directly if it is not
-    // in schema-change state.
-    AlterTabletTaskSharedPtr alter_task = tablet_to_drop->alter_task();
-    if (alter_task == nullptr) {
-        return _drop_tablet_directly_unlocked(tablet_id, flag);
-    }
-
-    AlterTabletState alter_state = alter_task->alter_state();
-    TTabletId related_tablet_id = alter_task->related_tablet_id();
-
-    TabletSharedPtr related_tablet = _get_tablet_unlocked(related_tablet_id);
-    if (related_tablet == nullptr) {
-        // TODO(lingbin): in what case, can this happen?
-        LOG(WARNING) << "Dropping tablet directly when related tablet not found. "
-                     << " tablet_id=" << related_tablet_id;
-        return _drop_tablet_directly_unlocked(tablet_id, flag);
-    }
-
-    // Check whether the tablet we want to delete is in schema-change state
-    bool is_schema_change_finished = alter_state == ALTER_FINISHED || alter_state == ALTER_FAILED;
-
-    // Check whether the tablet we want to delete is base-tablet
-    bool is_dropping_base_tablet = false;
-    if (tablet_to_drop->creation_time() < related_tablet->creation_time()) {
-        is_dropping_base_tablet = true;
-    }
-
-    if (is_dropping_base_tablet && !is_schema_change_finished) {
-        LOG(WARNING) << "Fail to drop tablet. it is in schema-change state. tablet=" << tablet_to_drop->full_name();
-        return Status::InternalError("doing schema-change");
-    }
-
-    // When the code gets here, there are two possibilities:
-    // 1. The tablet currently being deleted is a base-tablet, and the corresponding
-    //    schema-change process has finished;
-    // 2. The tablet we are currently trying to drop is not base-tablet(i.e. a tablet
-    //    generated from its base-tablet due to schema-change). For example, the current
-    //    request is triggered by cancel alter). In this scenario, the corresponding
-    //    schema-change task may still in process.
-
-    // Drop specified tablet and clear schema-change info
-    // NOTE: must first break the hard-link and then drop the tablet.
-    // Otherwise, if first drop tablet, then break link. If BE restarts during execution,
-    // after BE restarts, the tablet is no longer in metadata, but because the hard-link
-    // is still there, the corresponding file may never be deleted from disk.
-    related_tablet->obtain_header_wrlock();
-    // should check the related tablet_id in alter task is current tablet to be dropped
-    // For example: A related to B, BUT B related to C.
-    // If drop A, should not clear B's alter task
-    AlterTabletTaskSharedPtr related_alter_task = related_tablet->alter_task();
-    if (related_alter_task != nullptr && related_alter_task->related_tablet_id() == tablet_id) {
-        related_tablet->delete_alter_task();
-        related_tablet->save_meta();
-    }
-    related_tablet->release_header_lock();
-    auto res = _drop_tablet_directly_unlocked(tablet_id, flag);
-    if (!res.ok()) {
-        LOG(WARNING) << "Fail to drop tablet which in schema change. tablet=" << tablet_to_drop->full_name();
-        return res;
-    }
-    LOG(INFO) << "Dropped tablet " << tablet_id;
-    return res;
 }
 
 Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec) {
@@ -539,7 +475,7 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
     // reach here means do not has enough tablets to pick in current shard
     _shard_visited_tablet_ids.clear();
-    DCHECK(_tablets_shards.size() > 0);
+    DCHECK(!_tablets_shards.empty());
     _cur_shard = (_cur_shard + 1) % _tablets_shards.size();
     if (_cur_shard == 0) {
         // the next shard is 0, then all tablets has been visited
@@ -561,15 +497,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
-            AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
-            if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
-                cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
-                    // Current tablet is newly created during schema-change or rollup, skip it
-                    continue;
-                }
-            }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
                 continue;
@@ -580,13 +507,15 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                 continue;
             }
 
-            int64_t last_failure_ms = tablet_ptr->last_cumu_compaction_failure_time();
+            int64_t last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
             if (compaction_type == CompactionType::BASE_COMPACTION) {
-                last_failure_ms = tablet_ptr->last_base_compaction_failure_time();
+                last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
             }
-            if (now_ms - last_failure_ms <= config::min_compaction_failure_interval_sec * 1000) {
-                VLOG(1) << "Too often to check compaction, skip it."
-                        << "compaction_type=" << compaction_type_str << ", last_failure_time_ms=" << last_failure_ms
+            if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+                VLOG(1) << "Too often to schedule failure compaction, skip it."
+                        << "compaction_type=" << compaction_type_str
+                        << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                        << ", last_failure_timestamp=" << last_failure_ts / 1000
                         << ", tablet_id=" << tablet_ptr->tablet_id();
                 continue;
             }
@@ -642,15 +571,6 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
-            }
-            AlterTabletTaskSharedPtr cur_alter_task = tablet_ptr->alter_task();
-            if (cur_alter_task != nullptr && cur_alter_task->alter_state() != ALTER_FINISHED &&
-                cur_alter_task->alter_state() != ALTER_FAILED) {
-                TabletSharedPtr related_tablet = _get_tablet_unlocked(cur_alter_task->related_tablet_id());
-                if (related_tablet != nullptr && tablet_ptr->creation_time() > related_tablet->creation_time()) {
-                    // Current tablet is newly created during schema-change or rollup, skip it
-                    continue;
-                }
             }
             // A not-ready tablet maybe a newly created tablet under schema-change, skip it
             if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
@@ -817,12 +737,13 @@ Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
 
 Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tablets_info) {
     DCHECK(tablets_info != nullptr);
-    LOG(INFO) << "Reporting all tablets info";
 
     // build the expired txn map first, outside the tablet map lock
     std::map<TabletInfo, std::vector<int64_t>> expire_txn_map;
     StorageEngine::instance()->txn_manager()->build_expire_txn_map(&expire_txn_map);
-    LOG(INFO) << "Found " << expire_txn_map.size() << " expired tablet transactions";
+    if (expire_txn_map.size() > 0) {
+        LOG(INFO) << "Found " << expire_txn_map.size() << " expired tablet transactions";
+    }
 
     StarRocksMetrics::instance()->report_all_tablets_requests_total.increment(1);
 
@@ -847,7 +768,7 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             }
         }
     }
-    LOG(INFO) << "Reported all " << tablets_info->size() << " tablets info";
+    LOG(INFO) << "Report all " << tablets_info->size() << " tablets info";
     return Status::OK();
 }
 
@@ -1099,6 +1020,7 @@ void TabletManager::_build_tablet_stat() {
                 stat.__set_data_size(tablet->tablet_footprint());
                 stat.__set_row_num(tablet->num_rows());
             }
+            stat.__set_version_count(tablet->version_count());
             _tablet_stat_cache.emplace(tablet_id, stat);
         }
     }
@@ -1114,7 +1036,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
         VLOG(3) << "begin to create init version. version=" << version;
         RowsetSharedPtr new_rowset;
         do {
-            RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+            RowsetWriterContext context;
             context.rowset_id = StorageEngine::instance()->next_rowset_id();
             context.tablet_uid = tablet->tablet_uid();
             context.tablet_id = tablet->tablet_id();
@@ -1217,21 +1139,26 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                               col_idx_to_unique_id, tablet_meta);
 }
 
-Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
+Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
+    StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
+
     if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
         return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
     }
+
     TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it == tablet_map.end()) {
         LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
-        return Status::NotFound("");
+        return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
+
+    LOG(INFO) << "Start to drop tablet" << tablet_id;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
-    LOG(INFO) << "drop tablet:" << dropped_tablet->tablet_id() << ", stop compaction task";
     dropped_tablet->stop_compaction();
+    LOG(INFO) << "Succeed to stop compaction of tablet " << tablet_id;
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
@@ -1250,11 +1177,10 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
         if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
             LOG(FATAL) << "Fail to remove tablet meta: " << st;
         }
-        LOG(INFO) << "Removed tablet " << tablet_id;
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
         std::unique_lock l(_shutdown_tablets_lock);
-        _shutdown_tablets.emplace(dropped_tablet->tablet_id(), std::move(drop_info));
+        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
     } else if (flag == kMoveFilesToTrash) {
         {
             // See comments above
@@ -1265,11 +1191,12 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
         dropped_tablet->save_meta();
 
         std::unique_lock l(_shutdown_tablets_lock);
-        _shutdown_tablets.emplace(dropped_tablet->tablet_id(), std::move(drop_info));
+        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
     } else {
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
+    LOG(INFO) << "Succeed to drop tablet" << tablet_id;
     return Status::OK();
 }
 

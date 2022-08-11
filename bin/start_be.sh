@@ -43,7 +43,9 @@ export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# export env variables from be.conf
+# ===================================================================================
+# initialization of environment variables before exporting env variables from be.conf
+# For most cases, you should put default environment variables in this section.
 #
 # UDF_RUNTIME_DIR
 # LOG_DIR
@@ -51,6 +53,11 @@ source $STARROCKS_HOME/bin/common.sh
 export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
 export LOG_DIR=${STARROCKS_HOME}/log
 export PID_DIR=`cd "$curdir"; pwd`
+
+# https://github.com/aws/aws-cli/issues/5623
+# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+export AWS_EC2_METADATA_DISABLED=true
+# ===================================================================================
 
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
@@ -91,20 +98,15 @@ export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [ -z "$JAVA_OPTS_FOR_JDK_9" ]; then
-        echo "JAVA_OPTS_FOR_JDK_9 is not set in be.conf" >> $LOG_DIR/be.out
-        exit -1
+    if [ -n "$JAVA_OPTS_FOR_JDK_9_AND_LATER" ]; then
+    final_java_opt=$JAVA_OPTS_FOR_JDK_9_AND_LATER
     fi
-    final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
 export LIBHDFS_OPTS=$final_java_opt
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
-# https://github.com/aws/aws-cli/issues/5623
-# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-export AWS_EC2_METADATA_DISABLED=true
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
@@ -133,6 +135,8 @@ echo "start time: "$(date) >> $LOG_DIR/be.out
 if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
+
+export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true"
 
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

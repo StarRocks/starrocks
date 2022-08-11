@@ -1,11 +1,18 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.statistic;
 
+import com.google.common.base.Joiner;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,8 +21,24 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName'," +
-                    " histogram($columnName, $bucketNum, $sampleRatio, $topN), NOW()" +
-                    " FROM (SELECT * FROM $dbName.$tableName $sampleTabletHint ORDER BY $columnName LIMIT $totalRows) t";
+                    " histogram($columnName, $bucketNum, $sampleRatio), " +
+                    " $mcv," +
+                    " NOW()" +
+                    " FROM (SELECT $columnName FROM $dbName.$tableName where rand() <= $sampleRatio" +
+                    " and $columnName is not null $MCVExclude" +
+                    " ORDER BY $columnName LIMIT $totalRows) t";
+
+    private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
+            "select cast(version as INT), cast(db_id as BIGINT), cast(table_id as BIGINT), " +
+                    "cast(column_key as varchar), cast(column_value as varchar) from (" +
+                    "select " + StatsConstants.STATISTIC_HISTOGRAM_VERSION + " as version, " +
+                    "$dbId as db_id, " +
+                    "$tableId as table_id, " +
+                    "`$columnName` as column_key, " +
+                    "count(`$columnName`) as column_value " +
+                    "from $dbName.$tableName " +
+                    "group by `$columnName` " +
+                    "order by count(`$columnName`) desc limit $topN ) t";
 
     public HistogramStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
                                          StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
@@ -28,20 +51,40 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         ConnectContext context = StatisticUtils.buildConnectContext();
         context.getSessionVariable().setNewPlanerAggStage(1);
 
-        long totalRows = table.getRowCount();
-        long sampleRows = Long.parseLong(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS));
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
-        long topN = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_TOPN_SIZE));
+        long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
 
         for (String column : columns) {
-            String sql = buildCollectHistogram(db, table, totalRows, sampleRows, sampleRatio, bucketNum, topN, column);
+            String sql = buildCollectMCV(db, table, mcvSize, column);
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+            List<TStatisticData> mcv = statisticExecutor.queryMCV(sql);
+
+            Map<String, String> mostCommonValues = new HashMap<>();
+            for (TStatisticData tStatisticData : mcv) {
+                mostCommonValues.put(tStatisticData.columnName, tStatisticData.histogram);
+            }
+
+            sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, column);
             collectStatisticSync(sql);
         }
     }
 
-    public String buildCollectHistogram(Database database, OlapTable table, Long totalRows, Long sampleRows, double sampleRatio,
-                                        Long bucketNum, Long topN, String columnName) {
+    private String buildCollectMCV(Database database, OlapTable table, Long topN, String columnName) {
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", table.getId());
+        context.put("columnName", columnName);
+        context.put("dbId", database.getId());
+
+        context.put("dbName", database.getOriginName());
+        context.put("tableName", table.getName());
+        context.put("topN", topN);
+
+        return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
+    }
+
+    private String buildCollectHistogram(Database database, OlapTable table, double sampleRatio,
+                                        Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
         VelocityContext context = new VelocityContext();
@@ -53,13 +96,35 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", totalRows);
-        context.put("topN", topN);
+        context.put("totalRows", Long.MAX_VALUE);
 
-        if (sampleRows >= totalRows) {
-            context.put("sampleTabletHint", "");
+        Column column = table.getColumn(columnName);
+
+        List<String> mcvList = new ArrayList<>();
+        for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
+            String key;
+            if (column.getType().isDate()) {
+                key = LocalDate.parse(entry.getKey(), DateUtils.DATE_FORMATTER).format(DateUtils.DATEKEY_FORMATTER);
+            } else if (column.getType().isDatetime()) {
+                key = LocalDate.parse(entry.getKey(), DateUtils.DATE_TIME_FORMATTER).format(DateUtils.SECOND_FORMATTER);
+            } else {
+                key = entry.getKey();
+            }
+
+            mcvList.add("[\"" + key + "\",\"" + entry.getValue() + "\"]");
+        }
+
+        if (mcvList.isEmpty()) {
+            context.put("mcv", "NULL");
         } else {
-            context.put("sampleTabletHint", getSampleTabletHint(table, sampleRows));
+            context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
+        }
+
+        if (!mostCommonValues.isEmpty()) {
+            context.put("MCVExclude", " and " + columnName + " not in (" +
+                    Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+        } else {
+            context.put("MCVExclude", "");
         }
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));

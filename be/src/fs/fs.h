@@ -16,6 +16,7 @@
 #include "common/statusor.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
+#include "runtime/descriptors.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -23,6 +24,9 @@ namespace starrocks {
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
+class ResultFileOptions;
+class TUploadReq;
+class TDownloadReq;
 struct WritableFileOptions;
 struct RandomAccessFileOptions;
 
@@ -33,6 +37,47 @@ struct SpaceInfo {
     int64_t free = 0;
     // Free space available to a non-privileged process (may be equal or less than free)
     int64_t available = 0;
+};
+
+struct FSOptions {
+private:
+    FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
+              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download)
+            : scan_range_params(scan_range_params),
+              export_sink(export_sink),
+              result_file_options(result_file_options),
+              upload(upload),
+              download(download) {}
+
+public:
+    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr) {}
+
+    FSOptions(const TBrokerScanRangeParams* scan_range_params)
+            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr) {}
+
+    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr) {}
+
+    FSOptions(const ResultFileOptions* result_file_options)
+            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr) {}
+
+    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr) {}
+
+    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download) {}
+
+    const THdfsProperties* hdfs_properties() const;
+
+    const TBrokerScanRangeParams* scan_range_params;
+    const TExportSink* export_sink;
+    const ResultFileOptions* result_file_options;
+    const TUploadReq* upload;
+    const TDownloadReq* download;
+};
+
+struct FileStatus {
+    FileStatus(std::string_view name, bool is_dir, int64_t size) : name(name), is_dir(is_dir), size(size) {}
+    std::string name;
+    bool is_dir;
+    int64_t size;
 };
 
 class FileSystem {
@@ -52,7 +97,8 @@ public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
 
-    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri);
+    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
+                                                                        FSOptions options = FSOptions());
 
     static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
@@ -105,6 +151,8 @@ public:
     //                  permission to access "dir", or if "dir" is invalid.
     //         IOError if an IO Error was encountered
     virtual Status get_children(const std::string& dir, std::vector<std::string>* result) = 0;
+
+    virtual Status list_path(const std::string& dir, std::vector<FileStatus>* result) { return Status::OK(); }
 
     // Iterate the specified directory and call given callback function with child's
     // name. This function continues execution until all children have been iterated

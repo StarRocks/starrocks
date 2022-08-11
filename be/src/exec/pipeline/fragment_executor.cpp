@@ -544,12 +544,40 @@ void FragmentExecutor::_fail_cleanup() {
     }
 }
 
+std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(PipelineBuilderContext* context,
+                                                                            const TDataStreamSink& stream_sink,
+                                                                            const DataStreamSender* sender,
+                                                                            size_t dop) {
+    auto fragment_ctx = context->fragment_context();
+
+    bool is_dest_merge = stream_sink.__isset.is_merge && stream_sink.is_merge;
+
+    bool is_pipeline_level_shuffle = false;
+    int32_t dest_dop = -1;
+    if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
+        sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        dest_dop = stream_sink.dest_dop;
+        is_pipeline_level_shuffle = true;
+        DCHECK_GT(dest_dop, 0);
+    }
+
+    std::shared_ptr<SinkBuffer> sink_buffer =
+            std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
+
+    auto exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
+            context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
+            sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
+            sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
+            fragment_ctx, sender->output_columns());
+    return exchange_sink;
+}
+
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                           const UnifiedExecPlanFragmentParams& request,
                                                           std::unique_ptr<starrocks::DataSink>& datasink) {
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
-        starrocks::ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+        ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
         // Result sink doesn't have plan node id;
         OpFactoryPtr op =
                 std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
@@ -557,30 +585,11 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
-        starrocks::DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
+        DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto& t_stream_sink = request.output_sink().stream_sink;
-        bool is_dest_merge = false;
-        if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
-            is_dest_merge = true;
-        }
-        bool is_pipeline_level_shuffle = false;
-        int32_t dest_dop = -1;
-        if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
-            sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-            dest_dop = t_stream_sink.dest_dop;
-            is_pipeline_level_shuffle = true;
-            DCHECK_GT(dest_dop, 0);
-        }
 
-        std::shared_ptr<SinkBuffer> sink_buffer =
-                std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
-
-        OpFactoryPtr exchange_sink = std::make_shared<ExchangeSinkOperatorFactory>(
-                context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
-                sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
-                sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
-                fragment_ctx, sender->output_columns());
+        auto exchange_sink = _create_exchange_sink_operator(context, t_stream_sink, sender, dop);
         fragment_ctx->pipelines().back()->add_op_factory(exchange_sink);
 
     } else if (typeid(*datasink) == typeid(starrocks::MultiCastDataStreamSink)) {
@@ -595,7 +604,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
         // Further workflow explanation is in mcast_local_exchange.h file.
-        starrocks::MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
+        MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
@@ -616,14 +625,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             OpFactories ops;
             // it's okary to set arbitrary dop.
             const size_t dop = 1;
-            // TODO(hcf) set dest dop properly
-            bool is_pipeline_level_shuffle = false;
-            auto dest_dop = context->degree_of_parallelism();
-            bool is_dest_merge = false;
             auto& t_stream_sink = t_multi_case_stream_sink.sinks[i];
-            if (t_stream_sink.__isset.is_merge && t_stream_sink.is_merge) {
-                is_dest_merge = true;
-            }
 
             // source op
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
@@ -631,12 +633,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             source_op->set_degree_of_parallelism(dop);
 
             // sink op
-            auto sink_buffer = std::make_shared<SinkBuffer>(fragment_ctx, sender->destinations(), is_dest_merge, dop);
-            auto sink_op = std::make_shared<ExchangeSinkOperatorFactory>(
-                    context->next_operator_id(), t_stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
-                    sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
-                    sender->get_dest_node_id(), sender->get_partition_exprs(),
-                    sender->get_enable_exchange_pass_through(), fragment_ctx, sender->output_columns());
+            auto sink_op = _create_exchange_sink_operator(context, t_stream_sink, sender.get(), dop);
 
             ops.emplace_back(source_op);
             ops.emplace_back(sink_op);

@@ -29,6 +29,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.logging.log4j.LogManager;
@@ -91,8 +92,7 @@ public class Checkpoint extends LeaderDaemon {
         if (belongToGlobalStateMgr) {
             success = replayAndGenerateGlobalStateMgrImage(checkPointVersion);
         } else {
-            assert belongToGlobalStateMgr == true;
-            // success = replayAndGenerateStarMgrImage(checkPointVersion);
+            success = replayAndGenerateStarMgrImage(checkPointVersion);
         }
 
         if (!success) {
@@ -200,14 +200,7 @@ public class Checkpoint extends LeaderDaemon {
         try {
             globalStateMgr.loadImage(imageDir);
             globalStateMgr.replayJournal(checkPointVersion);
-            if (globalStateMgr.getReplayedJournalId() != checkPointVersion) {
-                LOG.error("checkpoint version should be {}, actual replayed journal id is {}",
-                        checkPointVersion, globalStateMgr.getReplayedJournalId());
-                return false;
-            }
-
             globalStateMgr.clearExpiredJobs();
-
             globalStateMgr.saveImage();
             replayedJournalId = globalStateMgr.getReplayedJournalId();
             if (MetricRepo.isInit) {
@@ -224,6 +217,20 @@ public class Checkpoint extends LeaderDaemon {
             // destroy checkpoint globalStateMgr, reclaim memory
             globalStateMgr = null;
             GlobalStateMgr.destroyCheckpoint();
+        }
+    }
+
+    private boolean replayAndGenerateStarMgrImage(long checkPointVersion) {
+        assert belongToGlobalStateMgr == false;
+        StarMgrServer starMgrServer = StarMgrServer.getCurrentState();
+        try {
+            return starMgrServer.replayAndGenerateImage(imageDir, checkPointVersion);
+        } catch (Exception e) {
+            LOG.error("Exception when generate new star mgr image file, {}.", e.getMessage());
+            return false;
+        } finally {
+            // destroy checkpoint, reclaim memory
+            StarMgrServer.destroyCheckpoint();
         }
     }
 }

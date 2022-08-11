@@ -358,7 +358,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     // database lock should be held.
     public List<Replica> getReplicas() {
-        return tablet.getReplicas();
+        return tablet.getImmutableReplicas();
     }
 
     public void setVersionInfo(long visibleVersion,
@@ -416,7 +416,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     // database lock should be held.
     public long getTabletSize() {
         long max = Long.MIN_VALUE;
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.getDataSize() > max) {
                 max = replica.getDataSize();
             }
@@ -430,7 +430,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
      */
     public boolean containsBE(long beId, boolean forColocate) {
         String host = infoService.getBackend(beId).getHost();
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             Backend be = infoService.getBackend(replica.getBackendId());
             if (be == null) {
                 // BE has been dropped, skip it
@@ -502,7 +502,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.isBad()) {
                 continue;
             }
@@ -585,7 +585,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public void chooseDestReplicaForVersionIncomplete(Map<Long, PathSlot> backendsWorkingSlots)
             throws SchedException {
         Replica chosenReplica = null;
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             if (replica.isBad()) {
                 continue;
             }
@@ -652,7 +652,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 if (type == Type.REPAIR) {
                     slot.freeSlot(srcPathHash);
                 } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)
+                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
                             || isSrcPathResourceHold()) {
                         slot.freeBalanceSlot(srcPathHash);
                     }
@@ -666,7 +666,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 if (type == Type.REPAIR) {
                     slot.freeSlot(destPathHash);
                 } else {
-                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)
+                    if (!TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)
                             || isDestPathResourceHold()) {
                         slot.freeBalanceSlot(destPathHash);
                     }
@@ -683,7 +683,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 db.writeLock();
                 try {
                     List<Replica> cloneReplicas = Lists.newArrayList();
-                    tablet.getReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
+                    tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
                             cloneReplicas::add);
 
                     for (Replica cloneReplica : cloneReplicas) {
@@ -712,7 +712,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (state == State.PENDING
                 && (type == Type.REPAIR
                 || (type == Type.BALANCE &&
-                !TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)))) {
+                !TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_sched_balancer_strategy)))) {
             if (!reserveTablet) {
                 this.tablet = null;
             }
@@ -833,7 +833,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 olapTable.enablePersistentIndex(),
                 olapTable.getPartitionInfo().getTabletType(partitionId));
         createReplicaTask.setIsRecoverTask(true);
-        taskTimeoutMs = Config.min_clone_task_timeout_sec * 1000;
+        taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
         Replica emptyReplica =
                 new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
@@ -849,8 +849,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private long getApproximateTimeoutMs() {
         long tabletSize = getTabletSize();
         long timeoutMs = tabletSize / 1024 / 1024 / MIN_CLONE_SPEED_MB_PER_SECOND * 1000;
-        timeoutMs = Math.max(timeoutMs, Config.min_clone_task_timeout_sec * 1000);
-        timeoutMs = Math.min(timeoutMs, Config.max_clone_task_timeout_sec * 1000);
+        timeoutMs = Math.max(timeoutMs, Config.tablet_sched_min_clone_task_timeout_sec * 1000);
+        timeoutMs = Math.min(timeoutMs, Config.tablet_sched_max_clone_task_timeout_sec * 1000);
         return timeoutMs;
     }
 

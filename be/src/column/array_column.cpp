@@ -467,22 +467,6 @@ void ArrayColumn::reset_column() {
     _elements->reset_column();
 }
 
-const Column& ArrayColumn::elements() const {
-    return *(_elements.get());
-}
-
-ColumnPtr& ArrayColumn::elements_column() {
-    return _elements;
-}
-
-const UInt32Column& ArrayColumn::offsets() const {
-    return *_offsets;
-}
-
-UInt32Column::Ptr& ArrayColumn::offsets_column() {
-    return _offsets;
-}
-
 std::string ArrayColumn::debug_item(uint32_t idx) const {
     DCHECK_LT(idx, size());
     size_t offset = _offsets->get_data()[idx];

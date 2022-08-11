@@ -22,7 +22,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
@@ -65,19 +64,6 @@ public class AlterTableStmtTest {
                 result = true;
             }
         };
-    }
-
-    @Test
-    public void testNormal() throws UserException {
-        List<AlterClause> ops = Lists.newArrayList();
-        ops.add(new DropColumnClause("col1", "", null));
-        ops.add(new DropColumnClause("col2", "", null));
-        AlterTableStmt stmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
-        stmt.analyze(analyzer);
-        Assert.assertEquals("ALTER TABLE `testDb`.`testTbl` DROP COLUMN `col1`, \nDROP COLUMN `col2`",
-                stmt.toSql());
-        Assert.assertEquals("default_cluster:testDb", stmt.getTbl().getDb());
-        Assert.assertEquals(2, stmt.getOps().size());
     }
 
     @Test

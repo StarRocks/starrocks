@@ -197,7 +197,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         int totalReplicaNum = 0;
         for (MaterializedIndex rollupIdx : partitionIdToRollupIndex.values()) {
             for (Tablet tablet : rollupIdx.getTablets()) {
-                totalReplicaNum += ((LocalTablet) tablet).getReplicas().size();
+                totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalReplicaNum);
@@ -222,7 +222,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
-                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getReplicas();
+                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     for (Replica rollupReplica : rollupReplicas) {
                         long backendId = rollupReplica.getBackendId();
                         Preconditions.checkNotNull(tabletIdMap.get(rollupTabletId)); // baseTabletId
@@ -375,7 +375,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         }
                     }
 
-                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getReplicas();
+                    List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     for (Replica rollupReplica : rollupReplicas) {
                         AlterReplicaTask rollupTask = new AlterReplicaTask(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId,
@@ -463,7 +463,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
                 MaterializedIndex rollupIndex = entry.getValue();
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
-                    List<Replica> replicas = ((LocalTablet) rollupTablet).getReplicas();
+                    List<Replica> replicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
                     int healthyReplicaNum = 0;
                     for (Replica replica : replicas) {
                         if (replica.getLastFailedVersion() < 0
@@ -499,12 +499,20 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             MaterializedIndex rollupIndex = partition.getIndex(rollupIndexId);
             Preconditions.checkNotNull(rollupIndex, rollupIndexId);
             for (Tablet tablet : rollupIndex.getTablets()) {
-                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                     replica.setState(ReplicaState.NORMAL);
                 }
             }
             partition.visualiseShadowIndex(rollupIndexId, false);
         }
+        // colocate mv
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db != null) {
+            db.writeLock();
+            tbl.addTableToColocateGroupIfSet(dbId, rollupIndexName);
+            db.writeUnlock();
+        }
+
         tbl.rebuildFullSchema();
     }
 
@@ -516,6 +524,19 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     protected boolean cancelImpl(String errMsg) {
         if (jobState.isFinalState()) {
             return false;
+        }
+        //colocate mv
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db != null) {
+            db.writeLock();
+            try {
+                OlapTable table = (OlapTable) db.getTable(tableId);
+                if (table != null) {
+                    table.removeMaterializedViewWhenJobCanceled(rollupIndexName);
+                }
+            } finally {
+                db.writeUnlock();
+            }
         }
 
         cancelInternal();
@@ -605,7 +626,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             for (Tablet rollupTablet : rollupIndex.getTablets()) {
                 invertedIndex.addTablet(rollupTablet.getId(), rollupTabletMeta);
-                for (Replica rollupReplica : ((LocalTablet) rollupTablet).getReplicas()) {
+                for (Replica rollupReplica : ((LocalTablet) rollupTablet).getImmutableReplicas()) {
                     invertedIndex.addReplica(rollupTablet.getId(), rollupReplica);
                 }
             }

@@ -5,8 +5,10 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.iceberg.IcebergHiveCatalog;
+import com.starrocks.external.iceberg.IcebergCatalog;
+import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -15,35 +17,52 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
+import static com.starrocks.external.iceberg.IcebergUtil.getIcebergCustomCatalog;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergHiveCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
-    private final String metastoreURI;
-    private IcebergHiveCatalog hiveCatalog;
+    private String metastoreURI;
+    private String catalogType;
+    private String catalogImpl;
+    private IcebergCatalog icebergCatalog;
+    private Map<String, String> customProperties;
 
-    public IcebergMetadata(String metastoreURI) {
-        Map<String, String> properties = new HashMap<>();
-        // the first phase of IcebergConnector only supports hive catalog.
-        this.hiveCatalog = (IcebergHiveCatalog) getIcebergHiveCatalog(metastoreURI, properties);
-        this.metastoreURI = metastoreURI;
+    public IcebergMetadata(Map<String, String> properties) {
+        if (IcebergCatalogType.HIVE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG))) {
+            catalogType = properties.get(ICEBERG_CATALOG);
+            metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
+            icebergCatalog = getIcebergHiveCatalog(metastoreURI, properties);
+            Util.validateMetastoreUris(metastoreURI);
+        } else if (IcebergCatalogType.CUSTOM_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG))) {
+            catalogType = properties.get(ICEBERG_CATALOG);
+            catalogImpl = properties.get(ICEBERG_IMPL);
+            icebergCatalog = getIcebergCustomCatalog(catalogImpl, properties);
+            properties.remove(ICEBERG_CATALOG);
+            properties.remove(ICEBERG_IMPL);
+            customProperties = properties;
+        } else {
+            throw new RuntimeException(String.format("Property %s is missing or not supported now.", ICEBERG_CATALOG));
+        }
     }
 
     @Override
     public List<String> listDbNames() throws DdlException {
-        return hiveCatalog.listAllDatabases();
+        return icebergCatalog.listAllDatabases();
     }
 
     @Override
     public Database getDb(String dbName) {
         try {
-            return hiveCatalog.getDB(dbName);
+            return icebergCatalog.getDB(dbName);
         } catch (InterruptedException | TException e) {
             LOG.error("Failed to get iceberg database " + dbName, e);
             return null;
@@ -52,15 +71,19 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) throws DdlException {
-        List<TableIdentifier> tableIdentifiers = hiveCatalog.listTables(Namespace.of(dbName));
+        List<TableIdentifier> tableIdentifiers = icebergCatalog.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
     @Override
     public Table getTable(String dbName, String tblName) {
         try {
-            org.apache.iceberg.Table icebergTable = hiveCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-            return IcebergUtil.convertToSRTable(icebergTable, metastoreURI, dbName, tblName);
+            org.apache.iceberg.Table icebergTable
+                    = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
+            if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
+                return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName, customProperties);
+            }
+            return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, dbName, tblName);
         } catch (DdlException e) {
             LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
             return null;

@@ -27,12 +27,7 @@ import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicaStateException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
-import com.starrocks.alter.AlterJob;
-import com.starrocks.alter.AlterJob.JobType;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
-import com.starrocks.alter.SchemaChangeJob;
-import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.cluster.Cluster;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -70,9 +65,7 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -312,5 +305,11 @@ public class GlobalStateMgrTest {
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
         globalStateMgr.modifyFrontendHost(clause);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testAddRepeatedFe() throws Exception {
+        GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+        globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
     }
 }

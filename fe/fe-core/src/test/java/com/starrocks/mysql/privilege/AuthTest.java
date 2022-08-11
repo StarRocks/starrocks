@@ -895,17 +895,13 @@ public class AuthTest {
                 PrivPredicate.DROP));
 
         // 32. drop user cmy@"%"
-        DropUserStmt dropUserStmt = new DropUserStmt(new UserIdentity("cmy", "%"));
+        String dropSql = "DROP USER 'cmy'";
+        DropUserStmt dropUserStmt = null;
         try {
-            dropUserStmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        try {
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
             auth.dropUser(dropUserStmt);
-        } catch (DdlException e) {
+        } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
 
@@ -915,10 +911,10 @@ public class AuthTest {
                 "12345", null));
 
         // 33. drop user zhangsan@"192.%"
-        dropUserStmt = new DropUserStmt(new UserIdentity("zhangsan", "192.%"));
+        dropSql = "DROP USER 'zhangsan'@'192.%'";
         try {
-            dropUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -959,10 +955,10 @@ public class AuthTest {
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "10.1.1.1", "abcde", null));
 
         // 35. drop user zhangsan@['starrocks.domain1']
-        dropUserStmt = new DropUserStmt(new UserIdentity("zhangsan", "starrocks.domain1", true));
+        dropSql = "DROP USER 'zhangsan'@['starrocks.domain1']";
         try {
-            dropUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -983,11 +979,11 @@ public class AuthTest {
         Assert.assertTrue(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "10.1.1.1", "abcde", null));
 
-        // 36. drop user lisi@['starrocks.domain1']
-        dropUserStmt = new DropUserStmt(new UserIdentity("lisi", "starrocks.domain2", true));
+        // 36. drop user lisi@['starrocks.domain2']
+        dropSql = "DROP USER 'lisi'@['starrocks.domain2']";
         try {
-            dropUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1012,11 +1008,11 @@ public class AuthTest {
         Assert.assertFalse(
                 auth.checkPlainPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "10.1.1.1", "123456", null));
 
-        // 37. drop zhangsan@'172.18.1.1' and zhangsan@'10.1.1.1'
-        dropUserStmt = new DropUserStmt(new UserIdentity("zhangsan", "172.18.1.1", false));
+        // 37. drop zhangsan@'172.18.1.1' and zhangsan@'172.18.1.1'
+        dropSql = "DROP USER 'zhangsan'@'172.18.1.1'";
         try {
-            dropUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1027,10 +1023,10 @@ public class AuthTest {
             Assert.fail();
         }
 
-        dropUserStmt = new DropUserStmt(new UserIdentity("zhangsan", "10.1.1.1", false));
+        dropSql = "DROP USER 'zhangsan'@'10.1.1.1'";
         try {
-            dropUserStmt.analyze(analyzer);
-        } catch (UserException e) {
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1275,11 +1271,12 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 4. drop user
-        DropUserStmt dropUserStmt = new DropUserStmt(userIdentity);
+        String dropSql = "DROP USER 'testUser'";
+        DropUserStmt dropUserStmt;
         try {
-            dropUserStmt.analyze(analyzer);
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
             auth.dropUser(dropUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1330,11 +1327,11 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 4. drop user and role
-        dropUserStmt = new DropUserStmt(userIdentity);
+        dropSql = "DROP USER 'testUser'";
         try {
-            dropUserStmt.analyze(analyzer);
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
             auth.dropUser(dropUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1383,11 +1380,11 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 4. drop user
-        dropUserStmt = new DropUserStmt(userIdentity);
+        dropSql = "DROP USER 'testUser'";
         try {
-            dropUserStmt.analyze(analyzer);
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
             auth.dropUser(dropUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1438,11 +1435,11 @@ public class AuthTest {
         Assert.assertFalse(auth.checkGlobalPriv(userIdentity, PrivPredicate.USAGE));
 
         // 4. drop user and role
-        dropUserStmt = new DropUserStmt(userIdentity);
+        dropSql = "DROP USER 'testUser'";
         try {
-            dropUserStmt.analyze(analyzer);
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
             auth.dropUser(dropUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -1492,11 +1489,11 @@ public class AuthTest {
         }
         Assert.assertTrue(hasException);
 
-        dropUserStmt = new DropUserStmt(userIdentity);
         try {
-            dropUserStmt.analyze(analyzer);
+            dropSql = "DROP USER 'testUser'";
+            dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
             auth.dropUser(dropUserStmt);
-        } catch (UserException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
         }
@@ -2212,5 +2209,13 @@ public class AuthTest {
         // 7. replay revoke
         newAuth.replayRevokeImpersonate(infos.get(0));
         Assert.assertFalse(newAuth.canImpersonate(harry, gregory));
+    }
+
+    @Test
+    public void testUserNamePureDigit() throws Exception {
+        String sql = "CREATE USER '12345' IDENTIFIED BY '12345'";
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        auth.createUser(createUserStmt);
+        Assert.assertNotNull(auth.getUserProperties("default_cluster:'12345'@'%'"));
     }
  }

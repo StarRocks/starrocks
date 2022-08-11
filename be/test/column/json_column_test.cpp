@@ -210,6 +210,30 @@ PARALLEL_TEST(JsonColumnTest, test_compare) {
     }
 }
 
+PARALLEL_TEST(JsonColumnTest, test_compare_array) {
+    auto array0 = JsonValue::parse("[]").value();
+    auto array1 = JsonValue::parse("[1]").value();
+    auto array2 = JsonValue::parse("[1, 2]").value();
+    EXPECT_EQ(0, array0.compare(array0));
+    EXPECT_EQ(0, array1.compare(array1));
+    EXPECT_EQ(0, array2.compare(array2));
+    EXPECT_LT(array0.compare(array1), 0);
+    EXPECT_LT(array0.compare(array2), 0);
+    EXPECT_LT(array1.compare(array2), 0);
+}
+
+PARALLEL_TEST(JsonColumnTest, test_compare_object) {
+    auto obj0 = JsonValue::parse("{}").value();
+    auto obj1 = JsonValue::parse(R"( {"a": 1} )").value();
+    auto obj2 = JsonValue::parse(R"( {"a": 1, "b": 2} )").value();
+    EXPECT_EQ(0, obj0.compare(obj0));
+    EXPECT_EQ(0, obj1.compare(obj1));
+    EXPECT_EQ(0, obj2.compare(obj2));
+    EXPECT_LT(obj0.compare(obj1), 0);
+    EXPECT_LT(obj0.compare(obj2), 0);
+    EXPECT_LT(obj1.compare(obj2), 0);
+}
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(JsonColumnTest, test_hash) {
     JsonValue x = JsonValue::parse(R"({"a": 1, "b": 2})").value();

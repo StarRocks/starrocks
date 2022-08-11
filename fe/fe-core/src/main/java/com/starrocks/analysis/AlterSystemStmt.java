@@ -60,7 +60,6 @@ public class AlterSystemStmt extends DdlStmt {
                 || (alterClause instanceof AddFollowerClause)
                 || (alterClause instanceof DropFollowerClause)
                 || (alterClause instanceof ModifyFrontendAddressClause)
-                || (alterClause instanceof ModifyBrokerClause)
                 || (alterClause instanceof AlterLoadErrorUrlClause));
 
         alterClause.analyze(analyzer);
@@ -94,7 +93,8 @@ public class AlterSystemStmt extends DdlStmt {
                 || clause instanceof AddBackendClause
                 || clause instanceof DropBackendClause
                 || clause instanceof ModifyBackendAddressClause
-                || clause instanceof ModifyFrontendAddressClause;
+                || clause instanceof ModifyFrontendAddressClause
+                || clause instanceof ModifyBrokerClause;
 
     }
 }

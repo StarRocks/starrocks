@@ -29,6 +29,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Database;
@@ -42,9 +43,11 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -54,6 +57,7 @@ import com.starrocks.task.ReleaseSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -94,7 +98,7 @@ public class BackupJob extends AbstractJob {
     // all objects which need backup
     private List<TableRef> tableRefs = Lists.newArrayList();
 
-    private BackupJobState state;
+    protected BackupJobState state;
 
     private long snapshotFinishedTime = -1;
     private long snapshopUploadFinishedTime = -1;
@@ -493,12 +497,23 @@ public class BackupJob extends AbstractJob {
             LOG.info("backend {} has {} batch, total {} tasks, {}", beId, batchNum, totalNum, this);
 
             List<FsBroker> brokers = Lists.newArrayList();
-            Status st = repo.getBrokerAddress(beId, globalStateMgr, brokers);
-            if (!st.ok()) {
-                status = st;
-                return;
+            THdfsProperties hdfsProperties = new THdfsProperties();
+            if (repo.getStorage().hasBroker()) {
+                Status st = repo.getBrokerAddress(beId, globalStateMgr, brokers);
+                if (!st.ok()) {
+                    status = st;
+                    return;
+                }
+                Preconditions.checkState(brokers.size() == 1);
+            } else {
+                BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
+                try {
+                    HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                } catch (UserException e) {
+                    status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
+                    return;    
+                }
             }
-            Preconditions.checkState(brokers.size() == 1);
 
             // allot tasks
             int index = 0;
@@ -512,8 +527,14 @@ public class BackupJob extends AbstractJob {
                     srcToDest.put(src, dest);
                 }
                 long signature = globalStateMgr.getNextId();
-                UploadTask task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
-                        brokers.get(0), repo.getStorage().getProperties());
+                UploadTask task;
+                if (repo.getStorage().hasBroker()) {
+                    task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
+                            brokers.get(0), repo.getStorage().getProperties());
+                } else {
+                    task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
+                    null, repo.getStorage().getProperties(), hdfsProperties);
+                }
                 batchTask.addTask(task);
                 unfinishedTaskIds.put(signature, beId);
             }
@@ -673,7 +694,7 @@ public class BackupJob extends AbstractJob {
      */
     private Replica chooseReplica(LocalTablet tablet, long visibleVersion) {
         List<Long> replicaIds = Lists.newArrayList();
-        for (Replica replica : tablet.getReplicas()) {
+        for (Replica replica : tablet.getImmutableReplicas()) {
             replicaIds.add(replica.getId());
         }
 

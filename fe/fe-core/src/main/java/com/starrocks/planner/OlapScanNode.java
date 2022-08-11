@@ -319,7 +319,7 @@ public class OlapScanNode extends ScanNode {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             LOG.debug("tablet {}, replica: {}", tabletId, replica.toString());
                         }
                     }

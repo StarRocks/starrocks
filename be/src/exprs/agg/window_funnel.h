@@ -4,12 +4,16 @@
 
 #include <cstring>
 #include <limits>
+#include <memory>
+#include <memory_resource>
 #include <type_traits>
+#include <vector>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
@@ -17,6 +21,7 @@
 #include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/memory_resource.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
@@ -59,6 +64,8 @@ struct TypeTraits<TYPE_DATETIME> {
 };
 } // namespace InteralTypeOfFunnel
 
+inline const constexpr int reserve_list_size = 4;
+
 template <PrimitiveType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
@@ -68,12 +75,15 @@ struct WindowFunnelState {
 
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
-    mutable std::vector<TimestampEvent> events_list;
     using TimestampVector = std::vector<TimestampType>;
     int64_t window_size;
-    int32_t mode;
+    int32_t mode = 0;
     uint8_t events_size;
     bool sorted = true;
+    char buffer[reserve_list_size * sizeof(TimestampEvent)];
+    stack_memory_resource mr;
+    mutable std::pmr::vector<TimestampEvent> events_list;
+    WindowFunnelState() : mr(buffer, sizeof(buffer)), events_list(&mr) { events_list.reserve(reserve_list_size); }
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
@@ -92,8 +102,8 @@ struct WindowFunnelState {
         events_list.emplace_back(std::make_pair(timestamp, event_level));
     }
 
-    void deserialize_and_merge(FunctionContext* ctx, DatumArray& datum_array) {
-        if (datum_array.size() == 0) {
+    void deserialize_and_merge(FunctionContext* ctx, const int64_t* array, size_t length) {
+        if (length == 0) {
             return;
         }
 
@@ -101,12 +111,12 @@ struct WindowFunnelState {
         window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
         mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
 
-        events_size = (uint8_t)datum_array[0].get_int64();
-        bool other_sorted = (uint8_t)datum_array[1].get_int64();
+        events_size = (uint8_t)array[0];
+        bool other_sorted = (uint8_t)array[1];
 
-        for (size_t i = 2; i < datum_array.size() - 1; i += 2) {
-            TimestampType timestamp = datum_array[i].get_int64();
-            int64_t event_level = datum_array[i + 1].get_int64();
+        for (size_t i = 2; i < length - 1; i += 2) {
+            TimestampType timestamp = array[i];
+            int64_t event_level = array[i + 1];
             other_list.emplace_back(std::make_pair(timestamp, uint8_t(event_level)));
         }
 
@@ -130,20 +140,28 @@ struct WindowFunnelState {
         sorted = true;
     }
 
+    static void serialize(int64_t* buffer, size_t length, ArrayColumn* array_column) {
+        CHECK(array_column->elements_column()->append_numbers(buffer, sizeof(int64_t) * length) > 0);
+        array_column->offsets_column()->append(array_column->offsets_column()->get_data().back() + length);
+    }
+
     void serialize_to_array_column(ArrayColumn* array_column) const {
         if (!events_list.empty()) {
             size_t size = events_list.size();
-            DatumArray array;
-            array.reserve(size * 2 + 2);
-            array.emplace_back((int64_t)events_size);
-            array.emplace_back((int64_t)sorted);
-            auto curr = events_list.begin();
-            while (curr != events_list.end()) {
-                array.emplace_back((int64_t)(*curr).first);
-                array.emplace_back((int64_t)(*curr).second);
-                ++curr;
+            size_t serialize_size = size * 2 + 2;
+            // TODO:
+            std::unique_ptr<int64_t[]> buffer = std::make_unique<int64_t[]>(serialize_size);
+
+            buffer[0] = (int64_t)events_size;
+            buffer[1] = (int64_t)sorted;
+
+            size_t write_idx = 2;
+            for (auto [first, second] : events_list) {
+                buffer[write_idx++] = first;
+                buffer[write_idx++] = second;
             }
-            array_column->append_datum(array);
+
+            serialize(buffer.get(), write_idx, array_column);
         } else {
             array_column->append_default();
         }
@@ -370,8 +388,10 @@ class WindowFunnelAggregateFunction final
 
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
-        this->data(state).window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(0));
-        this->data(state).mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
+        DCHECK(columns[2]->is_constant());
+
+        this->data(state).window_size = down_cast<const Int64Column*>(columns[0])->get_data()[0];
+        this->data(state).mode = ColumnHelper::get_const_value<TYPE_INT>(columns[2]);
 
         // get timestamp
         TimeType tv;
@@ -430,9 +450,23 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        DCHECK(column->is_array());
+        DCHECK(!column->is_nullable());
         const auto* input_column = down_cast<const ArrayColumn*>(column);
-        auto ele_vector = input_column->get(row_num).get_array();
-        this->data(state).deserialize_and_merge(ctx, ele_vector);
+        const auto& offsets = input_column->offsets().get_data();
+        const auto& elements = input_column->elements();
+        const int64_t* raw_data;
+        if (elements.is_nullable()) {
+            auto data_elements = down_cast<const NullableColumn*>(&elements)->data_column().get();
+            raw_data = down_cast<const Int64Column*>(data_elements)->get_data().data();
+        } else {
+            raw_data = down_cast<const Int64Column*>(&elements)->get_data().data();
+        }
+
+        size_t offset = offsets[row_num];
+        size_t array_size = offsets[row_num + 1] - offsets[row_num];
+
+        this->data(state).deserialize_and_merge(ctx, raw_data + offset, array_size);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -471,15 +505,14 @@ public:
                 }
             }
 
-            DatumArray array;
             size_t events_size = ele_vector.size();
             bool sorted = false;
-            array.reserve(1 + 1 + 2);
-            array.emplace_back((int64_t)events_size);
-            array.emplace_back((int64_t)sorted);
-            array.emplace_back((int64_t)tv);
-            array.emplace_back((int64_t)event_level);
-            dst_column->append_datum(array);
+            int64_t buffer[4];
+            buffer[0] = (int64_t)events_size;
+            buffer[1] = (int64_t)sorted;
+            buffer[2] = (int64_t)tv;
+            buffer[3] = (int64_t)event_level;
+            WindowFunnelState<PT>::serialize(buffer, 4, dst_column);
         }
     }
 

@@ -101,6 +101,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         return versionInfo;
     }
 
+    @Override
     public StorageInfo getStorageInfo() {
         return storageInfo;
     }
@@ -165,7 +166,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
             throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
         }
         if (enableStorageCache && storageCacheTtlS == 0) {
-            storageCacheTtlS = Config.storage_cooldown_second;
+            storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
         }
         storageInfo = new StorageInfo(null, new StorageCacheInfo(enableStorageCache, storageCacheTtlS));
 

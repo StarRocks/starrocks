@@ -25,17 +25,13 @@ import com.google.common.base.Function;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
@@ -168,8 +164,16 @@ public class LoadStmt extends DdlStmt {
         return user;
     }
 
+    public void setUser(String user) {
+        this.user = user;
+    }
+
     public EtlJobType getEtlJobType() {
         return etlJobType;
+    }
+
+    public void setEtlJobType(EtlJobType etlJobType) {
+        this.etlJobType = etlJobType;
     }
 
     public static void checkProperties(Map<String, String> properties) throws DdlException {
@@ -246,79 +250,9 @@ public class LoadStmt extends DdlStmt {
         }
     }
 
-    private void analyzeVersion() throws AnalysisException {
-        if (properties == null) {
-            return;
-        }
-        final String versionProperty = properties.get(VERSION);
-        if (versionProperty != null) {
-            throw new AnalysisException("Do not support VERSION property");
-        }
-    }
-
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-        label.analyze(analyzer);
-        if (dataDescriptions == null || dataDescriptions.isEmpty()) {
-            throw new AnalysisException("No data file in load statement.");
-        }
-        // check data descriptions, support 2 cases bellow:
-        // case 1: muti file paths, muti data descriptions
-        // case 2: one hive table, one data description
-        boolean isLoadFromTable = false;
-        for (DataDescription dataDescription : dataDescriptions) {
-            if (brokerDesc == null && resourceDesc == null) {
-                dataDescription.setIsHadoopLoad(true);
-            }
-            dataDescription.analyze(label.getDbName());
-
-            if (dataDescription.isLoadFromTable()) {
-                isLoadFromTable = true;
-            }
-        }
-        if (isLoadFromTable) {
-            if (dataDescriptions.size() > 1) {
-                throw new AnalysisException("Only support one olap table load from one external table");
-            }
-            if (resourceDesc == null) {
-                throw new AnalysisException("Load from table should use Spark Load");
-            }
-        }
-
-        if (resourceDesc != null) {
-            resourceDesc.analyze();
-            etlJobType = resourceDesc.getEtlJobType();
-            // check resource usage privilege
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(ConnectContext.get(),
-                    resourceDesc.getName(),
-                    PrivPredicate.USAGE)) {
-                throw new AnalysisException("USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
-                        + "'@'" + ConnectContext.get().getRemoteIP()
-                        + "' for resource '" + resourceDesc.getName() + "'");
-            }
-        } else if (brokerDesc != null) {
-            etlJobType = EtlJobType.BROKER;
-        } else {
-            // if cluster is null, use default hadoop cluster
-            // if cluster is not null, use this hadoop cluster
-            etlJobType = EtlJobType.HADOOP;
-        }
-
-        if (etlJobType == EtlJobType.SPARK) {
-            for (DataDescription dataDescription : dataDescriptions) {
-                CatalogUtils.checkIsLakeTable(label.getDbName(), dataDescription.getTableName());
-            }
-        }
-
-        try {
-            checkProperties(properties);
-        } catch (DdlException e) {
-            throw new AnalysisException(e.getMessage());
-        }
-
-        analyzeVersion();
-        user = ConnectContext.get().getQualifiedUser();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -333,6 +267,15 @@ public class LoadStmt extends DdlStmt {
         return version;
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitLoadStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();

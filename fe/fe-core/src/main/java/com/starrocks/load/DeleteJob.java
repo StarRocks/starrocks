@@ -21,100 +21,61 @@
 
 package com.starrocks.load;
 
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Replica;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.PushTask;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionAlreadyCommitException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
-import java.util.Map;
-import java.util.Set;
+import java.util.List;
 
-public class DeleteJob extends AbstractTxnStateChangeCallback {
+public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
     private static final Logger LOG = LogManager.getLogger(DeleteJob.class);
 
     public enum DeleteState {
-        UN_QUORUM,
+        DELETING,
         QUORUM_FINISHED,
         FINISHED
     }
 
-    private DeleteState state;
-
     // jobId(listenerId). use in beginTransaction to callback function
-    private long id;
+    protected long id;
     // transaction id.
-    private long signature;
-    private String label;
-    private Set<Long> totalTablets;
-    private Set<Long> quorumTablets;
-    private Set<Long> finishedTablets;
-    Map<Long, TabletDeleteInfo> tabletDeleteInfoMap;
-    private Set<PushTask> pushTasks;
-    private MultiDeleteInfo deleteInfo;
+    protected long signature;
+    protected String label;
+    protected DeleteState state;
+    protected MultiDeleteInfo deleteInfo;
 
-    private Map<Long, Short> partitionToReplicateNum;
-
-    public DeleteJob(long id, long transactionId, String label,
-                     Map<Long, Short> partitionToReplicateNum, MultiDeleteInfo deleteInfo) {
+    public DeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo) {
         this.id = id;
         this.signature = transactionId;
         this.label = label;
+        this.state = DeleteState.DELETING;
         this.deleteInfo = deleteInfo;
-        totalTablets = Sets.newHashSet();
-        finishedTablets = Sets.newHashSet();
-        quorumTablets = Sets.newHashSet();
-        tabletDeleteInfoMap = Maps.newConcurrentMap();
-        pushTasks = Sets.newHashSet();
-        state = DeleteState.UN_QUORUM;
-        this.partitionToReplicateNum = partitionToReplicateNum;
     }
 
-    /**
-     * check and update if this job's state is QUORUM_FINISHED or FINISHED
-     * The meaning of state:
-     * QUORUM_FINISHED: For each tablet there are more than half of its replicas have been finished
-     * FINISHED: All replicas of this jobs have finished
-     */
-    public void checkAndUpdateQuorum() throws MetaNotFoundException {
-        long dbId = deleteInfo.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
-        }
+    @Override
+    public long getId() {
+        return id;
+    }
 
-        for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
-            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
-            if (replicaNum == null) {
-                // should not happen
-                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
-                        " when commit delete job");
-            }
-            if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
-                finishedTablets.add(tDeleteInfo.getTabletId());
-            }
-            if (tDeleteInfo.getFinishedReplicas().size() >= replicaNum / 2 + 1) {
-                quorumTablets.add(tDeleteInfo.getTabletId());
-            }
-        }
-        LOG.info("check delete job quorum, txn_id: {}, total tablets: {}, quorum tablets: {},",
-                signature, totalTablets.size(), quorumTablets.size());
+    public long getTransactionId() {
+        return signature;
+    }
 
-        if (finishedTablets.containsAll(totalTablets)) {
-            setState(DeleteState.FINISHED);
-        } else if (quorumTablets.containsAll(totalTablets)) {
-            setState(DeleteState.QUORUM_FINISHED);
-        }
+    public String getLabel() {
+        return label;
     }
 
     public void setState(DeleteState state) {
@@ -122,38 +83,11 @@ public class DeleteJob extends AbstractTxnStateChangeCallback {
     }
 
     public DeleteState getState() {
-        return this.state;
-    }
-
-    public boolean addTablet(long tabletId) {
-        return totalTablets.add(tabletId);
-    }
-
-    public boolean addPushTask(PushTask pushTask) {
-        return pushTasks.add(pushTask);
-    }
-
-    public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
-        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
-        TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
-        return tDeleteInfo.addFinishedReplica(replica);
+        return state;
     }
 
     public MultiDeleteInfo getDeleteInfo() {
         return deleteInfo;
-    }
-
-    public String getLabel() {
-        return this.label;
-    }
-
-    public Set<PushTask> getPushTasks() {
-        return pushTasks;
-    }
-
-    @Override
-    public long getId() {
-        return this.id;
     }
 
     @Override
@@ -161,38 +95,84 @@ public class DeleteJob extends AbstractTxnStateChangeCallback {
         if (!txnOperated) {
             return;
         }
-        executeFinish();
+        setState(DeleteState.FINISHED);
+        GlobalStateMgr.getCurrentState().getDeleteHandler().recordFinishedJob(this);
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
         GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         // just to clean the callback
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
     }
 
-    public void executeFinish() {
-        setState(DeleteState.FINISHED);
-        GlobalStateMgr.getCurrentState().getDeleteHandler().recordFinishedJob(this);
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
-    }
+    public abstract void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
+            throws DdlException, QueryStateException;
 
-    public long getTransactionId() {
-        return this.signature;
-    }
+    public abstract long getTimeoutMs();
 
-    public Collection<TabletDeleteInfo> getTabletDeleteInfo() {
-        return tabletDeleteInfoMap.values();
-    }
+    public abstract void clear();
 
-    public long getTimeoutMs() {
-        if (FeConstants.runningUnitTest) {
-            // for making unit test run fast
-            return 1000;
+    public boolean cancel(DeleteHandler.CancelType cancelType, String reason) {
+        LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", getTransactionId(),
+                cancelType.name());
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        try {
+            globalTransactionMgr.abortTransaction(getDeleteInfo().getDbId(), getTransactionId(), reason);
+        } catch (TransactionAlreadyCommitException e) {
+            return false;
+        } catch (Exception e) {
+            LOG.warn("errors while abort transaction", e);
         }
-        // timeout is between 30 seconds to 5 min
-        long timeout = Math.max(totalTablets.size() * Config.tablet_delete_timeout_second * 1000L, 30000L);
-        return Math.min(timeout, Config.load_straggler_wait_second * 1000L);
+        return true;
+    }
+
+    /**
+     * commit delete job
+     * return true when successfully commit and publish
+     * return false when successfully commit but publish unfinished.
+     * A UserException thrown if both commit and publish failed.
+     */
+    public abstract boolean commitImpl(Database db, long timeoutMs) throws UserException;
+
+    public void commit(Database db, long timeoutMs) throws DdlException, QueryStateException {
+        TransactionStatus status = TransactionStatus.UNKNOWN;
+        try {
+            if (commitImpl(db, timeoutMs)) {
+                GlobalStateMgr.getCurrentState().getDeleteHandler()
+                        .updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(),
+                                getDeleteInfo().getTableId());
+            }
+            status = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+                    getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
+        } catch (UserException e) {
+            if (cancel(DeleteHandler.CancelType.COMMIT_FAIL, e.getMessage())) {
+                throw new DdlException(e.getMessage(), e);
+            } else {
+                // do nothing
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("{'label':'").append(getLabel()).append("', 'status':'").append(status.name());
+        sb.append("', 'txnId':'").append(getTransactionId()).append("'");
+
+        switch (status) {
+            case COMMITTED: {
+                // Although publish is unfinished we should tell user that commit already success.
+                String errMsg = "delete job is committed but may be taking effect later";
+                sb.append(", 'err':'").append(errMsg).append("'");
+                sb.append("}");
+                throw new QueryStateException(QueryState.MysqlStateType.OK, sb.toString());
+            }
+            case VISIBLE: {
+                sb.append("}");
+                throw new QueryStateException(QueryState.MysqlStateType.OK, sb.toString());
+            }
+            default:
+                throw new IllegalStateException("wrong transaction status: " + status.name());
+        }
     }
 }

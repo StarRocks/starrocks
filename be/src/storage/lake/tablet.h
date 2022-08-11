@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "common/statusor.h"
+#include "gen_cpp/lake_delete.pb.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
@@ -79,6 +80,8 @@ public:
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
 
     [[nodiscard]] std::string segment_location(std::string_view segment_name) const;
+
+    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
 
 private:
     TabletManager* _mgr;

@@ -27,17 +27,17 @@ public class StatisticSQLBuilder {
 
     private static final String QUERY_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_DATA_VERSION + " as INT), $updateTime, db_id, table_id, column_name,"
-                    + " sum(row_count), cast(avg(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
                     + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string)"
                     + " FROM " + StatsConstants.FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
-            "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name, histogram"
+            "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
+                    + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
                     + " FROM " + StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
-
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
 

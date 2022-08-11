@@ -56,6 +56,10 @@ public class LabelName implements Writable {
         return dbName;
     }
 
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
     public String getLabelName() {
         return labelName;
     }

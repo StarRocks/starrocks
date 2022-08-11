@@ -1,0 +1,16 @@
+name: automerge
+on:
+  pull_request_target:
+    types:
+      - labeled
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: enable automerge
+        if: contains( github.event.pull_request.labels.*.name, 'automerge')
+        uses: peter-evans/enable-pull-request-automerge@v2
+        with:
+          token: ${{ secrets.PAT }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: rebase

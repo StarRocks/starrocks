@@ -12,8 +12,6 @@ public class TPCDSCTETest extends TPCDSPlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setCboCteReuse(true);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 

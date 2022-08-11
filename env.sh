@@ -40,12 +40,18 @@ if [[ -z ${STARROCKS_THIRDPARTY} ]]; then
 fi
 
 # check python
-export PYTHON=python
+if [[ -z ${PYTHON} ]]; then
+    export PYTHON=python
+fi
+
 if ! ${PYTHON} --version; then
     export PYTHON=python2.7
     if ! ${PYTHON} --version; then
-        echo "Error: python is not found"
-        exit 1
+        export PYTHON=python3
+        if ! ${PYTHON} --version; then
+            echo "Error: python is not found"
+            exit 1
+        fi
     fi
 fi
 

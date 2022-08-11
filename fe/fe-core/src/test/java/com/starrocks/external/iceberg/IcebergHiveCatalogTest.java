@@ -79,6 +79,6 @@ public class IcebergHiveCatalogTest {
         Map<String, String> icebergProperties = new HashMap<>();
         IcebergHiveCatalog icebergHiveCatalog = IcebergHiveCatalog.getInstance("thrift://test:9030", icebergProperties);
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
-        Assert.assertEquals(dbs, Arrays.asList("db1", "db2"));
+        Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
 }

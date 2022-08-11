@@ -121,7 +121,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     eval_join_runtime_filters(chunk->get());
 
     // For having
-    ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
+    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
     _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
 
     _aggregator->process_limit(chunk);
@@ -165,6 +165,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
+    source_operator->set_need_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
     ops_with_source.push_back(std::move(source_operator));
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {

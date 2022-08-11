@@ -31,9 +31,11 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.transaction.TxnFinishState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,6 +43,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -50,7 +53,7 @@ import java.util.stream.Collectors;
  * This class represents the local olap tablet related metadata.
  * LocalTablet is based on local disk storage and replicas are managed by StarRocks.
  */
-public class LocalTablet extends Tablet {
+public class LocalTablet extends Tablet implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(LocalTablet.class);
 
     public enum TabletStatus {
@@ -67,8 +70,15 @@ public class LocalTablet extends Tablet {
         NEED_FURTHER_REPAIR, // one of replicas need a definite repair.
     }
 
+    // Most read only accesses to replicas should acquire db lock, to prevent
+    // modification to replicas list during read access.
+    // This method avoids acquiring db lock by acquiring replicas object lock
+    // instead, so the lock granularity is reduced.
+    // To achieve this goal, all write operations to replicas object should
+    // also acquire object lock.
     @SerializedName(value = "replicas")
     private List<Replica> replicas;
+    private List<Replica> immutableReplicas;
     @SerializedName(value = "checkedVersion")
     private long checkedVersion;
     @SerializedName(value = "isConsistent")
@@ -96,6 +106,7 @@ public class LocalTablet extends Tablet {
         checkedVersion = -1L;
 
         isConsistent = true;
+        this.immutableReplicas = Collections.unmodifiableList(replicas);
     }
 
     public long getCheckedVersion() {
@@ -133,10 +144,12 @@ public class LocalTablet extends Tablet {
     }
 
     public void addReplica(Replica replica, boolean isRestore) {
-        if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
-            replicas.add(replica);
-            if (!isRestore) {
-                GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
+        synchronized (replicas) {
+            if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
+                replicas.add(replica);
+                if (!isRestore) {
+                    GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
+                }
             }
         }
     }
@@ -145,8 +158,12 @@ public class LocalTablet extends Tablet {
         addReplica(replica, false);
     }
 
-    public List<Replica> getReplicas() {
-        return this.replicas;
+    /**
+     * @return Immutable list of replicas
+     * notice: the list is immutable, not replica
+     */
+    public List<Replica> getImmutableReplicas() {
+        return immutableReplicas;
     }
 
     public Replica getSingleReplica() {
@@ -278,45 +295,53 @@ public class LocalTablet extends Tablet {
     }
 
     public boolean deleteReplica(Replica replica) {
-        if (replicas.contains(replica)) {
-            replicas.remove(replica);
-            GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
-            return true;
+        synchronized (replicas) {
+            if (replicas.contains(replica)) {
+                replicas.remove(replica);
+                GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
+                return true;
+            }
+            return false;
         }
-        return false;
     }
 
     public boolean deleteReplicaByBackendId(long backendId) {
-        Iterator<Replica> iterator = replicas.iterator();
-        while (iterator.hasNext()) {
-            Replica replica = iterator.next();
-            if (replica.getBackendId() == backendId) {
-                iterator.remove();
-                GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
-                return true;
+        synchronized (replicas) {
+            Iterator<Replica> iterator = replicas.iterator();
+            while (iterator.hasNext()) {
+                Replica replica = iterator.next();
+                if (replica.getBackendId() == backendId) {
+                    iterator.remove();
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
+                    return true;
+                }
             }
+            return false;
         }
-        return false;
     }
 
     @Deprecated
     public Replica deleteReplicaById(long replicaId) {
-        Iterator<Replica> iterator = replicas.iterator();
-        while (iterator.hasNext()) {
-            Replica replica = iterator.next();
-            if (replica.getId() == replicaId) {
-                LOG.info("delete replica[" + replica.getId() + "]");
-                iterator.remove();
-                return replica;
+        synchronized (replicas) {
+            Iterator<Replica> iterator = replicas.iterator();
+            while (iterator.hasNext()) {
+                Replica replica = iterator.next();
+                if (replica.getId() == replicaId) {
+                    LOG.info("delete replica[" + replica.getId() + "]");
+                    iterator.remove();
+                    return replica;
+                }
             }
+            return null;
         }
-        return null;
     }
 
     // for test,
     // and for some replay cases
     public void clearReplica() {
-        this.replicas.clear();
+        synchronized (replicas) {
+            this.replicas.clear();
+        }
     }
 
     @Override
@@ -344,6 +369,7 @@ public class LocalTablet extends Tablet {
         for (int i = 0; i < replicaCount; ++i) {
             Replica replica = Replica.read(in);
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
+                // do not need to update immutableReplicas, because it is a view of replicas
                 replicas.add(replica);
             }
         }
@@ -359,6 +385,13 @@ public class LocalTablet extends Tablet {
         LocalTablet tablet = new LocalTablet();
         tablet.readFields(in);
         return tablet;
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        // we need to update immutableReplicas, because replicas after deserialization from a json string
+        // will be different from the replicas initiated in the constructor
+        immutableReplicas = Collections.unmodifiableList(replicas);
     }
 
     @Override
@@ -391,7 +424,7 @@ public class LocalTablet extends Tablet {
     @Override
     public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
-        for (Replica replica : getReplicas()) {
+        for (Replica replica : getImmutableReplicas()) {
             if (replica.getState() == ReplicaState.NORMAL || replica.getState() == ReplicaState.SCHEMA_CHANGE) {
                 if (singleReplica) {
                     long replicaDataSize = replica.getDataSize();
@@ -410,7 +443,7 @@ public class LocalTablet extends Tablet {
     @Override
     public long getRowCount(long version) {
         long tabletRowCount = 0L;
-        for (Replica replica : getReplicas()) {
+        for (Replica replica : getImmutableReplicas()) {
             if (replica.checkVersionCatchUp(version, false) && replica.getRowCount() > tabletRowCount) {
                 tabletRowCount = replica.getRowCount();
             }
@@ -493,10 +526,19 @@ public class LocalTablet extends Tablet {
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
             return createRedundantSchedCtx(TabletStatus.FORCE_REDUNDANT, TabletSchedCtx.Priority.VERY_HIGH,
                     needFurtherRepairReplica);
-        } else if (alive < (replicationNum / 2) + 1) {
-            return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
-        } else if (alive < replicationNum) {
-            return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.NORMAL);
+        } else {
+            List<Long> availableBEs = systemInfoService.getAvailableBackendIds();
+            // We create `REPLICA_MISSING` type task only when there exists enough available BEs which
+            // we can choose to clone data to, if not we should check if we can create `VERSION_INCOMPLETE` task,
+            // so that repair of replica with incomplete version won't be blocked and hence version publish process
+            // of load task won't be blocked either.
+            if (availableBEs.size() > alive) {
+                if (alive < (replicationNum / 2) + 1) {
+                    return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.HIGH);
+                } else if (alive < replicationNum) {
+                    return Pair.create(TabletStatus.REPLICA_MISSING, TabletSchedCtx.Priority.NORMAL);
+                }
+            }
         }
 
         // 2. version complete replicas are not enough
@@ -564,7 +606,7 @@ public class LocalTablet extends Tablet {
      * tablet replicas:    1,2,3,4
      * <p>
      * No need to check if backend is available. We consider all backends in 'backendsSet' are available,
-     * If not, unavailable backends will be relocated by CalocateTableBalancer first.
+     * If not, unavailable backends will be relocated by ColocateTableBalancer first.
      */
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
@@ -606,8 +648,10 @@ public class LocalTablet extends Tablet {
      * NORNAL:  delay Config.tablet_repair_delay_factor_second * 2;
      * LOW:     delay Config.tablet_repair_delay_factor_second * 3;
      */
-    public boolean readyToBeRepaired(TabletSchedCtx.Priority priority) {
-        if (priority == Priority.VERY_HIGH) {
+    public boolean readyToBeRepaired(TabletStatus status, TabletSchedCtx.Priority priority) {
+        if (priority == Priority.VERY_HIGH ||
+                status == TabletStatus.VERSION_INCOMPLETE ||
+                status == TabletStatus.NEED_FURTHER_REPAIR) {
             return true;
         }
 
@@ -622,13 +666,13 @@ public class LocalTablet extends Tablet {
         boolean ready = false;
         switch (priority) {
             case HIGH:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000;
                 break;
             case NORMAL:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 2;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000 * 2;
                 break;
             case LOW:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 3;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_sched_repair_delay_factor_second * 1000 * 3;
                 break;
             default:
                 break;
@@ -648,5 +692,30 @@ public class LocalTablet extends Tablet {
                     replica.getLastFailedVersion(), replica.getLastSuccessVersion()));
         }
         return sb.toString();
+    }
+
+    // Note: this method does not require db lock to be held
+    public boolean quorumReachVersion(long version, long quorum, TxnFinishState finishState) {
+        // TODO(cbl): support tablets doing schemachange/rollup
+        long valid = 0;
+        synchronized (replicas) {
+            for (Replica replica : replicas) {
+                long replicaId = replica.getId();
+                long replicaVersion = replica.getVersion();
+                if (replicaVersion > version) {
+                    valid++;
+                    finishState.normalReplicas.remove(replicaId);
+                    finishState.abnormalReplicasWithVersion.put(replica.getId(), replicaVersion);
+                } else if (replicaVersion == version) {
+                    valid++;
+                    finishState.normalReplicas.add(replicaId);
+                    finishState.abnormalReplicasWithVersion.remove(replicaId);
+                } else {
+                    finishState.normalReplicas.remove(replicaId);
+                    finishState.abnormalReplicasWithVersion.put(replicaId, replicaVersion);
+                }
+            }
+        }
+        return valid >= quorum;
     }
 }

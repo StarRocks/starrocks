@@ -91,6 +91,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
+    public static final String TRANSACTION_ISOLATION = "transaction_isolation";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -220,6 +221,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // in the case of insufficient network bandwidth, but excess CPU resources, an algorithm with a
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
+    public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -341,6 +343,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TX_ISOLATION)
     private String txIsolation = "REPEATABLE-READ";
 
+    // this is used to compatible mysql 5.8
+    @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
+    private String transactionIsolation = "REPEATABLE-READ";
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
@@ -534,6 +539,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "LZ4";
 
+    @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
+    private String loadTransmissionCompressionType = "NO_COMPRESSION";
+
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
 
@@ -556,8 +564,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
-    private boolean enableColumnExprPredicate = false;
+    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE, flag = VariableMgr.INVISIBLE)
+    private boolean enableColumnExprPredicate = true;
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
@@ -1061,6 +1069,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryDebugTrace;
     }
 
+    public String getloadTransmissionCompressionType() {
+        return loadTransmissionCompressionType;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1095,6 +1107,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
+        }
+
+        TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
+        if (loadCompressionType != null) {
+            tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);

@@ -34,6 +34,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/data_dir.h"
+#include "storage/empty_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -41,7 +42,10 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
+#include "storage/union_iterator.h"
+#include "storage/update_manager.h"
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
@@ -217,13 +221,14 @@ protected:
         v2.column_name = "v2";
         v2.__set_is_key(false);
         v2.column_type.type = TPrimitiveType::INT;
-        v1.aggregation_type = TAggregationType::REPLACE;
+        v2.aggregation_type = TAggregationType::REPLACE;
         request.tablet_schema.columns.push_back(v2);
 
         TColumn v3;
         v3.column_name = "v3";
         v3.__set_is_key(false);
         v3.column_type.type = TPrimitiveType::INT;
+        v3.aggregation_type = TAggregationType::REPLACE;
         request.tablet_schema.columns.push_back(v3);
 
         auto st = StorageEngine::instance()->create_tablet(request);
@@ -245,6 +250,24 @@ protected:
         rowset_writer_context->version.second = 0;
     }
 
+    void create_partial_rowset_writer_context(const std::vector<int32_t>& column_indexes,
+                                              std::shared_ptr<TabletSchema> partial_schema,
+                                              RowsetWriterContext* rowset_writer_context) {
+        RowsetId rowset_id;
+        rowset_id.init(10000);
+        rowset_writer_context->rowset_id = rowset_id;
+        rowset_writer_context->tablet_id = 12345;
+        rowset_writer_context->tablet_schema_hash = 1111;
+        rowset_writer_context->partition_id = 10;
+        rowset_writer_context->rowset_path_prefix = config::storage_root_path + "/data/rowset_test";
+        rowset_writer_context->rowset_state = VISIBLE;
+        rowset_writer_context->partial_update_tablet_schema = partial_schema;
+        rowset_writer_context->tablet_schema = partial_schema.get();
+        rowset_writer_context->referenced_column_ids = column_indexes;
+        rowset_writer_context->version.first = 0;
+        rowset_writer_context->version.second = 0;
+    }
+
 private:
     std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
@@ -256,97 +279,94 @@ TEST_F(RowsetTest, FinalMergeTest) {
     create_primary_tablet_schema(&tablet_schema);
     RowsetSharedPtr rowset;
     const uint32_t rows_per_segment = 1024;
+
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(&tablet_schema, &writer_context);
+    writer_context.segments_overlap = OVERLAP_UNKNOWN;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+
     {
-        RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
-        create_rowset_writer_context(&tablet_schema, &writer_context);
-        writer_context.segments_overlap = OVERLAP_UNKNOWN;
-
-        std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
-
-        auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
-
-        {
-            auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-            auto& cols = chunk->columns();
-            for (auto i = 0; i < rows_per_segment; i++) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-            }
-            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
-            ASSERT_OK(rowset_writer->flush());
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = 0; i < rows_per_segment; i++) {
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
         }
-
-        {
-            auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-            auto& cols = chunk->columns();
-            for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-            }
-            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
-            ASSERT_OK(rowset_writer->flush());
-        }
-
-        {
-            auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
-            auto& cols = chunk->columns();
-            for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-            }
-            ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
-            ASSERT_OK(rowset_writer->flush());
-        }
-
-        rowset = rowset_writer->build().value();
-        ASSERT_TRUE(rowset != nullptr);
-        ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
-        ASSERT_EQ(rows_per_segment * 2, rowset->rowset_meta()->num_rows());
-
-        vectorized::SegmentReadOptions seg_options;
-        ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
-        seg_options.stats = &_stats;
-
-        std::string segment_file =
-                Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
-
-        auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet_schema);
-        ASSERT_NE(segment->num_rows(), 0);
-        auto res = segment->new_iterator(schema, seg_options);
-        ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
-        auto seg_iterator = res.value();
-
-        seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
-
-        auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
-
-        size_t count = 0;
-
-        while (true) {
-            auto st = seg_iterator->get_next(chunk.get());
-            if (st.is_end_of_file()) {
-                break;
-            }
-            ASSERT_FALSE(!st.ok());
-            for (auto i = 0; i < chunk->num_rows(); i++) {
-                auto index = count + i;
-                if (0 <= index && index < rows_per_segment / 2) {
-                    EXPECT_EQ(1, chunk->get(i)[2].get_int32());
-                } else if (rows_per_segment / 2 <= index && index < rows_per_segment) {
-                    EXPECT_EQ(2, chunk->get(i)[2].get_int32());
-                } else if (rows_per_segment <= index && index < rows_per_segment * 2) {
-                    EXPECT_EQ(3, chunk->get(i)[2].get_int32());
-                }
-            }
-            count += chunk->num_rows();
-            chunk->reset();
-        }
-        EXPECT_EQ(count, rows_per_segment * 2);
+        ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+        ASSERT_OK(rowset_writer->flush());
     }
+
+    {
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+        }
+        ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+        ASSERT_OK(rowset_writer->flush());
+    }
+
+    {
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+        }
+        ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+        ASSERT_OK(rowset_writer->flush());
+    }
+
+    rowset = rowset_writer->build().value();
+    ASSERT_TRUE(rowset != nullptr);
+    ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
+    ASSERT_EQ(rows_per_segment * 2, rowset->rowset_meta()->num_rows());
+
+    vectorized::SegmentReadOptions seg_options;
+    ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
+    seg_options.stats = &_stats;
+
+    std::string segment_file =
+            Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, 0);
+
+    auto segment = *Segment::open(_tablet_meta_mem_tracker.get(), seg_options.fs, segment_file, 0, &tablet_schema);
+    ASSERT_NE(segment->num_rows(), 0);
+    auto res = segment->new_iterator(schema, seg_options);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+    auto seg_iterator = res.value();
+
+    seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+
+    auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
+    size_t count = 0;
+    while (true) {
+        auto st = seg_iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_FALSE(!st.ok());
+        for (auto i = 0; i < chunk->num_rows(); i++) {
+            auto index = count + i;
+            if (0 <= index && index < rows_per_segment / 2) {
+                EXPECT_EQ(1, chunk->get(i)[2].get_int32());
+            } else if (rows_per_segment / 2 <= index && index < rows_per_segment) {
+                EXPECT_EQ(2, chunk->get(i)[2].get_int32());
+            } else if (rows_per_segment <= index && index < rows_per_segment * 2) {
+                EXPECT_EQ(3, chunk->get(i)[2].get_int32());
+            }
+        }
+        count += chunk->num_rows();
+        chunk->reset();
+    }
+    EXPECT_EQ(count, rows_per_segment * 2);
 }
 
 TEST_F(RowsetTest, FinalMergeVerticalTest) {
@@ -354,7 +374,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     RowsetSharedPtr rowset;
     const uint32_t rows_per_segment = 1024;
     config::vertical_compaction_max_columns_per_group = 1;
-    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    RowsetWriterContext writer_context;
     create_rowset_writer_context(&tablet->tablet_schema(), &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
 
@@ -438,10 +458,16 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
             auto index = count + i;
             if (0 <= index && index < rows_per_segment / 2) {
                 EXPECT_EQ(1, chunk->get(i)[2].get_int32());
+                EXPECT_EQ(1, chunk->get(i)[3].get_int32());
+                EXPECT_EQ(1, chunk->get(i)[4].get_int32());
             } else if (rows_per_segment / 2 <= index && index < rows_per_segment) {
                 EXPECT_EQ(2, chunk->get(i)[2].get_int32());
+                EXPECT_EQ(2, chunk->get(i)[3].get_int32());
+                EXPECT_EQ(2, chunk->get(i)[4].get_int32());
             } else if (rows_per_segment <= index && index < rows_per_segment * 2) {
                 EXPECT_EQ(3, chunk->get(i)[2].get_int32());
+                EXPECT_EQ(3, chunk->get(i)[3].get_int32());
+                EXPECT_EQ(3, chunk->get(i)[4].get_int32());
             }
         }
         count += chunk->num_rows();
@@ -450,11 +476,146 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     EXPECT_EQ(count, rows_per_segment * 2);
 }
 
+static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
+                                                           vectorized::Schema& schema) {
+    vectorized::TabletReaderParams params;
+    if (!reader.prepare().ok()) {
+        LOG(ERROR) << "reader prepare failed";
+        return nullptr;
+    }
+    std::vector<ChunkIteratorPtr> seg_iters;
+    if (!reader.get_segment_iterators(params, &seg_iters).ok()) {
+        LOG(ERROR) << "reader get segment iterators fail";
+        return nullptr;
+    }
+    if (seg_iters.empty()) {
+        return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
+    }
+    return vectorized::new_union_iterator(seg_iters);
+}
+
+static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_t nkeys) {
+    auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
+    auto& cols = full_chunk->columns();
+    for (size_t i = 0; i < nkeys / 4; i++) {
+        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+        cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+    }
+    for (size_t i = nkeys / 4; i < nkeys / 2; i++) {
+        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+        cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+    }
+    for (size_t i = nkeys / 2; i < nkeys; i++) {
+        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+        cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+    }
+    size_t count = 0;
+    auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
+    while (true) {
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            for (auto i = 0; i < chunk->num_rows(); i++) {
+                EXPECT_EQ(full_chunk->get(count + i).compare(iter->schema(), chunk->get(i)), 0);
+            }
+            count += chunk->num_rows();
+            chunk->reset();
+        } else {
+            return -1;
+        }
+    }
+    return count;
+}
+
+static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, std::shared_ptr<TabletSchema> partial_schema,
+                                       int64_t version, int64_t nkeys) {
+    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    if (iter == nullptr) {
+        return -1;
+    }
+    return read_and_compare(iter, nkeys);
+}
+
+TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
+    auto tablet = create_tablet(12345, 1111);
+    const uint32_t rows_per_segment = 1024;
+    config::vertical_compaction_max_columns_per_group = 1;
+    RowsetWriterContext writer_context;
+    std::vector<int32_t> column_indexes = {0, 1, 2, 3};
+    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(tablet->tablet_schema(), column_indexes);
+    create_partial_rowset_writer_context(column_indexes, partial_schema, &writer_context);
+    writer_context.segments_overlap = OVERLAP_UNKNOWN;
+    writer_context.rowset_path_prefix = tablet->schema_hash_path();
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    auto schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema.get());
+
+    {
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = 0; i < rows_per_segment; i++) {
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+        }
+        ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+        ASSERT_OK(rowset_writer->flush());
+    }
+
+    {
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+        }
+        ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+        ASSERT_OK(rowset_writer->flush());
+    }
+
+    {
+        auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto& cols = chunk->columns();
+        for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
+            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+        }
+        ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
+        ASSERT_OK(rowset_writer->flush());
+    }
+
+    auto rowset = rowset_writer->build().value();
+    ASSERT_TRUE(rowset != nullptr);
+    ASSERT_EQ(1, rowset->rowset_meta()->num_segments());
+    ASSERT_EQ(rows_per_segment * 2, rowset->rowset_meta()->num_rows());
+
+    ASSERT_TRUE(tablet->rowset_commit(2, rowset).ok());
+    EXPECT_EQ(rows_per_segment * 2, read_tablet_and_compare(tablet, partial_schema, 2, rows_per_segment * 2));
+    ASSERT_OK(starrocks::ExecEnv::GetInstance()->storage_engine()->update_manager()->on_rowset_finished(tablet.get(),
+                                                                                                        rowset.get()));
+}
+
 TEST_F(RowsetTest, VerticalWriteTest) {
     TabletSchema tablet_schema;
     create_tablet_schema(&tablet_schema);
 
-    RowsetWriterContext writer_context(kDataFormatV2, kDataFormatV2);
+    RowsetWriterContext writer_context;
     create_rowset_writer_context(&tablet_schema, &writer_context);
     writer_context.max_rows_per_segment = 5000;
     writer_context.writer_type = kVertical;

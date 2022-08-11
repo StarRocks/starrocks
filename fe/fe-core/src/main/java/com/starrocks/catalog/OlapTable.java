@@ -27,7 +27,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
@@ -40,6 +42,7 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -50,16 +53,23 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,6 +81,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -142,6 +153,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
+
+    @SerializedName(value = "colocateMv")
+    protected Set<String> colocateMaterializedViewNames = Sets.newHashSet();
+    @SerializedName(value = "isInColocateMvGroup")
+    protected boolean isInColocateMvGroup = false;
 
     @SerializedName(value = "indexes")
     protected TableIndexes indexes;
@@ -540,7 +556,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
                             .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
                                     true, true);
-                    if (beIds == null) {
+                    if (CollectionUtils.isEmpty(beIds)) {
                         return new Status(ErrCode.COMMON_ERROR, "failed to find "
                                 + partitionInfo.getReplicationNum(entry.getKey())
                                 + " different hosts to create table: " + name);
@@ -719,9 +735,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         nameToPartition.put(partition.getName(), partition);
     }
 
-    // This is a private methid.
+    // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
-    private Partition dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
+    private Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         // 1. If "isForceDrop" is false, the partition will be added to the GlobalStateMgr Recyle bin, and all tablets of this
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
@@ -729,6 +745,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
+        Set<Long> tabletIds = new HashSet<Long>();
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
@@ -744,20 +761,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getReplicationNum(partition.getId()),
                         rangePartitionInfo.getIsInMemory(partition.getId()));
             } else if (!reserveTablets) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
         }
-        return partition;
+        return tabletIds;
     }
 
-    public Partition dropPartitionAndReserveTablet(String partitionName) {
+    public Set<Long> dropPartitionAndReserveTablet(String partitionName) {
         return dropPartition(-1, partitionName, true, true);
     }
 
-    public Partition dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+    public Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop) {
         return dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
     }
 
@@ -897,6 +914,66 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public void setColocateGroup(String colocateGroup) {
         this.colocateGroup = colocateGroup;
+    }
+
+    public Set<String> getColocateMaterializedViewNames() {
+        return colocateMaterializedViewNames;
+    }
+
+    public void setColocateMaterializedViewNames(Set<String> colocateMaterializedViewNames) {
+        this.colocateMaterializedViewNames = colocateMaterializedViewNames;
+    }
+
+    public boolean isInColocateMvGroup() {
+        return isInColocateMvGroup;
+    }
+
+    public void setInColocateMvGroup(boolean inColocateMvGroup) {
+        this.isInColocateMvGroup = inColocateMvGroup;
+    }
+
+    public void addColocateMaterializedView(String mvName) {
+        colocateMaterializedViewNames.add(mvName);
+    }
+
+    // 1. remove the materialized view name from the set colocateMaterializedViewNames
+    // 2. the base table will be removed from the colocate group
+    // only the currently deleted materialized view is the only colocate mv of the base table
+    public void removeColocateMaterializedView(String mvName) {
+        if (colocateMaterializedViewNames.contains(mvName)) {
+            if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
+                ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+                colocateTableIndex.removeTable(this.id);
+                setInColocateMvGroup(false);
+                setColocateGroup(null);
+            }
+            colocateMaterializedViewNames.remove(mvName);
+        }
+    }
+
+    // this will be called when rollupJobV2 is finished
+    public void addTableToColocateGroupIfSet(Long dbId, String rollupIndexName) {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
+            String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+            String groupName = dbName + ":" + rollupIndexName;
+            colocateTableIndex.addTableToGroup(dbId, this, groupName, null);
+            setInColocateMvGroup(true);
+            setColocateGroup(groupName);
+
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo info =
+                    ColocatePersistInfo.createForAddTable(groupId, this.id, backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
+        }
+    }
+
+    // when the state of rollupJobV2 is canceled
+    // just remove the materialized view from the set
+    // for the materialized view is added to the set before the rollupJobV2 running
+    public void removeMaterializedViewWhenJobCanceled(String rollupIndexName) {
+        colocateMaterializedViewNames.remove(rollupIndexName);
     }
 
     // when the table is creating new rollup and enter finishing state, should tell be not auto load to new rollup
@@ -1290,7 +1367,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {
-                        for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             replica.setState(ReplicaState.NORMAL);
                         }
                     }
@@ -1338,7 +1415,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                        replicationNum, isInMemory, storageInfo);
+                    replicationNum, isInMemory, storageInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
             partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
@@ -1397,7 +1474,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                             aliveBeIdsInCluster);
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
-                                id, tablet.getId(), statusPair.first, localTablet.getReplicas());
+                                id, tablet.getId(), statusPair.first, localTablet.getImmutableReplicas());
                         return false;
                     }
                 }
@@ -1541,7 +1618,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (!column.isKey()) {
                 continue;
             }
-            if (column.getPrimitiveType() == PrimitiveType.VARCHAR 
+            if (column.getPrimitiveType() == PrimitiveType.VARCHAR
                     || column.getPrimitiveType() == PrimitiveType.CHAR) {
                 LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
                 return false;
@@ -1781,14 +1858,91 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @Override
-    public void onDrop() {
+    public void onDrop(Database db, boolean force, boolean replay) {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
+        for (long mvId : getRelatedMaterializedViews()) {
+            Table tmpTable = db.getTable(mvId);
+            if (tmpTable != null) {
+                MaterializedView mv = (MaterializedView) tmpTable;
+                mv.setActive(false);
+            }
+        }
+    }
+
+    @Override
+    public Runnable delete(boolean replay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+        return replay ? null : new DeleteOlapTableTask(this);
     }
 
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public AlterJobV2Builder alterTable() {
+        return new OlapTableAlterJobV2Builder(this);
+    }
+
+    private static class DeleteOlapTableTask implements Runnable {
+        private final OlapTable table;
+
+        public DeleteOlapTableTask(OlapTable table) {
+            this.table = table;
+        }
+
+        @Override
+        public void run() {
+            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+
+            // drop all replicas
+            for (Partition partition : table.getAllPartitions()) {
+                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    long indexId = materializedIndex.getId();
+                    int schemaHash = table.getSchemaHashByIndexId(indexId);
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        long tabletId = tablet.getId();
+                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                        for (Replica replica : replicas) {
+                            long backendId = replica.getBackendId();
+                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                            if (batchTask == null) {
+                                batchTask = new AgentBatchTask();
+                                batchTaskMap.put(backendId, batchTask);
+                            }
+                            batchTask.addTask(dropTask);
+                        } // end for replicas
+                    } // end for tablets
+                } // end for indices
+            } // end for partitions
+
+            int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+            for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+                AgentBatchTask originTasks = entry.getValue();
+                if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                    AgentBatchTask partTask = new AgentBatchTask();
+                    List<AgentTask> allTasks = originTasks.getAllTasks();
+                    int curTask = 1;
+                    for (AgentTask task : allTasks) {
+                        partTask.addTask(task);
+                        if (curTask++ > numDropTaskPerBe) {
+                            AgentTaskExecutor.submit(partTask);
+                            curTask = 1;
+                            partTask = new AgentBatchTask();
+                            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                        }
+                    }
+                    if (!partTask.getAllTasks().isEmpty()) {
+                        AgentTaskExecutor.submit(partTask);
+                    }
+                } else {
+                    AgentTaskExecutor.submit(originTasks);
+                }
+            }
+        }
     }
 }

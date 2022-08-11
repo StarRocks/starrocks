@@ -85,6 +85,7 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
@@ -183,7 +184,11 @@ public class SparkLoadJob extends BulkLoadJob {
 
         // broker desc
         Map<String, String> brokerProperties = sparkResource.getBrokerPropertiesWithoutPrefix();
-        brokerDesc = new BrokerDesc(sparkResource.getBroker(), brokerProperties);
+        if (sparkResource.hasBroker()) {
+            brokerDesc = new BrokerDesc(sparkResource.getBroker(), brokerProperties);
+        } else {
+            brokerDesc = new BrokerDesc(brokerProperties);
+        }
     }
 
     @Override
@@ -472,7 +477,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         indexId, bucket++, schemaHash);
                                 Set<Long> tabletAllReplicas = Sets.newHashSet();
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
-                                for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
+                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     long replicaId = replica.getId();
                                     tabletAllReplicas.add(replicaId);
                                     if (!tabletToSentReplicaPushTask.containsKey(tabletId)
@@ -503,15 +508,19 @@ public class SparkLoadJob extends BulkLoadJob {
                                         // update broker address
                                         Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                                                 .getBackend(backendId);
-                                        FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
-                                                brokerDesc.getName(), backend.getHost());
-                                        tBrokerScanRange.getBroker_addresses().add(
+                                        if (brokerDesc.hasBroker()) {
+                                            FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
+                                                    brokerDesc.getName(), backend.getHost());
+                                            tBrokerScanRange.getBroker_addresses().add(
                                                 new TNetworkAddress(fsBroker.ip, fsBroker.port));
-
-                                        LOG.debug(
-                                                "push task for replica {}, broker {}:{}, backendId {}, filePath {}, fileSize {}",
-                                                replicaId, fsBroker.ip, fsBroker.port, backendId, tBrokerRangeDesc.path,
-                                                tBrokerRangeDesc.file_size);
+                                            LOG.debug("push task for replica {}, broker {}:{}, backendId {}," + 
+                                                    "filePath {}, fileSize {}", replicaId, fsBroker.ip, fsBroker.port, 
+                                                    backendId, tBrokerRangeDesc.path, tBrokerRangeDesc.file_size);
+                                        } else {
+                                            LOG.debug("push task for replica {}, backendId {}, filePath {}, fileSize {}",
+                                                    replicaId, backendId, tBrokerRangeDesc.path,
+                                                    tBrokerRangeDesc.file_size);
+                                        }
 
                                         PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId,
                                                 indexId, tabletId, replicaId, schemaHash,
@@ -933,7 +942,15 @@ public class SparkLoadJob extends BulkLoadJob {
             // scan range params
             TBrokerScanRangeParams params = new TBrokerScanRangeParams();
             params.setStrict_mode(false);
-            params.setProperties(brokerDesc.getProperties());
+            if (brokerDesc.hasBroker()) {
+                params.setProperties(brokerDesc.getProperties());
+                params.setUse_broker(true);
+            } else {
+                THdfsProperties hdfsProperties = new THdfsProperties();
+                params.setHdfs_properties(hdfsProperties);
+                params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
+                params.setUse_broker(false);
+            }
             TupleDescriptor srcTupleDesc = descTable.createTupleDescriptor();
             Map<String, SlotDescriptor> srcSlotDescByName = Maps.newHashMap();
             for (Column column : columns) {

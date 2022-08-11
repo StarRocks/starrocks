@@ -2,14 +2,46 @@
 package com.starrocks.pseudocluster;
 
 import com.starrocks.server.GlobalStateMgr;
+import org.junit.AfterClass;
+import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.sql.Connection;
+import java.sql.Statement;
+
 public class PseudoClusterTest {
+    @BeforeClass
+    public static void setUp() throws Exception {
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        PseudoCluster.getInstance().shutdown(true);
+    }
+
     @Test
-    public void testStartCluster() throws Exception {
-        PseudoCluster cluster = PseudoCluster.getOrCreate("pseudo_cluster", 3);
+    public void testGetBackend() throws Exception {
         for (int i = 0; i < 3; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
+        }
+    }
+
+    @Test
+    public void testCreateTabletAndInsert() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database test");
+            stmt.execute("use test");
+            stmt.execute(
+                    "create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
+            Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);"));
+            System.out.printf("updated %d rows\n", stmt.getUpdateCount());
+        } finally {
+            stmt.close();
+            connection.close();
         }
     }
 }

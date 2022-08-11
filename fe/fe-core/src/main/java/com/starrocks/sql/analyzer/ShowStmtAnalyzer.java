@@ -22,9 +22,12 @@ import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowIndexStmt;
+import com.starrocks.analysis.ShowLoadStmt;
+import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -32,6 +35,7 @@ import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -44,12 +48,14 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import org.apache.commons.lang.StringUtils;
@@ -167,6 +173,14 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+        public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
+        }
+
+        @Override
         public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
             ShowAlterStmtAnalyzer.analyze(statement, context);
             return null;
@@ -230,6 +244,29 @@ public class ShowStmtAnalyzer {
         @Override
         public Void visitDescTableStmt(DescribeStmt node, ConnectContext context) {
             node.getDbTableName().normalization(context);
+            TableName tableName = node.getDbTableName();
+            String catalogName = tableName.getCatalog();
+            String dbName = tableName.getDb();
+            String tbl = tableName.getTbl();
+            if (catalogName == null) {
+                catalogName = context.getCurrentCatalog();
+            }
+
+            CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+
+            if (!catalogMgr.catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
+            if (CatalogMgr.isInternalCatalog(catalogName)) {
+                descInternalTbl(node, context);
+            } else {
+                descExternalTbl(node, catalogName, dbName, tbl);
+            }
+            return null;
+        }
+
+        private void descInternalTbl(DescribeStmt node, ConnectContext context) {
             Database db = GlobalStateMgr.getCurrentState().getDb(node.getDb());
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
@@ -264,7 +301,7 @@ public class ShowStmtAnalyzer {
                                         node.getTotalRows().add(row);
                                     }
                                     node.setMaterializedView(true);
-                                    return null;
+                                    return;
                                 }
                             }
                         }
@@ -291,7 +328,7 @@ public class ShowStmtAnalyzer {
                     try {
                         node.setNode(ProcService.getInstance().open(procString));
                     } catch (AnalysisException e) {
-                        throw new SemanticException(String.format("Unknown proc node path: ", procString));
+                        throw new SemanticException(String.format("Unknown proc node path: %s", procString));
                     }
                 } else {
                     if (table.isNativeTable()) {
@@ -367,7 +404,16 @@ public class ShowStmtAnalyzer {
             } finally {
                 db.readUnlock();
             }
-            return null;
+        }
+
+        private void descExternalTbl(DescribeStmt node, String catalogName, String dbName, String tbl) {
+            // show external table schema only
+            String procString = "/catalog/" + catalogName + "/" + dbName + "/" + tbl + "/" + ExternalTableProcDir.SCHEMA;
+            try {
+                node.setNode(ProcService.getInstance().open(procString));
+            } catch (AnalysisException e) {
+                throw new SemanticException(String.format("Unknown proc node path: %s", procString));
+            }
         }
 
         @Override
@@ -379,7 +425,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.setNode(ProcService.getInstance().open(path));
             } catch (AnalysisException e) {
-                throw new SemanticException(String.format("Unknown proc node path: ", path));
+                throw new SemanticException(String.format("Unknown proc node path: %s", path));
             }
             return null;
         }
@@ -533,5 +579,15 @@ public class ShowStmtAnalyzer {
             return orderByPairs;
         }
 
+        public Void visitShowLoadStmt(ShowLoadStmt statement, ConnectContext context) {
+            ShowLoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, ConnectContext context) {
+            ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
     }
 }

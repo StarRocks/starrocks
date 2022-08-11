@@ -41,6 +41,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
@@ -82,6 +83,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
@@ -271,7 +273,7 @@ public class Coordinator {
 
     // Used for broker load task/export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
-                       List<ScanNode> scanNodes, String timezone, long startTime) {
+                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -280,6 +282,14 @@ public class Coordinator {
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
+        if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            final TCompressionType loadCompressionType = CompressionUtils
+                    .findTCompressionByName(
+                            sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+            if (loadCompressionType != null) {
+                this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+            }
+        }
         String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
@@ -1398,7 +1408,7 @@ public class Coordinator {
             // hash-partitioned
             // output at the moment
 
-            // set params for pipeline level shuffle
+            // Set params for pipeline level shuffle.
             params.fragment.getDestNode().setPartitionType(params.fragment.getOutputPartition().getType());
             if (sink instanceof DataStreamSink) {
                 DataStreamSink dataStreamSink = (DataStreamSink) sink;
@@ -1470,12 +1480,16 @@ public class Coordinator {
 
             for (int i = 0; i < multi.getDestFragmentList().size(); i++) {
                 PlanFragment destFragment = multi.getDestFragmentList().get(i);
-                DataSink sink = multiSink.getDataStreamSinks().get(i);
+                DataStreamSink sink = multiSink.getDataStreamSinks().get(i);
 
                 if (destFragment == null) {
                     continue;
                 }
                 FragmentExecParams destParams = fragmentExecParamsMap.get(destFragment.getFragmentId());
+
+                // Set params for pipeline level shuffle.
+                multi.getDestNode(i).setPartitionType(params.fragment.getOutputPartition().getType());
+                sink.setExchDop(destFragment.getPipelineDop());
 
                 PlanNodeId exchId = sink.getExchNodeId();
                 // MultiCastSink only send to itself, destination exchange only one senders
@@ -2268,6 +2282,11 @@ public class Coordinator {
             });
         }
 
+        // Remove redundant MIN/MAX metrics if MIN and MAX are identical
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            RuntimeProfile.removeRedundantMinMaxMetrics(fragmentProfile);
+        }
+
         // Set backend number
         for (int i = 0; i < fragments.size(); i++) {
             PlanFragment fragment = fragments.get(i);
@@ -2727,7 +2746,7 @@ public class Coordinator {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
-            commonParams.setFunc_version(3);
+            commonParams.setFunc_version(4);
             commonParams.setCoord(coordAddress);
 
             commonParams.setParams(new TPlanFragmentExecParams());

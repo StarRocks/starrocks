@@ -161,11 +161,9 @@ public:
     void cancel(const Status& err_st);
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
-                     int64_t* mem_exceeded_block_ns, int64_t* queue_push_lock_ns, int64_t* actual_consume_ns) {
+                     int64_t* actual_consume_ns) {
         (*add_batch_counter_map)[_node_id] += _add_batch_counter;
         *serialize_batch_ns += _serialize_batch_ns;
-        *mem_exceeded_block_ns += _mem_exceeded_block_ns;
-        *queue_push_lock_ns += _queue_push_lock_ns;
         *actual_consume_ns += _actual_consume_ns;
     }
 
@@ -227,8 +225,6 @@ private:
     size_t _current_request_index = 0;
     size_t _max_chunk_queue_size = 8;
 
-    int64_t _mem_exceeded_block_ns = 0;
-    int64_t _queue_push_lock_ns = 0;
     int64_t _actual_consume_ns = 0;
     Status _err_st = Status::OK();
 
@@ -392,7 +388,6 @@ private:
     // Stats for this
     int64_t _convert_batch_ns = 0;
     int64_t _validate_data_ns = 0;
-    int64_t _send_data_ns = 0;
     int64_t _number_input_rows = 0;
     int64_t _number_output_rows = 0;
     int64_t _number_filtered_rows = 0;
@@ -409,6 +404,7 @@ private:
     RuntimeProfile::Counter* _wait_response_timer = nullptr;
     RuntimeProfile::Counter* _compress_timer = nullptr;
     RuntimeProfile::Counter* _pack_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _send_rpc_timer = nullptr;
 
     // load mem limit is for remote load channel
     int64_t _load_mem_limit = 0;

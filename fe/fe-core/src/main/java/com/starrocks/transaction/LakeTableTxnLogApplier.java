@@ -3,6 +3,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionManager;
@@ -25,8 +26,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         }
     }
 
-    @Override
-    public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo) {
+    public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         CompactionManager compactionManager = GlobalStateMgr.getCurrentState().getCompactionManager();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
