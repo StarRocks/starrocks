@@ -1780,6 +1780,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
 
+<<<<<<< HEAD
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
      * Default value: 500
@@ -1805,4 +1806,22 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean ignore_invalid_privilege_authentications = false;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
 }

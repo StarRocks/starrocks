@@ -47,6 +47,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connect context for it.
 // We store session information here. Meanwhile ConnectScheduler all
@@ -168,6 +170,8 @@ public class ConnectContext {
 
     protected volatile boolean isPending = false;
 
+    protected SSLContext sslContext;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -185,10 +189,14 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        this(null);
+        this(null, null);
     }
 
     public ConnectContext(SocketChannel channel) {
+        this(channel, null);
+    }
+
+    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -207,6 +215,8 @@ public class ConnectContext {
         if (channel != null) {
             remoteIP = mysqlChannel.getRemoteIp();
         }
+
+        this.sslContext = sslContext;
     }
 
     public long getStmtId() {
@@ -630,6 +640,14 @@ public class ConnectContext {
 
     public boolean isPending() {
         return isPending;
+    }
+
+    public boolean supportSSL() {
+        return sslContext != null;
+    }
+
+    public boolean enableSSL() throws IOException {
+        return this.mysqlChannel.enableSSL(this.sslContext);
     }
 
     public class ThreadInfo {
