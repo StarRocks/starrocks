@@ -26,7 +26,7 @@ jobs:
           labels: documentation
 
       - uses: actions-ecosystem/action-add-labels@v1
-        if: (contains(${{ github.event.pull_request.title }}, 'backport') || contains(${{ github.event.pull_request.title }}, 'cherry-pick')) && contains(github.event.pull_request.labels.*.name, 'conflicts') != 'true'
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'conflicts') && (contains(github.event.pull_request.title, 'cherry-pick') || contains(github.event.pull_request.title, 'backport')) }}
         with:
           github_token: ${{ secrets.PAT }}
           labels: automerge
