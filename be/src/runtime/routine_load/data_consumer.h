@@ -140,11 +140,11 @@ public:
     Status group_consume(TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms);
 
     // get the partitions ids of the topic
-    Status get_partition_meta(std::vector<int32_t>* partition_ids);
+    Status get_partition_meta(std::vector<int32_t>* partition_ids, int timeout);
 
     // get beginning or latest offset of partitions
     Status get_partition_offset(std::vector<int32_t>* partition_ids, std::vector<int64_t>* beginning_offsets,
-                                std::vector<int64_t>* latest_offsets);
+                                std::vector<int64_t>* latest_offsets, int timeout);
 
 private:
     std::string _brokers;
