@@ -114,7 +114,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         List<Integer> groupBy = aggregate.getGroupingKeys().stream().map(ColumnRefOperator::getId)
                 .collect(Collectors.toList());
 
-        if (groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns())) {
+        if (groupBy.isEmpty() || groupBy.containsAll(scan.getDistributionSpec().getShuffleColumns())) {
             return false;
         }
 

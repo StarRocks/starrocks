@@ -279,7 +279,7 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(1);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
-        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)"));
     }
 
     @Test
