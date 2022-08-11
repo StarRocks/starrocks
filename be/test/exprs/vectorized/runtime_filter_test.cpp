@@ -589,7 +589,6 @@ TEST_F(RuntimeFilterTest, TestGlobalRuntimeFilterMinMax) {
         }
         global->concat(&local);
     }
-    EXPECT_TRUE(global->has_min_max());
     EXPECT_EQ(global->min_value(), 10);
     EXPECT_EQ(global->max_value(), 33);
 }
