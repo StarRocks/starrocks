@@ -7,6 +7,11 @@ jobs:
   automerge:
     runs-on: ubuntu-latest
     steps:
+      - uses: hmarr/auto-approve-action@v2
+        if: contains( github.event.pull_request.labels.*.name, 'automerge')
+        with:
+          github-token: ${{ secrets.PAT }}
+
       - name: enable automerge
         if: contains( github.event.pull_request.labels.*.name, 'automerge')
         uses: peter-evans/enable-pull-request-automerge@v2
