@@ -75,8 +75,9 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
     _analytor->remove_unused_buffer_values(state);
 
     RETURN_IF_ERROR(_analytor->add_chunk(chunk));
+    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
 
-    return (this->*_process_by_partition_if_necessary)();
+    return _analytor->check_has_error();
 }
 
 Status AnalyticSinkOperator::_process_by_partition_if_necessary_materializing() {
