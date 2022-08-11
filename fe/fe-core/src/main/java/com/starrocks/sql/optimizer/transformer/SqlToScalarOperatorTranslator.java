@@ -178,8 +178,10 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Void context) {
+            // no nested, so here be identified by unique slot_id
             if (node.getTblNameWithoutAnalyzed().getTbl() == "select") {
-                return new ColumnRefOperator(-1, node.getType(), node.getColumnName(), node.isNullable(), true);
+                return new ColumnRefOperator(node.getSlotId().asInt(), node.getType(), node.getColumnName(),
+                        node.isNullable(), true);
             }
             ResolvedField resolvedField =
                     expressionMapping.getScope().resolveField(node, expressionMapping.getOuterScopeRelationId());
@@ -247,7 +249,8 @@ public final class SqlToScalarOperatorTranslator {
             LambdaArguments args = (LambdaArguments) node.getChild(0);
             List<ColumnRefOperator> refs = Lists.newArrayList();
             for (int i = 0; i < args.getNames().size(); ++i) {
-                ColumnRefOperator ref = new ColumnRefOperator(-i - 1, args.getTypes().get(i), args.getNames().get(i), true, true);
+                ColumnRefOperator ref = new ColumnRefOperator(args.getArguments().get(i).getSlotId(),
+                        args.getArguments().get(i).getType(), args.getArguments().get(i).getName(), true, true);
                 refs.add(ref);
             }
             ScalarOperator arg = visit(node.getChild(1));

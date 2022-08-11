@@ -29,6 +29,10 @@ public class ResolvedField {
         return field;
     }
 
+    public boolean isFromLambda() {
+        return scope.isLambdaScope() && field.getRelationAlias().getTbl() == "select";
+    }
+
     public int getRelationFieldIndex() {
         return relationFieldIndex;
     }
