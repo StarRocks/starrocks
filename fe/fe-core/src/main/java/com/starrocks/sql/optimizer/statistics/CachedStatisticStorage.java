@@ -163,9 +163,7 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     @Override
     public void expireHistogramStatistics(Long tableId, List<String> columns) {
-        if (columns == null) {
-            return;
-        }
+        Preconditions.checkNotNull(columns);
 
         List<ColumnStatsCacheKey> allKeys = Lists.newArrayList();
         for (String column : columns) {
