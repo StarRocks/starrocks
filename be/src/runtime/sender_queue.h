@@ -85,6 +85,8 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
+        // Time in nano of saving closure
+        int64_t queue_enter_time;
     };
 
     typedef std::mutex Mutex;
@@ -187,6 +189,9 @@ private:
     // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
     // otherwise, we will only use the first item
     std::vector<ChunkQueue> _chunk_queues;
+    // _producer_token is used to ensure that the order of dequeueing is the same as enqueueing
+    // it is only used when the order needs to be guaranteed
+    std::unique_ptr<ChunkQueue::producer_token_t> _producer_token;
     std::atomic<size_t> _total_chunks{0};
     bool _is_pipeline_level_shuffle = false;
 

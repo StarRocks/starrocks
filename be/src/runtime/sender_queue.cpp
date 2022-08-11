@@ -122,12 +122,14 @@ Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(vectorized::Chunk** ch
 
     *chunk = _chunk_queue.front().chunk_ptr.release();
     auto* closure = _chunk_queue.front().closure;
+    auto queue_enter_time = _chunk_queue.front().queue_enter_time;
 
     _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     _chunk_queue.pop_front();
 
     if (closure != nullptr) {
+        _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
         // When the execution thread is blocked and the Chunk queue exceeds the memory limit,
         // the execution thread will hold done and will not return, block brpc from sending packets,
         // and the execution thread will call run() to let brpc continue to send packets,
@@ -170,9 +172,11 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(vectorized::Chunk** 
         *chunk = _chunk_queue.front().chunk_ptr.release();
         _recvr->_num_buffered_bytes -= _chunk_queue.front().chunk_bytes;
         auto* closure = _chunk_queue.front().closure;
+        auto queue_enter_time = _chunk_queue.front().queue_enter_time;
         VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
         _chunk_queue.pop_front();
         if (closure != nullptr) {
+            _recvr->_closure_block_timer->update(MonotonicNanos() - queue_enter_time);
             closure->Run();
         }
         return true;
@@ -282,6 +286,8 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
         bool has_new_chunks = _chunk_queue.size() > original_size;
         if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             _chunk_queue.back().closure = *done;
+            _chunk_queue.back().queue_enter_time = MonotonicNanos();
+            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
             *done = nullptr;
         }
 
@@ -389,6 +395,8 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const 
 
         if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             local_chunk_queue.back().closure = *done;
+            local_chunk_queue.back().queue_enter_time = MonotonicNanos();
+            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
             *done = nullptr;
         }
 
@@ -469,6 +477,7 @@ void DataStreamRecvr::NonPipelineSenderQueue::close() {
 void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
     for (auto& item : _chunk_queue) {
         if (item.closure != nullptr) {
+            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
             item.closure->Run();
         }
     }
@@ -490,6 +499,9 @@ DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* paren
         : SenderQueue(parent_recvr), _num_remaining_senders(num_senders) {
     for (int i = 0; i < degree_of_parallism; i++) {
         _chunk_queues.emplace_back(std::move(ChunkQueue()));
+    }
+    if (parent_recvr->_is_merging) {
+        _producer_token = std::make_unique<ChunkQueue::producer_token_t>(_chunk_queues[0]);
     }
 }
 
@@ -783,7 +795,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
                     _recvr->_num_buffered_bytes += chunk_bytes;
                 } else {
                     size_t chunk_bytes = item.chunk_bytes;
-                    _chunk_queues[0].enqueue(std::move(item));
+                    _chunk_queues[0].enqueue(*_producer_token, std::move(item));
                     _total_chunks++;
                     _recvr->_num_buffered_bytes += chunk_bytes;
                 }
