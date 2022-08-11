@@ -42,7 +42,7 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);

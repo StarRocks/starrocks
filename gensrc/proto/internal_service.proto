@@ -288,6 +288,7 @@ message PProxyRequest {
     optional PKafkaMetaProxyRequest kafka_meta_request = 1;
     optional PKafkaOffsetProxyRequest kafka_offset_request = 101;
     optional PKafkaOffsetBatchProxyRequest kafka_offset_batch_request = 102;
+    optional int64 timeout = 103;
 };
 
 message PKafkaMetaProxyResult {

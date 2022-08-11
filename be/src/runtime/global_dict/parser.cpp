@@ -243,9 +243,9 @@ Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slo
     // call rewrite for each DictMappingExpr
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
         f->rewrite([&]() -> StatusOr<Expr*> {
-            auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext());
+            auto* dict_ctx_handle = _runtime_state->obj_pool()->add(new DictOptimizeContext());
             RETURN_IF_ERROR(_eval_and_rewrite(ctx, f, dict_ctx_handle, slot_id));
-            return _free_pool.add(new DictFuncExpr(*f, dict_ctx_handle));
+            return _runtime_state->obj_pool()->add(new DictFuncExpr(*f, dict_ctx_handle));
         });
         return Status::OK();
     }

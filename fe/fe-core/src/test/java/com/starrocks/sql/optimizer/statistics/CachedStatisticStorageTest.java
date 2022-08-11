@@ -97,7 +97,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistic(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
 
         new Expectations() {{
@@ -128,7 +128,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testGetColumnStatistics(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
 
         ColumnStatistic columnStatistic1 = ColumnStatistic.builder().setDistinctValuesCount(888).build();
@@ -148,7 +148,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testLoadCacheLoadEmpty(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
         Table table = db.getTable("t0");
 
         new Expectations() {{
@@ -167,7 +167,7 @@ public class CachedStatisticStorageTest {
 
     @Test
     public void testConvert2ColumnStatistics() {
-        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t0");
         ColumnBasicStatsCacheLoader cachedStatisticStorage = Deencapsulation.newInstance(ColumnBasicStatsCacheLoader.class);
 

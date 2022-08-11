@@ -1026,7 +1026,7 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Database db = globalStateMgr.getDb("default_cluster:test");
+        Database db = globalStateMgr.getDb("test");
         Table table = db.getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
@@ -1050,9 +1050,9 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinReorderWithWithClause() throws Exception {
-        connectContext.setDatabase("default_cluster:test");
+        connectContext.setDatabase("test");
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
+        Table table = globalStateMgr.getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
             {
@@ -1262,7 +1262,7 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testLeftOuterJoinOnOrPredicate() throws Exception {
-        connectContext.setDatabase("default_cluster:test");
+        connectContext.setDatabase("test");
 
         String sql = "select * from join1 left join join2 on join1.id = join2.id\n" +
                 "and (join2.id > 1 or join2.id < 10);";
@@ -1556,7 +1556,7 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        Table table = globalStateMgr.getDb("default_cluster:test").getTable("join2");
+        Table table = globalStateMgr.getDb("test").getTable("join2");
         OlapTable olapTable1 = (OlapTable) table;
         new Expectations(olapTable1) {
             {

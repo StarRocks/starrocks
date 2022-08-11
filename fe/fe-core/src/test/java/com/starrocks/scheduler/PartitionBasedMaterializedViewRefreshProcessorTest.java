@@ -77,6 +77,14 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl3\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withNewMaterializedView("create materialized view test.mv1\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2)\n" +
@@ -88,7 +96,12 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "distributed by hash(k2)\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
-                        "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
+                        "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
+                .withNewMaterializedView("create materialized view test.mv_without_partition\n" +
+                        "distributed by hash(k2)\n" +
+                        "refresh manual\n" +
+                        "properties('replication_num' = '1')\n" +
+                        "as select k2, sum(v1) as total_sum from tbl3 group by k2;");
     }
 
     @Test
@@ -99,7 +112,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
                     TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     if (tableName.getTbl().equals("tbl1")) {
                         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
                         for (Partition partition : tbl1.getPartitions()) {
@@ -118,7 +131,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 }
             }
         };
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
@@ -180,7 +193,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
     @Test
     public void testInactive() {
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
         materializedView.setActive(false);
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -192,6 +205,48 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             Assert.fail("should not be here. executeTaskRun will throw exception");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("is not active, skip sync partition and data with base tables"));
+        }
+    }
+
+    @Test
+    public void testMvWithoutPartition() {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+                    if (tableName.getTbl().equals("tbl1")) {
+                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+                        for (Partition partition : tbl1.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    } else if (tableName.getTbl().equals("tbl2")) {
+                        OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl2"));
+                        for (Partition partition : tbl1.getPartitions()) {
+                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        try {
+            taskRun.executeTaskRun();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("refresh failed");
         }
     }
 

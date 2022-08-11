@@ -265,7 +265,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
-import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -1114,7 +1113,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
                     properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
+            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
                     qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
             throw new ParsingException("error task name ");
@@ -2505,12 +2504,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> colList = null;
         if (context.colList != null) {
             List<Identifier> identifiers = visit(context.colList.identifier(), Identifier.class);
-            colList = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            colList = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
         List<String> colFromPath = null;
         if (context.colFromPath != null) {
             List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
-            colFromPath = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            colFromPath = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
         return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
                 colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
@@ -2526,7 +2525,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private BrokerDesc getBrokerDesc(StarRocksParser.BrokerDescContext context) {
         if (context != null) {
-            String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
             Map<String, String> properties = null;
             if (context.props != null) {
                 properties = Maps.newHashMap();
@@ -2535,7 +2533,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     properties.put(property.getKey(), property.getValue());
                 }
             }
-            return new BrokerDesc(brokerName, properties);
+            if (context.identifierOrString() != null) {
+                String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
+                return new BrokerDesc(brokerName, properties);
+            } else {
+                return new BrokerDesc(properties);
+            }
+            
         }
         return null;
     }

@@ -66,7 +66,7 @@ public class ColocateTableIndexTest {
         // group1->table1_1
         Assert.assertEquals(1, infos.size());
         Map<String, List<String>> map = groupByName(infos);
-        Table table1_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_1");
+        Table table1_1 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_1");
         Assert.assertEquals(String.format("%d", table1_1.getId()), map.get("group1").get(2));
         LOG.info("after create db1.table1_1: {}", infos);
 
@@ -82,7 +82,7 @@ public class ColocateTableIndexTest {
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(1, infos.size());
         map = groupByName(infos);
-        Table table1_2 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1").getTable("table1_2");
+        Table table1_2 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_2");
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
         LOG.info("after create db1.table1_2: {}", infos);
 
@@ -104,7 +104,7 @@ public class ColocateTableIndexTest {
         Assert.assertEquals(2, infos.size());
         map = groupByName(infos);
         Assert.assertEquals(String.format("%d, %d", table1_1.getId(), table1_2.getId()), map.get("group1").get(2));
-        Table table2_1 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getTable("table2_1");
+        Table table2_1 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_1");
         Assert.assertEquals(String.format("%d", table2_1.getId()), map.get("group2").get(2));
         LOG.info("after create db2.table2_1: {}", infos);
 
@@ -159,7 +159,7 @@ public class ColocateTableIndexTest {
                 "PROPERTIES(\"colocate_with\"=\"group3\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Table table2_3 = GlobalStateMgr.getCurrentState().getDb("default_cluster:db2").getTable("table2_3");
+        Table table2_3 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_3");
         sql = "DROP DATABASE db2;";
         dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());

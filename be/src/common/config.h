@@ -302,7 +302,7 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_Bool(enable_event_based_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "true");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -788,5 +788,9 @@ CONF_String(dependency_librdkafka_debug, "all");
 
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
+
+// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
+CONF_Int32(internal_service_async_thread_num, "10");
 
 } // namespace starrocks::config
