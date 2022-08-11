@@ -706,4 +706,8 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 // admin, eos, mock, assigner, conf
 CONF_String(dependency_librdkafka_debug, "all");
 
+// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
+CONF_Int32(internal_service_async_thread_num, "10");
+
 } // namespace starrocks::config
