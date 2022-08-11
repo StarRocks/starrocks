@@ -21,6 +21,7 @@ namespace starrocks::vectorized {
 class ColumnRef;
 
 #define APPLY_FOR_JOIN_VARIANTS(M) \
+    M(empty)                       \
     M(keyboolean)                  \
     M(key8)                        \
     M(key16)                       \
@@ -488,7 +489,11 @@ private:
                             NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
+<<<<<<< HEAD
                     // DCHECK_EQ(column->is_nullable(), to_nullable);
+=======
+                    DCHECK_EQ(column->is_nullable(), to_nullable);
+>>>>>>> 1da0a2f03 (Revert "Revert "[Enhancement] Optimize hash join when hash table is empty" (#9701)" (#9720))
                     (*chunk)->append_column(std::move(column), slot->id());
                 }
             } else {
@@ -705,6 +710,7 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
 
+    std::unique_ptr<JoinHashMapForEmpty> _empty = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)> _keyboolean = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)> _key8 = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)> _key16 = nullptr;
