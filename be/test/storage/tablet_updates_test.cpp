@@ -1213,7 +1213,11 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
         keys5.push_back(i * 3 + 2);
     }
     ASSERT_TRUE(_tablet->rowset_commit(5, create_rowset(_tablet, keys5)).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    {
+        // used for wait merely
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets).ok());
+    }
     ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
