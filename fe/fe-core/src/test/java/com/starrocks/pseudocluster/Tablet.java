@@ -1,7 +1,9 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;
@@ -12,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Tablet {
     private static final Logger LOG = LogManager.getLogger(Tablet.class);
@@ -27,15 +30,17 @@ public class Tablet {
     @SerializedName(value = "enablePersistentIndex")
     boolean enablePersistentIndex;
 
+    private AtomicInteger cloneExecuted = new AtomicInteger(0);
+
     public synchronized TTabletInfo toThrift() {
         TTabletInfo info = new TTabletInfo();
         info.setTablet_id(id);
         info.setPartition_id(partitionId);
         info.setSchema_hash(schemaHash);
         info.setStorage_medium(TStorageMedium.SSD);
-        info.setPath_hash(1);
+        info.setPath_hash(PseudoBackend.PATH_HASH);
         info.setIs_in_memory(false);
-        info.setVersion(max_continuous_version());
+        info.setVersion(maxContinuousVersion());
         info.setVersion_miss(!pendingRowsets.isEmpty());
         info.setRow_count(getRowCount());
         info.setData_size(getDataSize());
@@ -50,6 +55,8 @@ public class Tablet {
         long minor;
         @SerializedName(value = "rowsets")
         List<Rowset> rowsets = Lists.newArrayList();
+        @SerializedName(value = "delta")
+        Rowset delta;
 
         EditVersion(long major, long minor) {
             this.major = major;
@@ -87,8 +94,33 @@ public class Tablet {
         return num_rowsets() * 100000;
     }
 
-    public synchronized long max_continuous_version() {
+    public synchronized List<Long> getMissingVersions() {
+        if (pendingRowsets.size() == 0) {
+            return Lists.newArrayList(maxContinuousVersion() + 1);
+        }
+        List<Long> ret = Lists.newArrayList();
+        for (long v = maxContinuousVersion() + 1; v <= pendingRowsets.lastKey() + 1; v++) {
+            if (!pendingRowsets.containsKey(v)) {
+                ret.add(v);
+            }
+        }
+        return ret;
+    }
+
+    public synchronized long maxContinuousVersion() {
         return versions.get(versions.size() - 1).major;
+    }
+
+    public synchronized long maxVersion() {
+        if (pendingRowsets.isEmpty()) {
+            return maxContinuousVersion();
+        } else {
+            return pendingRowsets.lastKey();
+        }
+    }
+
+    public int getCloneExecuted() {
+        return cloneExecuted.get();
     }
 
     public synchronized void commitRowset(Rowset rowset, long version) throws Exception {
@@ -119,6 +151,7 @@ public class Tablet {
         EditVersion ev = new EditVersion(version, 0);
         ev.rowsets.addAll(lastVersion.rowsets);
         ev.rowsets.add(rowset);
+        ev.delta = rowset;
         versions.add(ev);
         LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #rowset:{}", rowset.txnId, id, version, rowset.id,
                 ev.rowsets.size());
@@ -130,6 +163,60 @@ public class Tablet {
         stat.setData_size(getDataSize());
         stat.setRow_num(getRowCount());
         return stat;
+    }
+
+    public TTabletInfo getTabletInfo() {
+        TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), 1, getRowCount(), getDataSize());
+        return info;
+    }
+
+    private Rowset getRowsetByVersion(long version) {
+        for (EditVersion ev : versions) {
+            if (ev.major == version && ev.delta != null) {
+                return ev.delta;
+            }
+        }
+        return pendingRowsets.get(version);
+    }
+
+    public synchronized List<Pair<Long, Rowset>> getRowsetsByMissingVersionList(List<Long> missingVersions) {
+        List<Pair<Long, Rowset>> ret = Lists.newArrayList();
+        for (int i = 0; i < missingVersions.size() - 1; i++) {
+            long version = missingVersions.get(i);
+            Rowset rowset = getRowsetByVersion(version);
+            if (rowset != null) {
+                ret.add(new Pair<>(version, rowset));
+            }
+        }
+        for (long v = missingVersions.get(missingVersions.size() - 1); v <= maxVersion(); v++) {
+            Rowset rowset = getRowsetByVersion(v);
+            if (rowset != null) {
+                ret.add(new Pair<>(v, rowset));
+            } else {
+                break;
+            }
+        }
+        return ret;
+    }
+
+    public String versionInfo() {
+        return String.format("version:%d #pending:%d", maxContinuousVersion(), pendingRowsets.size());
+    }
+
+    public synchronized void cloneFrom(Tablet src) throws Exception {
+        if (maxContinuousVersion() >= src.maxContinuousVersion()) {
+            LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
+                    versionInfo());
+            return;
+        }
+        String oldInfo = versionInfo();
+        List<Long> missingVersions = getMissingVersions();
+        List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
+        for (Pair<Long, Rowset> p : versionAndRowsets) {
+            commitRowset(p.second.copy(), p.first);
+        }
+        cloneExecuted.incrementAndGet();
+        LOG.info("tablet:{} clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo, versionInfo());
     }
 
     public static void main(String[] args) {

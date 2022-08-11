@@ -32,8 +32,8 @@
 namespace starrocks {
 
 enum class FieldTypeVersion {
-    kV1, // beta rowset with config::storage_format_version == 1
-    kV2, // beta rowset with config::storage_format_version == 2
+    kV1,
+    kV2,
 };
 
 // Old version StarRocks use `TColumnType` to save type info, convert it into `TTypeDesc`.

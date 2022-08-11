@@ -170,6 +170,7 @@ struct THdfsProperties {
   8: optional bool ssl_enable
   9: optional i32 max_connection
   10: optional string region
+  11: optional string hdfs_username
 }
 
 struct TBrokerScanRangeParams {

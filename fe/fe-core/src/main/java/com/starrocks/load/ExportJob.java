@@ -396,7 +396,7 @@ public class ExportJob implements Writable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = new Coordinator(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
             coord.setExecMemoryLimit(getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, task idx: {}, task query id: {}",

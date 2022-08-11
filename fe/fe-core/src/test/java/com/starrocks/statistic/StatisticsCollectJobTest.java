@@ -39,7 +39,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0_stats");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
         partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
@@ -58,7 +58,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t1_stats");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1_stats");
         new ArrayList<>(t1.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(t1, 20000000);
     }
@@ -196,7 +196,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Map<String, String> properties = new HashMap<>();
         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
         properties.put(StatsConstants.HISTOGRAM_BUCKET_NUM, "64");
-        properties.put(StatsConstants.HISTOGRAM_TOPN_SIZE, "100");
+        properties.put(StatsConstants.HISTOGRAM_MCV_SIZE, "100");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, olapTable, Lists.newArrayList("v2"),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,

@@ -60,7 +60,7 @@ class DeleteLakeTableTask implements Runnable {
         }
         TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
         try {
-            LakeServiceAsync lakeServiceAsync = BrpcProxy.getInstance().getLakeService(address);
+            LakeServiceAsync lakeServiceAsync = BrpcProxy.getLakeService(address);
             lakeServiceAsync.dropTable(request, new RpcCallback<DropTableResponse>() {
                 @Override
                 public void success(DropTableResponse dropTableResponse) {

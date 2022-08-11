@@ -66,14 +66,14 @@ TEST_F(BufferedStreamTest, Large) {
     {
         const uint8_t* buf;
         size_t nbytes = 1024;
-        auto st = stream.get_bytes(&buf, &nbytes);
+        auto st = stream.get_bytes(&buf, &nbytes, false);
         ASSERT_TRUE(st.ok());
     }
     // get 65K to enlarge the buffer
     {
         const uint8_t* buf;
         size_t nbytes = 65 * 1024;
-        auto st = stream.get_bytes(&buf, &nbytes);
+        auto st = stream.get_bytes(&buf, &nbytes, false);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(65 * 1024, nbytes);
     }
@@ -81,7 +81,7 @@ TEST_F(BufferedStreamTest, Large) {
     {
         const uint8_t* buf;
         size_t nbytes = 1 * 1024;
-        auto st = stream.get_bytes(&buf, &nbytes);
+        auto st = stream.get_bytes(&buf, &nbytes, false);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(0, nbytes);
     }
@@ -98,14 +98,14 @@ TEST_F(BufferedStreamTest, Large2) {
     {
         const uint8_t* buf;
         size_t nbytes = 1024;
-        auto st = stream.get_bytes(&buf, &nbytes);
+        auto st = stream.get_bytes(&buf, &nbytes, false);
         ASSERT_TRUE(st.ok());
     }
     // get 64K to move
     {
         const uint8_t* buf;
         size_t nbytes = 64 * 1024;
-        auto st = stream.get_bytes(&buf, &nbytes);
+        auto st = stream.get_bytes(&buf, &nbytes, false);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(64 * 1024, nbytes);
     }
@@ -113,7 +113,7 @@ TEST_F(BufferedStreamTest, Large2) {
     {
         const uint8_t* buf;
         size_t nbytes = 1 * 1024;
-        auto st = stream.get_bytes(&buf, &nbytes);
+        auto st = stream.get_bytes(&buf, &nbytes, false);
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(0, nbytes);
     }

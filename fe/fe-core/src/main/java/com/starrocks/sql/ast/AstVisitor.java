@@ -52,6 +52,7 @@ import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FrontendClause;
@@ -108,6 +109,7 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWarningStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
@@ -116,6 +118,7 @@ import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
 
@@ -256,6 +259,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowComputeNodes(ShowComputeNodesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowWarningStatement(ShowWarningStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -440,6 +447,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitDropUserStatement(DropUserStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitRecoverPartitionStmt(RecoverPartitionStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -560,6 +571,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitDropPartitionClause(DropPartitionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitTruncatePartitionClause(TruncatePartitionClause clause, C context) {
         return visitNode(clause, context);
     }
 

@@ -27,7 +27,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -86,12 +86,7 @@ public class BackendsProcDir implements ProcDirInterface {
         return result;
     }
 
-    /**
-     * get backends of cluster
-     *
-     * @param clusterName
-     * @return
-     */
+    // get backends of cluster
     public static List<List<String>> getClusterBackendInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<List<String>> backendInfos = new LinkedList<>();

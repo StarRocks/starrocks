@@ -49,6 +49,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
+
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -64,6 +65,7 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.List;
 
 public class ShowExecutorTest {
@@ -308,6 +310,15 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+
+        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        new Expectations(globalStateMgr) {
+            {
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+                minTimes = 0;
+                result = Arrays.asList(10001, 10002, 10003);
+            }
+        };
         // Prepare to Test
         ListPartitionInfoTest listPartitionInfoTest = new ListPartitionInfoTest();
         listPartitionInfoTest.setUp();

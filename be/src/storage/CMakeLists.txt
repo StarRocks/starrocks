@@ -99,7 +99,6 @@ add_library(Storage STATIC
     rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
-    rowset/rowset_writer_adapter.cpp
     rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp

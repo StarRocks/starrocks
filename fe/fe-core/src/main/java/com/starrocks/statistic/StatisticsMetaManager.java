@@ -5,21 +5,17 @@ package com.starrocks.statistic;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -39,77 +35,6 @@ import java.util.Map;
 
 public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
-
-    static {
-        ScalarType columnNameType = ScalarType.createVarcharType(65530);
-        ScalarType tableNameType = ScalarType.createVarcharType(65530);
-        ScalarType partitionNameType = ScalarType.createVarcharType(65530);
-        ScalarType dbNameType = ScalarType.createVarcharType(65530);
-        ScalarType maxType = ScalarType.createVarcharType(65530);
-        ScalarType minType = ScalarType.createVarcharType(65530);
-        ScalarType bucketsType = ScalarType.createVarcharType(65530);
-        ScalarType mostCommonValueType = ScalarType.createVarcharType(65530);
-
-        // varchar type column need call setAssignedStrLenInColDefinition here,
-        // otherwise it will be set length to 1 at analyze
-        columnNameType.setAssignedStrLenInColDefinition();
-        tableNameType.setAssignedStrLenInColDefinition();
-        partitionNameType.setAssignedStrLenInColDefinition();
-        dbNameType.setAssignedStrLenInColDefinition();
-        maxType.setAssignedStrLenInColDefinition();
-        minType.setAssignedStrLenInColDefinition();
-        bucketsType.setAssignedStrLenInColDefinition();
-        mostCommonValueType.setAssignedStrLenInColDefinition();
-
-        SAMPLE_STATISTICS_COLUMNS = ImmutableList.of(
-                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("column_name", new TypeDef(columnNameType)),
-                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("db_name", new TypeDef(dbNameType)),
-                new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("distinct_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("max", new TypeDef(maxType)),
-                new ColumnDef("min", new TypeDef(minType)),
-                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
-        );
-
-        FULL_STATISTICS_COLUMNS = ImmutableList.of(
-                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("partition_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("column_name", new TypeDef(columnNameType)),
-                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("partition_name", new TypeDef(partitionNameType)),
-                new ColumnDef("row_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("data_size", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("ndv", new TypeDef(ScalarType.createType(PrimitiveType.HLL))),
-                new ColumnDef("null_count", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("max", new TypeDef(maxType)),
-                new ColumnDef("min", new TypeDef(minType)),
-                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
-        );
-
-        HISTOGRAM_STATISTICS_COLUMNS = ImmutableList.of(
-                new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("column_name", new TypeDef(columnNameType)),
-                new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
-                new ColumnDef("table_name", new TypeDef(tableNameType)),
-                new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
-                        true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
-                        true, ColumnDef.DefaultValueDef.NOT_SET, ""),
-                new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
-        );
-    }
-
-    private static final List<ColumnDef> SAMPLE_STATISTICS_COLUMNS;
-
-    private static final List<ColumnDef> FULL_STATISTICS_COLUMNS;
-
-    private static final List<ColumnDef> HISTOGRAM_STATISTICS_COLUMNS;
 
     // If all replicas are lost more than 3 times in a row, rebuild the statistics table
     private int lossTableCount = 0;
@@ -194,7 +119,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName, SAMPLE_STATISTICS_COLUMNS, "olap",
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME),
+                "olap",
                 new KeysDesc(KeysType.UNIQUE_KEYS, keyColumnNames),
                 null,
                 new HashDistributionDesc(10, keyColumnNames),
@@ -221,7 +148,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName, FULL_STATISTICS_COLUMNS, "olap",
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.FULL_STATISTICS_TABLE_NAME),
+                "olap",
                 new KeysDesc(KeysType.PRIMARY_KEYS, fullStatisticsKeyColumns),
                 null,
                 new HashDistributionDesc(10, fullStatisticsKeyColumns),
@@ -248,7 +177,9 @@ public class StatisticsMetaManager extends LeaderDaemon {
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
         CreateTableStmt stmt = new CreateTableStmt(false, false,
-                tableName, HISTOGRAM_STATISTICS_COLUMNS, "olap",
+                tableName,
+                StatisticUtils.buildStatsColumnDef(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME),
+                "olap",
                 new KeysDesc(KeysType.PRIMARY_KEYS, histogramKeyColumns),
                 null,
                 new HashDistributionDesc(10, histogramKeyColumns),

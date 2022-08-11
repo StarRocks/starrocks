@@ -17,7 +17,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
+import com.starrocks.alter.DecommissionType;
 
 import java.util.List;
 

@@ -113,8 +113,7 @@ Status ExportSink::open_file_writer(int timeout_ms) {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs,
-                             FileSystem::CreateUniqueFromString(file_path, FSOptions(nullptr, &_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {

@@ -227,6 +227,7 @@ public class RangePartitionInfo extends PartitionInfo {
                 idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
                 idToReplicationNum.put(partitionId, desc.getReplicationNum());
                 idToInMemory.put(partitionId, desc.isInMemory());
+                idToStorageInfo.put(partitionId, desc.getStorageInfo());
             }
         }
     }
@@ -245,7 +246,13 @@ public class RangePartitionInfo extends PartitionInfo {
      * @TODO This method may be used in future
      */
     public void unprotectHandleNewSinglePartitionDesc(RangePartitionPersistInfo info) {
-
+        Partition partition = info.getPartition();
+        long partitionId = partition.getId();
+        setRangeInternal(partitionId, info.isTempPartition(), info.getRange());
+        idToDataProperty.put(partitionId, info.getDataProperty());
+        idToReplicationNum.put(partitionId, info.getReplicationNum());
+        idToInMemory.put(partitionId, info.isInMemory());
+        idToStorageInfo.put(partitionId, info.getStorageInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

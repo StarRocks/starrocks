@@ -36,7 +36,7 @@ public class ExpressionRangePartitionInfoTest {
     public void setUp() {
         partitionExprs = Lists.newArrayList();
         singleRangePartitionDescs = Lists.newArrayList();
-        tableName = new TableName("default_cluster:test", "tbl1");
+        tableName = new TableName("test", "tbl1");
         k2 = new Column("k2", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
         List<Expr> fnChildren = Lists.newArrayList();

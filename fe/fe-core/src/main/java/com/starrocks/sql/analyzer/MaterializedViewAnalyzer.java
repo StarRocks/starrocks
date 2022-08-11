@@ -29,10 +29,12 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
@@ -47,6 +49,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -73,7 +76,14 @@ public class MaterializedViewAnalyzer {
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
-            statement.getTableName().normalization(context);
+            final TableName tableNameObject = statement.getTableName();
+            MetaUtils.normalizationTableName(context, tableNameObject);
+            final String tableName = tableNameObject.getTbl();
+            try {
+                FeNameFormat.checkTableName(tableName);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
+            }
             QueryStatement queryStatement = statement.getQueryStatement();
             // check query relation is select relation
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
@@ -115,7 +125,7 @@ public class MaterializedViewAnalyzer {
             if (tableNameTableMap.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            tableNameTableMap.forEach((tableName, table) -> {
+            tableNameTableMap.values().forEach(table -> {
                 if (db.getTable(table.getId()) == null) {
                     throw new SemanticException(
                             "Materialized view do not support table: " + table.getName() +

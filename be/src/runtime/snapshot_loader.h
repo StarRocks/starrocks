@@ -63,12 +63,11 @@ public:
 
     ~SnapshotLoader();
 
-    Status upload(const std::map<std::string, std::string>& src_to_dest_path, const TNetworkAddress& broker_addr,
-                  const std::map<std::string, std::string>& broker_prop,
+    Status upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                   std::map<int64_t, std::vector<std::string>>* tablet_files);
 
-    Status download(const std::map<std::string, std::string>& src_to_dest_path, const TNetworkAddress& broker_addr,
-                    const std::map<std::string, std::string>& broker_prop, std::vector<int64_t>* downloaded_tablet_ids);
+    Status download(const std::map<std::string, std::string>& src_to_dest_path, const TDownloadReq& download,
+                    std::vector<int64_t>* downloaded_tablet_ids);
 
     Status move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite);
 
@@ -78,14 +77,21 @@ private:
 
     Status _check_local_snapshot_paths(const std::map<std::string, std::string>& src_to_dest_path, bool check_src);
 
+    Status _get_existing_files_from_local(const std::string& local_path, std::vector<std::string>* local_files);
+
     Status _get_existing_files_from_remote(BrokerServiceConnection& client, const std::string& remote_path,
                                            const std::map<std::string, std::string>& broker_prop,
                                            std::map<std::string, FileStat>* files);
 
-    Status _get_existing_files_from_local(const std::string& local_path, std::vector<std::string>* local_files);
+    Status _get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
+                                                          const std::string& remote_path,
+                                                          std::map<std::string, FileStat>* files);
 
     Status _rename_remote_file(BrokerServiceConnection& client, const std::string& orig_name,
                                const std::string& new_name, const std::map<std::string, std::string>& broker_prop);
+
+    Status _rename_remote_file_without_broker(const std::unique_ptr<FileSystem>& fs, const std::string& orig_name,
+                                              const std::string& new_name);
 
     bool _end_with(const std::string& str, const std::string& match);
 

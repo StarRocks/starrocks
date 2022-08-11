@@ -878,7 +878,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testCastDatePredicate() throws Exception {
         OlapTable lineitem =
-                (OlapTable) connectContext.getGlobalStateMgr().getDb("default_cluster:test").getTable("lineitem");
+                (OlapTable) connectContext.getGlobalStateMgr().getDb("test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(100);
         connectContext.getGlobalStateMgr().setStatisticStorage(mock);

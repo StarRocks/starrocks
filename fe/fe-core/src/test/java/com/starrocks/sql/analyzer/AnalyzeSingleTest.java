@@ -436,21 +436,21 @@ public class AnalyzeSingleTest {
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT TRUE OR FALSE FROM default_cluster:test.t0"
+        Assert.assertEquals("SELECT TRUE OR FALSE FROM test.t0"
                 , AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT concat('a', 'b') FROM default_cluster:test.t0",
+        Assert.assertEquals("SELECT concat('a', 'b') FROM test.t0",
                 AST2SQL.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall WHERE ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
+                "SELECT * FROM test.tall WHERE ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -458,7 +458,7 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall WHERE (ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
+                "SELECT * FROM test.tall WHERE (ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
                 AST2SQL.toString(statementBase));
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
@@ -468,14 +468,14 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  tall order by ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT * FROM default_cluster:test.tall ORDER BY ta ASC NULLS LAST ",
+        Assert.assertEquals("SELECT * FROM test.tall ORDER BY ta ASC NULLS LAST ",
                 AST2SQL.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall order by ta desc",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall ORDER BY ta DESC NULLS FIRST ",
+                "SELECT * FROM test.tall ORDER BY ta DESC NULLS FIRST ",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -483,7 +483,7 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall ORDER BY ta ASC ",
+                "SELECT * FROM test.tall ORDER BY ta ASC ",
                 AST2SQL.toString(statementBase));
     }
 

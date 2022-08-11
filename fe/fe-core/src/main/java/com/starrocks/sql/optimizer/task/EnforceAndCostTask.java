@@ -288,7 +288,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // enforcedProperty is superset of requiredProperty
             if (!enforcedProperty.equals(requiredProperty)) {
-                setPropertyWithCost(groupExpression.getGroup().getBestExpression(enforcedProperty),
+                setPropertyWithCost(groupExpression.getGroup().getBestExpression(enforcedProperty), enforcedProperty,
                         requiredProperty, Lists.newArrayList(outputProperty));
             }
         } else {

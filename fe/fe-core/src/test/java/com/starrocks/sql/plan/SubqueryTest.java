@@ -133,7 +133,7 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testMultiNotExistPredicatePushDown() throws Exception {
         FeConstants.runningUnitTest = true;
-        connectContext.setDatabase("default_cluster:test");
+        connectContext.setDatabase("test");
 
         String sql =
                 "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
@@ -412,6 +412,48 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  output: count(1), any_value(5: v5)\n" +
                     "  |  group by: 4: v4");
         }
+        {
+            String sql = "SELECT * FROM t0\n" +
+                    "WHERE t0.v2 > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4 and t1.v4 = 10 and t1.v5 < 2\n" +
+                    ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  \n" +
+                    "  6:SELECT\n" +
+                    "  |  predicates: 2: v2 > 7: expr\n" +
+                    "  |  \n" +
+                    "  5:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  <slot 7> : 9: anyValue\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  \n" +
+                    "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4");
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1), any_value(5: v5)\n" +
+                    "  |  group by: 4: v4\n" +
+                    "  |  \n" +
+                    "  1:OlapScanNode\n" +
+                    "     TABLE: t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 4: v4 = 10, 5: v5 < 2\n" +
+                    "     partitions=0/1\n" +
+                    "     rollup: t1\n" +
+                    "     tabletRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     cardinality=0\n" +
+                    "     avgRowSize=2.0\n" +
+                    "     numNodes=0");
+        }
     }
 
     @Test
@@ -470,5 +512,61 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  output: count(1), any_value(6: v5)\n" +
                     "  |  group by: 5: v4");
         }
+    }
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryWithExpression() throws Exception {
+        String sql = "SELECT \n" +
+                "  subt0.v1 \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "          SELECT \n" +
+                "            t2.v7 \n" +
+                "          FROM \n" +
+                "            t2 \n" +
+                "          WHERE \n" +
+                "            t0.v2 = 284082749\n" +
+                "      ) >= 1\n" +
+                "  ) subt0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1), any_value(4: v7)\n" +
+                "  |  group by: 8: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: v7\n" +
+                "  |  <slot 8> : 284082749");
+        sql = "SELECT \n" +
+                "  subt0.v1 \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "          SELECT \n" +
+                "            t2.v7 \n" +
+                "          FROM \n" +
+                "            t2 \n" +
+                "          WHERE \n" +
+                "            t0.v2 = t2.v8 + 1\n" +
+                "      ) >= 1\n" +
+                "  ) subt0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 3:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1), any_value(4: v7)\n" +
+                "  |  group by: 8: add\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: v7\n" +
+                "  |  <slot 8> : 5: v8 + 1");
     }
 }

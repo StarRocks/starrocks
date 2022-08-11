@@ -54,8 +54,8 @@ public class ShowCreateMaterializedViewStmtTest {
                 new ShowCreateTableStmt(new TableName("test", "mv1"),
                         ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW default_cluster:test.mv1", stmt.toString());
-        Assert.assertEquals("default_cluster:test", stmt.getDb());
+        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW test.mv1", stmt.toString());
+        Assert.assertEquals("test", stmt.getDb());
         Assert.assertEquals("mv1", stmt.getTable());
         Assert.assertEquals(2, ShowCreateTableStmt.getMaterializedViewMetaData().getColumnCount());
         Assert.assertEquals("Materialized View",
@@ -73,7 +73,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv1");
+        Table table = currentState.getDb("test").getTable("mv1");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv1`\n" +
@@ -100,7 +100,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv2");
+        Table table = currentState.getDb("test").getTable("mv2");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv2`\n" +
@@ -128,7 +128,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv3");
+        Table table = currentState.getDb("test").getTable("mv3");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv3`\n" +
@@ -156,7 +156,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv4");
+        Table table = currentState.getDb("test").getTable("mv4");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv4`\n" +
@@ -189,7 +189,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv5");
+        Table table = currentState.getDb("test").getTable("mv5");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv5`\n" +
@@ -223,7 +223,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv6");
+        Table table = currentState.getDb("test").getTable("mv6");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv6`\n" +
@@ -257,7 +257,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv7");
+        Table table = currentState.getDb("test").getTable("mv7");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7`\n" +

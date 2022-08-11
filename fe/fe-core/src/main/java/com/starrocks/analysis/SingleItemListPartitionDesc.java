@@ -12,6 +12,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.StorageInfo;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.List;
@@ -85,6 +86,11 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
     @Override
     public boolean isSetIfNotExists() {
         return ifNotExists;
+    }
+
+    @Override
+    public StorageInfo getStorageInfo() {
+        return null;
     }
 
     public List<LiteralExpr> getLiteralExprValues() throws AnalysisException {

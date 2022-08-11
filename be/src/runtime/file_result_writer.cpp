@@ -74,8 +74,7 @@ Status FileResultWriter::_create_file_writer() {
                 _fs.reset(new BrokerFileSystem(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
                                                config::broker_write_timeout_seconds * 1000));
             } else {
-                ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path,
-                                                                         FSOptions(nullptr, nullptr, _file_opts)));
+                ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
             }
         }
     }

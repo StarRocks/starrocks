@@ -145,19 +145,9 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     (void)controller;
 
     // TODO: move the execution to TaskWorkerPool
-    // This rpc never fail.
+    auto tablet_mgr = _env->lake_tablet_manager();
     for (auto tablet_id : request->tablet_ids()) {
-        auto tablet = _env->lake_tablet_manager()->get_tablet(tablet_id);
-        if (!tablet.ok()) {
-            LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
-            continue;
-        }
-        // TODO: batch deletion
-        for (const auto& txn_id : request->txn_ids()) {
-            VLOG(3) << "Deleting " << tablet->txn_log_location(txn_id);
-            auto st = tablet->delete_txn_log(txn_id);
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
-        }
+        tablet_mgr->abort_txn(tablet_id, request->txn_ids().data(), request->txn_ids_size());
     }
 }
 
@@ -174,7 +164,7 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     }
 
     for (auto tablet_id : request->tablet_ids()) {
-        auto res = _env->lake_tablet_manager()->drop_tablet(tablet_id);
+        auto res = _env->lake_tablet_manager()->delete_tablet(tablet_id);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": " << res.get_error_msg();
             response->add_failed_tablets(tablet_id);

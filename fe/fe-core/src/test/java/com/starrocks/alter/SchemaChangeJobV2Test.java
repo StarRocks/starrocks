@@ -95,7 +95,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
     @Test
     public void testAddSchemaChange() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
 
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
@@ -108,7 +108,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
     @Test
     public void testSchemaChange1() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
@@ -172,7 +172,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 
@@ -292,8 +292,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         Assert.assertEquals(3, olapTable.getTableProperty().getDynamicPartitionProperty().getBuckets());
     }
 
-    public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue,
-                                                           String missPropertyKey)
+    public void modifyDynamicPartitionWithoutTableProperty(String propertyKey, String propertyValue, String expectErrMsg)
             throws UserException {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
@@ -305,9 +304,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
 
         expectedEx.expect(DdlException.class);
-        expectedEx.expectMessage("Table test_db.test_tbl2 is not a dynamic partition table. " +
-                "Use command `HELP ALTER TABLE` to see how to change a normal table to a dynamic partition table.");
-
+        expectedEx.expectMessage(expectErrMsg);
         schemaChangeHandler.process(alterClauses, db, olapTable);
     }
 

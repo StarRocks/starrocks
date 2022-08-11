@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -102,6 +103,21 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // t1.v1
         ColumnRefSet correlationPredicateInnerRefs = new ColumnRefSet(correlationPredicatePair.second.keySet());
 
+        OptExpression rightChild = input.inputAt(1);
+        if (correlationPredicatePair.second.values().stream().anyMatch(v -> !v.isColumnRef())) {
+            // There are expression, need project node
+            Map<ColumnRefOperator, ScalarOperator> rightChildProjectMap = Maps.newHashMap();
+            Arrays.stream(input.inputAt(1).getOutputColumns().getColumnIds()).
+                    mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(i -> rightChildProjectMap.put(i, i));
+            rightChildProjectMap.putAll(correlationPredicatePair.second);
+            rightChild = OptExpression.create(new LogicalProjectOperator(rightChildProjectMap), rightChild);
+        }
+
+        // Non-correlated predicates
+        if (apply.getPredicate() != null) {
+            rightChild = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), rightChild);
+        }
+
         /*
          * Step1: build agg
          *      output: count(1) as countRows, any_value(t1.v2) as anyValue
@@ -130,7 +146,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
 
         OptExpression newAggOpt = OptExpression.create(
                 new LogicalAggregationOperator(AggType.GLOBAL, countAggregateGroupBys, aggregates),
-                input.inputAt(1));
+                rightChild);
 
         /*
          * Step2: build left outer join
@@ -143,7 +159,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
                 .build();
         OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
 
-        // Step3: build project
+        /*
+         * Step3: build project
+         */
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         // Other columns
         projectMap.put(countRows, countRows);

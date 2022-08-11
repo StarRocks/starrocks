@@ -406,7 +406,7 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
         DCHECK(!_request.__isset.http_file_path);
 
         // 2. init RowsetBuilder of cur_tablet for current push
-        RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext context;
         context.rowset_id = StorageEngine::instance()->next_rowset_id();
         context.tablet_uid = cur_tablet->tablet_uid();
         context.tablet_id = cur_tablet->tablet_id();
@@ -462,7 +462,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
     // 1. init RowsetBuilder of cur_tablet for current push
     VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
             << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
-    RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+    RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = cur_tablet->tablet_uid();
     context.tablet_id = cur_tablet->tablet_id();

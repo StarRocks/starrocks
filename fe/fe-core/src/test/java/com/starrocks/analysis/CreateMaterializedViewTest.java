@@ -3,7 +3,9 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.KeysType;
@@ -212,11 +214,25 @@ public class CreateMaterializedViewTest {
                         "properties('replication_num'='1');")
                 .useDatabase("test");
         currentState = GlobalStateMgr.getCurrentState();
-        testDb = currentState.getDb("default_cluster:test");
+        testDb = currentState.getDb("test");
     }
 
     private void dropMv(String mvName) throws Exception {
         String sql = "drop materialized view " + mvName;
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+        stmtExecutor.execute();
+    }
+
+    private void dropTableForce(String tableName) throws Exception {
+        String sql = "drop table " + tableName +" force";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+        stmtExecutor.execute();
+    }
+
+    private void dropTable(String tableName) throws Exception {
+        String sql = "drop table " + tableName;
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
         stmtExecutor.execute();
@@ -236,6 +252,23 @@ public class CreateMaterializedViewTest {
             LOG.info("waiting for TaskRunState retryCount:" + retryCount);
         }
         return taskRuns;
+    }
+
+    private void waitngRollupJobV2Finish() throws Exception{
+        // waiting alterJobV2 finish
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        //Assert.assertEquals(1, alterJobs.size());
+
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
+                continue;
+            }
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            }
+        }
     }
 
     // ========== full test ==========
@@ -1343,6 +1376,173 @@ public class CreateMaterializedViewTest {
                     "not supported nondeterministic function", e.getMessage());
         }
     }
+    // ========== test colocate mv ==========
+    @Test
+    public void testCreateColocateMvNormal() throws Exception{
+        starRocksAssert.withTable("CREATE TABLE test.colocateTable\n" +
+                "(\n" +
+                "    k1 int,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        String sql = "create materialized view colocateMv\n" +
+                "PROPERTIES (\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select k1, k2 from colocateTable;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            waitngRollupJobV2Finish();
+            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+            String fullGroupName = testDb.getId() +"_" + testDb.getFullName() +":" + "colocateMv";
+            System.out.println(fullGroupName);
+            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+            Assert.assertNotEquals(-1,tableId);
+
+            OlapTable table = (OlapTable) testDb.getTable("colocateTable");
+            Assert.assertEquals(1,table.getColocateMaterializedViewNames().size());
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertEquals(1,colocateTableIndex.getAllTableIds(groupId).size());
+
+            dropMv("colocateMv");
+            Assert.assertFalse(currentState.getColocateTableIndex().isColocateTable(tableId));
+            Assert.assertEquals(0,table.getColocateMaterializedViewNames().size());
+
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            currentState.getColocateTableIndex().clear();
+        }
+    }
+
+    @Test
+    public void testCreateColocateMvToExitGroup() throws Exception{
+        starRocksAssert.withTable("CREATE TABLE test.colocateTable2\n" +
+                "(\n" +
+                "    k1 int,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"group2\"\n" +
+                ");");
+
+        String sql = "create materialized view colocateMv2\n" +
+                "PROPERTIES (\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select k1, k2 from colocateTable2;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+
+            waitngRollupJobV2Finish();
+            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+            String fullGroupName = testDb.getId() + "_" + "group2";
+            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+            Assert.assertNotEquals(-1,tableId);
+
+            OlapTable table = (OlapTable) testDb.getTable("colocateTable2");
+            Assert.assertEquals(1,table.getColocateMaterializedViewNames().size());
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertEquals(1,colocateTableIndex.getAllTableIds(groupId).size());
+
+            dropMv("colocateMv2");
+            Assert.assertTrue(currentState.getColocateTableIndex().isColocateTable(tableId));
+            Assert.assertEquals(0,table.getColocateMaterializedViewNames().size());
+
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            currentState.getColocateTableIndex().clear();
+        }
+
+    }
+
+    @Test
+    public void testColocateMvAlterGroup() throws Exception{
+        starRocksAssert.withTable("CREATE TABLE test.colocateTable3\n" +
+                "(\n" +
+                "    k1 int,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"group3\"\n" +
+                ");");
+
+        String sql = "create materialized view colocateMv3\n" +
+                "PROPERTIES (\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select k1, k2 from colocateTable3;";
+        String sql2 = "create materialized view colocateMv4\n" +
+                "PROPERTIES (\n" +
+                "\"colocate_mv\" = \"true\"\n" +
+                ")\n" +
+                "as select k1, k2 from colocateTable3;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            waitngRollupJobV2Finish();
+            statementBase = UtFrameUtils.parseStmtWithNewParser(sql2,connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            waitngRollupJobV2Finish();
+
+            ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
+            String fullGroupName = testDb.getId() + "_" + "group3";
+            System.out.println(fullGroupName);
+            long tableId = colocateTableIndex.getTableIdByGroup(fullGroupName);
+            Assert.assertNotEquals(-1,tableId);
+
+            OlapTable table = (OlapTable) testDb.getTable("colocateTable3");
+            Assert.assertFalse(table.isInColocateMvGroup());
+            Assert.assertEquals(2,table.getColocateMaterializedViewNames().size());
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertEquals(1,colocateTableIndex.getAllTableIds(groupId).size());
+
+            sql = "alter table colocateTable3 set (\"colocate_with\" = \"groupNew\")";
+            statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+            stmtExecutor.execute();
+
+            Assert.assertEquals(2,table.getColocateMaterializedViewNames().size());
+            Assert.assertEquals("groupNew",table.getColocateGroup());
+            Assert.assertFalse(table.isInColocateMvGroup());
+            Assert.assertTrue(colocateTableIndex.isColocateTable(tableId));
+
+            sql = "alter table colocateTable3 set (\"colocate_with\" = \"\")";
+            statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            stmtExecutor = new StmtExecutor(connectContext, statementBase);
+            stmtExecutor.execute();
+
+            Assert.assertTrue(colocateTableIndex.isColocateTable(tableId));
+            Assert.assertTrue(table.isInColocateMvGroup());
+            groupId = colocateTableIndex.getGroup(tableId);
+            Assert.assertNotEquals("group1",table.getColocateGroup());
+
+            dropMv("colocateMv4");
+            Assert.assertEquals(1,table.getColocateMaterializedViewNames().size());
+            dropMv("colocateMv3");
+            Assert.assertFalse(colocateTableIndex.isColocateTable(tableId));
+
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            currentState.getColocateTableIndex().clear();
+        }
+
+    }
 
     // ========== other test ==========
     @Test
@@ -1506,7 +1706,42 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Can not find database:default_cluster:db1", e.getMessage());
+            Assert.assertEquals("Can not find database:db1", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testMvNameInvalid() {
+        String sql = "create materialized view mvklajksdjksjkjfksdlkfgkllksdjkgjsdjfjklsdjkfgjkldfkljgljkljklgja\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name " +
+                    "'mvklajksdjksjkjfksdlkfgkllksdjkgjsdjfjklsdjkfgjkldfkljgljkljklgja'", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testMvNameTooLong() {
+        String sql = "create materialized view 22mv\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name '22mv'", e.getMessage());
         }
     }
 

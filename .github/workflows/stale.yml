@@ -17,11 +17,7 @@ jobs:
           operations-per-run: 1000
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           stale-issue-message: |
-            We have marked this issue as stale because it has been inactive for
-            18 months. If this issue is still relevant, removing the stale label
-            or adding a comment will keep it active. Otherwise, we'll close it in
-            10 days to keep the issue queue tidy. Thank you for your contribution
-            to StarRocks!
+            We have marked this issue as stale because it has been inactive for 6 months. If this issue is still relevant, removing the stale label or adding a comment will keep it active. Otherwise, we'll close it in 10 days to keep the issue queue tidy. Thank you for your contribution to StarRocks!
           stale-pr-message: 'Stale pull request message'
           stale-issue-label: 'no-issue-activity'
           stale-pr-label: 'no-pr-activity'
