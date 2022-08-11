@@ -3,6 +3,7 @@
 package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth;
@@ -113,11 +114,12 @@ public class Task implements Writable {
     }
 
     public String getDbName() {
-        return dbName;
+        return ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        // compatible with old version
+        this.dbName = ClusterNamespace.getFullName(dbName);
     }
 
     public String getDefinition() {

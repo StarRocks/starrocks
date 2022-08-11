@@ -92,41 +92,41 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         int scale = 100;
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(scale));
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("region");
+        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
-        OlapTable t5 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("nation");
+        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
         setTableStatistics(t5, 25);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("supplier");
+        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
         setTableStatistics(t1, 10000 * scale);
 
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
         setTableStatistics(t4, 150000 * scale);
 
-        OlapTable t6 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("part");
+        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
         setTableStatistics(t6, 200000 * scale);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("partsupp");
+        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
         setTableStatistics(t2, 800000 * scale);
 
-        OlapTable t3 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("orders");
+        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
         setTableStatistics(t3, 1500000 * scale);
 
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
-        OlapTable t8 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("lineitem_partition");
+        OlapTable t8 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
         setTableStatistics(t8, 6000000 * scale);
 
-        OlapTable test_all_type = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("test_all_type");
+        OlapTable test_all_type = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(test_all_type, 6000000);
 
         OlapTable lineorder_new_l =
-                (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("lineorder_new_l");
+                (OlapTable) globalStateMgr.getDb("test").getTable("lineorder_new_l");
         setTableStatistics(lineorder_new_l, 1200018434);
 
-        OlapTable dates_n = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("dates_n");
+        OlapTable dates_n = (OlapTable) globalStateMgr.getDb("test").getTable("dates_n");
         setTableStatistics(dates_n, 2556);
 
         UtFrameUtils.addMockBackend(10002);

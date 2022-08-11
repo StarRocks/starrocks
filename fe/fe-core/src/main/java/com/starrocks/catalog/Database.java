@@ -111,8 +111,6 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Database(long id, String name) {
-        // used for remove cluster from stmt
-        name = ClusterNamespace.getFullName(name);
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
@@ -256,7 +254,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public String getOriginName() {
-        return ClusterNamespace.getNameFromFullName(fullQualifiedName);
+        return fullQualifiedName;
     }
 
     public String getFullName() {
@@ -584,7 +582,12 @@ public class Database extends MetaObject implements Writable {
         super.write(out);
 
         out.writeLong(id);
-        Text.writeString(out, fullQualifiedName);
+        // compatible with old version
+        if (fullQualifiedName.isEmpty()) {
+            Text.writeString(out, fullQualifiedName);
+        } else {
+            Text.writeString(out, ClusterNamespace.getFullName(fullQualifiedName));
+        }
         // write tables
         int numTables = nameToTable.size();
         out.writeInt(numTables);
@@ -617,9 +620,9 @@ public class Database extends MetaObject implements Writable {
 
         id = in.readLong();
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            fullQualifiedName = ClusterNamespace.getFullName(Text.readString(in));
-        } else {
             fullQualifiedName = Text.readString(in);
+        } else {
+            fullQualifiedName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
         // read groups
         int numTables = in.readInt();
@@ -806,7 +809,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public boolean isInfoSchemaDb() {
-        return ClusterNamespace.getNameFromFullName(fullQualifiedName).equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
     }
 
     // the invoker should hold db's writeLock

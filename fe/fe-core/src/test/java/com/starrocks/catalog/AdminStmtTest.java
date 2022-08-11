@@ -74,7 +74,7 @@ public class AdminStmtTest {
 
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
         Assert.assertNotNull(tbl);

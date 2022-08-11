@@ -233,7 +233,7 @@ abstract public class StarRocksHttpTestCase {
 
                     globalStateMgr.getDbNames();
                     minTimes = 0;
-                    result = Lists.newArrayList("default_cluster:testDb");
+                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getLoadInstance();
                     minTimes = 0;
@@ -300,7 +300,7 @@ abstract public class StarRocksHttpTestCase {
 
                     globalStateMgr.getDbNames();
                     minTimes = 0;
-                    result = Lists.newArrayList("default_cluster:testDb");
+                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getLoadInstance();
                     minTimes = 0;
@@ -323,7 +323,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "default_cluster:testDb", "testTbl");
+                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "testTbl");
                     minTimes = 0;
                     result = table;
                 }

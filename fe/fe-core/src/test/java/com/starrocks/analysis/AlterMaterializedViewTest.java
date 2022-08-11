@@ -33,7 +33,7 @@ public class AlterMaterializedViewTest {
                 (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         TableName oldMvName = alterMvStmt.getMvName();
         String newMvName = alterMvStmt.getNewMvName();
-        Assert.assertEquals("default_cluster:test", oldMvName.getDb());
+        Assert.assertEquals("test", oldMvName.getDb());
         Assert.assertEquals("mv1", oldMvName.getTbl());
         Assert.assertEquals("mv2", newMvName);
     }
