@@ -689,6 +689,17 @@ std::string Analytor::debug_string() const {
     return ss.str();
 }
 
+Status Analytor::check_has_error() {
+    for (const auto* ctx : _agg_fn_ctxs) {
+        if (ctx != nullptr) {
+            if (ctx->has_error()) {
+                return Status::RuntimeError(ctx->error_msg());
+            }
+        }
+    }
+    return Status::OK();
+}
+
 void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                              int64_t frame_end) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
