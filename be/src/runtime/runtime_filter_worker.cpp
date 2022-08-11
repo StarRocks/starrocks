@@ -269,7 +269,6 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     for (auto it : status->filters) {
         out->concat(it.second);
     }
-
     // if well enough, then we send it out.
 
     PTransmitRuntimeFilterParams request;
@@ -300,9 +299,9 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
 
     VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. target_nodes[0] = " << target_nodes->at(0)
               << ", target_nodes_size = " << target_nodes->size() << ", filter_id = " << request.filter_id()
-              << ", filter_size = " << out->size()
               << ", latency(last-first = " << status->recv_last_filter_ts - status->recv_first_filter_ts
-              << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")";
+              << ", send-first = " << status->broadcast_filter_ts - status->recv_first_filter_ts << ")"
+              << ", filter = " << out->debug_string();
     request.set_broadcast_timestamp(now);
 
     std::map<TNetworkAddress, std::vector<TUniqueId>> nodes_to_frag_insts;
