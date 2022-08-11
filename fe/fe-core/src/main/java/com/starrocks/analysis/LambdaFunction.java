@@ -15,8 +15,8 @@ public class LambdaFunction extends Expr {
         this.children.add(left);
         this.children.add(right);
     }
-    public LambdaFunction(Expr left) {
-        this.children.add(left);
+    public LambdaFunction(List<Expr> arguments) {
+        this.children.addAll(arguments);
     }
     public LambdaFunction(LambdaFunction rhs) {
         super(rhs);

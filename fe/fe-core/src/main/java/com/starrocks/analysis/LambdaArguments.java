@@ -1,6 +1,5 @@
 package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
@@ -15,15 +14,16 @@ public class LambdaArguments extends Expr {
     }
 
     List<String> names;
-    List<Type> types;
+    List<PlaceHolderExpr> arguments;
 
-    public List<Type> getTypes() {
-        return types;
+    public void putArguments(List<PlaceHolderExpr> arguments) {
+        this.arguments = arguments;
     }
 
-    public void putTypes(List<Type> types) {
-        this.types = types;
+    public List<PlaceHolderExpr> getArguments() {
+        return arguments;
     }
+
     public LambdaArguments(List<String> name) {
         this.names = name;
     }

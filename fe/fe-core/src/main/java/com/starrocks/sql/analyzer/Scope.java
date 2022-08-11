@@ -3,10 +3,10 @@ package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.CTERelation;
 
 import java.util.List;
@@ -23,9 +23,7 @@ public class Scope {
     private final RelationFields relationFields;
     private final Map<String, CTERelation> cteQueries = Maps.newLinkedHashMap();
 
-    private List<String> lambdaArgumentNames = Lists.newArrayList();
-
-    private List<Type> lambdaInputTypes = Lists.newArrayList();
+    private List<PlaceHolderExpr> lambdaArguments = Lists.newArrayList();
 
     private boolean isLambdaScope = false;
 
@@ -34,12 +32,12 @@ public class Scope {
         this.relationFields = relation;
     }
 
-    public Scope(List<Type> typeList, List<String> nameList, Scope parent) {
+    public Scope(List<PlaceHolderExpr> exprs, Scope parent) {
         this.relationId = RelationId.anonymous();
         List<Field> fieldList = Lists.newArrayList();
-        for (int i = 0; i < typeList.size(); ++i) {
-            fieldList.add(new Field(nameList.get(i), typeList.get(i), new TableName("select", "select"),
-                    null, false));
+        for (int i = 0; i < exprs.size(); ++i) {
+            fieldList.add(new Field(exprs.get(i).getName(), exprs.get(i).getType(),
+                    new TableName("select", "select"), exprs.get(i), false));
         }
         relationFields = new RelationFields(fieldList);
         this.parent = parent;
@@ -47,23 +45,23 @@ public class Scope {
     }
 
     public Scope getLambdaScope() {
-        return new Scope(lambdaInputTypes, lambdaArgumentNames, this);
+        return new Scope(lambdaArguments, this);
     }
 
-    public void setLambdaInputTypes(List<Type> inputTypes) {
-        lambdaInputTypes = inputTypes;
+    public void putLambdaArgument(PlaceHolderExpr expr) {
+        lambdaArguments.add(expr);
     }
 
-    public List<Type> getLambdaInputTypes() {
-        return lambdaInputTypes;
-    }
-
-    public void putLambdaArg(String name) {
-        lambdaArgumentNames.add(name);
+    public List<PlaceHolderExpr> getLambdaArguments() {
+        return lambdaArguments;
     }
 
     public RelationId getRelationId() {
         return relationId;
+    }
+
+    public boolean isLambdaScope() {
+        return isLambdaScope;
     }
 
     public RelationFields getRelationFields() {

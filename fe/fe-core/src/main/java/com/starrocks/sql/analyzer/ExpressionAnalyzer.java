@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -33,8 +34,11 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -98,13 +102,12 @@ public class ExpressionAnalyzer {
         if (expression.hasLambdaFunction()) {
             // the last child is lambdaFunction
             int childSize = expression.getChildren().size();
-            List<Type> typeList = Lists.newArrayList();
             for (int i = 0; i < childSize - 1; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
-                typeList.add(((ArrayType) expr.getType()).getItemType());
+                scope.putLambdaArgument(new PlaceHolderExpr(visitor.getLambdaID(), expr.isNullable(),
+                        ((ArrayType) expr.getType()).getItemType()));
             }
-            scope.setLambdaInputTypes(typeList);
             // visit LambdaFunction
             visitor.visit(expression.getChild(childSize - 1), scope);
         } else {
@@ -119,6 +122,10 @@ public class ExpressionAnalyzer {
         private final AnalyzeState analyzeState;
         private final ConnectContext session;
 
+        public int getLambdaID() {
+            return analyzeState.getLambdaID();
+        }
+
         public Visitor(AnalyzeState analyzeState, ConnectContext session) {
             this.analyzeState = analyzeState;
             this.session = session;
@@ -129,8 +136,14 @@ public class ExpressionAnalyzer {
             throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
         }
 
-        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) { // related to statics?
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
+            if (resolvedField.isFromLambda()) {
+                Preconditions.checkArgument(resolvedField.getField().getOriginExpression() instanceof PlaceHolderExpr);
+                // bind the slotID of lambda arguments
+                slot.setDescAndMarkAnalyzed(new SlotDescriptor(
+                        new SlotId(((PlaceHolderExpr) resolvedField.getField().getOriginExpression()).getSlotId())));
+            }
         }
 
         @Override
@@ -242,10 +255,13 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitLambdaArguments(LambdaArguments node, Scope scope) {
+            // bind argument names with its type
+            // TODO: add error msg
+            Preconditions.checkArgument(scope.getLambdaArguments().size() == node.getNames().size());
             for (int i = 0; i < node.getNames().size(); ++i) {
-                node.putTypes(scope.getLambdaInputTypes());
-                scope.putLambdaArg(node.getNames().get(i));
+                scope.getLambdaArguments().get(i).setName(node.getNames().get(i));
             }
+            node.putArguments(scope.getLambdaArguments());
             return null;
         }
 

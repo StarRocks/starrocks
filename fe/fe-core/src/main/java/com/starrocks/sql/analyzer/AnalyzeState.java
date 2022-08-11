@@ -223,4 +223,10 @@ public class AnalyzeState {
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
     }
+
+    private int lambdaID = 100000;
+
+    public int getLambdaID() {
+        return lambdaID++;
+    }
 }

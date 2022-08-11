@@ -20,11 +20,25 @@ public class PlaceHolderExpr extends Expr {
     private final int slotId;
     boolean nullable;
 
+    private String name;
+
     public PlaceHolderExpr(int slotId, boolean nullable, Type type) {
         super();
         this.slotId = slotId;
         this.nullable = nullable;
         this.type = type;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public int getSlotId() {
+        return slotId;
+    }
+
+    public String getName() {
+        return name;
     }
 
     @Override
