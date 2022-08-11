@@ -19,9 +19,6 @@ tar -xzvf stargo-pkg.tar.gz
 - **deploy-template.yaml**：部署配置文件模板。
 - **repo.yaml**：指定 StarRocks 安装包下载库的配置文件。
 
-> 说明
-> 您可以在 `http://cdn-thirdparty.starrocks.com` 地址下获取相应的版本的安装 index 文件以及安装包。
-
 ## 部署集群
 
 您可以使用 StarGo 部署 StarRocks 集群。
