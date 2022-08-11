@@ -691,8 +691,10 @@ std::string Analytor::debug_string() const {
 
 Status Analytor::check_has_error() {
     for (const auto* ctx : _agg_fn_ctxs) {
-        if (ctx->has_error()) {
-            return Status::RuntimeError(ctx->error_msg());
+        if (ctx != nullptr) {
+            if (ctx->has_error()) {
+                return Status::RuntimeError(ctx->error_msg());
+            }
         }
     }
     return Status::OK();
