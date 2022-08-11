@@ -770,4 +770,8 @@ CONF_String(dependency_librdkafka_debug, "all");
 // For compatible consideration, we disable it by default.
 CONF_Bool(table_sink_compression_enable, "false");
 
+// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
+CONF_Int32(internal_service_async_thread_num, "10");
+
 } // namespace starrocks::config
