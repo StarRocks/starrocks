@@ -135,6 +135,7 @@ statement
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
     | setStatement                                                                          #setStmt
+    | showWarningStatement                                                                  #showWarning
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -796,6 +797,10 @@ showStatusStatement
 
 showCharsetStatement
     : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showWarningStatement
+    : SHOW (WARNINGS | ERRORS) (limitElement)?
     ;
 
 showNodesStatement
