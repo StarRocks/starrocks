@@ -174,7 +174,6 @@ import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
@@ -186,6 +185,7 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
@@ -242,6 +242,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetUserVar;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -2539,7 +2540,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 return new BrokerDesc(properties);
             }
-            
+
         }
         return null;
     }
@@ -2727,19 +2728,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetVariable(StarRocksParser.SetVariableContext context) {
-        if (context.AT().isEmpty()) {
-            Expr expr = (Expr) visit(context.setExprOrDefault());
-            String variable = ((Identifier) visit(context.identifier())).getValue();
-            if (context.varType() != null) {
-                return new SetVar(getVariableType(context.varType()), variable, expr);
-            } else {
-                return new SetVar(variable, expr);
-            }
-        } else if (context.AT().size() == 1) {
+        if (context.userVariable() != null) {
+            VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
             Expr expr = (Expr) visit(context.expression());
-            String variable = ((Identifier) visit(context.identifierOrString())).getValue();
-            return new SetVar(variable, expr);
-        } else if (context.AT().size() == 2) {
+            return new SetUserVar(variableDesc.getName(), expr);
+        } else if (context.systemVariable() != null) {
+            VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            return new SetVar(variableDesc.getSetType(), variableDesc.getName(), expr);
+        } else {
             Expr expr = (Expr) visit(context.setExprOrDefault());
             String variable = ((Identifier) visit(context.identifier())).getValue();
             if (context.varType() != null) {
@@ -2747,8 +2744,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 return new SetVar(variable, expr);
             }
-        } else {
-            throw new StarRocksPlannerException("Not support set var type", ErrorType.INTERNAL_ERROR);
         }
     }
 
@@ -3606,9 +3601,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitVariable(StarRocksParser.VariableContext context) {
+    public ParseNode visitUserVariable(StarRocksParser.UserVariableContext context) {
+        String variable = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new VariableExpr(variable, SetType.USER);
+    }
+
+    @Override
+    public ParseNode visitSystemVariable(StarRocksParser.SystemVariableContext context) {
         SetType setType = getVariableType(context.varType());
-        return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
+        return new VariableExpr(((Identifier) visit(context.identifier())).getValue(), setType);
     }
 
     @Override

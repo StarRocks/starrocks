@@ -29,8 +29,8 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -458,7 +458,7 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitSysVariableDesc(SysVariableDesc node, Void context) {
+        public ScalarOperator visitVariableExpr(VariableExpr node, Void context) {
             switch (node.getType().getPrimitiveType()) {
                 case BOOLEAN:
                     return ConstantOperator.createBoolean(node.getBoolValue());
