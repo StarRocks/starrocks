@@ -21,9 +21,19 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include "common/status.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "util/countdown_latch.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace brpc {
 class Controller;
@@ -81,10 +91,22 @@ public:
                   google::protobuf::Closure* done) override;
 
 private:
+    void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout);
+
     Status _exec_plan_fragment(brpc::Controller* cntl);
 
 private:
     ExecEnv* _exec_env;
+
+    // The BRPC call is executed by bthread.
+    // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
+    // In this way, the available pthread become less and the scheduling of bthread would be influenced.
+    // So, we should execute the function that may use pthread block primitive in a specific thread pool.
+    // More detail: https://github.com/apache/incubator-brpc/blob/master/docs/cn/bthread.md
+
+    // Thread pool for executing task  asynchronously in BRPC call.
+    PriorityThreadPool _async_thread_pool;
 };
 
 } // namespace starrocks
