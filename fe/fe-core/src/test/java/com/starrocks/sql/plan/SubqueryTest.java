@@ -413,20 +413,46 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  group by: 4: v4");
         }
         {
-            connectContext.getSessionVariable().setNewPlanerAggStage(2);
-            String sql = "select l.id_decimal from test_all_type l \n" +
-                    "where l.id_decimal > (\n" +
-                    "    select r.id_decimal from test_all_type_not_null r\n" +
-                    "    where l.t1a = r.t1a\n" +
+            String sql = "SELECT * FROM t0\n" +
+                    "WHERE t0.v2 > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4 and t1.v4 = 10 and t1.v5 < 2\n" +
                     ");";
-            String plan = getVerboseExplain(sql);
-            assertContains(plan,
-                    "args: DECIMAL64; result: DECIMAL64(10,2); args nullable: true; result nullable: true");
+            String plan = getFragmentPlan(sql);
             assertContains(plan, "  7:Project\n" +
-                    "  |  output columns:\n" +
-                    "  |  10 <-> [10: id_decimal, DECIMAL64(10,2), true]\n" +
-                    "  |  21 <-> [23: anyValue, DECIMAL64(10,2), true]");
-            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  \n" +
+                    "  6:SELECT\n" +
+                    "  |  predicates: 2: v2 > 7: expr\n" +
+                    "  |  \n" +
+                    "  5:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  <slot 7> : 9: anyValue\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  \n" +
+                    "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4");
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1), any_value(5: v5)\n" +
+                    "  |  group by: 4: v4\n" +
+                    "  |  \n" +
+                    "  1:OlapScanNode\n" +
+                    "     TABLE: t1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     PREDICATES: 4: v4 = 10, 5: v5 < 2\n" +
+                    "     partitions=0/1\n" +
+                    "     rollup: t1\n" +
+                    "     tabletRatio=0/0\n" +
+                    "     tabletList=\n" +
+                    "     cardinality=0\n" +
+                    "     avgRowSize=2.0\n" +
+                    "     numNodes=0");
         }
     }
 
