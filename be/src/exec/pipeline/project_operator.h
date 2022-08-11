@@ -50,6 +50,9 @@ private:
     const std::vector<int32_t>& _common_sub_column_ids;
     const std::vector<ExprContext*>& _common_sub_expr_ctxs;
 
+    std::vector<RuntimeProfile::Counter*> _common_expr_timers;
+    std::vector<RuntimeProfile::Counter*> _expr_timers;
+
     bool _is_finished = false;
     vectorized::ChunkPtr _cur_chunk = nullptr;
 };

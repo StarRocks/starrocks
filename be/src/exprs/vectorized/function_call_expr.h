@@ -28,6 +28,8 @@ protected:
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
 
+    std::string pretty_string() const override;
+
 private:
     const FunctionDescriptor* _fn_desc;
 

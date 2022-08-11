@@ -158,4 +158,8 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     return result;
 }
 
+std::string VectorizedFunctionCallExpr::pretty_string() const {
+    return _fn_desc->name;
+}
+
 } // namespace starrocks::vectorized

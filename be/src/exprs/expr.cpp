@@ -446,6 +446,16 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
     return Status::OK();
 }
 
+std::string Expr::pretty_string() const {
+    std::stringstream out;
+
+    if (_opcode != TExprOpcode::INVALID_OPCODE) {
+        out << " opcode=" << _opcode;
+    }
+    out << " node-type=" << to_string(_node_type);
+    return out.str();
+}
+
 std::string Expr::debug_string() const {
     // TODO: implement partial debug string for member vars
     std::stringstream out;

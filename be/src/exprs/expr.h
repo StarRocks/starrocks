@@ -180,6 +180,7 @@ public:
     /// Convenience functions for closing a list of ScalarExpr.
     static void close(const std::vector<Expr*>& exprs);
 
+    virtual std::string pretty_string() const;
     virtual std::string debug_string() const;
     static std::string debug_string(const std::vector<Expr*>& exprs);
     static std::string debug_string(const std::vector<ExprContext*>& ctxs);
