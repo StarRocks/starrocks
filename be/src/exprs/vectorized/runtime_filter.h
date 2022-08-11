@@ -256,7 +256,7 @@ public:
 
     RuntimeBloomFilter* create_empty(ObjectPool* pool) override {
         auto* p = pool->add(new RuntimeBloomFilter());
-        p->init(0);
+        p->init_min_max();
         return p;
     };
 
