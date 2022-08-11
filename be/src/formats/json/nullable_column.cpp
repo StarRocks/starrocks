@@ -6,6 +6,7 @@
 #include "column/nullable_column.h"
 #include "formats/json/binary_column.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
@@ -157,15 +158,26 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
     }
 }
 
-Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                           simdjson::ondemand::object* value, bool invalid_as_null) {
-    DCHECK_EQ(TYPE_JSON, type_desc.type);
+Status add_nullable_column_by_json_object(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                          simdjson::ondemand::object* value, bool invalid_as_null) {
     try {
         auto nullable_column = down_cast<NullableColumn*>(column);
         auto& null_column = nullable_column->null_column();
         auto& data_column = nullable_column->data_column();
 
-        RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+        switch (type_desc.type) {
+        case TYPE_JSON: {
+            RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+            break;
+        }
+        case TYPE_VARCHAR:
+        case TYPE_CHAR: {
+            RETURN_IF_ERROR(add_binary_column_from_json_object(data_column.get(), type_desc, name, value));
+            break;
+        }
+        default:
+            return Status::NotSupported("json object could only load into JSON/VARCHAR column");
+        }
         null_column->append(0);
 
         return Status::OK();
