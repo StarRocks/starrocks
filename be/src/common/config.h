@@ -789,7 +789,6 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
-
 CONF_Int16(jdbc_connection_pool_size, "8");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
