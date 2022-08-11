@@ -27,6 +27,7 @@ import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
@@ -41,23 +42,31 @@ import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TruncatePartitionClause;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
@@ -68,6 +77,9 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
@@ -78,6 +90,10 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+
+import mockit.Mock;
+import mockit.MockUp;
+
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -89,6 +105,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,7 +123,8 @@ public class AlterTest {
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
-
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -340,6 +358,12 @@ public class AlterTest {
         createMaterializedView(sql);
         String alterStmt = "alter materialized view test.mv1 rename mv2";
         alterMaterializedView(alterStmt, false);
+        MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().
+                getDb("default_cluster:test").getTable("mv2");
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1` AS `k1`," +
+                " `test`.`testTable1`.`k2` AS `k2` FROM `test`.`testTable1`", task.getDefinition());
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -458,7 +482,7 @@ public class AlterTest {
 
     @Test
     public void testConflictAlterOperations() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
 
         String stmt =
@@ -577,7 +601,7 @@ public class AlterTest {
     // test batch update range partitions' properties
     @Test
     public void testBatchUpdatePartitionProperties() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl4 = (OlapTable) db.getTable("tbl4");
         Partition p1 = tbl4.getPartition("p1");
         Partition p2 = tbl4.getPartition("p2");
@@ -652,7 +676,7 @@ public class AlterTest {
         alterTable(stmt, false);
         Thread.sleep(5000); // sleep to wait dynamic partition scheduler run
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("tbl3");
         Assert.assertEquals(4, tbl.getPartitionNames().size());
         Assert.assertNull(tbl.getPartition("p1"));
@@ -806,7 +830,7 @@ public class AlterTest {
         createTable(stmt2);
         createTable(stmt3);
         createTable(stmt4);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         // name conflict
         String replaceStmt = "ALTER TABLE test.replace1 SWAP WITH r1";
@@ -861,7 +885,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-07\") EVERY (interval 1 day)";
@@ -869,7 +893,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p20170103"));
@@ -931,7 +955,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
                 "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
@@ -939,7 +963,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_lake_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_lake_partition");
 
         Assert.assertNotNull(table.getPartition("p1"));
@@ -1002,7 +1026,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE site_access \n" +
                 "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
@@ -1011,7 +1035,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "site_access", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("site_access");
 
         Assert.assertNotNull(table.getPartition("p1"));
@@ -1071,7 +1095,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-03\") END (\"2017-01-15\") EVERY (interval 5 day)";
@@ -1079,7 +1103,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p20170103"));
@@ -1112,7 +1136,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_exception ADD\n" +
                 "    PARTITIONS START (\"2014-01-01\") END (\"2014-01-04\") EVERY (interval 1 day)";
@@ -1141,7 +1165,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
                 "    PARTITIONS START (\"2017-03-25\") END (\"2017-04-10\") EVERY (interval 1 week)";
@@ -1149,7 +1173,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_week", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_week");
 
         Assert.assertNotNull(table.getPartition("p2017_13"));
@@ -1184,7 +1208,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2017-04-01\") EVERY (interval 1 month)";
@@ -1192,7 +1216,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p201701"));
@@ -1228,7 +1252,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"2017-01-01\") END (\"2020-01-01\") EVERY (interval 1 YEAR)";
@@ -1236,7 +1260,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p2017"));
@@ -1269,7 +1293,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "    PARTITIONS START (\"1\") END (\"4\") EVERY (1)";
@@ -1277,7 +1301,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNotNull(table.getPartition("p1"));
@@ -1315,7 +1339,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 1 day);";
@@ -1328,7 +1352,7 @@ public class AlterTest {
 
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNull(table.getPartition("p20140101"));
@@ -1363,7 +1387,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_0day ADD\n" +
                 "          PARTITIONS START (\"2014-01-01\") END (\"2014-01-06\") EVERY (interval 0 day);";
@@ -1376,7 +1400,7 @@ public class AlterTest {
 
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_0day");
 
         Assert.assertNull(table.getPartition("p20140101"));
@@ -1413,7 +1437,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition ADD\n" +
                 "         START (\"2015-01-01\") END (\"2015-01-06\") EVERY (interval 1 day);";
@@ -1426,7 +1450,7 @@ public class AlterTest {
 
         }
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
 
         Assert.assertNull(table.getPartition("p20140101"));
@@ -1459,7 +1483,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
@@ -1473,7 +1497,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists", addPartitionClause2);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists");
 
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
@@ -1504,7 +1528,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL =
                 "ALTER TABLE test_partition_exists2 ADD PARTITION IF NOT EXISTS p20210701 VALUES LESS THAN ('2021-07-01')";
@@ -1518,7 +1542,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists2", addPartitionClause2);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists2");
 
         Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
@@ -1549,7 +1573,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String alterSQL = "ALTER TABLE test_partition_exists3 ADD PARTITION p20210701 VALUES LESS THAN ('2021-07-01')";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
@@ -1561,7 +1585,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause2 = (AddPartitionClause) alterTableStmt2.getOps().get(0);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition_exists3", addPartitionClause2);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_exists3");
 
         Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
@@ -1617,7 +1641,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("2022-04-01", "shandong");
         List<List<String>> multiValues = Lists.newArrayList();
@@ -1626,7 +1650,7 @@ public class AlterTest {
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<List<String>>> idToValues = partitionInfo.getIdToMultiValues();
@@ -1664,14 +1688,14 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("shanxi", "shanghai");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
         AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDesc, null, new HashMap<>(), false);
         GlobalStateMgr.getCurrentState().addPartitions(db, "test_partition", addPartitionClause);
 
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test")
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
         Map<Long, List<String>> idToValues = partitionInfo.getIdToValues();
@@ -1708,7 +1732,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
 
@@ -1784,7 +1808,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_partition");
         ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
 
@@ -1886,7 +1910,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("new_table");
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
 
@@ -1958,7 +1982,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("shanxi", "heilongjiang");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p1", values, new HashMap<>());
@@ -1988,7 +2012,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values1 = Lists.newArrayList("2022-04-01", "beijing");
         List<String> values2 = Lists.newArrayList("2022-04-01", "chongqing");
@@ -2022,7 +2046,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("beijing", "chongqing");
         PartitionDesc partitionDesc = new SingleItemListPartitionDesc(false, "p3", values, new HashMap<>());
@@ -2052,7 +2076,7 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> values = Lists.newArrayList("2022-04-01", "shanghai");
         List<List<String>> multiValues = Lists.newArrayList();
@@ -2073,7 +2097,7 @@ public class AlterTest {
                         "DUPLICATE KEY(`k1`)" +
                         "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');");
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
 
         String stmt = "alter table test.tbl1 add column k2 int";
@@ -2129,7 +2153,7 @@ public class AlterTest {
 
         stmt = "alter table test.tbl1 drop column col1, drop column col2";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        Assert.assertEquals("default_cluster:test", alterTableStmt.getTbl().getDb());
+        Assert.assertEquals("test", alterTableStmt.getTbl().getDb());
         Assert.assertEquals(2, alterTableStmt.getOps().size());
     }
 
@@ -2171,5 +2195,38 @@ public class AlterTest {
         clause = (ReorderColumnsClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(clause.getRollupName(), "testRollup");
         Assert.assertEquals("ORDER BY `k1`, `k2` IN `testRollup`", clause.toString());
+    }
+
+
+    @Test(expected = DdlException.class)
+    public void testFindTruncatePartitionEntrance() throws Exception {
+
+        Database db = new Database();
+        OlapTable table = new OlapTable(TableType.OLAP);
+        table.setState(OlapTableState.NORMAL);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String name) {
+                return db;
+            }
+            @Mock
+            public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+                throw new DdlException("test DdlException");
+            }
+        };
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return table;
+            }
+        };
+        List<AlterClause> cList = new ArrayList<>();
+        PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
+        TruncatePartitionClause clause = new TruncatePartitionClause(partitionNames);
+        cList.add(clause);
+        Alter alter = new Alter();
+        TableName tableName = new TableName("test_db", "test_table");
+        AlterTableStmt stmt = new AlterTableStmt(tableName, cList);
+        alter.processAlterTable(stmt);
     }
 }

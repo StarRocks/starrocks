@@ -100,7 +100,6 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -348,8 +347,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void createDb(String dbName) throws DdlException, AlreadyExistsException {
-        // used for remove cluster from stmt
-        dbName = ClusterNamespace.getFullName(dbName);
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -394,8 +391,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
-        // used for remove cluster from stmt
-        dbName = ClusterNamespace.getFullName(dbName);
         // 1. check if database exists
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -498,8 +493,8 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException("Database[" + recoverStmt.getDbName() + "] already exist.");
         }
 
-        // used for remove cluster from stmt
-        Database db = recycleBin.recoverDatabase(ClusterNamespace.getFullName(recoverStmt.getDbName()));
+
+        Database db = recycleBin.recoverDatabase(recoverStmt.getDbName());
 
         // add db to globalStateMgr
         if (!tryLock(false)) {
@@ -626,9 +621,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
-        // used for remove cluster from stmt
-        String fullDbName = ClusterNamespace.getFullName(stmt.getDbName());
-        String newFullDbName = ClusterNamespace.getFullName(stmt.getNewDbName());
+        String fullDbName = stmt.getDbName();
+        String newFullDbName = stmt.getNewDbName();
 
         if (fullDbName.equals(newFullDbName)) {
             throw new DdlException("Same database name");
@@ -1238,7 +1232,7 @@ public class LocalMetastore implements ConnectorMetadata {
             copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
         } catch (AnalysisException | NotImplementedException e) {
-            throw new DdlException(e.getMessage());
+            throw new DdlException(e.getMessage(), e);
         } finally {
             db.readUnlock();
         }
@@ -2546,30 +2540,6 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayAddMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
-        Database db = this.idToDb.get(info.getDbId());
-        MaterializedView mv = ((MaterializedView) db.getTable(info.getMvId()));
-        db.writeLock();
-        try {
-            Partition partition = new Partition(info.getTablePartitionId(), info.getTablePartitionName(), null, null);
-            partition.setVisibleVersion(info.getTablePartitionVersion(), -1);
-            mv.addBasePartition(info.getTableId(), partition, true);
-        } finally {
-            db.writeUnlock();
-        }
-    }
-
-    public void replayRemoveMvPartitionVersionInfo(MaterializedViewPartitionVersionInfo info) {
-        Database db = this.idToDb.get(info.getDbId());
-        MaterializedView mv = ((MaterializedView) db.getTable(info.getMvId()));
-        db.writeLock();
-        try {
-            mv.removeBasePartition(info.getTableId(), info.getTablePartitionName(), true);
-        } finally {
-            db.writeUnlock();
-        }
-    }
-
     private void createLakeTablets(LakeTable table, long partitionId, MaterializedIndex index,
                                    DistributionInfo distributionInfo, short replicationNum, TabletMeta tabletMeta,
                                    Set<Long> tabletIdSet)
@@ -2860,8 +2830,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public Database getDb(String name) {
-        // used for remove cluster from stmt
-        name = ClusterNamespace.getFullName(name);
         if (name == null) {
             return null;
         }
@@ -2874,7 +2842,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                return fullNameToDb.get(ClusterNamespace.getFullName(dbName.toLowerCase()));
+                return fullNameToDb.get(dbName.toLowerCase());
             }
         }
         return null;
@@ -3212,7 +3180,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.setReplicationNum(replicationNum);
             }
         } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+            throw new DdlException(e.getMessage(), e);
         }
         // validate optHints
         Map<String, String> optHints = null;
@@ -3237,9 +3205,9 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
-            if (hasMedium) {
+            if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
-                // set storage coldown time into table property,
+                // set storage cooldown time into table property,
                 // because we don't have property in MaterializedView
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
@@ -3250,7 +3218,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Unknown properties: " + properties);
             }
         } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+            throw new DdlException(e.getMessage(), e);
         }
         boolean createMvSuccess;
         Set<Long> tabletIdSet = new HashSet<>();
@@ -3294,34 +3262,39 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
 
-        // NOTE: The materialized view  has been added to the database, and the following procedure cannot throw exception.
+        // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         if (createMvSuccess) {
-            if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
-                // create task
-                Task task = TaskBuilder.buildMvTask(materializedView, dbName);
-                MaterializedView.AsyncRefreshContext asyncRefreshContext =
-                        materializedView.getRefreshScheme().getAsyncRefreshContext();
-                if (asyncRefreshContext.getTimeUnit() != null) {
-                    long startTime = asyncRefreshContext.getStartTime();
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
-                            asyncRefreshContext.getStep(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
-                    task.setSchedule(taskSchedule);
-                    task.setType(Constants.TaskType.PERIODICAL);
-                } else {
-                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
-                }
-                if (optHints != null) {
-                    Map<String, String> taskProperties = task.getProperties();
-                    taskProperties.putAll(optHints);
-                }
-                TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-                taskManager.createTask(task, false);
-                // for async type, run task
-                if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
-                        task.getType() != Constants.TaskType.PERIODICAL) {
-                    taskManager.executeTask(task.getName());
-                }
+            createTaskForMaterializedView(dbName, materializedView, optHints);
+        }
+    }
+
+    private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
+                                               Map<String, String> optHints) throws DdlException {
+        if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
+            // create task
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                    materializedView.getRefreshScheme().getAsyncRefreshContext();
+            if (asyncRefreshContext.getTimeUnit() != null) {
+                long startTime = asyncRefreshContext.getStartTime();
+                TaskSchedule taskSchedule = new TaskSchedule(startTime,
+                        asyncRefreshContext.getStep(),
+                        TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                task.setSchedule(taskSchedule);
+                task.setType(Constants.TaskType.PERIODICAL);
+            } else {
+                task.setType(Constants.TaskType.EVENT_TRIGGERED);
+            }
+            if (optHints != null) {
+                Map<String, String> taskProperties = task.getProperties();
+                taskProperties.putAll(optHints);
+            }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.createTask(task, false);
+            // for async type, run task
+            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
+                    task.getType() != Constants.TaskType.PERIODICAL) {
+                taskManager.executeTask(task.getName());
             }
         }
     }

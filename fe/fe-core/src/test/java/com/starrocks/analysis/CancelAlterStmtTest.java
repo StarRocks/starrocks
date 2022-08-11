@@ -34,14 +34,14 @@ public class CancelAlterStmtTest extends DDLTestBase {
         CancelAlterTableStmt stmt = new CancelAlterTableStmt(AlterType.COLUMN, new TableName(null, "testTbl"));
         stmt.analyze(analyzer);
         Assert.assertEquals("CANCEL ALTER COLUMN FROM `testDb1`.`testTbl`", stmt.toString());
-        Assert.assertEquals("default_cluster:testDb1", stmt.getDbName());
+        Assert.assertEquals("testDb1", stmt.getDbName());
         Assert.assertEquals(AlterType.COLUMN, stmt.getAlterType());
         Assert.assertEquals("testTbl", stmt.getTableName());
 
         stmt = new CancelAlterTableStmt(AlterType.ROLLUP, new TableName(null, "testTbl"));
         stmt.analyze(analyzer);
         Assert.assertEquals("CANCEL ALTER ROLLUP FROM `testDb1`.`testTbl`", stmt.toString());
-        Assert.assertEquals("default_cluster:testDb1", stmt.getDbName());
+        Assert.assertEquals("testDb1", stmt.getDbName());
         Assert.assertEquals(AlterType.ROLLUP, stmt.getAlterType());
     }
 }

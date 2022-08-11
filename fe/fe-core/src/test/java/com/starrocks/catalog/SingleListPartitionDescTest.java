@@ -9,7 +9,10 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.UtFrameUtils;
+
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.text.DateFormat;
@@ -21,6 +24,13 @@ import java.util.Map;
 
 public class SingleListPartitionDescTest {
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+    }
+    
     @Test
     public void testToSQL() {
         String partitionName = "p1";

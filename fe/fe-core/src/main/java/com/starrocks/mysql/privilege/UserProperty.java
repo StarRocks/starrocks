@@ -258,9 +258,9 @@ public class UserProperty implements Writable {
             for (int i = 0; i < numPriv; ++i) {
                 String dbName = null;
                 if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-                    dbName = ClusterNamespace.getFullName(Text.readString(in));
-                } else {
                     dbName = Text.readString(in);
+                } else {
+                    dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
                 }
                 AccessPrivilege ap = AccessPrivilege.valueOf(Text.readString(in));
                 dbPrivMap.put(dbName, ap);

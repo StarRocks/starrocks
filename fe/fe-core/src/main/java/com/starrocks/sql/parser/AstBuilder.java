@@ -76,6 +76,7 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropObserverClause;
 import com.starrocks.analysis.DropPartitionClause;
 import com.starrocks.analysis.DropTableStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FloatLiteral;
@@ -164,6 +165,7 @@ import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowWarningStmt;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
@@ -177,6 +179,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UpdateStmt;
@@ -263,7 +266,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.SetQualifier;
-import com.starrocks.system.SystemInfoService;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
@@ -619,6 +621,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitShowWarningStatement(StarRocksParser.ShowWarningStatementContext context) {
+        if (context.limitElement() != null) {
+            return new ShowWarningStmt((LimitElement) visit(context.limitElement()));
+        }
+        return new ShowWarningStmt();
+    }
+    @Override
     public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
         boolean temporary = context.TEMPORARY() != null;
         PartitionDesc partitionDesc = null;
@@ -898,6 +907,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitTruncatePartitionClause(StarRocksParser.TruncatePartitionClauseContext context) {
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new TruncatePartitionClause(partitionNames);
+    }
+
+    @Override
     public ParseNode visitModifyPartitionClause(StarRocksParser.ModifyPartitionClauseContext context) {
         Map<String, String> properties = null;
         if (context.propertyList() != null) {
@@ -1096,7 +1114,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
                     properties, startIndex, createTableAsSelectStmt);
         } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(SystemInfoService.DEFAULT_CLUSTER + ":" + qualifiedName.getParts().get(0),
+            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
                     qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt);
         } else {
             throw new ParsingException("error task name ");
@@ -2369,6 +2387,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     // ------------------------------------------- Privilege Statement -------------------------------------------------
 
     @Override
+    public ParseNode visitDropUser(StarRocksParser.DropUserContext context) {
+        UserIdentifier user = (UserIdentifier) visit(context.user());
+        return new DropUserStmt(user.getUserIdentity());
+    }
+
+    @Override
     public ParseNode visitCreateUser(StarRocksParser.CreateUserContext context) {
         UserDesc userDesc;
         UserIdentifier user = (UserIdentifier) visit(context.user());
@@ -2481,12 +2505,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<String> colList = null;
         if (context.colList != null) {
             List<Identifier> identifiers = visit(context.colList.identifier(), Identifier.class);
-            colList = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            colList = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
         List<String> colFromPath = null;
         if (context.colFromPath != null) {
             List<Identifier> identifiers = visit(context.colFromPath.identifier(), Identifier.class);
-            colFromPath = identifiers.stream().map(Identifier::getValue).map(String::toLowerCase).collect(toList());
+            colFromPath = identifiers.stream().map(Identifier::getValue).collect(toList());
         }
         return new DataDescription(dstTableName, partitionNames, files, colList, colSep, null, format,
                 colFromPath, context.NEGATIVE() != null, colMappingList, whereExpr);
@@ -2502,7 +2526,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private BrokerDesc getBrokerDesc(StarRocksParser.BrokerDescContext context) {
         if (context != null) {
-            String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
             Map<String, String> properties = null;
             if (context.props != null) {
                 properties = Maps.newHashMap();
@@ -2511,7 +2534,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     properties.put(property.getKey(), property.getValue());
                 }
             }
-            return new BrokerDesc(brokerName, properties);
+            if (context.identifierOrString() != null) {
+                String brokerName = ((Identifier) visit(context.identifierOrString())).getValue();
+                return new BrokerDesc(brokerName, properties);
+            } else {
+                return new BrokerDesc(properties);
+            }
+            
         }
         return null;
     }

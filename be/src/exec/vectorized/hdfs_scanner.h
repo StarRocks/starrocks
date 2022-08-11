@@ -147,6 +147,9 @@ struct HdfsScannerContext {
     // min max conjunct
     std::vector<ExprContext*> min_max_conjunct_ctxs;
 
+    // runtime filters.
+    const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+
     std::string timezone;
 
     vectorized::HdfsScanStats* stats = nullptr;

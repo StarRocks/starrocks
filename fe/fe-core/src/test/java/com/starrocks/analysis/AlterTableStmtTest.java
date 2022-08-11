@@ -77,7 +77,7 @@ public class AlterTableStmtTest {
                 "ALTER TABLE `testDb`.`testTbl` ADD ROLLUP `index1` (`col1`, `col2`) FROM `testTbl`, \n" +
                         " `index2` (`col2`, `col3`) FROM `testTbl`",
                 stmt.toSql());
-        Assert.assertEquals("default_cluster:testDb", stmt.getTbl().getDb());
+        Assert.assertEquals("testDb", stmt.getTbl().getDb());
         Assert.assertEquals(2, stmt.getOps().size());
     }
 

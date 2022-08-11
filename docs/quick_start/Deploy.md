@@ -562,5 +562,5 @@ If no error is returned, you have successfully deployed StarRocks in Docker.
 
 Having Deployed StarRocks, you can:
 
-* [Create a table](Create_table.md)
-* [Upgrade StarRocks](../administration/Cluster_administration.md#集群升级)
+* [Create a table](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
+* [Upgrade StarRocks](../administration/Cluster_administration.md#Upgrade-a-cluster)

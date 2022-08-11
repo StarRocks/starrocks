@@ -33,12 +33,14 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -322,16 +324,38 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new HDFSConfigurationWrap();
-                // TODO get this param from loadProperties
-                FileSystem dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                UserGroupInformation ugi = null;
+                if (!Strings.isNullOrEmpty(username) && conf.get("hadoop.security.authentication").equals("simple")) {
+                    ugi = UserGroupInformation.createRemoteUser(username);
+                }
+                FileSystem dfsFileSystem;
+                if (ugi != null) {
+                    dfsFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
+                        @Override
+                        public FileSystem run() throws Exception {
+                            return FileSystem.get(pathUri.getUri(), conf);
+                        }
+                    });
+                } else {
+                    dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                }
                 fileSystem.setFileSystem(dfsFileSystem);
                 fileSystem.setConfiguration(conf);
+                if (ugi != null) {
+                    fileSystem.setUserName(username);
+                }
                 if (tProperties != null) {
                     convertHDFSConfToProperties(conf, tProperties);
+                    if (ugi != null) {
+                        tProperties.setHdfs_username(username);
+                    }
                 }
             } else {
                 if (tProperties != null) {
                     convertHDFSConfToProperties(fileSystem.getConfiguration(), tProperties);
+                    if (fileSystem.getUserName() != null) {
+                        tProperties.setHdfs_username(fileSystem.getUserName());
+                    }
                 }
             }
             return fileSystem;

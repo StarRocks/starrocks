@@ -158,14 +158,40 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb.set_next_rowset_id(1);
     tablet_metadata_pb.set_cumulative_point(0);
 
-    // schema
-    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-    uint32_t next_unique_id = req.tablet_schema.columns.size();
-    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
-        col_idx_to_unique_id[col_idx] = col_idx;
+    if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
+        struct Finder {
+            std::string_view name;
+            bool operator()(const TabletColumn& c) const { return c.name() == name; }
+        };
+        ASSIGN_OR_RETURN(auto base_tablet, get_tablet(req.base_tablet_id));
+        ASSIGN_OR_RETURN(auto base_schema, base_tablet.get_schema());
+        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+        TTabletSchema mutable_new_schema = req.tablet_schema;
+        uint32_t next_unique_id = base_schema->next_column_unique_id();
+        const auto& old_columns = base_schema->columns();
+        auto& new_columns = mutable_new_schema.columns;
+        for (uint32_t i = 0, sz = new_columns.size(); i < sz; ++i) {
+            auto it = std::find_if(old_columns.begin(), old_columns.end(), Finder{new_columns[i].column_name});
+            if (it != old_columns.end() && it->has_default_value()) {
+                new_columns[i].__set_default_value(it->default_value());
+                col_idx_to_unique_id[i] = it->unique_id();
+            } else if (it != old_columns.end()) {
+                col_idx_to_unique_id[i] = it->unique_id();
+            } else {
+                col_idx_to_unique_id[i] = next_unique_id++;
+            }
+        }
+        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
+    } else {
+        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+        uint32_t next_unique_id = req.tablet_schema.columns.size();
+        for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
+            col_idx_to_unique_id[col_idx] = col_idx;
+        }
+        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
     }
-    RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(req.tablet_schema, next_unique_id, col_idx_to_unique_id,
-                                                             tablet_metadata_pb.mutable_schema()));
 
     return put_tablet_metadata(tablet_metadata_pb);
 }

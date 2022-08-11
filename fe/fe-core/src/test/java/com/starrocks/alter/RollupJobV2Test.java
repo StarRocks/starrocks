@@ -100,7 +100,7 @@ public class RollupJobV2Test extends DDLTestBase {
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
         alterClauses.add(clause2);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
         materializedViewHandler.process(alterClauses, db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
@@ -118,7 +118,7 @@ public class RollupJobV2Test extends DDLTestBase {
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
         materializedViewHandler.process(alterClauses, db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = materializedViewHandler.getAlterJobsV2();
@@ -134,7 +134,7 @@ public class RollupJobV2Test extends DDLTestBase {
         // add a rollup job
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
         materializedViewHandler.process(alterClauses, db, olapTable);
@@ -185,7 +185,7 @@ public class RollupJobV2Test extends DDLTestBase {
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + GlobalStateMgrTestUtil.testDb1);
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable1);
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable1);
 

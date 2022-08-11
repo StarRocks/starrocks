@@ -8,7 +8,6 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -57,7 +56,6 @@ public class LoadStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             }
-            dbName = ClusterNamespace.getFullName(dbName);
             label.setDbName(dbName);
             try {
                 FeNameFormat.checkLabel(label.getLabelName());

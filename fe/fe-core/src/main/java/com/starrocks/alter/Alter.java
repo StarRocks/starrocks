@@ -40,7 +40,10 @@ import com.starrocks.analysis.ReplacePartitionClause;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.SwapTableClause;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
+import com.starrocks.analysis.TruncatePartitionClause;
+import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -317,6 +320,7 @@ public class Alter {
         db.createTable(materializedView);
         final RenameMaterializedViewLog renameMaterializedViewLog =
                 new RenameMaterializedViewLog(materializedView.getId(), db.getId(), newMvName);
+        updateTaskDefinition(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvRename(renameMaterializedViewLog);
         LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, materializedView.getId());
     }
@@ -330,8 +334,18 @@ public class Alter {
         db.dropTable(oldMaterializedView.getName());
         oldMaterializedView.setName(newMaterializedViewName);
         db.createTable(oldMaterializedView);
+        updateTaskDefinition(oldMaterializedView);
         LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
                 newMaterializedViewName, oldMaterializedView.getId());
+    }
+
+    private void updateTaskDefinition(MaterializedView materializedView) {
+        Task currentTask = GlobalStateMgr.getCurrentState().getTaskManager().getTask(
+                TaskBuilder.getMvTaskName(materializedView.getId()));
+        if (currentTask != null) {
+            currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
+                    materializedView.getViewDefineSql());
+        }
     }
 
     public void replayChangeMaterializedViewRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
@@ -381,6 +395,7 @@ public class Alter {
         // some operations will take long time to process, need to be done outside the databse lock
         boolean needProcessOutsideDatabaseLock = false;
         String tableName = dbTableName.getTbl();
+
         db.writeLock();
         try {
             Table table = db.getTable(tableName);
@@ -436,6 +451,8 @@ public class Alter {
                 } else {
                     throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
                 }
+            } else if (currentAlterOps.hasTruncatePartitionOp()) {
+                needProcessOutsideDatabaseLock = true;
             } else if (currentAlterOps.hasRenameOp()) {
                 processRename(db, olapTable, alterClauses);
             } else if (currentAlterOps.hasSwapOp()) {
@@ -458,6 +475,13 @@ public class Alter {
                     DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                 }
                 GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
+            } else if (alterClause instanceof TruncatePartitionClause) {
+                // This logic is use to adapt mysql syntax.
+                // ALTER TABLE test TRUNCATE PARTITION p1;
+                TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
+                TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
+                TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
+                GlobalStateMgr.getCurrentState().truncateTable(tStmt);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();

@@ -3,6 +3,7 @@
 package com.starrocks.scheduler.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -95,11 +96,12 @@ public class TaskRunStatus implements Writable {
     }
 
     public String getDbName() {
-        return dbName;
+        return ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public void setDbName(String dbName) {
-        this.dbName = dbName;
+        // // compatible with old version
+        this.dbName = ClusterNamespace.getFullName(dbName);
     }
 
     public String getUser() {
@@ -177,7 +179,7 @@ public class TaskRunStatus implements Writable {
                 ", createTime=" + createTime +
                 ", finishTime=" + finishTime +
                 ", state=" + state +
-                ", dbName='" + dbName + '\'' +
+                ", dbName='" + getDbName() + '\'' +
                 ", definition='" + definition + '\'' +
                 ", user='" + user + '\'' +
                 ", errorCode=" + errorCode +

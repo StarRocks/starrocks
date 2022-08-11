@@ -41,7 +41,6 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.InfoSchemaDb;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -348,9 +347,6 @@ public class Auth implements Writable {
      * If the given db is null, which means it will no check if database name is matched.
      */
     public boolean checkDbPriv(UserIdentity currentUser, String db, PrivPredicate wanted) {
-        // used for remove default_cluster from stmt
-        db = ClusterNamespace.getFullName(db);
-
         if (!Config.enable_auth_check) {
             return true;
         }
@@ -394,9 +390,6 @@ public class Auth implements Writable {
     }
 
     public boolean checkTblPriv(UserIdentity currentUser, String db, String tbl, PrivPredicate wanted) {
-        // used for remove default_cluster from stmt
-        db = ClusterNamespace.getFullName(db);
-
         if (!Config.enable_auth_check) {
             return true;
         }

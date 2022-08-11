@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -60,8 +59,6 @@ public class AdminRepairTableStmt extends DdlStmt {
             if (Strings.isNullOrEmpty(dbName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
             }
-        } else {
-            dbName = ClusterNamespace.getFullName(tblRef.getName().getDb());
         }
 
         tblRef.getName().setDb(dbName);

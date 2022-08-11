@@ -65,7 +65,7 @@ public class LoadStmtTest {
                 result = auth;
                 auth.checkResourcePriv((ConnectContext) any, resourceName, PrivPredicate.USAGE);
                 result = true;
-                auth.checkTblPriv((ConnectContext) any, "default_cluster:test",
+                auth.checkTblPriv((ConnectContext) any, "test",
                         "t0", PrivPredicate.LOAD);
                 result = true;
             }
@@ -74,11 +74,11 @@ public class LoadStmtTest {
                 "LOAD LABEL test.testLabel " +
                         "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`)");
         DataDescription dataDescription = stmt.getDataDescriptions().get(0);
-        Assert.assertEquals("default_cluster:test", stmt.getLabel().getDbName());
+        Assert.assertEquals("test", stmt.getLabel().getDbName());
         Assert.assertFalse(dataDescription.isLoadFromTable());
         Assert.assertTrue(dataDescription.isHadoopLoad());
         Assert.assertNull(stmt.getProperties());
-        Assert.assertEquals("LOAD LABEL `default_cluster:test`.`testLabel`\n" +
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel`\n" +
                 "(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)", stmt.toString());
 
         // test ResourceDesc

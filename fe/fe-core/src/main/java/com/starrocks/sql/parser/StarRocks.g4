@@ -135,6 +135,7 @@ statement
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
     | setStatement                                                                          #setStmt
+    | showWarningStatement                                                                  #showWarning
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -144,6 +145,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | DROP USER user                                                                        #dropUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -364,7 +366,7 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-    
+
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
@@ -466,6 +468,7 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | truncatePartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
@@ -492,6 +495,10 @@ dropIndexClause
 
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
@@ -737,6 +744,7 @@ dataDesc
 
 brokerDesc
     : WITH BROKER name=identifierOrString props=propertyList?
+    | WITH BROKER props=propertyList?
     ;
 
 resourceDesc
@@ -790,6 +798,10 @@ showStatusStatement
 
 showCharsetStatement
     : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
+showWarningStatement
+    : SHOW (WARNINGS | ERRORS) (limitElement)?
     ;
 
 showNodesStatement

@@ -46,6 +46,8 @@ public class CreateTableTest {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -124,7 +126,7 @@ public class CreateTableTest {
                         +
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
         Assert.assertTrue(tbl6.getColumn("k2").isKey());

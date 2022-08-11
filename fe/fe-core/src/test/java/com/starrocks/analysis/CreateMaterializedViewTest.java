@@ -214,7 +214,7 @@ public class CreateMaterializedViewTest {
                         "properties('replication_num'='1');")
                 .useDatabase("test");
         currentState = GlobalStateMgr.getCurrentState();
-        testDb = currentState.getDb("default_cluster:test");
+        testDb = currentState.getDb("test");
     }
 
     private void dropMv(String mvName) throws Exception {
@@ -1706,7 +1706,42 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Can not find database:default_cluster:db1", e.getMessage());
+            Assert.assertEquals("Can not find database:db1", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testMvNameInvalid() {
+        String sql = "create materialized view mvklajksdjksjkjfksdlkfgkllksdjkgjsdjfjklsdjkfgjkldfkljgljkljklgja\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name " +
+                    "'mvklajksdjksjkjfksdlkfgkllksdjkgjsdjfjklsdjkfgjkldfkljgljkljklgja'", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testMvNameTooLong() {
+        String sql = "create materialized view 22mv\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2)\n" +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Incorrect table name '22mv'", e.getMessage());
         }
     }
 

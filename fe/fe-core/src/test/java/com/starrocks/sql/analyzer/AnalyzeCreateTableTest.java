@@ -20,7 +20,7 @@ public class AnalyzeCreateTableTest {
     public void testNormal() {
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap duplicate key(col1, col2) distributed by hash(col1) buckets 10");
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertNull(stmt.getProperties());
     }
@@ -31,7 +31,7 @@ public class AnalyzeCreateTableTest {
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(sql);
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertNull(stmt.getProperties());
         Assert.assertTrue(stmt.toSql()
@@ -44,7 +44,7 @@ public class AnalyzeCreateTableTest {
                 "create table test.table1 (col1 int, col2 varchar(10)) engine=olap aggregate key(col1, col2)" +
                         " distributed by hash(col1) buckets 10 rollup ( index1(col1, col2), index2(col2, col3))";
         CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(sql);
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertNull(stmt.getPartitionDesc());
         Assert.assertNull(stmt.getProperties());
