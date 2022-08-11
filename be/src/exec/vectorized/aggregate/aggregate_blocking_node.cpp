@@ -173,6 +173,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
+<<<<<<< HEAD
     bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
@@ -189,6 +190,16 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
             if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
                 texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                 need_local_shuffle = false;
+=======
+    if (agg_node.need_finalize) {
+        // If finalize aggregate with group by clause, then it can be parallelized
+        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
+            if (context->need_local_shuffle(ops_with_sink)) {
+                std::vector<ExprContext*> group_by_expr_ctxs;
+                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+                ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
+                                                                                  group_by_expr_ctxs);
+>>>>>>> 1da0a2f03 (Revert "Revert "[Enhancement] Optimize hash join when hash table is empty" (#9701)" (#9720))
             }
         }
 
