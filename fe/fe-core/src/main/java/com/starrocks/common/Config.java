@@ -1755,4 +1755,19 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
+
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    @ConfField
+    public static String ssl_key_password = "";
+
+    @ConfField
+    public static String ssl_truststore_location = "";
+
+    @ConfField
+    public static String ssl_truststore_password = "";
 }

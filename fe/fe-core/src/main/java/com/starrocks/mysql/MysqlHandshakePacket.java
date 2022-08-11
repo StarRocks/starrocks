@@ -57,10 +57,12 @@ public class MysqlHandshakePacket extends MysqlPacket {
     // connection id used in KILL statement.
     private int connectionId;
     private byte[] authPluginData;
+    private boolean supportSSL;
 
-    public MysqlHandshakePacket(int connectionId) {
+    public MysqlHandshakePacket(int connectionId, boolean supportSSL) {
         this.connectionId = connectionId;
         authPluginData = MysqlPassword.createRandomString(SCRAMBLE_LENGTH);
+        this.supportSSL = supportSSL;
     }
 
     public byte[] getAuthPluginData() {
@@ -70,6 +72,10 @@ public class MysqlHandshakePacket extends MysqlPacket {
     @Override
     public void writeTo(MysqlSerializer serializer) {
         MysqlCapability capability = CAPABILITY;
+        if (supportSSL) {
+            capability = new MysqlCapability(capability.getFlags()
+                    | MysqlCapability.Flag.CLIENT_SSL.getFlagBit());
+        }
 
         serializer.writeInt1(PROTOCOL_VERSION);
         serializer.writeNulTerminateString(SERVER_VERSION);

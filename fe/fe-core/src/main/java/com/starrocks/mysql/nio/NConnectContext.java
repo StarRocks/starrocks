@@ -25,6 +25,7 @@ import com.starrocks.qe.ConnectProcessor;
 import org.xnio.StreamConnection;
 
 import java.io.IOException;
+import javax.net.ssl.SSLContext;
 
 /**
  * connect context based on nio.
@@ -32,8 +33,9 @@ import java.io.IOException;
 public class NConnectContext extends ConnectContext {
     protected NMysqlChannel mysqlChannel;
 
-    public NConnectContext(StreamConnection connection) {
+    public NConnectContext(StreamConnection connection, SSLContext sslContext) {
         super();
+        super.sslContext = sslContext;
         mysqlChannel = new NMysqlChannel(connection);
         remoteIP = mysqlChannel.getRemoteIp();
     }

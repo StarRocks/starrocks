@@ -21,6 +21,9 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
+import com.starrocks.mysql.ssl.Transport;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,6 +31,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import javax.net.ssl.SSLContext;
 
 /**
  * This class used to read/write MySQL logical packet.
@@ -52,24 +56,24 @@ public class MysqlChannel {
     // default packet byte buffer for most packet
     protected ByteBuffer defaultBuffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
     protected ByteBuffer sendBuffer;
+
+    private SSLChannel sslChannel;
+
     // for log and show
     protected String remoteHostPortString;
     protected String remoteIp;
     protected boolean isSend;
 
     protected MysqlChannel() {
-        this.sequenceId = 0;
-        this.isSend = false;
-        this.remoteHostPortString = "";
-        this.remoteIp = "";
+        this(null);
     }
 
     public MysqlChannel(SocketChannel channel) {
         this.sequenceId = 0;
-        this.channel = channel;
         this.isSend = false;
         this.remoteHostPortString = "";
         this.remoteIp = "";
+        this.channel = channel;
 
         if (channel != null) {
             try {
@@ -123,10 +127,49 @@ public class MysqlChannel {
         }
     }
 
+    public boolean enableSSL(SSLContext sslContext) throws IOException {
+        Transport transport = new Transport() {
+            @Override
+            public int read(ByteBuffer buffer) throws IOException {
+                return realNetRead(buffer);
+            }
+
+            @Override
+            public void write(ByteBuffer buffer) throws IOException {
+                realNetSend(buffer);
+            }
+
+            @Override
+            public void closeTransport() {
+                close();
+            }
+        };
+        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
+        if (clazz == null) {
+            LOG.warn("load SSLChannelImp class failed");
+            throw new IOException("load SSLChannelImp class failed");
+        }
+        try {
+            sslChannel = (SSLChannel) clazz.getConstructors()[0].newInstance(sslContext.createSSLEngine(), transport);
+        } catch (Exception e) {
+            LOG.warn("construct SSLChannelImp class failed");
+            throw new IOException("construct SSLChannelImp class failed");
+        }
+        return sslChannel.init();
+    }
+
     protected int readAll(ByteBuffer dstBuf) throws IOException {
+        if (sslChannel != null) {
+            return sslChannel.readAll(dstBuf);
+        } else {
+            return readAllPlain(dstBuf);
+        }
+    }
+
+    protected int readAllPlain(ByteBuffer dstBuf) throws IOException {
         int readLen = 0;
         while (dstBuf.remaining() != 0) {
-            int ret = channel.read(dstBuf);
+            int ret = realNetRead(dstBuf);
             // return -1 when remote peer close the channel
             if (ret == -1) {
                 return readLen;
@@ -134,6 +177,10 @@ public class MysqlChannel {
             readLen += ret;
         }
         return readLen;
+    }
+
+    protected int realNetRead(ByteBuffer dstBuf) throws IOException {
+        return channel.read(dstBuf);
     }
 
     // read one logical mysql protocol packet
@@ -149,7 +196,8 @@ public class MysqlChannel {
             readLen = readAll(headerByteBuffer);
             if (readLen != PACKET_HEADER_LEN) {
                 // remote has close this channel
-                LOG.info("Receive packet header failed, remote {} may close the channel.", remoteHostPortString);
+                LOG.info("Receive packet header failed, " +
+                        "remote {} may close the channel.", remoteHostPortString);
                 return null;
             }
             if (packetId() != sequenceId) {
@@ -157,6 +205,7 @@ public class MysqlChannel {
                 throw new IOException("Bad packet sequence.");
             }
             int packetLen = packetLen();
+            LOG.info("packetLen is {}", packetLen);
             if ((result.capacity() - result.position()) < packetLen) {
                 // byte buffer is not enough, new one packet
                 ByteBuffer tmp;
@@ -189,6 +238,15 @@ public class MysqlChannel {
         return result;
     }
 
+    private void send(ByteBuffer buffer) throws IOException {
+        if (sslChannel != null) {
+            sslChannel.write(buffer);
+        } else {
+            realNetSend(buffer);
+        }
+        isSend = true;
+    }
+
     protected void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
         long writeLen = channel.write(buffer);
@@ -197,7 +255,6 @@ public class MysqlChannel {
                     + ", needToWrite=" + bufLen + "]");
         }
         channel.write(buffer);
-        isSend = true;
     }
 
     public void flush() throws IOException {
@@ -208,7 +265,7 @@ public class MysqlChannel {
 
         sendBuffer.flip();
         try {
-            realNetSend(sendBuffer);
+            send(sendBuffer);
         } finally {
             sendBuffer.clear();
         }
@@ -251,7 +308,7 @@ public class MysqlChannel {
         }
         // Send this buffer if large enough
         if (buffer.remaining() > sendBuffer.remaining()) {
-            realNetSend(buffer);
+            send(buffer);
             return;
         }
         // Put it to
