@@ -4,6 +4,7 @@
 
 导入外部bitmap数据到StarRocks表时，需要先对bitmap进行序列化和Base64编码，生成Base64字符串。导入字符串到StarRocks表里时再进行Base64到bitmap的转化。
 该函数用于将Base64编码的字符串转化为bitmap。
+该函数从2.3版本开始支持。
 
 ## 语法
 
