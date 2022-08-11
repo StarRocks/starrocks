@@ -134,6 +134,7 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
     | showWarningStatement                                                                  #showWarning
 
@@ -810,6 +811,10 @@ showNodesStatement
 
 showBrokerStatement
     : SHOW BROKER
+    ;
+
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 setStatement
