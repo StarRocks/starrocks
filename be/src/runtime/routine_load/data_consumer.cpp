@@ -273,15 +273,15 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
 
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
-                                               std::vector<int64_t>* latest_offsets) {
+                                               std::vector<int64_t>* latest_offsets, int timeout) {
     _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
-        RdKafka::ErrorCode err = _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset,
-                                                                      config::routine_load_kafka_timeout_second * 1000);
+        RdKafka::ErrorCode err =
+                _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, timeout);
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
                          << ", err: " << RdKafka::err2str(err);
@@ -294,7 +294,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     return Status::OK();
 }
 
-Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids) {
+Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
     _last_visit_time = time(nullptr);
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
@@ -315,8 +315,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
 
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
-    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata,
-                                                   config::routine_load_kafka_timeout_second * 1000);
+    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to get partition meta: " << RdKafka::err2str(err);
