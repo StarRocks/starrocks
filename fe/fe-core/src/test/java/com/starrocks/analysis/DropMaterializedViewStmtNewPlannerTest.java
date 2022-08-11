@@ -48,7 +48,7 @@ public class DropMaterializedViewStmtNewPlannerTest {
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        connectContext.setDatabase("default_cluster:test");
+        connectContext.setDatabase("test");
     }
 
     @AfterClass
@@ -63,7 +63,7 @@ public class DropMaterializedViewStmtNewPlannerTest {
         DropMaterializedViewStmt dropMvStmt = (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(dropMvSql, connectContext);
         String dbName = dropMvStmt.getDbName();
         String mvName = dropMvStmt.getMvName();
-        Assert.assertEquals("default_cluster:test", dbName);
+        Assert.assertEquals("test", dbName);
         Assert.assertEquals("mv1", mvName);
         Assert.assertEquals(false, dropMvStmt.isSetIfExists());
     }

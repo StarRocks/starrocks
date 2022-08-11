@@ -75,7 +75,7 @@ public class BatchRollupJobTest {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1");
+        Database db = GlobalStateMgr.getCurrentState().getDb("db1");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
         Assert.assertNotNull(tbl);
@@ -126,7 +126,7 @@ public class BatchRollupJobTest {
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1");
+        Database db = GlobalStateMgr.getCurrentState().getDb("db1");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl2");
         Assert.assertNotNull(tbl);

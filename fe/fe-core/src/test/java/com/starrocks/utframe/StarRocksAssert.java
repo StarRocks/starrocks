@@ -124,12 +124,12 @@ public class StarRocksAssert {
     }
 
     public boolean databaseExist(String dbName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb("" + dbName);
         return db != null;
     }
 
     public StarRocksAssert useDatabase(String dbName) {
-        ctx.setDatabase(ClusterNamespace.getFullName(dbName));
+        ctx.setDatabase(dbName);
         return this;
     }
 

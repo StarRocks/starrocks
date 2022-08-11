@@ -22,6 +22,7 @@
 package com.starrocks.persist;
 
 import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -76,8 +77,13 @@ public class DatabaseInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, dbName);
-        Text.writeString(out, newDbName);
+        // compatible with old version
+        Text.writeString(out, ClusterNamespace.getFullName(dbName));
+        if (newDbName.isEmpty()) {
+            Text.writeString(out, newDbName);
+        } else {
+            Text.writeString(out, ClusterNamespace.getFullName(newDbName));
+        }
         out.writeLong(quota);
         Text.writeString(out, this.clusterName);
         // compatible with dbState
@@ -86,9 +92,9 @@ public class DatabaseInfo implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        this.dbName = Text.readString(in);
+        this.dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_10) {
-            newDbName = Text.readString(in);
+            newDbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
         this.quota = in.readLong();
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {

@@ -540,7 +540,6 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            String dbShortName = dbName.replace("default_cluster:", "");
             db.readLock();
             try {
                 for (Table table : db.getTables()) {
@@ -550,7 +549,7 @@ public final class MetricRepo {
                                 (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
                             continue;
                         }
-                        m.addLabel(new MetricLabel("db_name", dbShortName))
+                        m.addLabel(new MetricLabel("db_name", dbName))
                                 .addLabel(new MetricLabel("tbl_name", table.getName()))
                                 .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
                         visitor.visit(m);

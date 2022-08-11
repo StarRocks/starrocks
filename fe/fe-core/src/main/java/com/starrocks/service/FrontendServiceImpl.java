@@ -519,7 +519,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             PrivBitSet savedPrivs = entry.getPrivSet();
             String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
             String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            String dbName = ClusterNamespace.getNameFromFullName(entry.getOrigDb());
+            String dbName = entry.getOrigDb();
             boolean isGrantable = savedPrivs.satisfy(PrivPredicate.GRANT);
             List<TDBPrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
                     priv -> {
@@ -561,7 +561,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             PrivBitSet savedPrivs = entry.getPrivSet();
             String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
             String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            String dbName = ClusterNamespace.getNameFromFullName(entry.getOrigDb());
+            String dbName = entry.getOrigDb();
             boolean isGrantable = savedPrivs.satisfy(PrivPredicate.GRANT);
             List<TTablePrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
                     priv -> {

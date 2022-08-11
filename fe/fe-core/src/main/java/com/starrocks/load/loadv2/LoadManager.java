@@ -28,7 +28,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
 import com.starrocks.common.DdlException;
@@ -459,8 +458,6 @@ public class LoadManager implements Writable {
     }
 
     public void getLoadJobInfo(Load.JobInfo info) throws DdlException {
-        String fullDbName = ClusterNamespace.getFullName(info.dbName);
-        info.dbName = fullDbName;
         Database database = checkDb(info.dbName);
         readLock();
         try {

@@ -14,14 +14,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 
@@ -65,9 +63,6 @@ public class BackupStmtAnalyzer {
             }
 
             String catalog = context.getCurrentCatalog();
-            if (CatalogMgr.isInternalCatalog(catalog)) {
-                dbName = ClusterNamespace.getFullName(dbName);
-            }
 
             String currentCatalog = context.getCurrentCatalog();
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(currentCatalog, dbName);
