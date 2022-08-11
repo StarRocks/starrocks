@@ -23,30 +23,32 @@
 #include "util/faststring.h"
 
 namespace starrocks {
-PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
+PARALLEL_TEST(PersistentIndexTest, test_fixed_mutable_index) {
     using Key = uint64_t;
     int N = 1000;
     vector<Key> keys;
     vector<Slice> key_slices;
     vector<IndexValue> values;
+    vector<size_t> idxes;
     keys.reserve(N);
     key_slices.reserve(N);
+    idxes.reserve(N);
     for (int i = 0; i < N; i++) {
         keys.emplace_back(i);
         values.emplace_back(i * 2);
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        idxes.emplace_back(i);
     }
-    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key), "./PersistentIndexTest_test_mutable_index"));
-
-    ASSERT_OK(idx->insert(keys.size(), key_slices.data(), values.data()));
+    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(sizeof(Key)));
+    ASSERT_OK(idx->insert(key_slices.data(), values.data(), idxes));
     // insert duplicate should return error
-    ASSERT_FALSE(idx->insert(keys.size(), key_slices.data(), values.data()).ok());
+    ASSERT_FALSE(idx->insert(key_slices.data(), values.data(), idxes).ok());
 
     // test get
     vector<IndexValue> get_values(keys.size());
     KeysInfo get_not_found;
     size_t get_num_found = 0;
-    ASSERT_TRUE(idx->get(keys.size(), key_slices.data(), get_values.data(), &get_not_found, &get_num_found).ok());
+    ASSERT_TRUE(idx->get(key_slices.data(), get_values.data(), &get_not_found, &get_num_found, idxes).ok());
     ASSERT_EQ(keys.size(), get_num_found);
     ASSERT_EQ(get_not_found.key_idxes.size(), 0);
     for (int i = 0; i < values.size(); i++) {
@@ -64,8 +66,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     KeysInfo get2_not_found;
     size_t get2_num_found = 0;
     // should only find 0,2,..N-2, not found: N,N+2, .. N*2-2
-    ASSERT_TRUE(idx->get(get2_keys.size(), get2_key_slices.data(), get2_values.data(), &get2_not_found, &get2_num_found)
-                        .ok());
+    ASSERT_TRUE(idx->get(get2_key_slices.data(), get2_values.data(), &get2_not_found, &get2_num_found, idxes).ok());
     ASSERT_EQ(N / 2, get2_num_found);
 
     // test erase
@@ -73,17 +74,18 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     vector<Slice> erase_key_slices;
     erase_keys.reserve(N);
     erase_key_slices.reserve(N);
+    idxes.clear();
     size_t num = 0;
     for (int i = 0; i < N + 3; i += 3) {
         erase_keys.emplace_back(i);
         erase_key_slices.emplace_back((uint8_t*)(&erase_keys[num]), sizeof(Key));
+        idxes.emplace_back(num);
         num++;
     }
     vector<IndexValue> erase_old_values(erase_keys.size());
     KeysInfo erase_not_found;
     size_t erase_num_found = 0;
-    ASSERT_TRUE(idx->erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data(), &erase_not_found,
-                           &erase_num_found)
+    ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes)
                         .ok());
     ASSERT_EQ(erase_num_found, (N + 2) / 3);
     // N+2 not found
@@ -96,6 +98,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
     upsert_key_slices.reserve(N);
     size_t expect_exists = 0;
     size_t expect_not_found = 0;
+    idxes.clear();
     for (int i = 0; i < N; i++) {
         upsert_keys[i] = i * 2;
         if (i % 3 != 0 && i * 2 < N) {
@@ -106,12 +109,109 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_index) {
             expect_not_found++;
         }
         upsert_values[i] = i * 3;
+        idxes.emplace_back(i);
     }
     vector<IndexValue> upsert_old_values(upsert_keys.size());
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
-    ASSERT_TRUE(idx->upsert(upsert_keys.size(), upsert_key_slices.data(), upsert_values.data(),
-                            upsert_old_values.data(), &upsert_not_found, &upsert_num_found)
+    ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
+                            &upsert_num_found, idxes)
+                        .ok());
+    ASSERT_EQ(upsert_num_found, expect_exists);
+    ASSERT_EQ(upsert_not_found.key_idxes.size(), expect_not_found);
+}
+
+PARALLEL_TEST(PersistentIndexTest, test_slice_mutable_index) {
+    using Key = std::string;
+    int N = 1000;
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<size_t> idxes;
+    key_slices.reserve(N);
+    idxes.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = "test_varlen_" + std::to_string(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back(keys[i]);
+        idxes.push_back(i);
+    }
+    ASSIGN_OR_ABORT(auto idx, MutableIndex::create(0));
+    ASSERT_OK(idx->insert(key_slices.data(), values.data(), idxes));
+    // insert duplicate should return error
+    ASSERT_FALSE(idx->insert(key_slices.data(), values.data(), idxes).ok());
+
+    vector<IndexValue> get_values(keys.size());
+    KeysInfo get_not_found;
+    size_t get_num_found = 0;
+    ASSERT_TRUE(idx->get(key_slices.data(), get_values.data(), &get_not_found, &get_num_found, idxes).ok());
+    ASSERT_EQ(keys.size(), get_num_found);
+    ASSERT_EQ(get_not_found.key_idxes.size(), 0);
+    for (int i = 0; i < values.size(); i++) {
+        ASSERT_EQ(values[i], get_values[i]);
+    }
+    vector<Key> get2_keys(N);
+    vector<Slice> get2_key_slices;
+    get2_keys.reserve(N);
+    get2_key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        get2_keys[i] = "test_varlen_" + std::to_string(i * 2);
+        get2_key_slices.emplace_back(get2_keys[i]);
+    }
+    vector<IndexValue> get2_values(get2_keys.size());
+    KeysInfo get2_not_found;
+    size_t get2_num_found = 0;
+    // should only find 0,2,..N-2, not found: N,N+2, .. N*2-2
+    ASSERT_TRUE(idx->get(get2_key_slices.data(), get2_values.data(), &get2_not_found, &get2_num_found, idxes).ok());
+    ASSERT_EQ(N / 2, get2_num_found);
+
+    // test erase
+    vector<Key> erase_keys;
+    vector<Slice> erase_key_slices;
+    erase_keys.reserve(N);
+    erase_key_slices.reserve(N);
+    idxes.clear();
+    size_t num = 0;
+    for (int i = 0; i < N + 3; i += 3) {
+        erase_keys.emplace_back("test_varlen_" + std::to_string(i));
+        erase_key_slices.emplace_back(erase_keys.back());
+        idxes.emplace_back(num);
+        num++;
+    }
+    vector<IndexValue> erase_old_values(erase_keys.size());
+    KeysInfo erase_not_found;
+    size_t erase_num_found = 0;
+    ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes)
+                        .ok());
+    ASSERT_EQ(erase_num_found, (N + 2) / 3);
+    // N+2 not found
+    ASSERT_EQ(erase_not_found.key_idxes.size(), 1);
+
+    // test upsert
+    vector<Key> upsert_keys(N);
+    vector<Slice> upsert_key_slices;
+    vector<IndexValue> upsert_values(upsert_keys.size());
+    upsert_key_slices.reserve(N);
+    size_t expect_exists = 0;
+    size_t expect_not_found = 0;
+    idxes.clear();
+    for (int i = 0; i < N; i++) {
+        upsert_keys[i] = "test_varlen_" + std::to_string(i * 2);
+        if (i % 3 != 0 && i * 2 < N) {
+            expect_exists++;
+        }
+        upsert_key_slices.emplace_back(upsert_keys[i]);
+        if (i * 2 >= N && i * 2 != N + 2) {
+            expect_not_found++;
+        }
+        upsert_values[i] = i * 3;
+        idxes.emplace_back(i);
+    }
+    vector<IndexValue> upsert_old_values(upsert_keys.size());
+    KeysInfo upsert_not_found;
+    size_t upsert_num_found = 0;
+    ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
+                            &upsert_num_found, idxes)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.key_idxes.size(), expect_not_found);
@@ -254,20 +354,26 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     vector<Key> keys(N);
     vector<IndexValue> values(N);
     vector<Slice> key_slices;
+    vector<size_t> idxes;
     key_slices.reserve(N);
+    idxes.reserve(N);
     for (int i = 0; i < N; i++) {
         keys[i] = i;
         values[i] = i * 2;
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+        idxes.push_back(i);
     }
-    auto rs = MutableIndex::create(sizeof(Key), "./PersistentIndexTest_test_mutable_flush_to_immutable");
+    auto rs = MutableIndex::create(sizeof(Key));
     ASSERT_TRUE(rs.ok());
     std::unique_ptr<MutableIndex> idx = std::move(rs).value();
 
-    // test insert
-    ASSERT_TRUE(idx->insert(keys.size(), key_slices.data(), values.data()).ok());
+    ASSERT_TRUE(idx->insert(key_slices.data(), values.data(), idxes).ok());
 
-    ASSERT_TRUE(idx->flush_to_immutable_index(".", EditVersion(1, 1)).ok());
+    auto writer = std::make_unique<ImmutableIndexWriter>();
+    ASSERT_TRUE(writer->init(".", EditVersion(1, 1)).ok());
+
+    ASSERT_TRUE(idx->flush_to_immutable_index(writer).ok());
+    writer->finish();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file("./index.l1.1.1"));
@@ -303,6 +409,7 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
         check_not_exist_key_slices[i] = Slice((uint8_t*)(&check_not_exist_keys[i]), sizeof(Key));
     }
     ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_key_slices.data(), sizeof(Key)).ok());
+    ASSERT_TRUE(fs::remove_all("./index.l1.1.1").ok());
 }
 
 TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {

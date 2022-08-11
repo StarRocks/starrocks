@@ -67,7 +67,34 @@ struct KVRef {
 
 class PersistentIndex;
 class ImmutableIndex;
-class ImmutableIndexWriter;
+
+class ImmutableIndexWriter {
+public:
+    ~ImmutableIndexWriter();
+
+    Status init(const string& dir, const EditVersion& version);
+
+    // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
+    Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
+
+    Status finish();
+
+private:
+    EditVersion _version;
+    string _idx_file_path_tmp;
+    string _idx_file_path;
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<WritableFile> _wb;
+    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
+    size_t _nshard = 0;
+    size_t _cur_key_size = -1;
+    size_t _cur_value_size = 0;
+    size_t _total = 0;
+    size_t _total_moved = 0;
+    size_t _total_kv_size = 0;
+    size_t _total_bytes = 0;
+    ImmutableIndexMetaPB _meta;
+};
 
 class MutableIndex {
 public:
@@ -171,15 +198,14 @@ class ShardByLengthMutableIndex {
 public:
     ShardByLengthMutableIndex() {}
 
-    ShardByLengthMutableIndex(const size_t key_size) : _fixed_key_size(key_size) {}
+    ShardByLengthMutableIndex(const size_t key_size, const std::string& path)
+            : _fixed_key_size(key_size), _path(path) {}
 
     ~ShardByLengthMutableIndex() {
         if (_index_file) {
             _index_file->close();
         }
     }
-
-    static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size);
 
     Status init();
 
@@ -265,6 +291,8 @@ public:
     size_t capacity();
 
     size_t memory_usage();
+
+    static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
     friend class PersistentIndex;
