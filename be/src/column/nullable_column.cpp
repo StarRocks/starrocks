@@ -3,7 +3,6 @@
 #include "column/nullable_column.h"
 
 #include "column/column_helper.h"
-#include "column/json_column.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "simd/simd.h"

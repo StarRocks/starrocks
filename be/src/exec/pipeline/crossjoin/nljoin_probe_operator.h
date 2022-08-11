@@ -45,7 +45,7 @@ public:
 private:
     enum JoinStage {
         Probe,         // Start probing left table
-        RightJoin,     // The last proober need to perform the right join
+        RightJoin,     // The last prober need to merge the build_match_flags and perform the right join
         PostRightJoin, // Finish right join, and has some data to pull
         Finished,      // Finish all job
     };
@@ -84,7 +84,7 @@ private:
     // Build states
     int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
-    std::vector<uint8_t> _self_build_match_flag; // Whether this build row matched by probe
+    std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;

@@ -10,7 +10,6 @@
 #include "exec/pipeline/context_with_dependency.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 class RuntimeFilterBuildDescriptor;
@@ -35,7 +34,7 @@ public:
             : _num_left_probers(params.num_left_probers),
               _num_right_sinkers(params.num_right_sinkers),
               _plan_node_id(params.plan_node_id),
-              _tmp_chunks(_num_right_sinkers),
+              _input_chunks(_num_right_sinkers),
               _conjuncts_ctx(std::move(params.filters)),
               _rf_hub(params.rf_hub),
               _rf_descs(std::move(params.rf_descs)) {}
@@ -80,8 +79,8 @@ private:
 
     // Join states
     std::mutex _join_stage_mutex; // Protects join states
-    std::vector<std::vector<vectorized::ChunkPtr>> _tmp_chunks;
-    std::vector<vectorized::ChunkPtr> _build_chunks;
+    std::vector<std::vector<vectorized::ChunkPtr>> _input_chunks; // Input chunks from each sink
+    std::vector<vectorized::ChunkPtr> _build_chunks;              // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
     int _num_post_probers = 0;
     std::vector<uint8_t> _shared_build_match_flag;

@@ -73,7 +73,7 @@ const std::vector<uint8_t> CrossJoinContext::get_shared_build_match_flag() const
 }
 
 void CrossJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
-    _tmp_chunks[sinker_id].push_back(chunk);
+    _input_chunks[sinker_id].push_back(chunk);
 }
 
 int CrossJoinContext::get_build_chunk_start(int index) const {
@@ -87,7 +87,7 @@ Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
 
         // Accumulate chunks
         ChunkAccumulator accumulator(state->chunk_size());
-        for (auto& sink_chunks : _tmp_chunks) {
+        for (auto& sink_chunks : _input_chunks) {
             for (auto& tmp_chunk : sink_chunks) {
                 if (tmp_chunk && !tmp_chunk->is_empty()) {
                     _num_build_rows += tmp_chunk->num_rows();
@@ -99,8 +99,8 @@ Status CrossJoinContext::finish_one_right_sinker(RuntimeState* state) {
         while (ChunkPtr output = accumulator.pull()) {
             _build_chunks.emplace_back(std::move(output));
         }
-        _tmp_chunks.clear();
-        _tmp_chunks.shrink_to_fit();
+        _input_chunks.clear();
+        _input_chunks.shrink_to_fit();
 
         _build_chunk_desired_size = state->chunk_size();
         _all_right_finished = true;

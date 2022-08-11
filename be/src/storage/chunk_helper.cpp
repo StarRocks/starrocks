@@ -14,7 +14,6 @@
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
 #include "storage/types.h"
-#include "util/json.h"
 #include "util/metrics.h"
 #include "util/percentile_value.h"
 
