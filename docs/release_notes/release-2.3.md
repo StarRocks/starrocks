@@ -12,7 +12,7 @@ Release date: July 29, 2022
 
 - A global dictionary supports updates during real-time data ingestion，thus optimizing query performance and doubling query performance of string data.
 
-- The CREATE TABLE AS SELECT statement can be executed asynchronously and write results to a new table. For more information, see [CREATE TABLE AS SELECT](sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md#create-table-as-select).
+- The CREATE TABLE AS SELECT statement can be executed asynchronously and write results to a new table. For more information, see [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md).
 
 - Support the following resource group-related features:
   - Monitor resource groups: You can use the audit log to view a query in which resource group  and call API operations to obtain the monitoring metrics about specific resource groups. For more information, see [Monitor and Alerting](../administration/Monitor_and_Alert.md#monitor-and-alerting).
