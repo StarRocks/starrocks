@@ -173,6 +173,7 @@ public class KafkaUtil {
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
+                request.timeout = Config.routine_load_kafka_timeout_second;
                 Future<PProxyResult> future = BackendServiceProxy.getInstance().getInfo(address, request);
                 PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
