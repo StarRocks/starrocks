@@ -150,6 +150,7 @@ public class ScalarApply2JoinRule extends TransformationRule {
         LogicalJoinOperator joinOp = new LogicalJoinOperator.Builder()
                 .setJoinType(JoinOperator.LEFT_OUTER_JOIN)
                 .setOnPredicate(Utils.compoundAnd(correlationPredicatePair.first))
+                .setPredicate(apply.getPredicate())
                 .build();
         OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
 

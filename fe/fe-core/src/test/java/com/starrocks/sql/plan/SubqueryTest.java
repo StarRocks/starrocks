@@ -412,6 +412,37 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  output: count(1), any_value(5: v5)\n" +
                     "  |  group by: 4: v4");
         }
+        {
+            String sql = "SELECT * FROM t0\n" +
+                    "WHERE t0.v2 > (\n" +
+                    "      SELECT t1.v5 FROM t1\n" +
+                    "      WHERE t0.v1 = t1.v4 and t1.v4 = 10\n" +
+                    ");";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  \n" +
+                    "  6:SELECT\n" +
+                    "  |  predicates: 2: v2 > 7: expr\n" +
+                    "  |  \n" +
+                    "  5:Project\n" +
+                    "  |  <slot 1> : 1: v1\n" +
+                    "  |  <slot 2> : 2: v2\n" +
+                    "  |  <slot 3> : 3: v3\n" +
+                    "  |  <slot 7> : 9: anyValue\n" +
+                    "  |  <slot 10> : assert_true((8: countRows IS NULL) OR (8: countRows <= 1))\n" +
+                    "  |  \n" +
+                    "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                    "  |  other predicates: 4: v4 = 10");
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1), any_value(5: v5)\n" +
+                    "  |  group by: 4: v4");
+        }
     }
 
     @Test
