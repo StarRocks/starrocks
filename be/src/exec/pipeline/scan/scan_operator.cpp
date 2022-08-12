@@ -382,7 +382,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         _chunk_sources[chunk_source_index] = nullptr;
     }
 
-    ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+    ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get(_driver_sequence));
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
 

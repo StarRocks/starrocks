@@ -22,6 +22,7 @@
 #include "exec/scan_node.h"
 
 #include "exec/pipeline/scan/morsel.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -54,8 +55,16 @@ Status ScanNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+int ScanNode::_scan_dop(const std::vector<TScanRangeParams>& scan_ranges,
+                        const TExecPlanFragmentParams& request) const {
+    int dop = request.__isset.pipeline_dop ? request.pipeline_dop : 0;
+    dop = ExecEnv::GetInstance()->calc_pipeline_dop(dop);
+    dop = std::max(1, std::min((int)scan_ranges.size(), dop));
+    return dop;
+}
+
 StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
-        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams&) {
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, const TExecPlanFragmentParams& request) {
     pipeline::Morsels morsels;
     // If this scan node does not accept non-empty scan ranges, create a placeholder one.
     if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
@@ -66,7 +75,8 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
         }
     }
 
-    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
+    int dop = _scan_dop(scan_ranges, request);
+    return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels), dop);
 }
 
 } // namespace starrocks
