@@ -1219,7 +1219,17 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
         ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets).ok());
     }
     ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // Wait until compaction applied.
+    while (true) {
+        std::vector<RowsetSharedPtr> dummy_rowsets;
+        EditVersion full_version;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(5, &dummy_rowsets, &full_version).ok());
+        if (full_version.minor() == 1) {
+            break;
+        }
+        std::cerr << "waiting for compaction applied\n";
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 TEST_F(TabletUpdatesTest, compaction_with_empty_rowset) {
