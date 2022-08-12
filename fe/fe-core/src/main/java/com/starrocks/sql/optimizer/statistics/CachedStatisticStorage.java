@@ -113,6 +113,9 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     @Override
     public void expireColumnStatistics(Table table, List<String> columns) {
+        if (columns == null) {
+            return;
+        }
         List<ColumnStatsCacheKey> allKeys = Lists.newArrayList();
         for (String column : columns) {
             ColumnStatsCacheKey key = new ColumnStatsCacheKey(table.getId(), column);
@@ -160,6 +163,8 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     @Override
     public void expireHistogramStatistics(Long tableId, List<String> columns) {
+        Preconditions.checkNotNull(columns);
+
         List<ColumnStatsCacheKey> allKeys = Lists.newArrayList();
         for (String column : columns) {
             ColumnStatsCacheKey key = new ColumnStatsCacheKey(tableId, column);
