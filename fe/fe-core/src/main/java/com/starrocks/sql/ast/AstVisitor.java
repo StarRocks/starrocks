@@ -115,12 +115,12 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TruncatePartitionClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.analysis.VariableExpr;
 
 public abstract class AstVisitor<R, C> {
     public R visit(ParseNode node) {
@@ -770,7 +770,7 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    public R visitSysVariableDesc(SysVariableDesc node, C context) {
+    public R visitVariableExpr(VariableExpr node, C context) {
         return visitExpression(node, context);
     }
 

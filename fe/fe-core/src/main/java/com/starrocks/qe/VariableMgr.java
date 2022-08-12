@@ -27,7 +27,7 @@ import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -108,7 +108,7 @@ public class VariableMgr {
 
     // Map variable name to variable context which have enough information to change variable value.
     // This map contains info of all session and global variables.
-    private static ImmutableMap<String, VarContext> ctxByVarName;
+    private static final ImmutableMap<String, VarContext> ctxByVarName;
 
     private static ImmutableMap<String, String> aliases;
 
@@ -277,8 +277,8 @@ public class VariableMgr {
         VarAttr attr = ctx.getField().getAnnotation(VarAttr.class);
         String value;
         // If value is null, this is `set variable = DEFAULT`
-        if (setVar.getValue() != null) {
-            value = setVar.getValue().getStringValue();
+        if (setVar.getResolvedExpression() != null) {
+            value = setVar.getResolvedExpression().getStringValue();
         } else {
             value = ctx.getDefaultValue();
             if (value == null) {
@@ -369,7 +369,7 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static void fillValue(SessionVariable var, SysVariableDesc desc) throws AnalysisException {
+    public static void fillValue(SessionVariable var, VariableExpr desc) throws AnalysisException {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName());
@@ -387,7 +387,7 @@ public class VariableMgr {
         }
     }
 
-    private static void fillValue(Object obj, Field field, SysVariableDesc desc) {
+    private static void fillValue(Object obj, Field field, VariableExpr desc) {
         try {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
@@ -433,7 +433,7 @@ public class VariableMgr {
     }
 
     // Get variable value through variable name, used to satisfy statement like `SELECT @@comment_version`
-    public static String getValue(SessionVariable var, SysVariableDesc desc) throws AnalysisException {
+    public static String getValue(SessionVariable var, VariableExpr desc) throws AnalysisException {
         VarContext ctx = getVarContext(desc.getName());
         if (ctx == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, desc.getName());

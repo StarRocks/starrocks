@@ -34,27 +34,29 @@ import java.util.Objects;
 
 // System variable
 // Converted to StringLiteral in analyze, if this variable is not exist, throw AnalysisException.
-public class SysVariableDesc extends Expr {
+public class VariableExpr extends Expr {
     private final String name;
     private final SetType setType;
+    private boolean isNull;
     private boolean boolValue;
     private long intValue;
     private double floatValue;
     private String strValue;
 
-    public SysVariableDesc(String name) {
+    public VariableExpr(String name) {
         this(name, SetType.SESSION);
     }
 
-    public SysVariableDesc(String name, SetType setType) {
+    public VariableExpr(String name, SetType setType) {
         this.name = name;
         this.setType = setType;
     }
 
-    protected SysVariableDesc(SysVariableDesc other) {
+    protected VariableExpr(VariableExpr other) {
         super(other);
         name = other.name;
         setType = other.setType;
+        isNull = other.isNull;
         boolValue = other.boolValue;
         intValue = other.intValue;
         floatValue = other.floatValue;
@@ -63,7 +65,7 @@ public class SysVariableDesc extends Expr {
 
     @Override
     public Expr clone() {
-        return new SysVariableDesc(this);
+        return new VariableExpr(this);
     }
 
     @Override
@@ -76,6 +78,14 @@ public class SysVariableDesc extends Expr {
 
     public SetType getSetType() {
         return setType;
+    }
+
+    public void setIsNull() {
+        isNull = true;
+    }
+
+    public boolean isNull() {
+        return isNull;
     }
 
     public void setBoolValue(boolean value) {
@@ -137,9 +147,16 @@ public class SysVariableDesc extends Expr {
 
     @Override
     public String toSqlImpl() {
-        StringBuilder sb = new StringBuilder("@@");
-        if (setType == SetType.GLOBAL) {
-            sb.append("GLOBAL.");
+        StringBuilder sb = new StringBuilder();
+        if (setType == SetType.USER) {
+            sb.append("@");
+        } else {
+            sb.append("@@");
+            if (setType == SetType.GLOBAL) {
+                sb.append("GLOBAL.");
+            } else {
+                sb.append("SESSION.");
+            }
         }
         sb.append(name);
         return sb.toString();
@@ -155,7 +172,7 @@ public class SysVariableDesc extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSysVariableDesc(this, context);
+        return visitor.visitVariableExpr(this, context);
     }
 
     @Override
@@ -169,14 +186,15 @@ public class SysVariableDesc extends Expr {
         if (!super.equals(o)) {
             return false;
         }
-        SysVariableDesc that = (SysVariableDesc) o;
+        VariableExpr that = (VariableExpr) o;
         return boolValue == that.boolValue && intValue == that.intValue &&
                 Double.compare(that.floatValue, floatValue) == 0 && Objects.equals(name, that.name) &&
-                setType == that.setType && Objects.equals(strValue, that.strValue);
+                setType == that.setType && Objects.equals(strValue, that.strValue) &&
+                Objects.equals(isNull, that.isNull);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), name, setType, boolValue, intValue, floatValue, strValue);
+        return Objects.hash(super.hashCode(), name, setType, boolValue, intValue, floatValue, strValue, isNull);
     }
 }
