@@ -2,16 +2,49 @@
 
 #include "exprs/vectorized/lambda_function.h"
 
+#include <iostream>
 namespace starrocks::vectorized {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false) {}
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
-    get_child(0)->get_slot_ids(&captured_slot_ids);
+    argument_num = get_num_children() - 1;
+    // collect the slot ids of lambda arguments
+    for (int i = 0; i < argument_num; ++i) {
+        get_child(i)->get_slot_ids(&arguments_ids);
+    }
+    DCHECK(argument_num == arguments_ids.size());
+
+    // get slot ids from the lambda expression
+    get_child(argument_num)->get_slot_ids(&captured_slot_ids);
+
+    // remove current argument ids and duplicated ids from captured_slot_ids
+    std::map<int, bool> captured_mask;
+    int valid_id = 0;
+    for (int slot_id = 0; slot_id < captured_slot_ids.size(); ++slot_id) {
+        if (!captured_mask[captured_slot_ids[slot_id]]) { // not duplicated
+            for (int arg_id = 0; arg_id < argument_num; ++arg_id) {
+                if (captured_slot_ids[slot_id] == arguments_ids[arg_id]) {
+                    captured_mask[captured_slot_ids[slot_id]] = true;
+                }
+            }
+            if (!captured_mask[captured_slot_ids[slot_id]]) { // not from arguments
+                captured_slot_ids[valid_id++] = captured_slot_ids[slot_id];
+            }
+            captured_mask[captured_slot_ids[slot_id]] = true;
+        }
+    }
+    // remove tail elements
+    int removed = captured_slot_ids.size() - valid_id;
+    while (removed--) {
+        captured_slot_ids.pop_back();
+    }
+
     return Status::OK();
 }
+
 ColumnPtr LambdaFunction::evaluate(ExprContext* context, Chunk* ptr) {
-    return get_child(0)->evaluate(context, ptr);
+    return get_child(argument_num)->evaluate(context, ptr);
 }
 
 } // namespace starrocks::vectorized

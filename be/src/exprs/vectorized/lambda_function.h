@@ -15,6 +15,8 @@
 
 namespace starrocks::vectorized {
 
+// LambdaFunction has various children such as arg_0, arg_1,...,lambda expression.
+
 class LambdaFunction final : public Expr {
 public:
     LambdaFunction(const TExprNode& node);
@@ -25,12 +27,21 @@ public:
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 
+    // the slot ids of lambda expression may be from the arguments of this lambda function
+    // or its parent lambda functions, or captured columns.
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
-        slot_ids->assign(captured_slot_ids.begin(),captured_slot_ids.end());
+        slot_ids->assign(captured_slot_ids.begin(), captured_slot_ids.end());
         return captured_slot_ids.size();
+    }
+
+    int get_lambda_arguments_ids(std::vector<SlotId>* ids) {
+        ids->assign(arguments_ids.begin(), arguments_ids.end());
+        return arguments_ids.size();
     }
 
 private:
     std::vector<SlotId> captured_slot_ids;
+    std::vector<SlotId> arguments_ids;
+    int argument_num; // also the argument ID of the lambda expression.
 };
 } // namespace starrocks::vectorized
