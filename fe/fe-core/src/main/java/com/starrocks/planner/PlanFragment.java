@@ -32,7 +32,6 @@ import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
