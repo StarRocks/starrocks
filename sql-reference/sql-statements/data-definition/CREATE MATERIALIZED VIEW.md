@@ -31,7 +31,7 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
 
 2. query
 
-    用于构建物化视图的查询语句，查询语句的结果既物化视图的数据。目前支持的 query 格式为:
+    用于构建物化视图的查询语句，查询语句的结果即物化视图的数据。目前支持的 query 格式为:
 
     ```sql
     SELECT select_expr[, select_expr ...]
