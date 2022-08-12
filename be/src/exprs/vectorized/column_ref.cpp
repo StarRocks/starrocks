@@ -44,15 +44,7 @@ ColumnPtr ColumnRef::evaluate(ExprContext* context, Chunk* ptr) {
 
 vectorized::ColumnPtr& ColumnRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
     ColumnRef* ref = (ColumnRef*)expr;
-    if (!chunk->is_slot_exist(ref->slot_id())) {
-        ColumnPtr& column = (chunk)->get_column_by_slot_id(111);
-        return column;
-    } else {
-        auto str = ref->debug_string();
-        DCHECK(str.size() > 0);
-        ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
-        return column;
-    }
+    return (chunk)->get_column_by_slot_id(ref->slot_id());
 }
 
 } // namespace starrocks::vectorized
