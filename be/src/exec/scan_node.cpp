@@ -54,6 +54,24 @@ Status ScanNode::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+// Distribute morsels from a single queue to multiple queues
+static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeline::MorselQueuePtr morsel_queue,
+                                                                          int dop) {
+    std::map<int, pipeline::Morsels> morsels_per_driver;
+    int driver_seq = 0;
+    while (!morsel_queue->empty()) {
+        auto maybe_morsel = morsel_queue->try_get();
+        DCHECK(maybe_morsel.ok());
+        morsels_per_driver[driver_seq].push_back(std::move(maybe_morsel.value()));
+        driver_seq = (driver_seq + 1) % dop;
+    }
+    std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
+    for (auto& [operator_seq, morsels] : morsels_per_driver) {
+        queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
+    }
+    return queue_per_driver;
+}
+
 StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel_queue_factory(
         const std::vector<TScanRangeParams>& global_scan_ranges,
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
@@ -63,7 +81,16 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
                                                     global_scan_ranges, node_id, pipeline_dop,
                                                     enable_tablet_internal_parallel, global_scan_ranges.size()));
         int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
-        return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
+        int io_parallelism = scan_dop * io_tasks_per_scan_operator();
+
+        // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
+        if (scan_dop > 1 && dynamic_cast<pipeline::FixedMorselQueue*>(morsel_queue.get()) &&
+            morsel_queue->num_original_morsels() <= io_parallelism) {
+            auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
+            return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map));
+        } else {
+            return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
+        }
     } else {
         size_t num_total_scan_ranges = 0;
         for (const auto& [_, scan_ranges] : scan_ranges_per_driver_seq) {

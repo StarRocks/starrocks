@@ -67,7 +67,7 @@ public:
     // Convert scan_ranges into node-specific scan restrictions.  This should be
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
-    virtual StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
+    StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
             int pipeline_dop, bool enable_tablet_internal_parallel);
