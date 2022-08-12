@@ -359,7 +359,7 @@ public class AlterTest {
         String alterStmt = "alter materialized view test.mv1 rename mv2";
         alterMaterializedView(alterStmt, false);
         MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().
-                getDb("default_cluster:test").getTable("mv2");
+                getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1` AS `k1`," +
