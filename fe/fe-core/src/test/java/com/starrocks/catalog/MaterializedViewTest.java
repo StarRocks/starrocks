@@ -83,8 +83,21 @@ public class MaterializedViewTest {
         Assert.assertEquals(true, mv2.isActive());
         mv2.setActive(false);
         Assert.assertEquals(false, mv2.isActive());
-        mv2.setBaseTableIds(Sets.newHashSet(10L, 20L));
-        Assert.assertEquals(Sets.newHashSet(10L, 20L), mv2.getBaseTableIds());
+
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo();
+        baseTableInfo1.setDbId(100L);
+        baseTableInfo1.setTableId(10L);
+        baseTableInfos.add(baseTableInfo1);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo();
+        baseTableInfo2.setDbId(100L);
+        baseTableInfo2.setTableId(20L);
+        baseTableInfos.add(baseTableInfo2);
+        mv2.setBaseTableInfos(baseTableInfos);
+        List<BaseTableInfo> baseTableInfosCheck = mv2.getBaseTableInfos();
+
+        Assert.assertEquals(10L, baseTableInfosCheck.get(0).getTableId());
+        Assert.assertEquals(20L, baseTableInfosCheck.get(1).getTableId());
 
         String mvDefinition = "create materialized view mv2 select col1, col2 from table1";
         mv2.setViewDefineSql(mvDefinition);
@@ -249,7 +262,22 @@ public class MaterializedViewTest {
         MaterializedIndex index = new MaterializedIndex(3, IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
-        mv.setBaseTableIds(Sets.newHashSet(10L, 20L, 30L));
+
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo();
+        baseTableInfo1.setDbId(100L);
+        baseTableInfo1.setTableId(10L);
+        baseTableInfos.add(baseTableInfo1);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo();
+        baseTableInfo2.setDbId(100L);
+        baseTableInfo2.setTableId(20L);
+        baseTableInfos.add(baseTableInfo2);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo();
+        baseTableInfo2.setDbId(100L);
+        baseTableInfo2.setTableId(30L);
+        baseTableInfos.add(baseTableInfo3);
+
+        mv.setBaseTableInfos(baseTableInfos);
 
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(byteArrayOutputStream);
@@ -347,7 +375,13 @@ public class MaterializedViewTest {
         MaterializedIndex index = new MaterializedIndex(3, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(2, "mv_name", index, hashDistributionInfo);
         mv.addPartition(partition);
-        mv.setBaseTableIds(Sets.newHashSet(baseTable.getId()));
+
+        List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+        BaseTableInfo baseTableInfo = new BaseTableInfo();
+        baseTableInfo.setDbId(100L);
+        baseTableInfo.setTableId(baseTable.getId());
+        baseTableInfos.add(baseTableInfo);
+        mv.setBaseTableInfos(baseTableInfos);
         mv.setViewDefineSql("select * from test.tbl1");
 
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();

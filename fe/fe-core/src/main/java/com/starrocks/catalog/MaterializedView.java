@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.catalog;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
@@ -190,8 +191,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "refreshScheme")
     private MvRefreshScheme refreshScheme;
 
-    @SerializedName(value = "baseTableIds")
-    private Set<Long> baseTableIds;
+
+    @SerializedName(value = "baseTableInfos")
+    private List<BaseTableInfo> baseTableInfos;
 
     @SerializedName(value = "active")
     private boolean active;
@@ -242,12 +244,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.viewDefineSql = viewDefineSql;
     }
 
-    public Set<Long> getBaseTableIds() {
-        return baseTableIds;
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
     }
 
-    public void setBaseTableIds(Set<Long> baseTableIds) {
-        this.baseTableIds = baseTableIds;
+    public List<BaseTableInfo> getBaseTableInfos() {
+        return baseTableInfos;
+    }
+
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
+        this.baseTableInfos = baseTableInfos;
     }
 
     public void setPartitionRefTableExprs(List<Expr> partitionRefTableExprs) {
@@ -330,18 +336,39 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             active = false;
             return;
         }
-        // register materialized view to base tables
-        for (long tableId : baseTableIds) {
-            Table table = db.getTable(tableId);
-            if (table == null) {
-                LOG.warn("tableId:{} do not exist. set materialized view:{} to invalid", tableId, id);
+
+        if (baseTableInfos == null) {
+            // for compatibility
+            baseTableInfos = Lists.newArrayList();
+        }
+
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (baseTableInfo.isExternal()) {
+                LOG.warn("External base table for materialized view id:{} name:{} are not supported", id, name);
+                active = false;
+                continue;
+            }
+
+            Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+            if (baseDb == null) {
+                LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist",
+                        baseTableInfo.getDbId(), id, name);
+                active = false;
+                continue;
+            }
+
+            Table baseTable = baseDb.getTable(baseTableInfo.getTableId());
+            if (baseTable == null) {
+                LOG.warn("tableId:{} do not exist. set materialized view id:{} name:{} to invalid",
+                        baseTableInfo.getTableId(), id, name);
                 active = false;
                 continue;
             }
             // now table must be OlapTable
             // it is checked when creation
-            ((OlapTable) table).addRelatedMaterializedView(id);
+            ((OlapTable) baseTable).addRelatedMaterializedView(id);
         }
+
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
         }

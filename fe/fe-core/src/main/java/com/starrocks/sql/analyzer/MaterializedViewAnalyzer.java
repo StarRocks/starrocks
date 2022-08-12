@@ -18,6 +18,7 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -37,6 +38,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -116,8 +118,8 @@ public class MaterializedViewAnalyzer {
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
-            Set<Long> baseTableIds = Sets.newHashSet();
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
@@ -125,12 +127,7 @@ public class MaterializedViewAnalyzer {
             if (tableNameTableMap.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            tableNameTableMap.values().forEach(table -> {
-                if (db.getTable(table.getId()) == null) {
-                    throw new SemanticException(
-                            "Materialized view do not support table: " + table.getName() +
-                                    " do not exist in database: " + db.getOriginName());
-                }
+            tableNameTableMap.forEach((tableInfo, table) -> {
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException(
                             "Materialized view only supports olap table, but the type of table: " +
@@ -141,9 +138,18 @@ public class MaterializedViewAnalyzer {
                             "Creating a materialized view from materialized view is not supported now. The type of table: " +
                                     table.getName() + " is: Materialized View");
                 }
-                baseTableIds.add(table.getId());
+                BaseTableInfo baseTableInfo = new BaseTableInfo();
+                Database baseDb;
+                if (tableInfo.getDb() != null) {
+                    baseDb = GlobalStateMgr.getCurrentState().getDb(tableInfo.getDb());
+                } else {
+                    baseDb = db;
+                }
+                baseTableInfo.setDbId(baseDb.getId());
+                baseTableInfo.setTableId(table.getId());
+                baseTableInfos.add(baseTableInfo);
             });
-            statement.setBaseTableIds(baseTableIds);
+            statement.setBaseTableInfos(baseTableInfos);
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement

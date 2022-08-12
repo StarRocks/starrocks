@@ -4,6 +4,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -32,7 +33,6 @@ import org.junit.Test;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PartitionBasedMaterializedViewRefreshProcessorTest {
@@ -235,7 +235,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 }
             }
         };
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
@@ -304,24 +304,23 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
-                Set<Long> baseTableIds = materializedView.getBaseTableIds();
-                database.readLock();
-                try {
-                    for (Long baseTableId : baseTableIds) {
-                        OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                        if (olapTable == null) {
-                            throw new SemanticException("Materialized view base table: " + baseTableId + " not exist.");
-                        }
-                        OlapTable copied = new OlapTable();
-                        if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
-                            throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
-                        }
-                        olapTables.put(olapTable.getId(), copied);
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+                    if (baseDb == null) {
+                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
                     }
-                } finally {
-                    database.readUnlock();
+                    OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+                    if (olapTable == null) {
+                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                    }
+                    OlapTable copied = new OlapTable();
+                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                        throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
+                    }
+                    olapTables.put(olapTable.getId(), copied);
                 }
                 String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p1 p1_1";
                 try {
@@ -389,24 +388,23 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
-                Set<Long> baseTableIds = materializedView.getBaseTableIds();
-                database.readLock();
-                try {
-                    for (Long baseTableId : baseTableIds) {
-                        OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                        if (olapTable == null) {
-                            throw new SemanticException("Materialized view base table: " + baseTableId + " not exist.");
-                        }
-                        OlapTable copied = new OlapTable();
-                        if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
-                            throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
-                        }
-                        olapTables.put(olapTable.getId(), copied);
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+                    if (baseDb == null) {
+                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
                     }
-                } finally {
-                    database.readUnlock();
+                    OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+                    if (olapTable == null) {
+                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                    }
+                    OlapTable copied = new OlapTable();
+                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                        throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
+                    }
+                    olapTables.put(olapTable.getId(), copied);
                 }
                 String replacePartitionSql = "ALTER TABLE test.tbl1 REPLACE PARTITION (p3) WITH TEMPORARY PARTITION (tp3)\n" +
                         "PROPERTIES (\n" +
@@ -440,24 +438,23 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
-                Set<Long> baseTableIds = materializedView.getBaseTableIds();
-                database.readLock();
-                try {
-                    for (Long baseTableId : baseTableIds) {
-                        OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                        if (olapTable == null) {
-                            throw new SemanticException("Materialized view base table: " + baseTableId + " not exist.");
-                        }
-                        OlapTable copied = new OlapTable();
-                        if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
-                            throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
-                        }
-                        olapTables.put(olapTable.getId(), copied);
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+                    if (baseDb == null) {
+                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
                     }
-                } finally {
-                    database.readUnlock();
+                    OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+                    if (olapTable == null) {
+                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                    }
+                    OlapTable copied = new OlapTable();
+                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                        throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
+                    }
+                    olapTables.put(olapTable.getId(), copied);
                 }
                 String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p99 VALUES [('9999-03-01'),('9999-04-01'))";
                 try {
@@ -521,24 +518,23 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
+            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
                 Map<Long, OlapTable> olapTables = Maps.newHashMap();
-                Set<Long> baseTableIds = materializedView.getBaseTableIds();
-                database.readLock();
-                try {
-                    for (Long baseTableId : baseTableIds) {
-                        OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                        if (olapTable == null) {
-                            throw new SemanticException("Materialized view base table: " + baseTableId + " not exist.");
-                        }
-                        OlapTable copied = new OlapTable();
-                        if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
-                            throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
-                        }
-                        olapTables.put(olapTable.getId(), copied);
+                List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+                for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                    Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+                    if (baseDb == null) {
+                        throw new SemanticException("Materialized view base db: " + baseTableInfo.getDbId() + " not exist.");
                     }
-                } finally {
-                    database.readUnlock();
+                    OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+                    if (olapTable == null) {
+                        throw new SemanticException("Materialized view base table: " + baseTableInfo.getTableId() + " not exist.");
+                    }
+                    OlapTable copied = new OlapTable();
+                    if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
+                        throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
+                    }
+                    olapTables.put(olapTable.getId(), copied);
                 }
                 String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p4";
                 try {

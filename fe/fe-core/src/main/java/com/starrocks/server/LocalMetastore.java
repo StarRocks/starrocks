@@ -77,6 +77,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -3154,7 +3155,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
-        materializedView.setBaseTableIds(stmt.getBaseTableIds());
+        materializedView.setBaseTableInfos(stmt.getBaseTableInfos());
         // set viewDefineSql
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         // set partitionRefTableExprs
@@ -3315,14 +3316,20 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.readUnlock();
         }
+
         if (table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
-            Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
-            for (Long baseTableId : baseTableIds) {
-                OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
+            List<BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                Database baseDb = getDb(baseTableInfo.getDbId());
+                if (baseDb == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, stmt.getDbName());
+                }
+                OlapTable baseTable = ((OlapTable) baseDb.getTable(baseTableInfo.getTableId()));
                 if (baseTable != null) {
                     baseTable.removeRelatedMaterializedView(table.getId());
                 }
+
             }
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));

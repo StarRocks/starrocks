@@ -7,12 +7,12 @@ import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Materialized view is performed to materialize the results of query.
@@ -40,7 +40,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     protected String inlineViewDef;
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
-    private Set<Long> baseTableIds;
+    private List<BaseTableInfo> baseTableInfos;
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
@@ -147,12 +147,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public Set<Long> getBaseTableIds() {
-        return baseTableIds;
+    public List<BaseTableInfo> getBaseTableInfos() {
+        return baseTableInfos;
     }
 
-    public void setBaseTableIds(Set<Long> baseTableIds) {
-        this.baseTableIds = baseTableIds;
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
+        this.baseTableInfos = baseTableInfos;
     }
 
     public Column getPartitionColumn() {

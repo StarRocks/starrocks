@@ -21,6 +21,7 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -79,7 +80,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private Database database;
     private MaterializedView materializedView;
     private MvTaskRunContext mvContext;
-    private Map<Long, OlapTable> snapshotBaseTables;
+    private Map<Long, BaseTableInfo> snapshotBaseTables;
 
     // Core logics:
     // 1. prepare to check some conditions
@@ -169,7 +170,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 currentTablePartitionInfo.putAll(partitionInfoMap);
 
                 // remove partition info of not-exist partition for snapshot table from version map
-                OlapTable snapshotOlapTable = snapshotBaseTables.get(tableId);
+                BaseTableInfo baseTableInfo = snapshotBaseTables.get(tableId);
+                OlapTable snapshotOlapTable = baseTableInfo.getBaseTableCache();
                 Iterator<String> infoKeyIterator = currentTablePartitionInfo.keySet().iterator();
                 while (infoKeyIterator.hasNext()) {
                     String partitionName = infoKeyIterator.next();
@@ -211,7 +213,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private void syncPartitions() {
-        snapshotBaseTables = collectBaseTables(materializedView, database);
+        snapshotBaseTables = collectBaseTables(materializedView);
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             syncPartitionsForExpr();
@@ -226,14 +228,15 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return materializedView.getPartitionRefTableExprs().get(0);
     }
 
-    private Pair<OlapTable, Column> getPartitionTableAndColumn(Map<Long, OlapTable> olapTables) {
+    private Pair<OlapTable, Column> getPartitionTableAndColumn(Map<Long, BaseTableInfo> olapTables) {
         List<SlotRef> slotRefs = Lists.newArrayList();
         Expr partitionExpr = getPartitionExpr();
         partitionExpr.collect(SlotRef.class, slotRefs);
         // if partitionExpr is FunctionCallExpr, get first SlotRef
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef slotRef = slotRefs.get(0);
-        for (OlapTable olapTable : olapTables.values()) {
+        for (BaseTableInfo baseTableInfo : olapTables.values()) {
+            OlapTable olapTable = baseTableInfo.getBaseTableCache();
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 return Pair.create(olapTable, olapTable.getColumn(slotRef.getColumnName()));
             }
@@ -306,7 +309,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean needToRefreshNonPartitionTable(OlapTable partitionTable) {
-        for (OlapTable olapTable : snapshotBaseTables.values()) {
+        for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
+            OlapTable olapTable = baseTableInfo.getBaseTableCache();
             if (olapTable.getId() == partitionTable.getId()) {
                 continue;
             }
@@ -365,7 +369,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             partitionTable = partitionTableAndColumn.first;
         }
         Map<String, Set<String>> tableNamePartitionNames = Maps.newHashMap();
-        for (OlapTable olapTable : snapshotBaseTables.values()) {
+        for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
+            OlapTable olapTable = baseTableInfo.getBaseTableCache();
             if (partitionTable != null && olapTable.getId() == partitionTable.getId()) {
                 Set<String> needRefreshTablePartitionNames = Sets.newHashSet();
                 Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvToBaseNameRef();
@@ -416,21 +421,31 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private boolean checkBaseTablePartitionChange() {
         // check snapshotBaseTables and current tables in catalog
-        for (OlapTable snapshotTable : snapshotBaseTables.values()) {
-            if (snapshotTable.getPartitionInfo() instanceof SinglePartitionInfo) {
-                Set<String> partitionNames = ((OlapTable) database.getTable(snapshotTable.getId())).getPartitionNames();
-                if (!snapshotTable.getPartitionNames().equals(partitionNames)) {
-                    // there is partition rename
-                    return true;
+        for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
+            OlapTable snapshotTable = baseTableInfo.getBaseTableCache();
+            Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+            if (baseDb == null) {
+                return true;
+            }
+            baseDb.readLock();
+            try {
+                if (snapshotTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                    Set<String> partitionNames = ((OlapTable) baseDb.getTable(snapshotTable.getId())).getPartitionNames();
+                    if (!snapshotTable.getPartitionNames().equals(partitionNames)) {
+                        // there is partition rename
+                        return true;
+                    }
+                } else {
+                    Map<String, Range<PartitionKey>> snapshotPartitionMap = snapshotTable.getRangePartitionMap();
+                    Map<String, Range<PartitionKey>> currentPartitionMap =
+                            ((OlapTable) baseDb.getTable(snapshotTable.getId())).getRangePartitionMap();
+                    boolean changed = SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                    if (changed) {
+                        return true;
+                    }
                 }
-            } else {
-                Map<String, Range<PartitionKey>> snapshotPartitionMap = snapshotTable.getRangePartitionMap();
-                Map<String, Range<PartitionKey>> currentPartitionMap =
-                        ((OlapTable) database.getTable(snapshotTable.getId())).getRangePartitionMap();
-                boolean changed = SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-                if (changed) {
-                    return true;
-                }
+            } finally {
+                baseDb.readUnlock();
             }
         }
         return false;
@@ -468,24 +483,41 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     @VisibleForTesting
-    public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView, Database database) {
-        Map<Long, OlapTable> olapTables = Maps.newHashMap();
-        Set<Long> baseTableIds = materializedView.getBaseTableIds();
-        database.readLock();
-        try {
-            for (Long baseTableId : baseTableIds) {
-                OlapTable olapTable = (OlapTable) database.getTable(baseTableId);
-                if (olapTable == null) {
-                    throw new DmlException("Materialized view base table: %d not exist.", baseTableId);
-                }
-                OlapTable copied = new OlapTable();
-                if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
-                    throw new DmlException("Failed to copy olap table: %s", olapTable.getName());
-                }
-                olapTables.put(olapTable.getId(), copied);
+    public Map<Long, BaseTableInfo> collectBaseTables(MaterializedView mv) {
+        Map<Long, BaseTableInfo> olapTables = Maps.newHashMap();
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (baseTableInfo.isExternal()) {
+                throw new DmlException("External base table for materialized view id:{} name:{} are not supported.",
+                        mv.getId(), mv.getName());
             }
-        } finally {
-            database.readUnlock();
+            Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+            if (baseDb == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getDbId(), mv.getName());
+                throw new DmlException("database " + baseTableInfo.getDbId() + " do not exist.");
+            }
+
+            baseDb.readLock();
+            try {
+                OlapTable baseTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+                if (baseTable == null) {
+                    throw new DmlException("Materialized view base table: %d not exist.", baseTableInfo.getTableId());
+                }
+
+                OlapTable copied = new OlapTable();
+                if (!DeepCopy.copy(baseTable, copied, OlapTable.class)) {
+                    throw new DmlException("Failed to copy olap table: %s", baseTable.getName());
+                }
+                BaseTableInfo info = new BaseTableInfo();
+                info.setDbId(baseDb.getId());
+                info.setTableId(copied.getId());
+                info.setBaseTableCache(copied);
+                olapTables.put(baseTable.getId(), info);
+            } finally {
+                baseDb.readUnlock();
+            }
         }
         return olapTables;
     }
