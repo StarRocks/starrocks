@@ -586,7 +586,8 @@ Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTran
     return Status::OK();
 }
 
-StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sender_id, size_t& total_chunk_bytes) {
+StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList>
+DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sender_id, size_t& total_chunk_bytes) {
     ChunkUniquePtrVector swap_chunks;
     std::vector<size_t> swap_bytes;
     _recvr->_pass_through_context.pull_chunks(sender_id, &swap_chunks, &swap_bytes);
@@ -607,7 +608,8 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
     return chunks;
 }
 
-StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes) {
+StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(
+        const PTransmitChunkParams& request, size_t& total_chunk_bytes) {
     ChunkList chunks;
     faststring uncompressed_buffer;
     for (auto i = 0; i < request.chunks().size(); i++) {
@@ -622,8 +624,9 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
     return chunks;
 }
 
-template<bool keep_order>
-Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
+template <bool keep_order>
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                        ::google::protobuf::Closure** done) {
     if (keep_order) {
         DCHECK(!request.has_is_pipeline_level_shuffle() || !request.is_pipeline_level_shuffle());
     }
@@ -639,7 +642,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
 
     ChunkList chunks;
-    ASSIGN_OR_RETURN(chunks, use_pass_through ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes): get_chunks_from_request(request, total_chunk_bytes));
+    ASSIGN_OR_RETURN(chunks, use_pass_through ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
+                                              : get_chunks_from_request(request, total_chunk_bytes));
     COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
 
     if (_is_cancelled) {
@@ -702,8 +706,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             wait_timer.stop();
 
             for (auto iter = chunks.begin(); iter != chunks.end();) {
-                if (_is_pipeline_level_shuffle &&
-                    _short_circuit_driver_sequences.find(iter->driver_sequence) != _short_circuit_driver_sequences.end()) {
+                if (_is_pipeline_level_shuffle && _short_circuit_driver_sequences.find(iter->driver_sequence) !=
+                                                          _short_circuit_driver_sequences.end()) {
                     total_chunk_bytes -= iter->chunk_bytes;
                     chunks.erase(iter++);
                     continue;

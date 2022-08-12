@@ -167,8 +167,12 @@ private:
 
         ChunkItem() {}
 
-        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure, ChunkUniquePtr&& chunk_ptr):
-            chunk_bytes(chunk_bytes), driver_sequence(driver_sequence),closure(closure),chunk_ptr(std::move(chunk_ptr)) {}
+        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
+                  ChunkUniquePtr&& chunk_ptr)
+                : chunk_bytes(chunk_bytes),
+                  driver_sequence(driver_sequence),
+                  closure(closure),
+                  chunk_ptr(std::move(chunk_ptr)) {}
     };
 
     typedef std::list<ChunkItem> ChunkList;
@@ -181,7 +185,7 @@ private:
 
     Status try_to_build_chunk_meta(const PTransmitChunkParams& request);
 
-    template<bool keep_order>
+    template <bool keep_order>
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
