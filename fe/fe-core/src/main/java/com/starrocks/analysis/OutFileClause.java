@@ -50,8 +50,6 @@ public class OutFileClause implements ParseNode {
     private static final String PROP_COLUMN_SEPARATOR = "column_separator";
     private static final String PROP_LINE_DELIMITER = "line_delimiter";
     private static final String PROP_MAX_FILE_SIZE = "max_file_size";
-    private static final String VIEW_FS_PREFIX = "viewfs://";
-    private static final String HDFS_PREFIX = "hdfs://";
 
     private static final long DEFAULT_MAX_FILE_SIZE_BYTES = 1024 * 1024 * 1024L; // 1GB
     private static final long MIN_FILE_SIZE_BYTES = 5 * 1024 * 1024L; // 5MB
@@ -162,11 +160,7 @@ public class OutFileClause implements ParseNode {
     private void getBrokerProperties(String filePath, Set<String> processedPropKeys) {
         boolean outfile_without_broker = false;
         if (!properties.containsKey(PROP_BROKER_NAME)) {
-            if (filePath.startsWith(HDFS_PREFIX) || filePath.startsWith(VIEW_FS_PREFIX)) {
-                outfile_without_broker = true; 
-            } else {
-                return;
-            }
+            outfile_without_broker = true;
         }
         String brokerName = null;
         if (!outfile_without_broker) {
