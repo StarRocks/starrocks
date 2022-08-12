@@ -2,18 +2,20 @@
 
 #include "exec/vectorized/jdbc_scanner.h"
 
+#include <memory>
 #include <type_traits>
 
+#include "common/statusor.h"
 #include "jni_md.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
-#define CHECK_JAVA_EXCEPTION(error_message)                                             \
-    if (jthrowable thr = _jni_env->ExceptionOccurred(); thr) {                          \
+#define CHECK_JAVA_EXCEPTION(env, error_message)                                        \
+    if (jthrowable thr = env->ExceptionOccurred(); thr) {                               \
         std::string err = JVMFunctionHelper::getInstance().dumpExceptionString(thr);    \
-        _jni_env->ExceptionClear();                                                     \
-        _jni_env->DeleteLocalRef(thr);                                                  \
+        env->ExceptionClear();                                                          \
+        env->DeleteLocalRef(thr);                                                       \
         return Status::InternalError(fmt::format("{}, error: {}", error_message, err)); \
     }
 
@@ -27,19 +29,7 @@ namespace starrocks::vectorized {
         return Status::OK();                                                                                    \
     }
 
-JDBCScanner::~JDBCScanner() {}
-
-Status JDBCScanner::reset_jni_env() {
-    _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    if (_jni_env == nullptr) {
-        return Status::InternalError("Cannot get jni env");
-    }
-    return Status::OK();
-}
-
 Status JDBCScanner::open(RuntimeState* state) {
-    RETURN_IF_ERROR(reset_jni_env());
-
     _init_profile();
 
     RETURN_IF_ERROR(_init_jdbc_bridge());
@@ -50,15 +40,7 @@ Status JDBCScanner::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(_init_column_class_name());
 
-    // init JDBCUtil method
-    _jdbc_util_cls = _jni_env->FindClass(JDBC_UTIL_CLASS_NAME);
-    DCHECK(_jdbc_util_cls != nullptr);
-    _util_format_date =
-            _jni_env->GetStaticMethodID(_jdbc_util_cls, "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
-    DCHECK(_util_format_date != nullptr);
-    _util_format_localdatetime = _jni_env->GetStaticMethodID(_jdbc_util_cls, "formatLocalDatetime",
-                                                             "(Ljava/time/LocalDateTime;)Ljava/lang/String;");
-    DCHECK(_util_format_localdatetime != nullptr);
+    RETURN_IF_ERROR(_init_jdbc_util());
 
     return Status::OK();
 }
@@ -70,13 +52,8 @@ Status JDBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         *eos = true;
         return Status::OK();
     }
-    jobject jchunk;
-    DeferOp defer([&jchunk, this]() {
-        if (jchunk != nullptr) {
-            _jni_env->DeleteLocalRef(jchunk);
-        }
-    });
-
+    jobject jchunk = nullptr;
+    LOCAL_REF_GUARD(jchunk);
     RETURN_IF_ERROR(_get_next_chunk(&jchunk));
     RETURN_IF_ERROR(_fill_chunk(jchunk, chunk));
     return Status::OK();
@@ -88,80 +65,93 @@ Status JDBCScanner::close(RuntimeState* state) {
 
 Status JDBCScanner::_init_jdbc_bridge() {
     // 1. construct JDBCBridge
-    _jdbc_bridge_cls = _jni_env->FindClass(JDBC_BRIDGE_CLASS_NAME);
-    DCHECK(_jdbc_bridge_cls != nullptr);
+    auto& h = JVMFunctionHelper::getInstance();
+    auto* env = h.getEnv();
 
-    jmethodID constructor = _jni_env->GetMethodID(_jdbc_bridge_cls, "<init>", "()V");
-    DCHECK(constructor != nullptr);
+    auto jdbc_bridge_cls = env->FindClass(JDBC_BRIDGE_CLASS_NAME);
+    DCHECK(jdbc_bridge_cls != nullptr);
+    _jdbc_bridge_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_bridge_cls));
+    LOCAL_REF_GUARD_ENV(env, jdbc_bridge_cls);
 
-    _jdbc_bridge = _jni_env->NewObject(_jdbc_bridge_cls, constructor);
+    ASSIGN_OR_RETURN(_jdbc_bridge, _jdbc_bridge_cls->newInstance());
 
     // 2. set class loader
-    jmethodID set_class_loader = _jni_env->GetMethodID(_jdbc_bridge_cls, "setClassLoader", "(Ljava/lang/String;)V");
+    jmethodID set_class_loader = env->GetMethodID(_jdbc_bridge_cls->clazz(), "setClassLoader", "(Ljava/lang/String;)V");
     DCHECK(set_class_loader != nullptr);
 
-    jstring driver_location = _jni_env->NewStringUTF(_scan_ctx.driver_path.c_str());
-    _jni_env->CallVoidMethod(_jdbc_bridge, set_class_loader, driver_location);
-    _jni_env->DeleteLocalRef(driver_location);
-    CHECK_JAVA_EXCEPTION("set class loader failed")
+    jstring driver_location = env->NewStringUTF(_scan_ctx.driver_path.c_str());
+    LOCAL_REF_GUARD_ENV(env, driver_location);
+    env->CallVoidMethod(_jdbc_bridge.handle(), set_class_loader, driver_location);
+    CHECK_JAVA_EXCEPTION(env, "set class loader failed")
 
     return Status::OK();
 }
 
 Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
-    jclass scan_context_cls = _jni_env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
+    // scan
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+
+    jclass scan_context_cls = env->FindClass(JDBC_SCAN_CONTEXT_CLASS_NAME);
     DCHECK(scan_context_cls != nullptr);
+    LOCAL_REF_GUARD_ENV(env, scan_context_cls);
 
-    jmethodID constructor = _jni_env->GetMethodID(
+    jmethodID constructor = env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
-    jstring driver_class_name = _jni_env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
-    jstring jdbc_url = _jni_env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
-    jstring user = _jni_env->NewStringUTF(_scan_ctx.user.c_str());
-    jstring passwd = _jni_env->NewStringUTF(_scan_ctx.passwd.c_str());
-    jstring sql = _jni_env->NewStringUTF(_scan_ctx.sql.c_str());
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)V");
+    jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
+    LOCAL_REF_GUARD_ENV(env, driver_class_name);
+    jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
+    LOCAL_REF_GUARD_ENV(env, jdbc_url);
+    jstring user = env->NewStringUTF(_scan_ctx.user.c_str());
+    LOCAL_REF_GUARD_ENV(env, user);
+    jstring passwd = env->NewStringUTF(_scan_ctx.passwd.c_str());
+    LOCAL_REF_GUARD_ENV(env, passwd);
+    jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
+    LOCAL_REF_GUARD_ENV(env, sql);
     int statement_fetch_size = state->chunk_size();
+    int connection_pool_size = config::jdbc_connection_pool_size;
 
-    _jdbc_scan_context = _jni_env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd,
-                                             sql, statement_fetch_size);
-
-    _jni_env->DeleteLocalRef(driver_class_name);
-    _jni_env->DeleteLocalRef(jdbc_url);
-    _jni_env->DeleteLocalRef(user);
-    _jni_env->DeleteLocalRef(passwd);
-    _jni_env->DeleteLocalRef(sql);
-    CHECK_JAVA_EXCEPTION("construct JDBCScanContext failed")
+    auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
+                                   statement_fetch_size, connection_pool_size);
+    _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
+    LOCAL_REF_GUARD_ENV(env, scan_ctx);
+    CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
 
     return Status::OK();
 }
 
 Status JDBCScanner::_init_jdbc_scanner() {
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+
     jmethodID get_scanner =
-            _jni_env->GetMethodID(_jdbc_bridge_cls, "getScanner",
-                                  "(Lcom/starrocks/jdbcbridge/JDBCScanContext;)Lcom/starrocks/jdbcbridge/JDBCScanner;");
+            env->GetMethodID(_jdbc_bridge_cls->clazz(), "getScanner",
+                             "(Lcom/starrocks/jdbcbridge/JDBCScanContext;)Lcom/starrocks/jdbcbridge/JDBCScanner;");
     DCHECK(get_scanner != nullptr);
 
-    _jdbc_scanner = _jni_env->CallObjectMethod(_jdbc_bridge, get_scanner, _jdbc_scan_context);
-    _jni_env->DeleteLocalRef(_jdbc_scan_context);
-    _jni_env->DeleteLocalRef(_jdbc_bridge);
-    CHECK_JAVA_EXCEPTION("get JDBCScanner failed")
+    auto jdbc_scanner = env->CallObjectMethod(_jdbc_bridge.handle(), get_scanner, _jdbc_scan_context.handle());
+    _jdbc_scanner = env->NewGlobalRef(jdbc_scanner);
+    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+    CHECK_JAVA_EXCEPTION(env, "get JDBCScanner failed")
 
-    _jdbc_scanner_cls = _jni_env->FindClass(JDBC_SCANNER_CLASS_NAME);
+    auto jdbc_scanner_cls = env->FindClass(JDBC_SCANNER_CLASS_NAME);
+    _jdbc_scanner_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_scanner_cls));
+    LOCAL_REF_GUARD_ENV(env, jdbc_scanner);
+
     DCHECK(_jdbc_scanner_cls != nullptr);
     // init jmethod
-    _scanner_has_next = _jni_env->GetMethodID(_jdbc_scanner_cls, "hasNext", "()Z");
+    _scanner_has_next = env->GetMethodID(_jdbc_scanner_cls->clazz(), "hasNext", "()Z");
     DCHECK(_scanner_has_next != nullptr);
-    _scanner_get_next_chunk = _jni_env->GetMethodID(_jdbc_scanner_cls, "getNextChunk", "()Ljava/util/List;");
+    _scanner_get_next_chunk = env->GetMethodID(_jdbc_scanner_cls->clazz(), "getNextChunk", "()Ljava/util/List;");
     DCHECK(_scanner_get_next_chunk != nullptr);
-    _scanner_close = _jni_env->GetMethodID(_jdbc_scanner_cls, "close", "()V");
+    _scanner_close = env->GetMethodID(_jdbc_scanner_cls->clazz(), "close", "()V");
     DCHECK(_scanner_close != nullptr);
 
     // open scanner
-    jmethodID scanner_open = _jni_env->GetMethodID(_jdbc_scanner_cls, "open", "()V");
+    jmethodID scanner_open = env->GetMethodID(_jdbc_scanner_cls->clazz(), "open", "()V");
     DCHECK(scanner_open != nullptr);
 
-    _jni_env->CallVoidMethod(_jdbc_scanner, scanner_open);
-    CHECK_JAVA_EXCEPTION("open JDBCScanner failed")
+    env->CallVoidMethod(_jdbc_scanner.handle(), scanner_open);
+    CHECK_JAVA_EXCEPTION(env, "open JDBCScanner failed")
 
     return Status::OK();
 }
@@ -253,50 +243,79 @@ Status JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescr
 }
 
 Status JDBCScanner::_init_column_class_name() {
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+
     jmethodID get_result_column_class_names =
-            _jni_env->GetMethodID(_jdbc_scanner_cls, "getResultColumnClassNames", "()Ljava/util/List;");
+            env->GetMethodID(_jdbc_scanner_cls->clazz(), "getResultColumnClassNames", "()Ljava/util/List;");
     DCHECK(get_result_column_class_names != nullptr);
 
-    jobject column_class_names = _jni_env->CallObjectMethod(_jdbc_scanner, get_result_column_class_names);
-    CHECK_JAVA_EXCEPTION("get JDBC result column class name failed")
+    jobject column_class_names = env->CallObjectMethod(_jdbc_scanner.handle(), get_result_column_class_names);
+    CHECK_JAVA_EXCEPTION(env, "get JDBC result column class name failed")
+    LOCAL_REF_GUARD_ENV(env, column_class_names);
 
     auto& helper = JVMFunctionHelper::getInstance();
     int len = helper.list_size(column_class_names);
 
     for (int i = 0; i < len; i++) {
         jobject jelement = helper.list_get(column_class_names, i);
-        DeferOp defer([&jelement, this]() { _jni_env->DeleteLocalRef(jelement); });
+        LOCAL_REF_GUARD_ENV(env, jelement);
         std::string class_name = helper.to_string((jstring)(jelement));
         RETURN_IF_ERROR(_precheck_data_type(class_name, _slot_descs[i]));
         _column_class_name.emplace_back(class_name);
     }
-    _jni_env->DeleteLocalRef(column_class_names);
 
     return Status::OK();
 }
 
+Status JDBCScanner::_init_jdbc_util() {
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+
+    // init JDBCUtil method
+    auto jdbc_util_cls = env->FindClass(JDBC_UTIL_CLASS_NAME);
+    DCHECK(jdbc_util_cls != nullptr);
+    _jdbc_util_cls = std::make_unique<JVMClass>(env->NewGlobalRef(jdbc_util_cls));
+    LOCAL_REF_GUARD_ENV(env, jdbc_util_cls);
+
+    _util_format_date =
+            env->GetStaticMethodID(_jdbc_util_cls->clazz(), "formatDate", "(Ljava/sql/Date;)Ljava/lang/String;");
+    DCHECK(_util_format_date != nullptr);
+    _util_format_localdatetime = env->GetStaticMethodID(_jdbc_util_cls->clazz(), "formatLocalDatetime",
+                                                        "(Ljava/time/LocalDateTime;)Ljava/lang/String;");
+    DCHECK(_util_format_localdatetime != nullptr);
+    return Status::OK();
+}
+
 Status JDBCScanner::_has_next(bool* result) {
-    jboolean ret = _jni_env->CallBooleanMethod(_jdbc_scanner, _scanner_has_next);
-    CHECK_JAVA_EXCEPTION("call JDBCScanner hasNext failed")
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    jboolean ret = env->CallBooleanMethod(_jdbc_scanner.handle(), _scanner_has_next);
+    CHECK_JAVA_EXCEPTION(env, "call JDBCScanner hasNext failed")
     *result = ret;
     return Status::OK();
 }
 
 Status JDBCScanner::_get_next_chunk(jobject* chunk) {
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
     SCOPED_TIMER(_profile.io_timer);
     COUNTER_UPDATE(_profile.io_counter, 1);
-    *chunk = _jni_env->CallObjectMethod(_jdbc_scanner, _scanner_get_next_chunk);
-    CHECK_JAVA_EXCEPTION("getNextChunk failed")
+    *chunk = env->CallObjectMethod(_jdbc_scanner.handle(), _scanner_get_next_chunk);
+    CHECK_JAVA_EXCEPTION(env, "getNextChunk failed")
     return Status::OK();
 }
 
 Status JDBCScanner::_close_jdbc_scanner() {
-    if (_jdbc_scanner == nullptr) {
+    auto* env = JVMFunctionHelper::getInstance().getEnv();
+    if (_jdbc_scanner.handle() == nullptr) {
         return Status::OK();
     }
-    _jni_env->CallVoidMethod(_jdbc_scanner, _scanner_close);
-    _jni_env->DeleteLocalRef(_jdbc_scanner);
-    CHECK_JAVA_EXCEPTION("close JDBCScanner failed")
+    env->CallVoidMethod(_jdbc_scanner.handle(), _scanner_close);
+    CHECK_JAVA_EXCEPTION(env, "close JDBCScanner failed")
+
+    _jdbc_scanner.clear();
+    _jdbc_scan_context.clear();
+    _jdbc_bridge.clear();
+    _jdbc_util_cls.reset();
+    _jdbc_scanner_cls.reset();
+    _jdbc_bridge_cls.reset();
     return Status::OK();
 }
 
@@ -323,7 +342,6 @@ template <>
 Status JDBCScanner::_append_value_from_result<std::string>(jobject jval,
                                                            std::function<std::string(jobject)> get_value_func,
                                                            SlotDescriptor* slot_desc, Column* column) {
-    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
     PROCESS_NULL_VALUE(jval, column)
 
     std::string cpp_val = get_value_func(jval);
@@ -351,7 +369,6 @@ Status JDBCScanner::_append_value_from_result<std::string>(jobject jval,
 template <typename CppType>
 Status JDBCScanner::_append_value_from_result(jobject jval, std::function<CppType(jobject)> get_value_func,
                                               SlotDescriptor* slot_desc, Column* column) {
-    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
     PROCESS_NULL_VALUE(jval, column)
 
 #define CHECK_DATA_OVERFLOW(val, min_val, max_val)                                                                  \
@@ -405,26 +422,28 @@ Status JDBCScanner::_append_value_from_result(jobject jval, std::function<CppTyp
 Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
     SCOPED_TIMER(_profile.fill_chunk_timer);
     auto& helper = JVMFunctionHelper::getInstance();
+    auto* env = helper.getEnv();
     jobject first_column = helper.list_get(jchunk, 0);
     int num_rows = helper.list_size(first_column);
-    _jni_env->DeleteLocalRef(first_column);
-    COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
+    LOCAL_REF_GUARD_ENV(env, first_column);
 
+    COUNTER_UPDATE(_profile.rows_read_counter, num_rows);
     for (size_t col_idx = 0; col_idx < _slot_descs.size(); col_idx++) {
         SlotDescriptor* slot_desc = _slot_descs[col_idx];
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         const auto& column_class = _column_class_name[col_idx];
 
         jobject jcolumn = helper.list_get(jchunk, col_idx);
-        DeferOp defer([&jcolumn, this]() { _jni_env->DeleteLocalRef(jcolumn); });
+        LOCAL_REF_GUARD_ENV(env, jcolumn);
 
-#define FILL_COLUMN(get_value_func, cpp_type)                                                                         \
-    {                                                                                                                 \
-        auto func = std::bind(&JVMFunctionHelper::get_value_func, &helper, std::placeholders::_1);                    \
-        for (int i = 0; i < num_rows; i++) {                                                                          \
-            RETURN_IF_ERROR(                                                                                          \
-                    _append_value_from_result<cpp_type>(helper.list_get(jcolumn, i), func, slot_desc, column.get())); \
-        }                                                                                                             \
+#define FILL_COLUMN(get_value_func, cpp_type)                                                         \
+    {                                                                                                 \
+        auto func = std::bind(&JVMFunctionHelper::get_value_func, &helper, std::placeholders::_1);    \
+        for (int i = 0; i < num_rows; i++) {                                                          \
+            auto ele = helper.list_get(jcolumn, i);                                                   \
+            LOCAL_REF_GUARD_ENV(env, ele);                                                            \
+            RETURN_IF_ERROR(_append_value_from_result<cpp_type>(ele, func, slot_desc, column.get())); \
+        }                                                                                             \
     }
         if (column_class == "java.lang.Short") {
             FILL_COLUMN(valint16_t, int16_t);
@@ -443,21 +462,29 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
         } else if (column_class == "java.sql.Timestamp") {
             DCHECK(slot_desc->type().type == TYPE_DATETIME);
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_datetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                auto ele = helper.list_get(jcolumn, i);
+                LOCAL_REF_GUARD_ENV(env, ele);
+                RETURN_IF_ERROR(_append_datetime_val(env, ele, slot_desc, column.get()));
             }
         } else if (column_class == "java.sql.Date") {
             DCHECK(slot_desc->type().type == TYPE_DATE);
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_date_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                auto ele = helper.list_get(jcolumn, i);
+                LOCAL_REF_GUARD_ENV(env, ele);
+                RETURN_IF_ERROR(_append_date_val(env, ele, slot_desc, column.get()));
             }
         } else if (column_class == "java.time.LocalDateTime") {
             DCHECK(slot_desc->type().type == TYPE_DATETIME);
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_localdatetime_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                auto ele = helper.list_get(jcolumn, i);
+                LOCAL_REF_GUARD_ENV(env, ele);
+                RETURN_IF_ERROR(_append_localdatetime_val(env, ele, slot_desc, column.get()));
             }
         } else if (column_class == "java.math.BigDecimal") {
             for (int i = 0; i < num_rows; i++) {
-                RETURN_IF_ERROR(_append_decimal_val(helper.list_get(jcolumn, i), slot_desc, column.get()));
+                auto ele = helper.list_get(jcolumn, i);
+                LOCAL_REF_GUARD_ENV(env, ele);
+                RETURN_IF_ERROR(_append_decimal_val(env, ele, slot_desc, column.get()));
             }
         } else {
             return Status::InternalError(fmt::format("not support type {}", column_class));
@@ -466,10 +493,8 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status JDBCScanner::_append_datetime_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
+Status JDBCScanner::_append_datetime_val(JNIEnv* env, jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
-    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
-
     std::string origin_str = JVMFunctionHelper::getInstance().to_string(jval);
     std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
     TimestampValue tsv;
@@ -481,11 +506,10 @@ Status JDBCScanner::_append_datetime_val(jobject jval, SlotDescriptor* slot_desc
     return Status::OK();
 }
 
-Status JDBCScanner::_append_localdatetime_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
+Status JDBCScanner::_append_localdatetime_val(JNIEnv* env, jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
-    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
 
-    std::string localdatetime_str = _get_localdatetime_string(jval);
+    std::string localdatetime_str = _get_localdatetime_string(env, jval);
     TimestampValue tsv;
     if (!tsv.from_datetime_format_str(localdatetime_str.c_str(), localdatetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
         return Status::DataQualityError(fmt::format("Invalid datetime value occurs on column[{}], value is [{}]",
@@ -495,11 +519,9 @@ Status JDBCScanner::_append_localdatetime_val(jobject jval, SlotDescriptor* slot
     return Status::OK();
 }
 
-Status JDBCScanner::_append_date_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
+Status JDBCScanner::_append_date_val(JNIEnv* env, jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
-    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
-
-    std::string date_str = _get_date_string(jval);
+    std::string date_str = _get_date_string(env, jval);
     DateValue dv;
     if (!dv.from_string(date_str.c_str(), date_str.size())) {
         return Status::DataQualityError(
@@ -509,23 +531,23 @@ Status JDBCScanner::_append_date_val(jobject jval, SlotDescriptor* slot_desc, Co
     return Status::OK();
 }
 
-std::string JDBCScanner::_get_date_string(jobject jval) {
-    jstring date_str = (jstring)_jni_env->CallStaticObjectMethod(_jdbc_util_cls, _util_format_date, jval);
+std::string JDBCScanner::_get_date_string(JNIEnv* env, jobject jval) {
+    jstring date_str = (jstring)env->CallStaticObjectMethod(_jdbc_util_cls->clazz(), _util_format_date, jval);
     std::string result = JVMFunctionHelper::getInstance().to_string(date_str);
-    _jni_env->DeleteLocalRef(date_str);
+    LOCAL_REF_GUARD_ENV(env, date_str);
     return result;
 }
 
-std::string JDBCScanner::_get_localdatetime_string(jobject jval) {
-    jstring datetime_str = (jstring)_jni_env->CallStaticObjectMethod(_jdbc_util_cls, _util_format_localdatetime, jval);
+std::string JDBCScanner::_get_localdatetime_string(JNIEnv* env, jobject jval) {
+    jstring datetime_str =
+            (jstring)env->CallStaticObjectMethod(_jdbc_util_cls->clazz(), _util_format_localdatetime, jval);
     std::string result = JVMFunctionHelper::getInstance().to_string(datetime_str);
-    _jni_env->DeleteLocalRef(datetime_str);
+    LOCAL_REF_GUARD_ENV(env, datetime_str);
     return result;
 }
 
-Status JDBCScanner::_append_decimal_val(jobject jval, SlotDescriptor* slot_desc, Column* column) {
+Status JDBCScanner::_append_decimal_val(JNIEnv* env, jobject jval, SlotDescriptor* slot_desc, Column* column) {
     PROCESS_NULL_VALUE(jval, column)
-    DeferOp defer([&jval, this]() { _jni_env->DeleteLocalRef(jval); });
 
     auto type = slot_desc->type().type;
     int precision = slot_desc->type().precision;
