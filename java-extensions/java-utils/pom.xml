@@ -9,47 +9,34 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>udf-extensions</artifactId>
-    <dependencies>
-        <dependency>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm</artifactId>
-            <version>9.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.ow2.asm</groupId>
-            <artifactId>asm-util</artifactId>
-            <version>9.1</version>
-        </dependency>
-        <!-- https://mvnrepository.com/artifact/junit/junit -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.1</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>java-utils</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-
-    </dependencies>
+    <artifactId>java-utils</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <build>
-        <finalName>udf-extensions</finalName>
+        <finalName>starrocks-java-utils</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${compiler-plugin.version}</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
+            <!-- copy all dependency libs to target lib dir -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
-                <version>2.10</version>
+                <version>3.1.1</version>
                 <executions>
                     <execution>
                         <id>copy-dependencies</id>
@@ -58,7 +45,8 @@
                             <goal>copy-dependencies</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                            <outputDirectory>${project.build.directory}/java-utils</outputDirectory>
+                            <overWriteIfNewer>true</overWriteIfNewer>
                         </configuration>
                     </execution>
                 </executions>
@@ -66,7 +54,14 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.3.0</version>
+                <version>3.1.1</version>
+
+                <configuration>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                </configuration>
+
                 <executions>
                     <execution>
                         <id>make-assembly</id>
@@ -76,11 +71,6 @@
                         </goals>
                     </execution>
                 </executions>
-                <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
             </plugin>
         </plugins>
     </build>
