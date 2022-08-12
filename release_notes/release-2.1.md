@@ -1,5 +1,22 @@
 # StarRocks version 2.1
 
+## 2.1.12
+
+发布日期：2022年8月9日
+
+### 功能优化
+
+增加`bdbje_cleaner_threads`和`bdbje_replay_cost_percent`两个参数，以加速清理 BDB JE 中的元数据。[#8371](https://github.com/StarRocks/starrocks/pull/8371)
+
+### Bug 修复
+
+修复了如下 Bug：
+
+- 一些查询会被转发到 Leader FE 节点上，从而可能导致通过 `/api/query_detail` 接口获得的 SQL 语句执行信息不正确，比如 SHOW FRONTENDS 语句。[#9185](https://github.com/StarRocks/starrocks/issues/9185)
+- 停止 BE 后，当前进程未完全退出，导致重启 BE 失败。[#9175](https://github.com/StarRocks/starrocks/pull/9267)
+- 提交多个 Broker Load 作业同时导入相同 HDFS 文件的数据时，如果有一个作业出现异常，可能会导致其他作业也无法正常读取数据并且最终失败。[#9506](https://github.com/StarRocks/starrocks/issues/9506)
+- 表结构变更后，相关变量未重置，导致查询该表报错：`no delete vector found tablet`。[#9192](https://github.com/StarRocks/starrocks/issues/9192)
+
 ## 2.1.11
 
 发布日期：2022年7月9日
