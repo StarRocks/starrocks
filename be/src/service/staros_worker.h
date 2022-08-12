@@ -31,7 +31,7 @@ public:
     using FileSystem = staros::starlet::fslib::FileSystem;
     using Configuration = staros::starlet::fslib::Configuration;
 
-    StarOSWorker() : _service_id(0), _worker_id(0) {}
+    StarOSWorker() : _service_id(), _worker_id(0) {}
 
     ~StarOSWorker() override = default;
 
