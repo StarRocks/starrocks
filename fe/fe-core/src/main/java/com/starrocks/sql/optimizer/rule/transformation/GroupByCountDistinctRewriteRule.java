@@ -156,20 +156,20 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             String firstFn = OTHER_FUNCTION_TRANS.get(origin.getFunctionName().getFunction()).first;
             String secondFn = OTHER_FUNCTION_TRANS.get(origin.getFunctionName().getFunction()).second;
 
-            CallOperator firstAgg = genAggregation(firstFn, origin.getArgs(), v.getChildren());
+            CallOperator firstAgg = genAggregation(firstFn, origin.getArgs(), v.getChildren(), v);
             ColumnRefOperator firstOutput = factory.create(firstAgg, firstAgg.getType(), firstAgg.isNullable());
 
             firstAggregations.put(firstOutput, firstAgg);
 
             CallOperator secondAgg =
-                    genAggregation(secondFn, new Type[] {firstAgg.getType()}, Lists.newArrayList(firstOutput));
+                    genAggregation(secondFn, new Type[] {firstAgg.getType()}, Lists.newArrayList(firstOutput), v);
             secondAggregations.put(k, secondAgg);
         });
 
         distinctMap.forEach((k, v) -> {
             Function origin = v.getFunction();
             String secondFn = DISTINCT_FUNCTION_TRANS.get(origin.getFunctionName().getFunction());
-            CallOperator secondAgg = genAggregation(secondFn, origin.getArgs(), v.getChildren());
+            CallOperator secondAgg = genAggregation(secondFn, origin.getArgs(), v.getChildren(), v);
             secondAggregations.put(k, secondAgg);
         });
 
@@ -182,7 +182,11 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
     }
 
     @NotNull
-    private CallOperator genAggregation(String name, Type[] argTypes, List<ScalarOperator> args) {
+    private CallOperator genAggregation(String name, Type[] argTypes, List<ScalarOperator> args, CallOperator origin) {
+        if (FunctionSet.SUM.equals(name) || FunctionSet.MAX.equals(name) || FunctionSet.MIN.equals(name)) {
+            // for decimal
+            return new CallOperator(name, origin.getType(), args, origin.getFunction());
+        }
         Function fn = Expr.getBuiltinFunction(name, argTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         return new CallOperator(name, fn.getReturnType(), args, fn);
     }
