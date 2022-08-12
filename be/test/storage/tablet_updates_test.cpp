@@ -1228,7 +1228,7 @@ void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent
             break;
         }
         std::cerr << "waiting for compaction applied\n";
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
 }
 
