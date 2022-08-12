@@ -214,7 +214,8 @@ public class PseudoCluster {
 
         BasicDataSource dataSource = new BasicDataSource();
         dataSource.setUrl(
-                "jdbc:mysql://localhost:" + queryPort + "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false");
+                "jdbc:mysql://127.0.0.1:" + queryPort +
+                        "/?permitMysqlScheme&usePipelineAuth=false&useBatchMultiSend=false&autoReconnect=true&failOverReadOnly=false&maxReconnects=10");
         dataSource.setUsername("root");
         dataSource.setPassword("");
         dataSource.setMaxTotal(40);

@@ -86,7 +86,7 @@ public class PseudoFrontend {
 
         this.runningDir = runningDir;
         this.fakeJournal = fakeJournal;
-        System.out.println("mocked frontend running in dir: " + new File(this.runningDir).getAbsolutePath());
+        System.out.println("pseudo frontend running in dir: " + new File(this.runningDir).getAbsolutePath());
 
         // root running dir
         createAndClearDir(this.runningDir);

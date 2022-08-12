@@ -204,10 +204,10 @@ public class ConcurrentTxnTest {
         for (int i = 0; i < runTime; i++) {
             DBLoad dbLoad = new DBLoad(numDB, numTable, withRead);
             dbLoad.run(numThread, runSeconds);
+            System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
+                    totalRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(), Tablet.getTotalReadFailed());
+            Assert.assertEquals(totalRead.get(), Tablet.getTotalReadSucceed());
         }
-        System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
-                totalRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(), Tablet.getTotalReadFailed());
-        Assert.assertEquals(totalRead.get(), Tablet.getTotalReadSucceed());
         PseudoCluster.getInstance().shutdown(true);
     }
 }

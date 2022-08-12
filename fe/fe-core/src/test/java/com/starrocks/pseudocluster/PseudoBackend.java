@@ -112,6 +112,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -121,8 +122,11 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class PseudoBackend {
     private static final Logger LOG = LogManager.getLogger(PseudoBackend.class);
-    private static final int REPORT_INTERVAL_SEC = 5;
     public static final long PATH_HASH = 123456;
+
+    public static volatile long reportIntervalMs = 5000L;
+
+    public static volatile long tabletCheckIntervalMs = 5000L;
 
     private final PseudoCluster cluster;
     private final String runPath;
@@ -140,9 +144,9 @@ public class PseudoBackend {
     private final BlockingQueue<TAgentTaskRequest> taskQueue = Queues.newLinkedBlockingQueue();
     private final Map<TTaskType, Set<Long>> taskSignatures = new EnumMap(TTaskType.class);
     private volatile boolean stopped = false;
-    private Thread reportTabletsWorker;
-    private Thread reportDisksWorker;
-    private Thread reportTasksWorker;
+
+    private TreeMap<Long, Runnable> maintenanceTasks = new TreeMap<>(Long::compare);
+    private Thread maintenanceWorkerThread;
 
     private volatile float writeFailureRate = 0.0f;
     private volatile float publishFailureRate = 0.0f;
@@ -164,6 +168,44 @@ public class PseudoBackend {
 
     String genRowsetId() {
         return String.format("rowset-%d-%d", be.getId(), nextRowsetId.incrementAndGet());
+    }
+
+    private void maintenanceWorker() {
+        currentBackend.set(PseudoBackend.this);
+        while (!stopped) {
+            try {
+                Runnable task;
+                synchronized (maintenanceTasks) {
+                    if (maintenanceTasks.isEmpty()) {
+                        Thread.sleep(500);
+                        continue;
+                    }
+                    long ts = maintenanceTasks.firstKey();
+                    long now = System.nanoTime();
+                    if (ts > now) {
+                        Thread.sleep(500);
+                        continue;
+                    }
+                    task = maintenanceTasks.pollFirstEntry().getValue();
+                }
+                task.run();
+            } catch (Throwable e) {
+                LOG.error("Error in maintenance worker be:" + getId(), e);
+            }
+        }
+        LOG.info("Maintenance worker stopped be:" + getId());
+    }
+
+    private void addMaintenanceTask(long ts, Runnable task) {
+        synchronized (maintenanceTasks) {
+            maintenanceTasks.put(ts, task);
+        }
+    }
+
+    private long nextScheduleTime(long intervalMs) {
+        // add -500 ~ 500 ms jitter
+        long randomMs = (random.nextInt(11) - 5) * 100;
+        return System.nanoTime() + intervalMs * 1000000 + randomMs;
     }
 
     public PseudoBackend(PseudoCluster cluster, String runPath, long backendId, String host, int brpcPort, int heartBeatPort,
@@ -202,86 +244,13 @@ public class PseudoBackend {
         this.backendClient = new BeThriftClient();
         this.pBackendService = new PseudoPBackendService();
 
-        reportTabletsWorker = new Thread(() -> {
-            currentBackend.set(PseudoBackend.this);
-            while (!stopped) {
-                try {
-                    Random r = new Random();
-                    int wait = REPORT_INTERVAL_SEC + r.nextInt(7) - 3;
-                    for (int i = 0; i < wait; i++) {
-                        Thread.sleep(1000);
-                        if (stopped) {
-                            break;
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    LOG.error("reportWorker interrupted", e);
-                }
-                if (stopped) {
-                    break;
-                }
-                try {
-                    reportTablets();
-                } catch (Exception e) {
-                    LOG.error("reportWorker error", e);
-                }
-            }
-        }, "reportTablets-" + be.getId());
-        reportTabletsWorker.start();
+        maintenanceWorkerThread = new Thread(() -> maintenanceWorker(), "be-" + getId());
+        maintenanceWorkerThread.start();
 
-        reportDisksWorker = new Thread(() -> {
-            currentBackend.set(PseudoBackend.this);
-            while (!stopped) {
-                try {
-                    Random r = new Random();
-                    int wait = REPORT_INTERVAL_SEC + r.nextInt(7) - 3;
-                    for (int i = 0; i < wait; i++) {
-                        Thread.sleep(1000);
-                        if (stopped) {
-                            break;
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    LOG.error("reportWorker interrupted", e);
-                }
-                if (stopped) {
-                    break;
-                }
-                try {
-                    reportDisks();
-                } catch (Exception e) {
-                    LOG.error("reportWorker error", e);
-                }
-            }
-        }, "reportDisks-" + be.getId());
-        reportDisksWorker.start();
-
-        reportTasksWorker = new Thread(() -> {
-            currentBackend.set(PseudoBackend.this);
-            while (!stopped) {
-                try {
-                    Random r = new Random();
-                    int wait = REPORT_INTERVAL_SEC + r.nextInt(7) - 3;
-                    for (int i = 0; i < wait; i++) {
-                        Thread.sleep(1000);
-                        if (stopped) {
-                            break;
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    LOG.error("reportWorker interrupted", e);
-                }
-                if (stopped) {
-                    break;
-                }
-                try {
-                    reportTasks();
-                } catch (Exception e) {
-                    LOG.error("reportWorker error", e);
-                }
-            }
-        }, "reportTasks-" + be.getId());
-        reportTasksWorker.start();
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTablets);
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportDisks);
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTasks);
+        addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
     }
 
     public String getHost() {
@@ -333,8 +302,8 @@ public class PseudoBackend {
             LOG.info("report {} tablets", request.tablets.size());
         } catch (TException e) {
             LOG.error("report tablets error", e);
-            return;
         }
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTablets);
     }
 
     private void reportDisks() {
@@ -362,8 +331,8 @@ public class PseudoBackend {
             LOG.info("report {} disks", request.disks.size());
         } catch (TException e) {
             LOG.error("report disk error", e);
-            return;
         }
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportDisks);
     }
 
     private void reportTasks() {
@@ -387,8 +356,13 @@ public class PseudoBackend {
             LOG.info("report {} tasks", request.tasks.size());
         } catch (TException e) {
             LOG.error("report tasks error", e);
-            return;
         }
+        addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTasks);
+    }
+
+    private void tabletMaintenance() {
+        tabletManager.maintenance();
+        addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
     }
 
     public static TStatus toStatus(Exception e) {
