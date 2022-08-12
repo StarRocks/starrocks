@@ -37,7 +37,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |force_do_metadata_checkpoint|FALSE|无论 JVM 内存使用率多少，都会产生元数据的 Checkpoint。|
 |ignore_meta_check|FALSE|忽略元数据落后的情形。|
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。|
-|enable_collect_query_detail_info|false|否需要查看查询的 profile。|
+|enable_collect_query_detail_info|FALSE|是否需要查看查询的 profile。|
 
 #### Query Engine 相关动态参数
 
