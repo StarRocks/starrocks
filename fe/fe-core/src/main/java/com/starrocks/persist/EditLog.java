@@ -852,6 +852,9 @@ public class EditLog {
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should expire cache here.
+                    globalStateMgr.getAnalyzeManager().expireBasicStatisticsCache(basicStatsMeta);
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -862,6 +865,9 @@ public class EditLog {
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should expire cache here.
+                    globalStateMgr.getAnalyzeManager().expireHistogramStatisticsCache(histogramStatsMeta);
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {

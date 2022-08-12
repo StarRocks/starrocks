@@ -15,6 +15,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 public class BasicStatsMeta implements Writable {
@@ -23,6 +24,9 @@ public class BasicStatsMeta implements Writable {
 
     @SerializedName("tableId")
     private long tableId;
+
+    @SerializedName("columns")
+    private List<String> columns;
 
     @SerializedName("type")
     private StatsConstants.AnalyzeType type;
@@ -36,12 +40,13 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("updateRows")
     private long updateRows;
 
-    public BasicStatsMeta(long dbId, long tableId,
+    public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
                           Map<String, String> properties) {
         this.dbId = dbId;
         this.tableId = tableId;
+        this.columns = columns;
         this.type = type;
         this.updateTime = updateTime;
         this.properties = properties;
@@ -65,6 +70,10 @@ public class BasicStatsMeta implements Writable {
 
     public long getTableId() {
         return tableId;
+    }
+
+    public List<String> getColumns() {
+        return columns;
     }
 
     public StatsConstants.AnalyzeType getType() {
