@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <optional>
 
 #include "gen_cpp/InternalService_types.h"
@@ -93,7 +94,7 @@ public:
     virtual size_t num_original_morsels() const = 0;
     virtual size_t max_degree_of_parallelism() const = 0;
     virtual bool empty() const = 0;
-    virtual StatusOr<MorselPtr> try_get() = 0;
+    virtual StatusOr<MorselPtr> try_get(int driver_seq) = 0;
 
     virtual std::string name() const = 0;
 
@@ -103,16 +104,15 @@ public:
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels)
-            : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0) {}
+    explicit FixedMorselQueue(Morsels&& morsels, int dop);
     ~FixedMorselQueue() override = default;
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
     size_t num_original_morsels() const override { return _num_morsels; }
     size_t max_degree_of_parallelism() const override { return _num_morsels; }
-    bool empty() const override { return _pop_index >= _num_morsels; }
-    StatusOr<MorselPtr> try_get() override;
+    bool empty() const override;
+    StatusOr<MorselPtr> try_get(int driver_seq) override;
 
     std::string name() const override { return "fixed_morsel_queue"; }
 
@@ -120,6 +120,11 @@ private:
     Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
+
+    bool _assign_morsels = false;
+    int _scan_dop;
+    std::map<int, Morsels> _morsels_per_operator;
+    std::map<int, std::atomic_size_t> _next_morsel_index_per_operator;
 };
 
 class PhysicalSplitMorselQueue final : public MorselQueue {
@@ -142,7 +147,7 @@ public:
     size_t num_original_morsels() const override { return _morsels.size(); }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override { return _tablet_idx >= _tablets.size(); }
-    StatusOr<MorselPtr> try_get() override;
+    StatusOr<MorselPtr> try_get(int driver_seq) override;
 
     std::string name() const override { return "physical_split_morsel_queue"; }
 

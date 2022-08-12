@@ -93,6 +93,8 @@ public:
     const std::string& name() const { return _name; }
 
 protected:
+    int _scan_dop(const std::vector<TScanRangeParams>& scan_ranges, const TExecPlanFragmentParams& request) const;
+
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
     RuntimeProfile::Counter* _rows_read_counter;
