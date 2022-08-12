@@ -10,7 +10,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,7 +24,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     " $mcv," +
                     " NOW()" +
                     " FROM (SELECT $columnName FROM $dbName.$tableName where rand() <= $sampleRatio" +
-                    " and $columnName is not null $topNExclude" +
+                    " and $columnName is not null $MCVExclude" +
                     " ORDER BY $columnName LIMIT $totalRows) t";
 
     private static final String COLLECT_MCV_STATISTIC_TEMPLATE =
@@ -36,7 +35,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "$tableId as table_id, " +
                     "`$columnName` as column_key, " +
                     "count(`$columnName`) as column_value " +
-                    "from $dbName.$tableName " +
+                    "from $dbName.$tableName where `$columnName` is not null " +
                     "group by `$columnName` " +
                     "order by count(`$columnName`) desc limit $topN ) t";
 
@@ -53,12 +52,12 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));
-        long topN = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_TOPN_SIZE));
+        long mcvSize = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_MCV_SIZE));
 
         for (String column : columns) {
-            String sql = buildCollectMCV(db, table, topN, column);
+            String sql = buildCollectMCV(db, table, mcvSize, column);
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            List<TStatisticData> mcv = statisticExecutor.queryTopN(sql);
+            List<TStatisticData> mcv = statisticExecutor.queryMCV(sql);
 
             Map<String, String> mostCommonValues = new HashMap<>();
             for (TStatisticData tStatisticData : mcv) {
@@ -104,9 +103,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
             String key;
             if (column.getType().isDate()) {
-                key = LocalDate.parse(entry.getKey(), DateUtils.DATE_FORMATTER).format(DateUtils.DATEKEY_FORMATTER);
+                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_FORMATTER_UNIX)
+                        .format(DateUtils.DATEKEY_FORMATTER_UNIX);
             } else if (column.getType().isDatetime()) {
-                key = LocalDate.parse(entry.getKey(), DateUtils.DATE_TIME_FORMATTER).format(DateUtils.SECOND_FORMATTER);
+                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_TIME_FORMATTER_UNIX)
+                        .format(DateUtils.DATETIMEKEY_FORMATTER_UNIX);
             } else {
                 key = entry.getKey();
             }
@@ -121,15 +122,15 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         if (!mostCommonValues.isEmpty()) {
-            if (column.getType().getPrimitiveType().isCharFamily()) {
-                context.put("topNExclude", " and " + columnName + " not in (\"" +
+            if (column.getType().getPrimitiveType().isDateType() || column.getType().getPrimitiveType().isCharFamily()) {
+                context.put("MCVExclude", " and " + columnName + " not in (\"" +
                         Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
             } else {
-                context.put("topNExclude", " and " + columnName + " not in (" +
+                context.put("MCVExclude", " and " + columnName + " not in (" +
                         Joiner.on(",").join(mostCommonValues.keySet()) + ")");
             }
         } else {
-            context.put("topNExclude", "");
+            context.put("MCVExclude", "");
         }
 
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));

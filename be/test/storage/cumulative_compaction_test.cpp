@@ -117,10 +117,9 @@ public:
     }
 
     void do_compaction() {
-        config::storage_format_version = 2;
         create_tablet_schema(UNIQUE_KEYS);
 
-        RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context);
         std::unique_ptr<RowsetWriter> _rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());

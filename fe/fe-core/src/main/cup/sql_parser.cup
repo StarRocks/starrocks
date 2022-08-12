@@ -996,6 +996,12 @@ create_stmt ::=
     {:
         RESULT = new CreateRepositoryStmt(isReadOnly, repoName, brokerName, location, properties);
     :}
+    | KW_CREATE opt_read_only:isReadOnly KW_REPOSITORY ident:repoName KW_WITH KW_BROKER
+      KW_ON KW_LOCATION STRING_LITERAL:location
+      opt_properties:properties
+    {:
+        RESULT = new CreateRepositoryStmt(isReadOnly, repoName, null, location, properties);
+    :}
     | KW_CREATE KW_ROLE ident_or_text:role
     {:
         RESULT = new CreateRoleStmt(role);

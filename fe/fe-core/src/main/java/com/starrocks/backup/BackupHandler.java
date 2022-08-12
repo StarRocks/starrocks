@@ -177,12 +177,14 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
     // handle create repository stmt
     public void createRepository(CreateRepositoryStmt stmt) throws DdlException {
-        if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
-            ErrorReport
-                    .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
+        if (stmt.hasBroker()) {
+            if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
+                ErrorReport
+                        .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
+            }
         }
 
-        BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties());
+        BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties(), stmt.hasBroker());
         long repoId = globalStateMgr.getNextId();
         Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), stmt.getLocation(), storage);
 
@@ -401,7 +403,7 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
         // Create a restore job
         RestoreJob restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                db.getId(), db.getFullName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
                 stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
                 repository.getId());
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);

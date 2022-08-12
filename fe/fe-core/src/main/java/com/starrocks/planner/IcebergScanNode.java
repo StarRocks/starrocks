@@ -6,7 +6,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -74,7 +73,8 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void getAliveBackends() throws UserException {
-        ImmutableCollection<ComputeNode> computeNodes = ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
+        ImmutableCollection<ComputeNode> computeNodes =
+                ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
 
         for (ComputeNode computeNode : computeNodes) {
             if (computeNode.isAlive()) {
@@ -200,7 +200,7 @@ public class IcebergScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getName()).append("\n");
+        output.append(prefix).append("TABLE: ").append(srIcebergTable.getTable()).append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
@@ -208,6 +208,10 @@ public class IcebergScanNode extends ScanNode {
         if (!conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
                     getExplainString(conjuncts)).append("\n");
+        }
+        if (!minMaxConjuncts.isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(minMaxConjuncts)).append("\n");
         }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
@@ -226,7 +230,7 @@ public class IcebergScanNode extends ScanNode {
     protected String getNodeVerboseExplain(String prefix) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getName()).append("\n");
+        output.append(prefix).append("TABLE: ").append(srIcebergTable.getTable()).append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
@@ -234,6 +238,10 @@ public class IcebergScanNode extends ScanNode {
         if (!conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
                     getExplainString(conjuncts)).append("\n");
+        }
+        if (!minMaxConjuncts.isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(minMaxConjuncts)).append("\n");
         }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
@@ -273,11 +281,20 @@ public class IcebergScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        String sqlPredicates = getExplainString(conjuncts);
+        msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
+
         if (!minMaxConjuncts.isEmpty()) {
+            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
             for (Expr expr : minMaxConjuncts) {
                 msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
             }
             msg.hdfs_scan_node.setMin_max_tuple_id(minMaxTuple.getId().asInt());
+            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
+        }
+
+        if (srIcebergTable != null) {
+            msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
         }
     }
 

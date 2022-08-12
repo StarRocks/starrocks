@@ -134,7 +134,9 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
+    | showWarningStatement                                                                  #showWarning
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -144,6 +146,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | DROP USER user                                                                        #dropUser
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -364,7 +367,7 @@ showPartitionsStatement
     (WHERE expression)?
     (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
-    
+
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
@@ -466,6 +469,7 @@ alterClause
     | dropComputeNodeClause
     | swapTableClause
     | dropPartitionClause
+    | truncatePartitionClause
     | modifyTablePropertiesClause
     | addPartitionClause
     | modifyPartitionClause
@@ -492,6 +496,10 @@ dropIndexClause
 
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
@@ -604,6 +612,7 @@ pauseRoutineLoadStatement
 
 showRoutineLoadStatement
     : SHOW ALL? ROUTINE LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
@@ -736,6 +745,7 @@ dataDesc
 
 brokerDesc
     : WITH BROKER name=identifierOrString props=propertyList?
+    | WITH BROKER props=propertyList?
     ;
 
 resourceDesc
@@ -791,6 +801,10 @@ showCharsetStatement
     : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
+showWarningStatement
+    : SHOW (WARNINGS | ERRORS) (limitElement)?
+    ;
+
 showNodesStatement
     : SHOW COMPUTE NODES                                                       #showComputeNodes
     ;
@@ -799,14 +813,23 @@ showBrokerStatement
     : SHOW BROKER
     ;
 
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
 setStatement
     : SET setVar (',' setVar)*
     ;
 
 setVar
-    : varType? identifier '=' setExprOrDefault
-    | AT identifierOrString '=' expression
-    | AT AT (varType '.')? identifier '=' setExprOrDefault
+    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    | NAMES (charset = identifierOrString | DEFAULT)
+        (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
+    | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
+    | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
+    | varType? identifier '=' setExprOrDefault                                                  #setVariable
+    | AT identifierOrString '=' expression                                                      #setVariable
+    | AT AT (varType '.')? identifier '=' setExprOrDefault                                      #setVariable
     ;
 
 setExprOrDefault

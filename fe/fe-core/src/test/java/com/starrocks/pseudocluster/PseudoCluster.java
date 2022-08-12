@@ -1,9 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.pseudocluster;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.BrpcProxy;
@@ -13,6 +20,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -24,6 +32,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class PseudoCluster {
@@ -69,12 +78,14 @@ public class PseudoCluster {
     }
 
     private class PseudoBrpcRroxy extends BrpcProxy {
-        public PBackendServiceAsync getBackendService(TNetworkAddress address) {
+        @Override
+        protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
             Preconditions.checkState(backends.containsKey(address.getHostname()));
             return backends.get(address.getHostname()).pBackendService;
         }
 
-        public LakeServiceAsync getLakeService(TNetworkAddress address) {
+        @Override
+        protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
             Preconditions.checkState(backends.containsKey(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;
@@ -82,11 +93,46 @@ public class PseudoCluster {
     }
 
     public PseudoBackend getBackend(long beId) {
-        return backends.get(backendIdToHost.get(beId));
+        String host = backendIdToHost.get(beId);
+        if (host == null) {
+            return null;
+        }
+        return backends.get(host);
+    }
+
+    public PseudoBackend getBackendByHost(String host) {
+        return backends.get(host);
     }
 
     public Connection getQueryConnection() throws SQLException {
         return dataSource.getConnection();
+    }
+
+    public List<Long> listTablets(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                return null;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            List<Long> ret = Lists.newArrayList();
+            for (Partition partition : olapTable.getPartitions()) {
+                for (MaterializedIndex index : partition.getMaterializedIndices(
+                        MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        ret.add(tablet.getId());
+                    }
+                }
+            }
+            return ret;
+        } finally {
+            db.readUnlock();
+        }
     }
 
     public void runSql(String db, String sql) throws SQLException {
@@ -173,6 +219,11 @@ public class PseudoCluster {
         return cluster;
     }
 
+    public static synchronized PseudoCluster getOrCreateWithRandomPort(boolean fakeJournal, int numBackends) throws Exception {
+        int queryPort = UtFrameUtils.findValidPort();
+        return getOrCreate("pseudo_cluster_" + queryPort, fakeJournal, queryPort, numBackends);
+    }
+
     public static synchronized PseudoCluster getOrCreate(String runDir, boolean fakeJournal, int queryPort, int numBackends)
             throws Exception {
         if (instance == null) {
@@ -186,9 +237,7 @@ public class PseudoCluster {
     }
 
     public static void main(String[] args) throws Exception {
-        String currentPath = new java.io.File(".").getCanonicalPath();
-        String runDir = currentPath + "/pseudo_cluster";
-        PseudoCluster cluster = PseudoCluster.getOrCreate(runDir, true, 9030, 3);
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
         for (int i = 0; i < 3; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
         }

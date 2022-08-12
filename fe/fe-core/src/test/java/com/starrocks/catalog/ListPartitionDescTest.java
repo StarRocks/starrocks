@@ -8,7 +8,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.UtFrameUtils;
+
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.text.DateFormat;
@@ -20,6 +23,14 @@ import java.util.Map;
 
 public class ListPartitionDescTest {
 
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+    }
+    
     private List<ColumnDef> findColumnDefList() {
         ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
         id.setAggregateType(AggregateType.NONE);

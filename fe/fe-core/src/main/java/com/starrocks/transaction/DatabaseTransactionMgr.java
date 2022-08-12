@@ -130,9 +130,7 @@ public class DatabaseTransactionMgr {
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
 
-    private long lastCommitTs = 0;
-
-    private long commitTsInc = 0;
+    private long maxCommitTs = 0;
 
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
 
@@ -1046,18 +1044,8 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
         }
-        // since we send publish order by commit timestamp
-        // so that we need handle timetamp fallback
-        // & same timestamp cause by granularity
-        // The probability of timestamp fallback after FE failover is small
-        // and it is not considered at present
-        long commitTs = System.currentTimeMillis();
-        if (commitTs <= lastCommitTs) {
-            commitTs = lastCommitTs + ++commitTsInc;
-        } else {
-            commitTsInc = 0;
-        }
-        lastCommitTs = commitTs;
+        // commit timestamps needs to be strictly monotonically increasing
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1098,22 +1086,12 @@ public class DatabaseTransactionMgr {
     }
 
     protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
-        // transaction state is modified during check if the transaction could committed
+        // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
             return;
         }
-        // since we send publish order by commit timestamp
-        // so that we need handle timetamp fallback
-        // & same timestamp cause by granularity
-        // The probability of timestamp fallback after FE failover is small
-        // and it is not considered at present
-        long commitTs = System.currentTimeMillis();
-        if (commitTs <= lastCommitTs) {
-            commitTs = lastCommitTs + ++commitTsInc;
-        } else {
-            commitTsInc = 0;
-        }
-        lastCommitTs = commitTs;
+        // commit timestamps needs to be strictly monotonically increasing
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1168,6 +1146,8 @@ public class DatabaseTransactionMgr {
                 editLog.logInsertTransactionState(transactionState);
             }
         }
+        // it's OK if getCommitTime() returns -1
+        maxCommitTs = Math.max(maxCommitTs, transactionState.getCommitTime());
         if (!transactionState.getTransactionStatus().isFinalStatus()) {
             if (idToRunningTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
@@ -1176,7 +1156,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {

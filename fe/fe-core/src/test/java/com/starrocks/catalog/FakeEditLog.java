@@ -23,8 +23,6 @@ package com.starrocks.catalog;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.RollupJob;
-import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -61,28 +59,6 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     @Mock
     public void logCreateCluster(Cluster cluster) {
-    }
-
-    @Mock
-    public void logStartRollup(RollupJob rollupJob) {
-
-    }
-
-    @Mock
-    public void logFinishingRollup(RollupJob rollupJob) {
-
-    }
-
-    @Mock
-    public void logCancelRollup(RollupJob rollupJob) {
-    }
-
-    @Mock
-    public void logStartSchemaChange(SchemaChangeJob schemaChangeJob) {
-    }
-
-    @Mock
-    public void logFinishingSchemaChange(SchemaChangeJob schemaChangeJob) {
     }
 
     @Mock

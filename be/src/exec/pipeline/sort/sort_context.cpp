@@ -33,7 +33,12 @@ StatusOr<ChunkPtr> SortContext::pull_chunk() {
     }
 
     SortedRun& run = _merged_runs.front();
-    ChunkPtr res = run.steal_chunk(required_rows);
+    size_t rows_before = run.num_rows();
+    ChunkPtr res = run.steal_chunk(required_rows, _offset);
+    size_t rows_after = run.num_rows();
+    size_t fetched_rows = res == nullptr ? 0 : res->num_rows();
+    size_t skipped_rows = rows_before - rows_after - fetched_rows;
+    _offset -= skipped_rows;
     if (res != nullptr) {
         RETURN_IF_ERROR(res->downgrade());
     }
@@ -50,7 +55,7 @@ Status SortContext::_merge_inputs() {
     // Keep all the data if topn type is RANK or DENSE_RANK
     int64_t require_rows = total_rows;
     if (_topn_type == TTopNType::ROW_NUMBER) {
-        require_rows = ((_limit < 0) ? total_rows : std::min(_limit, total_rows));
+        require_rows = ((_limit < 0) ? total_rows : std::min(_limit + _offset, total_rows));
     }
 
     std::vector<SortedRuns> partial_sorted_runs;
@@ -63,13 +68,14 @@ Status SortContext::_merge_inputs() {
 }
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
-                                       int64_t limit, int32_t num_right_sinkers,
+                                       int64_t offset, int64_t limit, int32_t num_right_sinkers,
                                        const std::vector<ExprContext*>& sort_exprs,
                                        const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),
           _topn_type(topn_type),
           _is_merging(is_merging),
           _sort_contexts(is_merging ? 1 : num_right_sinkers),
+          _offset(offset),
           _limit(limit),
           _num_right_sinkers(num_right_sinkers),
           _sort_exprs(sort_exprs),
@@ -81,8 +87,8 @@ SortContextPtr SortContextFactory::create(int32_t idx) {
 
     DCHECK_LE(actual_idx, _sort_contexts.size());
     if (!_sort_contexts[actual_idx]) {
-        _sort_contexts[actual_idx] =
-                std::make_shared<SortContext>(_state, _topn_type, _limit, num_sinkers, _sort_exprs, _sort_descs);
+        _sort_contexts[actual_idx] = std::make_shared<SortContext>(_state, _topn_type, _offset, _limit, num_sinkers,
+                                                                   _sort_exprs, _sort_descs);
     }
     return _sort_contexts[actual_idx];
 }

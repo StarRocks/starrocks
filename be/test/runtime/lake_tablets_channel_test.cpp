@@ -553,7 +553,7 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
 
-    _tablet_manager->drop_tablet(10089);
+    _tablet_manager->delete_tablet(10089);
 
     _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, nullptr);
     ASSERT_NE(TStatusCode::OK, add_chunk_response.status().status_code());
@@ -659,8 +659,8 @@ TEST_F(LakeTabletsChannelTest, test_finish_failed) {
     ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
 
     // Drop tablet 10087 and 10088 before finish
-    _tablet_manager->drop_tablet(10087);
-    _tablet_manager->drop_tablet(10088);
+    _tablet_manager->delete_tablet(10087);
+    _tablet_manager->delete_tablet(10088);
 
     PTabletWriterAddChunkRequest finish_request;
     PTabletWriterAddBatchResult finish_response;

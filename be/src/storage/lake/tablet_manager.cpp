@@ -158,14 +158,40 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb.set_next_rowset_id(1);
     tablet_metadata_pb.set_cumulative_point(0);
 
-    // schema
-    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-    uint32_t next_unique_id = req.tablet_schema.columns.size();
-    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
-        col_idx_to_unique_id[col_idx] = col_idx;
+    if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
+        struct Finder {
+            std::string_view name;
+            bool operator()(const TabletColumn& c) const { return c.name() == name; }
+        };
+        ASSIGN_OR_RETURN(auto base_tablet, get_tablet(req.base_tablet_id));
+        ASSIGN_OR_RETURN(auto base_schema, base_tablet.get_schema());
+        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+        TTabletSchema mutable_new_schema = req.tablet_schema;
+        uint32_t next_unique_id = base_schema->next_column_unique_id();
+        const auto& old_columns = base_schema->columns();
+        auto& new_columns = mutable_new_schema.columns;
+        for (uint32_t i = 0, sz = new_columns.size(); i < sz; ++i) {
+            auto it = std::find_if(old_columns.begin(), old_columns.end(), Finder{new_columns[i].column_name});
+            if (it != old_columns.end() && it->has_default_value()) {
+                new_columns[i].__set_default_value(it->default_value());
+                col_idx_to_unique_id[i] = it->unique_id();
+            } else if (it != old_columns.end()) {
+                col_idx_to_unique_id[i] = it->unique_id();
+            } else {
+                col_idx_to_unique_id[i] = next_unique_id++;
+            }
+        }
+        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
+    } else {
+        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+        uint32_t next_unique_id = req.tablet_schema.columns.size();
+        for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
+            col_idx_to_unique_id[col_idx] = col_idx;
+        }
+        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema()));
     }
-    RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(req.tablet_schema, next_unique_id, col_idx_to_unique_id,
-                                                             tablet_metadata_pb.mutable_schema()));
 
     return put_tablet_metadata(tablet_metadata_pb);
 }
@@ -174,7 +200,7 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return Tablet(this, tablet_id);
 }
 
-Status TabletManager::drop_tablet(int64_t tablet_id) {
+Status TabletManager::delete_tablet(int64_t tablet_id) {
     std::vector<std::string> objects;
     // TODO: construct prefix in LocationProvider or a common place
     const auto tablet_metadata_prefix = fmt::format("tbl_{:016X}_", tablet_id);
@@ -187,7 +213,11 @@ Status TabletManager::drop_tablet(int64_t tablet_id) {
         }
         return true;
     };
-    RETURN_IF_ERROR(fs->iterate_dir(root_path, scan_cb));
+    auto st = fs->iterate_dir(root_path, scan_cb);
+    if (!st.ok() && !st.is_not_found()) {
+        return st;
+    }
+
     for (const auto& obj : objects) {
         erase_metacache(obj);
         (void)fs->delete_file(obj);
@@ -342,7 +372,14 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto location = txn_log_location(tablet_id, txn_id);
     erase_metacache(location);
-    return fs::delete_file(location);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
+Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
+    erase_metacache(segment_name);
+    auto st = fs::delete_file(segment_location(tablet_id, segment_name));
+    return st.is_not_found() ? Status::OK() : st;
 }
 
 StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_tablet) {
@@ -565,6 +602,36 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
     return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
+}
+
+void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
+    // TODO: batch deletion
+    for (int i = 0; i < txns_size; i++) {
+        auto txn_id = txns[i];
+        auto txn_log_or = get_txn_log(tablet_id, txn_id);
+        if (!txn_log_or.ok()) {
+            LOG_IF(WARNING, !txn_log_or.status().is_not_found())
+                    << "Fail to get txn log " << txn_log_location(tablet_id, txn_id) << ": " << txn_log_or.status();
+            continue;
+        }
+
+        TxnLogPtr txn_log = std::move(txn_log_or).value();
+        if (txn_log->has_op_write()) {
+            for (const auto& segment : txn_log->op_write().rowset().segments()) {
+                auto st = delete_segment(tablet_id, segment);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+        }
+        if (txn_log->has_op_compaction()) {
+            for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
+                auto st = delete_segment(tablet_id, segment);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+        }
+        auto st = delete_txn_log(tablet_id, txn_id);
+        LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                << "Fail to delete " << txn_log_location(tablet_id, txn_id) << ": " << st;
+    }
 }
 
 void TabletManager::start_gc() {

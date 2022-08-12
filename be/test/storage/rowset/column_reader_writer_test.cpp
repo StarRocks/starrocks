@@ -92,7 +92,7 @@ protected:
                                          _tablet_meta_mem_tracker.get());
     }
 
-    template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
+    template <FieldType type, EncodingTypePB encoding, uint32_t version>
     void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
                             const std::string null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
@@ -105,8 +105,8 @@ protected:
         auto fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
 
-        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5-$6.data", TEST_DIR, type, encoding,
-                                                      version, adaptive, null_encoding, null_ratio);
+        const std::string fname = strings::Substitute("$0/test-$1-$2-$3-$4-$5.data", TEST_DIR, type, encoding, version,
+                                                      null_encoding, null_ratio);
         auto segment = create_dummy_segment(fs, fname);
         // write data
         {
@@ -118,7 +118,6 @@ protected:
             writer_opts.meta->set_column_id(0);
             writer_opts.meta->set_unique_id(0);
             writer_opts.meta->set_type(type);
-            writer_opts.adaptive_page_format = adaptive;
             if (type == OLAP_FIELD_TYPE_CHAR || type == OLAP_FIELD_TYPE_VARCHAR) {
                 writer_opts.meta->set_length(128);
             } else {
@@ -700,7 +699,6 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         writer_opts.meta->set_column_id(0);
         writer_opts.meta->set_unique_id(0);
         writer_opts.meta->set_type(OLAP_FIELD_TYPE_INT);
-        writer_opts.adaptive_page_format = true;
         writer_opts.meta->set_length(0);
         writer_opts.meta->set_encoding(BIT_SHUFFLE);
         writer_opts.meta->set_compression(starrocks::LZ4_FRAME);

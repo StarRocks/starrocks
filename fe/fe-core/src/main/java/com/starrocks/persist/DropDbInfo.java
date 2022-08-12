@@ -22,6 +22,7 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -43,12 +44,16 @@ public class DropDbInfo implements Writable {
     }
 
     public DropDbInfo(String dbName, boolean forceDrop) {
-        this.dbName = dbName;
+        // compatible with old version
+        this.dbName = ClusterNamespace.getFullName(dbName);
+        if (this.dbName == null) {
+            this.dbName = "";
+        }
         this.forceDrop = forceDrop;
     }
 
     public String getDbName() {
-        return dbName;
+        return ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public boolean isForceDrop() {
@@ -87,7 +92,7 @@ public class DropDbInfo implements Writable {
 
         DropDbInfo info = (DropDbInfo) obj;
 
-        return (dbName.equals(info.getDbName()))
+        return (this.getDbName().equals(info.getDbName()))
                 && (forceDrop == info.isForceDrop());
     }
 

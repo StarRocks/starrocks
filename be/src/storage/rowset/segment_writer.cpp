@@ -87,11 +87,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
 
-    if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
-        return Status::InvalidArgument(
-                strings::Substitute("Invalid storage_format_version $0", _opts.storage_format_version));
-    }
-
     // merge partial segment footer
     // in partial update, key columns and some value columns have been written in partial segment
     // rewrite partial segment into full segment only need to write other value columns into full segment
@@ -119,8 +114,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         const auto& column = _tablet_schema->column(column_index);
         ColumnWriterOptions opts;
-        opts.page_format = (_opts.storage_format_version == 1) ? 1 : 2;
-        opts.adaptive_page_format = (_opts.storage_format_version > 1);
+        opts.page_format = 2;
         opts.meta = _footer.add_columns();
 
         if (!_opts.referenced_column_ids.empty()) {
@@ -263,7 +257,7 @@ Status SegmentWriter::_write_short_key_index() {
 }
 
 Status SegmentWriter::_write_footer() {
-    _footer.set_version(_opts.storage_format_version);
+    _footer.set_version(2);
     _footer.set_num_rows(_num_rows);
 
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)

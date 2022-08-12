@@ -590,7 +590,7 @@ Status ScalarColumnWriter::finish_current_page() {
 
     _push_back_page(page.release());
 
-    if (is_nullable() && _opts.adaptive_page_format) {
+    if (is_nullable()) {
         size_t num_data = (_curr_page_format == 1) ? _page_builder->count() : _null_map_builder_v2->data_count();
         size_t num_null = data_page_footer->num_values() - num_data;
         // If more than 80% of the current page is NULL records, using format 1 for the next page,

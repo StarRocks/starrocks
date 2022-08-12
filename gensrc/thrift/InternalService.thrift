@@ -171,6 +171,8 @@ struct TQueryOptions {
   60: optional i32 query_delivery_timeout;
   
   61: optional bool enable_query_debug_trace;
+
+  62: optional Types.TCompressionType load_transmission_compression_type;
 }
 
 

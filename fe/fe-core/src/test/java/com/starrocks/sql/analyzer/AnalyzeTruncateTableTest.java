@@ -26,7 +26,7 @@ public class AnalyzeTruncateTableTest {
        stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
        Assert.assertEquals("TRUNCATE TABLE `test`.`tbl`PARTITIONS (p1, p2)", stmt.toSql());
        Assert.assertEquals("tbl", stmt.getTblName());
-       Assert.assertEquals("default_cluster:test", stmt.getDbName());
+       Assert.assertEquals("test", stmt.getDbName());
     }
 
     @Test

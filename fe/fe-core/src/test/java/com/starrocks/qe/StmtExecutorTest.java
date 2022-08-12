@@ -31,12 +31,14 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SqlParser;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TUniqueId;
@@ -52,6 +54,7 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
+import java.sql.SQLException;
 import java.util.List;
 
 public class StmtExecutorTest {
@@ -63,7 +66,7 @@ public class StmtExecutorTest {
     SocketChannel socketChannel;
 
     @BeforeClass
-    public static void start() {
+    public static void start() throws Exception {
         MetricRepo.init();
         try {
             FrontendOptions.init(new String[0]);
@@ -71,6 +74,32 @@ public class StmtExecutorTest {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
+        Config.enable_collect_query_detail_info = true;
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        cluster.runSql(null, "create database test");
+        cluster.runSql("test", "CREATE TABLE base0 (\n" +
+                "dt date NOT NULL COMMENT \"\",\n" +
+                "k1 int(11) NOT NULL COMMENT \"\",\n" +
+                "k2 int(11) NOT NULL COMMENT \"\",\n" +
+                "k3 int(11) NOT NULL COMMENT \"\",\n" +
+                "k4 int(11) NOT NULL COMMENT \"\",\n" +
+                "v1 int(11) NOT NULL COMMENT \"\",\n" +
+                "v2 int(11) NOT NULL COMMENT \"\",\n" +
+                "v3 int(11) NOT NULL COMMENT \"\",\n" +
+                "v4 int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(dt, k1, k2, k3, k4)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(dt)\n" +
+                "(PARTITION p20220101 VALUES [('2022-01-01'), ('2022-01-02')))\n" +
+                "DISTRIBUTED BY HASH(k1, k2, k3, k4) BUCKETS 4\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"false\"\n" +
+                ");");
     }
 
     @Before
@@ -163,6 +192,12 @@ public class StmtExecutorTest {
                 result = 1L;
             }
         };
+    }
+
+    @Test
+    public void testEnableQueryDetailForDelete() throws SQLException {
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        cluster.runSql("test", "delete from base0 where k1 = '100'");
     }
 
     @Test

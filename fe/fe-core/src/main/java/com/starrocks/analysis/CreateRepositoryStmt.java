@@ -40,6 +40,7 @@ public class CreateRepositoryStmt extends DdlStmt {
     private String brokerName;
     private String location;
     private Map<String, String> properties;
+    private boolean hasBroker;
 
     public CreateRepositoryStmt(boolean isReadOnly, String name, String brokerName, String location,
                                 Map<String, String> properties) {
@@ -48,6 +49,11 @@ public class CreateRepositoryStmt extends DdlStmt {
         this.brokerName = brokerName;
         this.location = location;
         this.properties = properties;
+        if (brokerName == null) {
+            hasBroker = false;
+        } else {
+            hasBroker = true;
+        }
     }
 
     public boolean isReadOnly() {
@@ -56,6 +62,10 @@ public class CreateRepositoryStmt extends DdlStmt {
 
     public String getName() {
         return name;
+    }
+
+    public boolean hasBroker() {
+        return hasBroker;
     }
 
     public String getBrokerName() {
@@ -81,8 +91,10 @@ public class CreateRepositoryStmt extends DdlStmt {
 
         FeNameFormat.checkCommonName("repository", name);
 
-        if (Strings.isNullOrEmpty(brokerName)) {
-            throw new AnalysisException("You must specify the broker of the repository");
+        if (hasBroker) {
+            if (Strings.isNullOrEmpty(brokerName)) {
+                throw new AnalysisException("You must specify the broker of the repository");
+            }
         }
 
         if (Strings.isNullOrEmpty(location)) {
