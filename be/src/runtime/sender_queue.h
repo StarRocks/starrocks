@@ -53,7 +53,7 @@ protected:
     serde::ProtobufChunkMeta _chunk_meta;
 };
 
-class DataStreamRecvr::NonPipelineSenderQueue : public DataStreamRecvr::SenderQueue {
+class DataStreamRecvr::NonPipelineSenderQueue final : public DataStreamRecvr::SenderQueue {
 public:
     NonPipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders);
     ~NonPipelineSenderQueue() override = default;
@@ -124,7 +124,7 @@ private:
 // It should be noted that some atomic variables are updated at the same time under the protection of lock,
 // which may not be completely consistent when reading without lock, but will eventually be consistent.
 // This won't affect the correctness in our usage scenario.
-class DataStreamRecvr::PipelineSenderQueue : public DataStreamRecvr::SenderQueue {
+class DataStreamRecvr::PipelineSenderQueue final : public DataStreamRecvr::SenderQueue {
 public:
     PipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders, int degree_of_parallism);
     ~PipelineSenderQueue() override = default;
@@ -167,15 +167,10 @@ private:
         // Time in nano of saving closure
         int64_t queue_enter_time;
 
-        inline static ChunkItem create(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
-                                       ChunkUniquePtr&& chunk_ptr) {
-            ChunkItem result;
-            result.chunk_bytes = chunk_bytes;
-            result.driver_sequence = driver_sequence;
-            result.closure = closure;
-            result.chunk_ptr = std::move(chunk_ptr);
-            return result;
-        }
+        ChunkItem() {}
+
+        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure, ChunkUniquePtr&& chunk_ptr):
+            chunk_bytes(chunk_bytes), driver_sequence(driver_sequence),closure(closure),chunk_ptr(std::move(chunk_ptr)) {}
     };
 
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;

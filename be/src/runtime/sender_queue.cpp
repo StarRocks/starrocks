@@ -609,8 +609,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             // 4. receive request_2 and get nothing
             // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
             // but not the request's driver_sequence
-            chunks.emplace_back(
-                    ChunkItem::create(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first)));
+            chunks.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
             bytes += swap_bytes[i];
         }
         total_chunk_bytes += bytes;
@@ -622,7 +621,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            chunks.emplace_back(ChunkItem::create(chunk_bytes, driver_sequence, nullptr, std::move(chunk)));
+            chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
             total_chunk_bytes += chunk_bytes;
         }
 
@@ -715,8 +714,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
             // 4. receive request_2 and get nothing
             // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
             // but not the request's driver_sequence
-            local_chunk_queue.emplace_back(
-                    ChunkItem::create(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first)));
+            local_chunk_queue.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
             bytes += swap_bytes[i];
         }
         total_chunk_bytes += bytes;
@@ -727,7 +725,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTr
             int64_t chunk_bytes = pchunk.data().size();
             ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            local_chunk_queue.emplace_back(ChunkItem::create(chunk_bytes, -1, nullptr, std::move(chunk)));
+            local_chunk_queue.emplace_back(chunk_bytes, -1, nullptr, std::move(chunk));
             total_chunk_bytes += chunk_bytes;
         }
         COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
