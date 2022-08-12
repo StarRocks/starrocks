@@ -235,7 +235,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 }
             }
         };
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 

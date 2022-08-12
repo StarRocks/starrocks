@@ -11,6 +11,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatisticData;
@@ -18,9 +19,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -127,20 +125,22 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             if (column.getPrimitiveType().isCharFamily()) {
                 // do nothing
             } else if (column.getPrimitiveType().equals(PrimitiveType.DATE)) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
-                    minValue = getLongFromDateTime(LocalDate.parse(statisticData.min, dtf).atStartOfDay());
+                    minValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.min, DateUtils.DATE_FORMATTER_UNIX));
                 }
                 if (statisticData.isSetMax() && !statisticData.getMax().isEmpty()) {
-                    maxValue = getLongFromDateTime(LocalDate.parse(statisticData.max, dtf).atStartOfDay());
+                    maxValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.max, DateUtils.DATE_FORMATTER_UNIX));
                 }
             } else if (column.getPrimitiveType().equals(PrimitiveType.DATETIME)) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
-                    minValue = getLongFromDateTime(LocalDateTime.parse(statisticData.min, dtf));
+                    minValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.min, DateUtils.DATE_TIME_FORMATTER_UNIX));
                 }
                 if (statisticData.isSetMax() && !statisticData.getMax().isEmpty()) {
-                    maxValue = getLongFromDateTime(LocalDateTime.parse(statisticData.max, dtf));
+                    maxValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.max, DateUtils.DATE_TIME_FORMATTER_UNIX));
                 }
             } else {
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
