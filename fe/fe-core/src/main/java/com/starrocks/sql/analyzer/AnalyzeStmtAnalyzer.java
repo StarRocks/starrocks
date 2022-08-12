@@ -169,7 +169,8 @@ public class AnalyzeStmtAnalyzer {
                     Column column = analyzeTable.getColumn(columnName);
                     if (column.getType().isComplexType()
                             || column.getType().isJsonType()
-                            || column.getType().isOnlyMetricType()) {
+                            || column.getType().isOnlyMetricType()
+                            || column.getType().isChar() || column.getType().isVarchar()) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
                     }
