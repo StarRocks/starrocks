@@ -40,6 +40,8 @@ public class PseudoCluster {
 
     private static volatile PseudoCluster instance;
 
+    ClusterConfig config = new ClusterConfig();
+
     String runDir;
     int queryPort;
 
@@ -90,6 +92,10 @@ public class PseudoCluster {
             Preconditions.checkState(false, "not implemented");
             return null;
         }
+    }
+
+    public ClusterConfig getConfig() {
+        return config;
     }
 
     public PseudoBackend getBackend(long beId) {
@@ -143,6 +149,22 @@ public class PseudoCluster {
                 stmt.execute("use " + db);
             }
             stmt.execute(sql);
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    public void runSqlList(String db, String... sqls) throws SQLException {
+        Connection connection = getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            if (db != null) {
+                stmt.execute("use " + db);
+            }
+            for (String sql : sqls) {
+                stmt.execute(sql);
+            }
         } finally {
             stmt.close();
             connection.close();
