@@ -455,7 +455,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
-            String scheduleStr = task.getType().name();
+            String scheduleStr = "UNKNOWN";
+            if (task.getType() != null) {
+                scheduleStr = task.getType().name();
+            }
             if (task.getType() == Constants.TaskType.PERIODICAL) {
                 scheduleStr += task.getSchedule();
             }
