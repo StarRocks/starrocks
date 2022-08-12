@@ -543,10 +543,6 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
 }
 
 static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change, TabletMetadata* metadata) {
-    if (op_schema_change.rowsets_size() == 0) {
-        return Status::OK();
-    }
-
     for (const auto& rowset : op_schema_change.rowsets()) {
         if (rowset.num_rows() > 0 || rowset.has_delete_predicate()) {
             auto new_rowset = metadata->add_rowsets();
@@ -631,7 +627,7 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
             if (txn_vlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-                // txn log does not exist but the new version metadata has been generated, maybe
+                // txn version log does not exist but the new version metadata has been generated, maybe
                 // this is a duplicated publish version request.
                 return Status::OK();
             } else if (!txn_vlog.ok()) {

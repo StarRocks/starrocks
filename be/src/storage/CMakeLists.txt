@@ -165,6 +165,7 @@ add_library(Storage STATIC
     lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
+    lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp

@@ -54,8 +54,17 @@ public:
             : _tablet_id(tablet_id),
               _txn_id(txn_id),
               _partition_id(partition_id),
-              _slots(slots),
               _mem_tracker(mem_tracker),
+              _slots(slots),
+              _schema_initialized(false) {}
+
+    explicit DeltaWriterImpl(int64_t tablet_id, int64_t max_buffer_size, MemTracker* mem_tracker)
+            : _tablet_id(tablet_id),
+              _txn_id(-1),
+              _partition_id(-1),
+              _mem_tracker(mem_tracker),
+              _slots(nullptr),
+              _max_buffer_size(max_buffer_size),
               _schema_initialized(false) {}
 
     ~DeltaWriterImpl() = default;
@@ -78,6 +87,8 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker() { return _mem_tracker; }
 
+    [[nodiscard]] TabletWriter* tablet_writer() { return _tablet_writer.get(); }
+
     [[nodiscard]] Status flush();
 
     [[nodiscard]] Status flush_async();
@@ -88,8 +99,13 @@ private:
     const int64_t _tablet_id;
     const int64_t _txn_id;
     const int64_t _partition_id;
-    const std::vector<SlotDescriptor*>* const _slots;
     MemTracker* const _mem_tracker;
+
+    // for load
+    const std::vector<SlotDescriptor*>* const _slots;
+
+    // for schema change
+    int64_t _max_buffer_size = config::write_buffer_size;
 
     std::unique_ptr<TabletWriter> _tablet_writer;
     std::unique_ptr<MemTable> _mem_table;
@@ -101,11 +117,16 @@ private:
 };
 
 inline void DeltaWriterImpl::reset_memtable() {
-    if (_schema_initialized == false) {
+    if (!_schema_initialized) {
         _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema.get(), _slots));
         _schema_initialized = true;
     }
-    _mem_table.reset(new MemTable(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker));
+    if (_slots != nullptr) {
+        _mem_table.reset(new MemTable(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker));
+    } else {
+        _mem_table.reset(
+                new MemTable(_tablet_id, &_vectorized_schema, _mem_table_sink.get(), _max_buffer_size, _mem_tracker));
+    }
 }
 
 inline Status DeltaWriterImpl::flush_async() {
@@ -246,6 +267,10 @@ MemTracker* DeltaWriter::mem_tracker() {
     return _impl->mem_tracker();
 }
 
+TabletWriter* DeltaWriter::tablet_writer() {
+    return _impl->tablet_writer();
+}
+
 Status DeltaWriter::flush() {
     return _impl->flush();
 }
@@ -256,8 +281,11 @@ Status DeltaWriter::flush_async() {
 
 std::unique_ptr<DeltaWriter> DeltaWriter::create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                                                  const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker) {
-    auto impl = new DeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker);
-    return std::make_unique<DeltaWriter>(impl);
+    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_id, txn_id, partition_id, slots, mem_tracker));
+}
+
+std::unique_ptr<DeltaWriter> DeltaWriter::create(int64_t tablet_id, int64_t max_buffer_size, MemTracker* mem_tracker) {
+    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_id, max_buffer_size, mem_tracker));
 }
 
 } // namespace starrocks::lake
