@@ -954,7 +954,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
 
         public long getDbId() {
-            return tableId;
+            return dbId;
         }
 
         public long getTableId() {
