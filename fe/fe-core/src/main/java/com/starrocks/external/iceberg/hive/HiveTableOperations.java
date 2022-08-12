@@ -13,6 +13,7 @@ import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.exceptions.NoSuchIcebergTableException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.io.FileIO;
 import org.apache.thrift.TException;
 
@@ -77,6 +78,10 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             validateTableIsIceberg(table, fullName);
 
             metadataLocation = table.getParameters().get(METADATA_LOCATION_PROP);
+            if (null == metadataLocation || metadataLocation.length() == 0) {
+                throw new NotFoundException("Property 'metadata_location' can not be found in table %s.%s. " +
+                        "Probably this table is created by Spark2, which is not supported.", database, tableName);
+            }
 
         } catch (NoSuchObjectException e) {
             if (currentMetadataLocation() != null) {
