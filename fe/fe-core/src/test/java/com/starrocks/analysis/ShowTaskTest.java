@@ -94,4 +94,41 @@ public class ShowTaskTest {
             }
         }
     }
+
+    @Test
+    public void testShowTasksUnknownType() throws Exception {
+        FrontendServiceImpl frontendService = new FrontendServiceImpl(null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+
+        String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
+        SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, connectContext);
+        Task manualTask = TaskBuilder.buildTask(submitTaskStmt, connectContext);
+        taskManager.createTask(manualTask, true);
+
+        Task periodTask = new Task("test_periodical");
+        periodTask.setCreateTime(System.currentTimeMillis());
+        periodTask.setDbName("test");
+        periodTask.setDefinition("select 1");
+        periodTask.setExpireTime(0L);
+        long startTime = Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 21, 0, 0, 0));
+        TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
+        periodTask.setSchedule(taskSchedule);
+        periodTask.setType(null);
+        taskManager.createTask(periodTask, true);
+
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        TGetTasksParams tGetTasksParams = new TGetTasksParams();
+        tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
+        TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
+        List<TTaskInfo> tasks = taskResult.getTasks();
+        Assert.assertEquals(tasks.size() , 2);
+        for (TTaskInfo task : tasks) {
+            if(task.getTask_name().equals("test_periodical")) {
+                Assert.assertEquals(task.getSchedule(),"UNKNOWN");
+            } else {
+                Assert.assertEquals(task.getSchedule(),"MANUAL");
+            }
+        }
+    }
 }
