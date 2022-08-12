@@ -5,10 +5,12 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -113,6 +115,12 @@ public class SubqueryUtils {
     public static CallOperator createAnyValueOperator(ScalarOperator column) {
         Function anyValueFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {column.getType()},
                 Function.CompareMode.IS_IDENTICAL);
+        if (column.getType().isDecimalV3()) {
+            anyValueFn =
+                    DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) anyValueFn,
+                            column.getType(),
+                            column.getType());
+        }
         return new CallOperator(FunctionSet.ANY_VALUE, column.getType(), Lists.newArrayList(column), anyValueFn);
     }
 
