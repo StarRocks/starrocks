@@ -471,4 +471,75 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  group by: 5: v4");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCorrelatedScalarNonAggSubqueryWithExpression() throws Exception {
+        String sql = "SELECT \n" +
+                "  subt0.v1 \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "          SELECT \n" +
+                "            t2.v7 \n" +
+                "          FROM \n" +
+                "            t2 \n" +
+                "          WHERE \n" +
+                "            t0.v2 = 284082749\n" +
+                "      ) >= 1\n" +
+                "  ) subt0;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1), any_value(4: v7)\n" +
+                "  |  group by: 8: expr\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: v7\n" +
+                "  |  <slot 8> : 284082749");
+        sql = "SELECT \n" +
+                "  subt0.v1 \n" +
+                "FROM \n" +
+                "  (\n" +
+                "    SELECT \n" +
+                "      t0.v1\n" +
+                "    FROM \n" +
+                "      t0 \n" +
+                "    WHERE \n" +
+                "      (\n" +
+                "          SELECT \n" +
+                "            t2.v7 \n" +
+                "          FROM \n" +
+                "            t2 \n" +
+                "          WHERE \n" +
+                "            t0.v2 = t2.v8 + 1\n" +
+                "      ) >= 1\n" +
+                "  ) subt0;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 3:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1), any_value(4: v7)\n" +
+                "  |  group by: 8: add\n" +
+                "  |  \n" +
+                "  2:Project\n" +
+                "  |  <slot 4> : 4: v7\n" +
+                "  |  <slot 8> : 5: v8 + 1");
+    }
+
+    @Test
+    public void testCorrelationScalarSubqueryWithNonEQPredicate() throws Exception {
+        String sql = "SELECT v1, SUM(v2) FROM t0\n" +
+                "GROUP BY v1\n" +
+                "HAVING SUM(v2) > (\n" +
+                "      SELECT t1.v5 FROM t1\n" +
+                "      WHERE nullif(false, t0.v1 < 0)\n" +
+                ");";
+        Assert.assertThrows("Not support Non-EQ correlation predicate correlation scalar-subquery",
+                SemanticException.class, () -> getFragmentPlan(sql));
+    }
+>>>>>>> 911abcac6 ([BugFix] Scalar subquery add corrletaion predicate check (#9946))
 }
