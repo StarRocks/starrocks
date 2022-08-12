@@ -91,9 +91,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
                 serde::ProtobufChunkDeserializer des(_chunk_meta);
-                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
-                if (!res.ok()) return res.status();
-                *chunk = std::move(res).value();
+                ASSIGN_OR_RETURN(*chunk, des.deserialize(buff));
             });
         }
     }
@@ -185,8 +183,7 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(vectorized::Chunk** 
 
 Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                            ::google::protobuf::Closure** done) {
-    bool use_pass_through = request.use_pass_through();
-    DCHECK(request.chunks_size() > 0 || use_pass_through);
+    DCHECK(request.chunks_size() > 0);
     int32_t be_number = request.be_number();
     int64_t sequence = request.sequence();
     ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
@@ -219,10 +216,8 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
             DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
             return Status::OK();
         }
-        // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are transmitted in shared memory without ser/deser
-        // So there is no need to build chunk meta.
-        if (_chunk_meta.types.empty() && !use_pass_through) {
+        // We only need to build chunk meta on first chunk
+        if (_chunk_meta.types.empty()) {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
@@ -233,40 +228,16 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
     size_t total_chunk_bytes = 0;
     faststring uncompressed_buffer;
 
-    if (use_pass_through) {
-        ChunkUniquePtrVector swap_chunks;
-        std::vector<size_t> swap_bytes;
-        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
-        DCHECK(swap_chunks.size() == swap_bytes.size());
-        size_t bytes = 0;
-        for (size_t i = 0; i < swap_chunks.size(); i++) {
-            // The sending and receiving of chunks from _pass_through_context may out of order, and
-            // considering the following sequences:
-            // 1. add chunk_1 to _pass_through_context and send request_1
-            // 2. add chunk_2 to _pass_through_context and send request_2
-            // 3. receive request_1 and get both chunk_1 and chunk_2
-            // 4. receive request_2 and get nothing
-            // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
-            // but not the request's driver_sequence
-            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), std::move(swap_chunks[i].first), nullptr};
-            chunks.emplace_back(std::move(item));
-            bytes += swap_bytes[i];
-        }
-        total_chunk_bytes += bytes;
-        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
-
-    } else {
-        for (auto i = 0; i < request.chunks().size(); ++i) {
-            auto& pchunk = request.chunks().Get(i);
-            int64_t chunk_bytes = pchunk.data().size();
-            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
-            chunks.emplace_back(std::move(item));
-            total_chunk_bytes += chunk_bytes;
-        }
-        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
+    for (auto i = 0; i < request.chunks().size(); ++i) {
+        auto& pchunk = request.chunks().Get(i);
+        int64_t chunk_bytes = pchunk.data().size();
+        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+        chunks.emplace_back(std::move(item));
+        total_chunk_bytes += chunk_bytes;
     }
+    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
 
     wait_timer.start();
     {
@@ -299,8 +270,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
 
 Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                           ::google::protobuf::Closure** done) {
-    bool use_pass_through = request.use_pass_through();
-    DCHECK(request.chunks_size() > 0 || use_pass_through);
+    DCHECK(request.chunks_size() > 0);
     const int32_t be_number = request.be_number();
     const int32_t sequence = request.sequence();
 
@@ -328,10 +298,8 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const 
             DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
             return Status::OK();
         }
-        // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are transmitted in shared memory without ser/deser
-        // So there is no need to build chunk meta.
-        if (_chunk_meta.types.empty() && !use_pass_through) {
+        // We only need to build chunk meta on first chunk
+        if (_chunk_meta.types.empty()) {
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             auto& pchunk = request.chunks(0);
             RETURN_IF_ERROR(_build_chunk_meta(pchunk));
@@ -342,43 +310,20 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const 
     faststring uncompressed_buffer;
     ChunkQueue local_chunk_queue;
 
-    if (use_pass_through) {
-        ChunkUniquePtrVector swap_chunks;
-        std::vector<size_t> swap_bytes;
-        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
-        DCHECK(swap_chunks.size() == swap_bytes.size());
-        size_t bytes = 0;
-        for (size_t i = 0; i < swap_chunks.size(); i++) {
-            // The sending and receiving of chunks from _pass_through_context may out of order, and
-            // considering the following sequences:
-            // 1. add chunk_1 to _pass_through_context and send request_1
-            // 2. add chunk_2 to _pass_through_context and send request_2
-            // 3. receive request_1 and get both chunk_1 and chunk_2
-            // 4. receive request_2 and get nothing
-            // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
-            // but not the request's driver_sequence
-            ChunkItem item{static_cast<int64_t>(swap_bytes[i]), std::move(swap_chunks[i].first), nullptr};
-            local_chunk_queue.emplace_back(std::move(item));
-            bytes += swap_bytes[i];
-        }
-        total_chunk_bytes += bytes;
-        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
-    } else {
-        for (auto i = 0; i < request.chunks().size(); ++i) {
-            auto& pchunk = request.chunks().Get(i);
-            int64_t chunk_bytes = pchunk.data().size();
-            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+    for (auto i = 0; i < request.chunks().size(); ++i) {
+        auto& pchunk = request.chunks().Get(i);
+        int64_t chunk_bytes = pchunk.data().size();
+        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
 
-            ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
+        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
 
-            // TODO(zc): review this chunk_bytes
-            local_chunk_queue.emplace_back(std::move(item));
+        // TODO(zc): review this chunk_bytes
+        local_chunk_queue.emplace_back(std::move(item));
 
-            total_chunk_bytes += chunk_bytes;
-        }
-        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
+        total_chunk_bytes += chunk_bytes;
     }
+    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
 
     wait_timer.start();
     {
@@ -568,213 +513,12 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
 
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                         ::google::protobuf::Closure** done) {
-    bool use_pass_through = request.use_pass_through();
-    DCHECK(request.chunks_size() > 0 || use_pass_through);
-    if (_is_cancelled || _num_remaining_senders <= 0) {
-        return Status::OK();
-    }
-
-    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-    {
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-        // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are transmitted in shared memory without ser/deser
-        // So there is no need to build chunk meta.
-        if (_chunk_meta.types.empty() && !use_pass_through) {
-            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
-            auto& pchunk = request.chunks(0);
-            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-        }
-    }
-
-    size_t total_chunk_bytes = 0;
-    faststring uncompressed_buffer;
-    _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
-
-    ChunkList chunks;
-
-    if (use_pass_through) {
-        ChunkUniquePtrVector swap_chunks;
-        std::vector<size_t> swap_bytes;
-        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
-        DCHECK(swap_chunks.size() == swap_bytes.size());
-        size_t bytes = 0;
-        for (size_t i = 0; i < swap_chunks.size(); i++) {
-            // The sending and receiving of chunks from _pass_through_context may out of order, and
-            // considering the following sequences:
-            // 1. add chunk_1 to _pass_through_context and send request_1
-            // 2. add chunk_2 to _pass_through_context and send request_2
-            // 3. receive request_1 and get both chunk_1 and chunk_2
-            // 4. receive request_2 and get nothing
-            // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
-            // but not the request's driver_sequence
-            chunks.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
-            bytes += swap_bytes[i];
-        }
-        total_chunk_bytes += bytes;
-        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
-    } else {
-        for (auto i = 0; i < request.chunks().size(); i++) {
-            auto& pchunk = request.chunks().Get(i);
-            int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
-            int64_t chunk_bytes = pchunk.data().size();
-            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
-            total_chunk_bytes += chunk_bytes;
-        }
-
-        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
-    }
-
-    if (_is_cancelled) {
-        return Status::OK();
-    }
-
-    wait_timer.start();
-    {
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-
-        for (auto iter = chunks.begin(); iter != chunks.end();) {
-            if (_is_pipeline_level_shuffle &&
-                _short_circuit_driver_sequences.find(iter->driver_sequence) != _short_circuit_driver_sequences.end()) {
-                chunks.erase(iter++);
-                continue;
-            }
-            iter++;
-        }
-    }
-    if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-        chunks.back().closure = *done;
-        chunks.back().queue_enter_time = MonotonicNanos();
-        COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
-        *done = nullptr;
-    }
-    for (auto& chunk : chunks) {
-        int index = _is_pipeline_level_shuffle ? chunk.driver_sequence : 0;
-        size_t chunk_bytes = chunk.chunk_bytes;
-        _chunk_queues[index].enqueue(std::move(chunk));
-        _total_chunks++;
-        _recvr->_num_buffered_bytes += chunk_bytes;
-    }
-    return Status::OK();
+    return add_chunks<false>(request, done);
 }
 
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
                                                                        ::google::protobuf::Closure** done) {
-    DCHECK(!request.has_is_pipeline_level_shuffle() || !request.is_pipeline_level_shuffle());
-    bool use_pass_through = request.use_pass_through();
-    DCHECK(request.chunks_size() > 0 || use_pass_through);
-    const int32_t be_number = request.be_number();
-    const int32_t sequence = request.sequence();
-    if (_is_cancelled || _num_remaining_senders <= 0) {
-        return Status::OK();
-    }
-
-    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-    {
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-
-        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
-            _max_processed_sequences[be_number] = -1;
-        }
-
-        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
-            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkList>();
-        }
-        // We only need to build chunk meta on first chunk and not use_pass_through
-        // By using pass through, chunks are transmitted in shared memory without ser/deser
-        // So there is no need to build chunk meta.
-        if (_chunk_meta.types.empty() && !use_pass_through) {
-            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
-            auto& pchunk = request.chunks(0);
-            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-        }
-    }
-
-    size_t total_chunk_bytes = 0;
-    faststring uncompressed_buffer;
-    ChunkList local_chunk_queue;
-
-    if (use_pass_through) {
-        ChunkUniquePtrVector swap_chunks;
-        std::vector<size_t> swap_bytes;
-        _recvr->_pass_through_context.pull_chunks(request.sender_id(), &swap_chunks, &swap_bytes);
-        DCHECK(swap_chunks.size() == swap_bytes.size());
-        size_t bytes = 0;
-        for (size_t i = 0; i < swap_chunks.size(); i++) {
-            // The sending and receiving of chunks from _pass_through_context may out of order, and
-            // considering the following sequences:
-            // 1. add chunk_1 to _pass_through_context and send request_1
-            // 2. add chunk_2 to _pass_through_context and send request_2
-            // 3. receive request_1 and get both chunk_1 and chunk_2
-            // 4. receive request_2 and get nothing
-            // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
-            // but not the request's driver_sequence
-            local_chunk_queue.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
-            bytes += swap_bytes[i];
-        }
-        total_chunk_bytes += bytes;
-        COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
-    } else {
-        for (auto i = 0; i < request.chunks().size(); i++) {
-            auto& pchunk = request.chunks().Get(i);
-            int64_t chunk_bytes = pchunk.data().size();
-            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-            local_chunk_queue.emplace_back(chunk_bytes, -1, nullptr, std::move(chunk));
-            total_chunk_bytes += chunk_bytes;
-        }
-        COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
-    }
-
-    if (_is_cancelled) {
-        return Status::OK();
-    }
-
-    wait_timer.start();
-    {
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-
-        auto& chunk_queues = _buffered_chunk_queues[be_number];
-
-        if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            local_chunk_queue.back().closure = *done;
-            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
-            *done = nullptr;
-        }
-
-        // The queue in chunk_queues cannot be changed, so it must be
-        // assigned to chunk_queues after local_chunk_queue is initialized
-        // Otherwise, other threads may see the intermediate state because
-        // the initialization of local_chunk_queue is beyond mutex
-        chunk_queues[sequence] = std::move(local_chunk_queue);
-
-        phmap::flat_hash_map<int64_t, ChunkList>::iterator it;
-        int64_t& max_processed_sequence = _max_processed_sequences[be_number];
-
-        // max_processed_sequence + 1 means the first unprocessed sequence
-        while ((it = chunk_queues.find(max_processed_sequence + 1)) != chunk_queues.end()) {
-            ChunkList& unprocessed_chunk_queue = (*it).second;
-
-            // Now, all the packets with sequance <= unprocessed_sequence have been received
-            // so chunks of unprocessed_sequence can be flushed to ready queue
-            for (auto& item : unprocessed_chunk_queue) {
-                size_t chunk_bytes = item.chunk_bytes;
-                _chunk_queues[0].enqueue(*_producer_token, std::move(item));
-                _total_chunks++;
-                _recvr->_num_buffered_bytes += chunk_bytes;
-            }
-
-            chunk_queues.erase(it);
-            ++max_processed_sequence;
-        }
-    }
-    return Status::OK();
+    return add_chunks<true>(request, done);
 }
 
 void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
@@ -825,6 +569,164 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
             }
         }
     }
+}
+
+Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTransmitChunkParams& request) {
+    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+    std::lock_guard<Mutex> l(_lock);
+    wait_timer.stop();
+    // We only need to build chunk meta on first chunk and not use_pass_through
+    // By using pass through, chunks are transmitted in shared memory without ser/deser
+    // So there is no need to build chunk meta.
+    if (_chunk_meta.types.empty() && !request.use_pass_through()) {
+        SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
+        auto& pchunk = request.chunks(0);
+        return _build_chunk_meta(pchunk);
+    }
+    return Status::OK();
+}
+
+StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sender_id, size_t& total_chunk_bytes) {
+    ChunkUniquePtrVector swap_chunks;
+    std::vector<size_t> swap_bytes;
+    _recvr->_pass_through_context.pull_chunks(sender_id, &swap_chunks, &swap_bytes);
+    DCHECK(swap_chunks.size() == swap_bytes.size());
+    ChunkList chunks;
+    for (size_t i = 0; i < swap_chunks.size(); i++) {
+        // The sending and receiving of chunks from _pass_through_context may out of order, and
+        // considering the following sequences:
+        // 1. add chunk_1 to _pass_through_context and send request_1
+        // 2. add chunk_2 to _pass_through_context and send request_2
+        // 3. receive request_1 and get both chunk_1 and chunk_2
+        // 4. receive request_2 and get nothing
+        // So one receiving may receive two or more chunks, and we need to use the chunk's driver_sequence
+        // but not the request's driver_sequence
+        chunks.emplace_back(swap_bytes[i], swap_chunks[i].second, nullptr, std::move(swap_chunks[i].first));
+        total_chunk_bytes += swap_bytes[i];
+    }
+    return chunks;
+}
+
+StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes) {
+    ChunkList chunks;
+    faststring uncompressed_buffer;
+    for (auto i = 0; i < request.chunks().size(); i++) {
+        auto& pchunk = request.chunks().Get(i);
+        int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
+        int64_t chunk_bytes = pchunk.data().size();
+        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+        chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
+        total_chunk_bytes += chunk_bytes;
+    }
+    return chunks;
+}
+
+template<bool keep_order>
+Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
+    if (keep_order) {
+        DCHECK(!request.has_is_pipeline_level_shuffle() || !request.is_pipeline_level_shuffle());
+    }
+    bool use_pass_through = request.use_pass_through();
+    DCHECK(request.chunks_size() > 0 || use_pass_through);
+    if (_is_cancelled || _num_remaining_senders <= 0) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(try_to_build_chunk_meta(request));
+
+    size_t total_chunk_bytes = 0;
+    _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
+
+    ChunkList chunks;
+    ASSIGN_OR_RETURN(chunks, use_pass_through ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes): get_chunks_from_request(request, total_chunk_bytes));
+    COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
+
+    if (_is_cancelled) {
+        return Status::OK();
+    }
+
+    if (keep_order) {
+        const int32_t be_number = request.be_number();
+        const int32_t sequence = request.sequence();
+        ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+        std::lock_guard<Mutex> l(_lock);
+        wait_timer.stop();
+
+        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
+            _max_processed_sequences[be_number] = -1;
+        }
+
+        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
+            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkList>();
+        }
+
+        auto& chunk_queues = _buffered_chunk_queues[be_number];
+
+        if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            chunks.back().closure = *done;
+            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+            *done = nullptr;
+        }
+
+        // The queue in chunk_queues cannot be changed, so it must be
+        // assigned to chunk_queues after local_chunk_queue is initialized
+        // Otherwise, other threads may see the intermediate state because
+        // the initialization of local_chunk_queue is beyond mutex
+        chunk_queues[sequence] = std::move(chunks);
+
+        phmap::flat_hash_map<int64_t, ChunkList>::iterator it;
+        int64_t& max_processed_sequence = _max_processed_sequences[be_number];
+
+        // max_processed_sequence + 1 means the first unprocessed sequence
+        while ((it = chunk_queues.find(max_processed_sequence + 1)) != chunk_queues.end()) {
+            ChunkList& unprocessed_chunk_queue = (*it).second;
+
+            // Now, all the packets with sequance <= unprocessed_sequence have been received
+            // so chunks of unprocessed_sequence can be flushed to ready queue
+            for (auto& item : unprocessed_chunk_queue) {
+                size_t chunk_bytes = item.chunk_bytes;
+                _chunk_queues[0].enqueue(*_producer_token, std::move(item));
+                _total_chunks++;
+                _recvr->_num_buffered_bytes += chunk_bytes;
+            }
+
+            chunk_queues.erase(it);
+            ++max_processed_sequence;
+        }
+    } else {
+        {
+            // remove the short-circuited chunks
+            ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+            std::lock_guard<Mutex> l(_lock);
+            wait_timer.stop();
+
+            for (auto iter = chunks.begin(); iter != chunks.end();) {
+                if (_is_pipeline_level_shuffle &&
+                    _short_circuit_driver_sequences.find(iter->driver_sequence) != _short_circuit_driver_sequences.end()) {
+                    total_chunk_bytes -= iter->chunk_bytes;
+                    chunks.erase(iter++);
+                    continue;
+                }
+                iter++;
+            }
+        }
+        if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+            chunks.back().closure = *done;
+            chunks.back().queue_enter_time = MonotonicNanos();
+            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+            *done = nullptr;
+        }
+        for (auto& chunk : chunks) {
+            int index = _is_pipeline_level_shuffle ? chunk.driver_sequence : 0;
+            size_t chunk_bytes = chunk.chunk_bytes;
+            _chunk_queues[index].enqueue(std::move(chunk));
+            _total_chunks++;
+            _recvr->_num_buffered_bytes += chunk_bytes;
+        }
+    }
+
+    return Status::OK();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_sequence) {

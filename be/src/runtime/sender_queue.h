@@ -152,8 +152,6 @@ public:
     bool is_finished() const;
 
 private:
-    void clean_buffer_queues();
-
     struct ChunkItem {
         int64_t chunk_bytes = 0;
         // Invalid if SenderQueue::_is_pipeline_level_shuffle is false
@@ -172,6 +170,19 @@ private:
         ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure, ChunkUniquePtr&& chunk_ptr):
             chunk_bytes(chunk_bytes), driver_sequence(driver_sequence),closure(closure),chunk_ptr(std::move(chunk_ptr)) {}
     };
+
+    typedef std::list<ChunkItem> ChunkList;
+
+    void clean_buffer_queues();
+
+    StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
+
+    StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes);
+
+    Status try_to_build_chunk_meta(const PTransmitChunkParams& request);
+
+    template<bool keep_order>
+    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     typedef moodycamel::ConcurrentQueue<ChunkItem> ChunkQueue;
 
@@ -199,7 +210,6 @@ private:
     // chunk request may be out-of-order, but we have to deal with it in order
     // key of first level is be_number
     // key of second level is request sequence
-    typedef std::list<ChunkItem> ChunkList;
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
 
     std::unordered_set<int32_t> _short_circuit_driver_sequences;
