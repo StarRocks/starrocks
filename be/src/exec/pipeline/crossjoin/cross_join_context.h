@@ -78,7 +78,7 @@ private:
     std::atomic_int64_t _num_build_rows = 0;
 
     // Join states
-    std::mutex _join_stage_mutex; // Protects join states
+    std::mutex _join_stage_mutex;                                 // Protects join states
     std::vector<std::vector<vectorized::ChunkPtr>> _input_chunks; // Input chunks from each sink
     std::vector<vectorized::ChunkPtr> _build_chunks;              // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
