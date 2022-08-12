@@ -64,7 +64,7 @@ public class TabletSchedulerTest {
         recycleBin.recycleDatabase(badDb, new HashSet<>());
         recycleBin.recycleTable(goodDB.getId(), badTable);
         recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
-                null, new DataProperty(TStorageMedium.HDD), (short)2, false);
+                null, new DataProperty(TStorageMedium.HDD), (short)2, false, null, false);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();
         List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
