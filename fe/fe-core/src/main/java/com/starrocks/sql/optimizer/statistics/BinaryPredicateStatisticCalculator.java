@@ -6,15 +6,17 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.statistic.StatisticUtils;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalDouble;
 
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.NaN;
 import static java.lang.Double.POSITIVE_INFINITY;
-import static java.lang.Double.sum;
 import static java.lang.Math.max;
 
 public class BinaryPredicateStatisticCalculator {
@@ -46,12 +48,11 @@ public class BinaryPredicateStatisticCalculator {
                                                             ColumnStatistic columnStatistic,
                                                             ConstantOperator constant,
                                                             Statistics statistics) {
-        double min = NEGATIVE_INFINITY;
-        double max = POSITIVE_INFINITY;
-        if (!constant.getType().isStringType()) {
-            min = constant.getDouble();
-            max = constant.getDouble();
-        }
+
+        double min = StatisticUtils.convertStatisticsToDouble(constant.getType(), constant.toString())
+                .orElse(NEGATIVE_INFINITY);
+        double max = StatisticUtils.convertStatisticsToDouble(constant.getType(), constant.toString())
+                .orElse(POSITIVE_INFINITY);
 
         ColumnStatistic estimatedColumnStatistic = ColumnStatistic.builder()
                 .setAverageRowSize(columnStatistic.getAverageRowSize())
@@ -65,8 +66,8 @@ public class BinaryPredicateStatisticCalculator {
         double rowCount;
         if (columnStatistic.getHistogram() != null) {
             Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
-            if (histogramTopN.containsKey(constant.getVarchar())) {
-                rowCount = histogramTopN.get(constant.getVarchar());
+            if (histogramTopN.containsKey(constant.toString())) {
+                rowCount = histogramTopN.get(constant.toString());
             } else {
                 Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
                 double predicateFactor = 1 / max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(), 1);
@@ -101,28 +102,22 @@ public class BinaryPredicateStatisticCalculator {
                                                              ConstantOperator constant,
                                                              Statistics statistics,
                                                              BinaryPredicateOperator.BinaryType binaryType) {
-        StatisticRangeValues predicateRange =
-                new StatisticRangeValues(NEGATIVE_INFINITY, constant.orElse(POSITIVE_INFINITY), NaN);
         if (columnStatistic.getHistogram() != null) {
-            Histogram histogram = columnStatistic.getHistogram();
-            double rowCount;
-            if (histogram.getMin() != Double.MIN_VALUE) {
-                double r1 = estimatePredicateRangeWithHistogram(columnStatistic, constant, statistics,
-                        binaryType.equals(BinaryPredicateOperator.BinaryType.LE));
-                double r2 = estimatePredicateRangeWithHistogram(columnStatistic, OptionalDouble.of(histogram.getMin()),
-                        statistics, !histogram.isContainMin());
-                rowCount = r1 - r2;
-            } else {
-                rowCount = estimatePredicateRangeWithHistogram(columnStatistic, constant, statistics,
-                        binaryType.equals(BinaryPredicateOperator.BinaryType.LE));
-            }
+            Histogram estimatedHistogram = estimatePredicateRangeWithHistogram(columnStatistic, constant,
+                    binaryType.equals(BinaryPredicateOperator.BinaryType.LE));
+
+            long rowCount = estimatedHistogram.getBuckets().get(estimatedHistogram.getBuckets().size() - 1).getCount()
+                    + estimatedHistogram.getMCV().values().stream().reduce(Long::sum).orElse(0L);
 
             ColumnStatistic newEstimateColumnStatistics =
-                    estimateColumnStatisticsWithHistogram(columnStatistic, predicateRange, constant, binaryType);
+                    estimateColumnStatisticsWithHistogram(columnStatistic, estimatedHistogram);
             Statistics.Builder builder = Statistics.buildFrom(statistics).setOutputRowCount(rowCount);
             columnRefOperator.ifPresent(refOperator -> builder.addColumnStatistic(refOperator, newEstimateColumnStatistics));
             return builder.build();
         } else {
+            Double constantDouble =
+                    StatisticUtils.convertStatisticsToDouble(constant.getType(), constant.toString()).orElse(POSITIVE_INFINITY);
+            StatisticRangeValues predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, constantDouble, NaN);
             return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
         }
     }
@@ -132,29 +127,25 @@ public class BinaryPredicateStatisticCalculator {
                                                                 ConstantOperator constant,
                                                                 Statistics statistics,
                                                                 BinaryPredicateOperator.BinaryType binaryType) {
-        StatisticRangeValues predicateRange =
-                new StatisticRangeValues(constant.orElse(NEGATIVE_INFINITY), POSITIVE_INFINITY, NaN);
+
 
         if (columnStatistic.getHistogram() != null) {
-            Histogram histogram = columnStatistic.getHistogram();
-            double rowCount;
-            if (histogram.getMax() != Double.MAX_VALUE) {
-                double r1 = estimatePredicateRangeWithHistogram(
-                        columnStatistic, OptionalDouble.of(histogram.getMax()), statistics, !histogram.isContainMax());
-                double r2 = estimatePredicateRangeWithHistogram(
-                        columnStatistic, constant, statistics, !binaryType.equals(BinaryPredicateOperator.BinaryType.GE));
-                rowCount = r2 - r1;
-            } else {
-                rowCount = statistics.getOutputRowCount() - estimatePredicateRangeWithHistogram(
-                        columnStatistic, constant, statistics, !binaryType.equals(BinaryPredicateOperator.BinaryType.GE));
-            }
+            Histogram estimatedHistogram = estimatePredicateRangeWithHistogram2(columnStatistic, constant,
+                    !binaryType.equals(BinaryPredicateOperator.BinaryType.GE));
+
+            long rowCount = estimatedHistogram.getBuckets().get(estimatedHistogram.getBuckets().size() - 1).getCount()
+                    + estimatedHistogram.getMCV().values().stream().reduce(Long::sum).orElse(0L);
 
             ColumnStatistic newEstimateColumnStatistics =
-                    estimateColumnStatisticsWithHistogram(columnStatistic, predicateRange, constant, binaryType);
+                    estimateColumnStatisticsWithHistogram(columnStatistic, estimatedHistogram);
             Statistics.Builder builder = Statistics.buildFrom(statistics).setOutputRowCount(rowCount);
             columnRefOperator.ifPresent(refOperator -> builder.addColumnStatistic(refOperator, newEstimateColumnStatistics));
             return builder.build();
         } else {
+            Double constantDouble =
+                    StatisticUtils.convertStatisticsToDouble(constant.getType(), constant.toString()).orElse(NEGATIVE_INFINITY);
+            StatisticRangeValues predicateRange =
+                    new StatisticRangeValues(constantDouble, POSITIVE_INFINITY, NaN);
             return estimatePredicateRange(columnRefOperator, columnStatistic, predicateRange, statistics);
         }
     }
@@ -255,24 +246,6 @@ public class BinaryPredicateStatisticCalculator {
         return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build();
     }
 
-    public static Statistics estimatePredicatePoint(Statistics statistics,
-                                                    ColumnRefOperator columnRefOperator,
-                                                    ColumnStatistic columnStatistic) {
-        ColumnStatistic c = ColumnStatistic.builder()
-                .setAverageRowSize(columnStatistic.getAverageRowSize())
-                .setNullsFraction(0)
-                .setMinValue(0)
-                .setMaxValue(0)
-                .setDistinctValuesCount(1)
-                .setType(columnStatistic.getType())
-                .build();
-
-        return Statistics.buildFrom(statistics)
-                .addColumnStatistic(columnRefOperator, c)
-                .setOutputRowCount(0)
-                .build();
-    }
-
     public static Statistics estimatePredicateRange(Optional<ColumnRefOperator> columnRefOperator,
                                                     ColumnStatistic columnStatistic,
                                                     StatisticRangeValues predicateRange,
@@ -306,11 +279,12 @@ public class BinaryPredicateStatisticCalculator {
                 orElseGet(() -> Statistics.buildFrom(statistics).setOutputRowCount(rowCount).build());
     }
 
-    public static double estimatePredicateRangeWithHistogram(ColumnStatistic columnStatistic, OptionalDouble constant,
-                                                             Statistics statistics, boolean containUpper) {
-        double constantDouble = constant.getAsDouble();
+    public static Histogram estimatePredicateRangeWithHistogram(ColumnStatistic columnStatistic, ConstantOperator constant,
+                                                                boolean containUpper) {
+        double constantDouble = constant.getDouble();
         Histogram histogram = columnStatistic.getHistogram();
 
+        List<Bucket> bucketList = new ArrayList<>();
         for (int i = 0; i < histogram.getBuckets().size(); i++) {
             Bucket bucket = histogram.getBuckets().get(i);
             long previousTotalRowCount = 0;
@@ -323,53 +297,109 @@ public class BinaryPredicateStatisticCalculator {
                 StatisticRangeValues columnRange = new StatisticRangeValues(bucket.getLower(), constantDouble, NaN);
                 double predicateFactor = bucketRange.overlapPercentWith(columnRange);
 
-                double bucketRowCount;
+                long bucketRowCount;
+                long repeat;
                 if (containUpper && constantDouble == bucket.getUpper()) {
                     bucketRowCount = bucket.getCount() - previousTotalRowCount;
+                    repeat = bucket.getUpperRepeats();
                 } else {
                     long bucketTotalRows = bucket.getCount() - bucket.getUpperRepeats() - previousTotalRowCount;
-                    bucketRowCount = bucketTotalRows * predicateFactor;
+                    bucketRowCount = (long) (bucketTotalRows * predicateFactor);
+                    repeat = 0;
                 }
 
-                return previousTotalRowCount + (long) bucketRowCount;
+                bucketList.add(new Bucket(bucket.getLower(), constantDouble, previousTotalRowCount + bucketRowCount, repeat));
+                break;
             } else if (bucket.getLower() > constantDouble) {
-                return previousTotalRowCount;
+                break;
+            }
+
+            bucketList.add(bucket);
+        }
+
+        Map<String, Long> mostCommonValues = histogram.getMCV();
+        Map<String, Long> estimatedMCV = new HashMap<>();
+        for (Map.Entry<String, Long> entry : mostCommonValues.entrySet()) {
+            double key = 0;
+            if (key < constantDouble) {
+                estimatedMCV.put(entry.getKey(), entry.getValue());
+            } else if (key == constantDouble && containUpper) {
+                estimatedMCV.put(entry.getKey(), entry.getValue());
             }
         }
 
-        return statistics.getOutputRowCount();
+        return new Histogram(bucketList, estimatedMCV);
+    }
+
+
+    public static Histogram estimatePredicateRangeWithHistogram2(ColumnStatistic columnStatistic, ConstantOperator constant,
+                                                                 boolean containUpper) {
+        double constantDouble = constant.getDouble();
+        Histogram histogram = columnStatistic.getHistogram();
+
+        List<Bucket> bucketList = new ArrayList<>();
+        int i = 0;
+        for (; i < histogram.getBuckets().size(); i++) {
+            Bucket bucket = histogram.getBuckets().get(i);
+            long previousTotalRowCount = 0;
+            if (i > 0) {
+                previousTotalRowCount = histogram.getBuckets().get(i - 1).getCount();
+            }
+
+            if (bucket.getUpper() >= constantDouble && bucket.getLower() <= constantDouble) {
+                StatisticRangeValues bucketRange = new StatisticRangeValues(bucket.getLower(), bucket.getUpper(), NaN);
+                StatisticRangeValues columnRange = new StatisticRangeValues(bucket.getLower(), constantDouble, NaN);
+                double predicateFactor = bucketRange.overlapPercentWith(columnRange);
+
+                long bucketRowCount;
+                long repeat;
+                if (containUpper && constantDouble == bucket.getUpper()) {
+                    bucketRowCount = bucket.getCount() - previousTotalRowCount;
+                    repeat = bucket.getUpperRepeats();
+                } else {
+                    long bucketTotalRows = bucket.getCount() - bucket.getUpperRepeats() - previousTotalRowCount;
+                    bucketRowCount = (long) (bucketTotalRows * predicateFactor);
+                    repeat = 0;
+                }
+
+                bucketList.add(new Bucket(bucket.getLower(), constantDouble, previousTotalRowCount + bucketRowCount, repeat));
+                break;
+            } else if (bucket.getLower() > constantDouble) {
+                break;
+            }
+
+            //bucketList.add(bucket);
+        }
+
+        for (; i < histogram.getBuckets().size(); i++) {
+            bucketList.add(histogram.getBuckets().get(i));
+        }
+
+        Map<String, Long> mostCommonValues = histogram.getMCV();
+        Map<String, Long> estimatedMCV = new HashMap<>();
+        for (Map.Entry<String, Long> entry : mostCommonValues.entrySet()) {
+            double key = 0;
+            if (key > constantDouble) {
+                estimatedMCV.put(entry.getKey(), entry.getValue());
+            } else if (key == constantDouble && containUpper) {
+                estimatedMCV.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return new Histogram(bucketList, estimatedMCV);
     }
 
     public static ColumnStatistic estimateColumnStatisticsWithHistogram(ColumnStatistic columnStatistic,
-                                                                        StatisticRangeValues predicateRange,
-                                                                        OptionalDouble constantOptional,
-                                                                        BinaryPredicateOperator.BinaryType binaryType) {
-        Histogram histogram = columnStatistic.getHistogram();
-
-        StatisticRangeValues columnRange = StatisticRangeValues.from(columnStatistic);
-        StatisticRangeValues intersectRange = columnRange.intersect(predicateRange);
+                                                                        Histogram histogram) {
         ColumnStatistic.Builder newEstimateColumnStatistics = ColumnStatistic.builder().
                 setAverageRowSize(columnStatistic.getAverageRowSize()).
-                setMaxValue(intersectRange.getHigh()).
-                setMinValue(intersectRange.getLow()).
+                setMaxValue(histogram.getBuckets().get(0).getLower()).
+                setMinValue(histogram.getBuckets().get(histogram.getBuckets().size() - 1).getUpper()).
                 setNullsFraction(0).
                 setDistinctValuesCount(columnStatistic.getDistinctValuesCount()).
                 setType(columnStatistic.getType());
 
-        double constant = constantOptional.getAsDouble();
-        Histogram newHistogram = new Histogram(histogram.getBuckets(), histogram.getMin(), histogram.isContainMin(),
-                histogram.getMax(), histogram.isContainMax());
-        if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
-            newHistogram.setMax(constant, true);
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
-            newHistogram.setMax(constant, false);
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GE)) {
-            newHistogram.setMin(constant, true);
-        } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.GT)) {
-            newHistogram.setMin(constant, false);
-        }
-        newEstimateColumnStatistics.setHistogram(newHistogram);
-
+        newEstimateColumnStatistics.setHistogram(histogram);
         return newEstimateColumnStatistics.build();
     }
 }

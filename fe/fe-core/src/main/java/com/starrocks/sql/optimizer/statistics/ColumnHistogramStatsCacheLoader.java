@@ -116,7 +116,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         }
 
         List<Bucket> buckets = convertBuckets(statisticData.histogram, column.getType());
-        Map<String, Long> mcv = convertMCV(statisticData.histogram, column.getType());
+        Map<String, Long> mcv = convertMCV(statisticData.histogram);
         return new Histogram(buckets, mcv);
     }
 
@@ -158,7 +158,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return buckets;
     }
 
-    private Map<String, Long> convertMCV(String histogramString, Type type) {
+    private Map<String, Long> convertMCV(String histogramString) {
         JsonObject jsonObject = JsonParser.parseString(histogramString).getAsJsonObject();
         JsonElement jsonElement = jsonObject.get("mcv");
         if (jsonElement.isJsonNull()) {
@@ -169,19 +169,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         Map<String, Long> mcv = new HashMap<>();
         for (int i = 0; i < histogramObj.size(); ++i) {
             JsonArray bucketJsonArray = histogramObj.get(i).getAsJsonArray();
-
-            String key;
-            if (type.isDate()) {
-                key = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
-            } else if (type.isDatetime()) {
-                key = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
-            } else {
-                key = bucketJsonArray.get(0).getAsString();
-            }
-
-            mcv.put(key, Long.parseLong(bucketJsonArray.get(1).getAsString()));
+            mcv.put(bucketJsonArray.get(0).getAsString(), Long.parseLong(bucketJsonArray.get(1).getAsString()));
         }
         return mcv;
     }
