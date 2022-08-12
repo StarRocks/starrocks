@@ -17,20 +17,7 @@ public class DataSourceCache {
         return instance;
     }
 
-    public synchronized HikariDataSource getSource(String driverId) {
-        return sources.get(driverId);
-    }
-
     public HikariDataSource getSource(String driverId, Supplier<HikariDataSource> provider) {
-        HikariDataSource targetSource = sources.get(driverId);
-        if (targetSource == null) {
-            synchronized (this) {
-                if (targetSource == null) {
-                    sources.put(driverId, provider.get());
-                }
-            }
-            targetSource = sources.get(driverId);
-        }
-        return targetSource;
+        return sources.computeIfAbsent(driverId, k -> provider.get());
     }
 }
