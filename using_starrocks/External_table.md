@@ -1053,4 +1053,12 @@ SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE ta
 
 **解决方法**：
 
-原来是建外部表时端口不对，正确的端口是"port"="9020"，不是9931.
+建外部表时端口不对，正确的端口是"port"="9020"，不是9931。
+
+**提示问题**：
+
+查询报错: Memory of query_pool exceed limit. read and decompress page Used: 49113428144, Limit: 49111753861. Mem usage has exceed the limit of query pool
+
+**解决方法**：
+
+查询的外表列比较多时可能触发该问题，可通过在 be.conf 中添加参数 `buffer_stream_reserve_size=8192` 后重启 BE 解决该问题。
