@@ -53,6 +53,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
 
     // multi-stage other function mapping
     // origin aggregate -> Pair<1st stage, 2nd stage>
+    // these aggregate function can be support multi-stage
     private static final Map<String, Pair<String, String>> OTHER_FUNCTION_TRANS =
             ImmutableMap.<String, Pair<String, String>>builder()
                     .put(FunctionSet.COUNT, Pair.create(FunctionSet.COUNT, FunctionSet.SUM))
