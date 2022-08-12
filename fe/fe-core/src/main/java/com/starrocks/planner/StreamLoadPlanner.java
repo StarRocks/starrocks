@@ -52,6 +52,7 @@ import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -172,7 +173,7 @@ public class StreamLoadPlanner {
         // whether update.
         fragment.setLoadGlobalDicts(globalDicts);
 
-        fragment.finalize(null, false);
+        fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
 
         TExecPlanFragmentParams params = new TExecPlanFragmentParams();
         params.setProtocol_version(InternalServiceVersion.V1);

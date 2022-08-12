@@ -36,8 +36,8 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -56,7 +56,7 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.SetUserDefineVar;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -837,20 +837,20 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSysVariableDesc(SysVariableDesc node, Scope context) {
+        public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
                 if (node.getSetType().equals(SetType.USER)) {
-                    SetUserDefineVar setUserDefineVar = session.getUserDefineVariables(node.getName());
-                    if (setUserDefineVar == null) {
+                    UserVariable userVariable = session.getUserVariables(node.getName());
+                    if (userVariable == null) {
                         node.setType(Type.STRING);
                         node.setIsNull();
                         return null;
                     }
 
-                    Type variableType = setUserDefineVar.getResolvedExpression().getType();
-                    String variableValue = setUserDefineVar.getResolvedExpression().getStringValue();
+                    Type variableType = userVariable.getResolvedExpression().getType();
+                    String variableValue = userVariable.getResolvedExpression().getStringValue();
 
-                    if (setUserDefineVar.getResolvedExpression() instanceof NullLiteral) {
+                    if (userVariable.getResolvedExpression() instanceof NullLiteral) {
                         node.setType(variableType);
                         node.setIsNull();
                         return null;

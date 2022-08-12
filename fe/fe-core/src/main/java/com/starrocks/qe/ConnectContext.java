@@ -39,7 +39,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
-import com.starrocks.sql.ast.SetUserDefineVar;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.system.SystemInfoService;
@@ -120,7 +120,7 @@ public class ConnectContext {
     // all the modified session variables, will forward to leader
     protected Map<String, SetVar> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
-    protected HashMap<String, SetUserDefineVar> userDefineVariables;
+    protected HashMap<String, UserVariable> userVariables;
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -186,7 +186,7 @@ public class ConnectContext {
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
         sessionVariable = VariableMgr.newSessionVariable();
-        userDefineVariables = new HashMap<>();
+        userVariables = new HashMap<>();
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
         dumpInfo = new QueryDumpInfo(sessionVariable);
@@ -269,15 +269,15 @@ public class ConnectContext {
     }
 
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
-        if (setVar.getType().equals(SetType.USER)) {
-            SetUserDefineVar userDefineVariable = (SetUserDefineVar) setVar;
-            userDefineVariables.put(setVar.getVariable(), userDefineVariable);
-        } else {
-            VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
-            if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
-                modifiedSessionVariables.put(setVar.getVariable(), setVar);
-            }
+        VariableMgr.setVar(sessionVariable, setVar, onlySetSessionVar);
+        if (!setVar.getType().equals(SetType.GLOBAL) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+            modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
+    }
+
+    public void modifyUserVariable(SetVar setVar) {
+        UserVariable userDefineVariable = (UserVariable) setVar;
+        userVariables.put(setVar.getVariable(), userDefineVariable);
     }
 
     public SetStmt getModifiedSessionVariables() {
@@ -291,8 +291,8 @@ public class ConnectContext {
         return sessionVariable;
     }
 
-    public SetUserDefineVar getUserDefineVariables(String variable) {
-        return userDefineVariables.get(variable);
+    public UserVariable getUserVariables(String variable) {
+        return userVariables.get(variable);
     }
 
     public void resetSessionVariable() {

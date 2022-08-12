@@ -134,6 +134,7 @@ statement
     | showStatusStatement                                                                   #showStatus
     | showCharsetStatement                                                                  #showCharset
     | showBrokerStatement                                                                   #showBroker
+    | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
     | showWarningStatement                                                                  #showWarning
 
@@ -812,6 +813,10 @@ showBrokerStatement
     : SHOW BROKER
     ;
 
+showCollationStatement
+    : SHOW COLLATION ((LIKE pattern=string) | (WHERE expression))?
+    ;
+
 setStatement
     : SET setVar (',' setVar)*
     ;
@@ -823,7 +828,7 @@ setVar
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
-    | userDefineVariable '=' expression                                                         #setVariable
+    | userVariable '=' expression                                                         #setVariable
     | systemVariable '=' setExprOrDefault                                                       #setVariable
     ;
 
@@ -1078,8 +1083,8 @@ valueExpression
     ;
 
 primaryExpression
-    : userDefineVariable                                                                  #udfVar
-    | systemVariable                                                                      #sysVar
+    : userVariable                                                                        #userVariableExpression
+    | systemVariable                                                                      #systemVariableExpression
     | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
@@ -1129,7 +1134,7 @@ aggregationFunction
     | SUM '(' DISTINCT? expression ')'
     ;
 
-userDefineVariable
+userVariable
     : AT identifierOrString
     ;
 

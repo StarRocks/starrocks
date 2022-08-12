@@ -76,6 +76,8 @@ set(RUNTIME_FILES
     small_file_mgr.cpp
     record_batch_queue.cpp
     result_queue_mgr.cpp
+    statistic_result_writer.cpp
+    variable_result_writer.cpp
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
     file_result_writer.cpp
@@ -85,7 +87,6 @@ set(RUNTIME_FILES
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
-    statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
@@ -95,7 +96,6 @@ set(RUNTIME_FILES
     current_thread.cpp
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
-    variable_result_writer.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

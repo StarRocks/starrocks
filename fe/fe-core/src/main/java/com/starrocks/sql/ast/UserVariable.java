@@ -16,12 +16,13 @@ import com.starrocks.qe.ConnectContext;
 import java.util.ArrayList;
 import java.util.List;
 
-public class SetUserDefineVar extends SetVar {
+public class UserVariable extends SetVar {
 
-    public SetUserDefineVar(String variable, Expr value) {
+    public UserVariable(String variable, Expr value) {
         super(SetType.USER, variable, value);
     }
 
+    @Override
     public void analyze() {
         Expr expression = getExpression();
         if (expression instanceof NullLiteral) {
@@ -44,9 +45,8 @@ public class SetUserDefineVar extends SetVar {
                 rows.add(row);
                 ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
                 valuesRelation.setNullValues(true);
-                Relation from = valuesRelation;
 
-                SelectRelation selectRelation = new SelectRelation(selectList, from, null, null, null);
+                SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
                 QueryStatement queryStatement = new QueryStatement(selectRelation);
                 //System.out.println(ViewDefBuilder.build(queryStatement));
 

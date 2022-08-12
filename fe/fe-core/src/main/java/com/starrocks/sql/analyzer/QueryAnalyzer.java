@@ -231,7 +231,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                Table table = resolveTable(tableRelation.getName());
+                Table table = resolveTable(tableRelation);
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
@@ -644,8 +644,9 @@ public class QueryAnalyzer {
         }
     }
 
-    private Table resolveTable(TableName tableName) {
+    private Table resolveTable(TableRelation tableRelation) {
         try {
+            TableName tableName = tableRelation.getName();
             MetaUtils.normalizationTableName(session, tableName);
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
@@ -656,6 +657,10 @@ public class QueryAnalyzer {
 
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
+            if (tableRelation.getAlias() != null) {
+                tableRelation.setAlias(new TableName(catalogName, dbName, tableRelation.getAlias().getTbl()));
             }
 
             Database database = metadataMgr.getDb(catalogName, dbName);

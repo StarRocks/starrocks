@@ -35,42 +35,34 @@ void VariableResultWriter::_init_profile() {
 }
 
 Status VariableResultWriter::append_chunk(vectorized::Chunk* chunk) {
-    std::cout<<"variable result " << chunk->num_rows() << std::endl;
     SCOPED_TIMER(_total_timer);
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }
 
-    // Step 1: compute expr
     int num_columns = _output_expr_ctxs.size();
-
     vectorized::Columns result_columns;
     result_columns.reserve(num_columns);
-
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(auto col, _output_expr_ctxs[i]->evaluate(chunk));
         result_columns.emplace_back(std::move(col));
     }
-
-    // Step 2: fill version magic_num, first column must be version(const int)
-    DCHECK(!result_columns.empty());
-    DCHECK(!result_columns[0]->empty());
-    DCHECK(!result_columns[0]->is_null(0));
 
     std::unique_ptr<TFetchDataResult> result(new (std::nothrow) TFetchDataResult());
     if (!result) {
         return Status::MemoryAllocFailed("memory allocate failed");
     }
 
-    BinaryColumn* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(result_columns[0].get()));
+    BinaryColumn* variable = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(result_columns[0].get()));
     std::vector<TVariableData> var_list;
-    int num_rows = chunk->num_rows();
 
+    int num_rows = chunk->num_rows();
     var_list.resize(num_rows);
     if (!result_columns[0]->is_null(0)) {
-        var_list[0].__set_result(histogramColumn->get_slice(0).to_string());
+        var_list[0].__set_isNull(false);
+        var_list[0].__set_result(variable->get_slice(0).to_string());
     } else {
-        std::cout << "result is null" << std::endl;
+        var_list[0].__set_isNull(true);
     }
     result->result_batch.rows.resize(num_rows);
 
@@ -79,8 +71,6 @@ Status VariableResultWriter::append_chunk(vectorized::Chunk* chunk) {
         RETURN_IF_ERROR(serializer.serialize(&var_list[i], &result->result_batch.rows[i]));
     }
 
-    // Step 4: send
-    //size_t num_rows = result->result_batch.rows.size();
     Status status = _sinker->add_batch(result);
 
     if (status.ok()) {
@@ -88,7 +78,7 @@ Status VariableResultWriter::append_chunk(vectorized::Chunk* chunk) {
         return status;
     }
 
-    LOG(WARNING) << "Append statistic result to sink failed.";
+    LOG(WARNING) << "Append user variable result to sink failed.";
     return status;
 }
 

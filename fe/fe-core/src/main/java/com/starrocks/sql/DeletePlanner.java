@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
 
@@ -45,8 +46,9 @@ public class DeletePlanner {
                 new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()),
                 columnRefFactory);
-        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames);
+        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(optimizedPlan, session,
+                logicalPlan.getOutputColumn(), columnRefFactory,
+                colNames, TResultSinkType.MYSQL_PROTOCAL, false);
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
@@ -79,7 +81,8 @@ public class DeletePlanner {
         // because tablet writing needs to know the number of senders in advance
         // and guaranteed order of data writing
         // It can be parallel only in some scenes, for easy use 1 dop now.
-        execPlan.getFragments().get(0).setPipelineDop(1);;
+        execPlan.getFragments().get(0).setPipelineDop(1);
+        ;
         return execPlan;
     }
 }
