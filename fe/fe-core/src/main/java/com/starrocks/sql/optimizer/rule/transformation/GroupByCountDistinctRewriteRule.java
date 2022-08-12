@@ -156,20 +156,20 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
             String firstFn = OTHER_FUNCTION_TRANS.get(origin.getFunctionName().getFunction()).first;
             String secondFn = OTHER_FUNCTION_TRANS.get(origin.getFunctionName().getFunction()).second;
 
-            CallOperator firstAgg = getAggregation(firstFn, origin.getArgs(), v.getChildren());
+            CallOperator firstAgg = genAggregation(firstFn, origin.getArgs(), v.getChildren());
             ColumnRefOperator firstOutput = factory.create(firstAgg, firstAgg.getType(), firstAgg.isNullable());
 
             firstAggregations.put(firstOutput, firstAgg);
 
             CallOperator secondAgg =
-                    getAggregation(secondFn, new Type[] {firstAgg.getType()}, Lists.newArrayList(firstOutput));
+                    genAggregation(secondFn, new Type[] {firstAgg.getType()}, Lists.newArrayList(firstOutput));
             secondAggregations.put(k, secondAgg);
         });
 
         distinctMap.forEach((k, v) -> {
             Function origin = v.getFunction();
             String secondFn = DISTINCT_FUNCTION_TRANS.get(origin.getFunctionName().getFunction());
-            CallOperator secondAgg = getAggregation(secondFn, origin.getArgs(), v.getChildren());
+            CallOperator secondAgg = genAggregation(secondFn, origin.getArgs(), v.getChildren());
             secondAggregations.put(k, secondAgg);
         });
 
@@ -182,7 +182,7 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
     }
 
     @NotNull
-    private CallOperator getAggregation(String name, Type[] argTypes, List<ScalarOperator> args) {
+    private CallOperator genAggregation(String name, Type[] argTypes, List<ScalarOperator> args) {
         Function fn = Expr.getBuiltinFunction(name, argTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         return new CallOperator(name, fn.getReturnType(), args, fn);
     }
