@@ -104,6 +104,8 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
+import com.starrocks.thrift.TGetTablesMetaRequest;
+import com.starrocks.thrift.TGetTablesMetaResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -137,6 +139,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
+import com.starrocks.thrift.TTableMetaInfo;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
@@ -1316,5 +1319,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TSetConfigResponse(status);
         }
+    }
+
+    @Override
+    public TGetTablesMetaResponse getTablesMeta(TGetTablesMetaRequest request) throws TException {
+        TGetTablesMetaResponse resp = new TGetTablesMetaResponse();
+        List<TTableMetaInfo> tList = new ArrayList<>();
+        TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
+        tableMetaInfo.setTable_schema("test_db");
+        tableMetaInfo.setTable_name("cjs");
+        tableMetaInfo.setPrimary_key("date");
+        tableMetaInfo.setPartition_key("partition key");
+        tableMetaInfo.setDistribute_bucket("8");
+        tableMetaInfo.setDistribute_type("HASH");
+        tableMetaInfo.setDistribute_key("bucket key");
+        tableMetaInfo.setSort_key("sort key");
+        tableMetaInfo.setProperties("{}");
+        tList.add(tableMetaInfo);
+        resp.tables_meta_infos = tList;
+        return resp;
     }
 }

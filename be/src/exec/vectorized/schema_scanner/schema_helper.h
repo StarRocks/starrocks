@@ -45,6 +45,9 @@ public:
 
     static Status get_task_runs(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                 TGetTaskRunInfoResult* var_result);
+
+    static Status get_tables_meta(const std::string& ip, const int32_t port, const TGetTablesMetaRequest& var_params,
+                                  TGetTablesMetaResponse* var_result);
 };
 
 template <PrimitiveType SlotType>

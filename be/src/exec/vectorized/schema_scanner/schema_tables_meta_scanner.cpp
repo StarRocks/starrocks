@@ -1,0 +1,154 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+#include "exec/vectorized/schema_scanner/schema_tables_meta_scanner.h"
+
+#include "common/logging.h"
+#include "exec/vectorized/schema_scanner/schema_helper.h"
+#include "runtime/primitive_type.h"
+#include "runtime/string_value.h"
+
+namespace starrocks::vectorized {
+
+SchemaScanner::ColumnDesc SchemaTablesMetaScanner::_s_table_tables_meta_columns[] = {
+        //   name,       type,          size,     is_null
+        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"PRIMARY_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"PARTITION_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DISTRIBUTE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DISTRUBTE_BUCKET", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"SORT_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
+};
+
+SchemaTablesMetaScanner::SchemaTablesMetaScanner()
+        : SchemaScanner(_s_table_tables_meta_columns,
+                        sizeof(_s_table_tables_meta_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+
+SchemaTablesMetaScanner::~SchemaTablesMetaScanner() = default;
+
+Status SchemaTablesMetaScanner::start(RuntimeState* state) {
+    if (!_is_init) {
+        return Status::InternalError("used before initialized.");
+    }
+    TGetTablesMetaRequest tables_meta_req;
+    if (nullptr != _param->ip && 0 != _param->port) {
+        RETURN_IF_ERROR(
+                SchemaHelper::get_tables_meta(*(_param->ip), _param->port, tables_meta_req, &_tables_meta_response));
+    } else {
+        return Status::InternalError("IP or port doesn't exists");
+    }
+    return Status::OK();
+}
+
+Status SchemaTablesMetaScanner::get_next(ChunkPtr* chunk, bool* eos) {
+    if (!_is_init) {
+        return Status::InternalError("Used before initialized.");
+    }
+    if (nullptr == chunk || nullptr == eos) {
+        return Status::InternalError("input pointer is nullptr.");
+    }
+    if (_tables_meta_index >= _tables_meta_response.tables_meta_infos.size()) {
+        *eos = true;
+        return Status::OK();
+    }
+    *eos = false;
+    return fill_chunk(chunk);
+}
+
+Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
+    const TTableMetaInfo& info = _tables_meta_response.tables_meta_infos[_tables_meta_index];
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // table_schema
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                const std::string* str = &info.table_schema;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 2: {
+            // table_name
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                const std::string* str = &info.table_name;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 3: {
+            // primary_key
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                const std::string* str = &info.primary_key;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 4: {
+            // partition_key
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                const std::string* str = &info.partition_key;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 5: {
+            // distribute_key
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                const std::string* str = &info.distribute_key;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 6: {
+            // distribute_type
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                const std::string* str = &info.distribute_type;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 7: {
+            // distribute_bucket
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+                const std::string* str = &info.distribute_bucket;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 8: {
+            // sort_key
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+                const std::string* str = &info.sort_key;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        case 9: {
+            // properties
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+                const std::string* str = &info.properties;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+        }
+        default:
+            break;
+        }
+    }
+    _tables_meta_index++;
+    return Status::OK();
+}
+
+} // namespace starrocks::vectorized

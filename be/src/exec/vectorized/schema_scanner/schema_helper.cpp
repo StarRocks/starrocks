@@ -78,6 +78,14 @@ Status SchemaHelper::get_table_privs(const std::string& ip, const int32_t port, 
             [&request, &result](FrontendServiceConnection& client) { client->getTablePrivs(*result, request); });
 }
 
+Status SchemaHelper::get_tables_meta(const std::string& ip, const int32_t port, const TGetTablesMetaRequest& var_params,
+                                     TGetTablesMetaResponse* var_result) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&var_params, &var_result](FrontendServiceConnection& client) {
+                                                           client->getTablesMeta(*var_result, var_params);
+                                                       });
+}
+
 Status SchemaHelper::get_tasks(const std::string& ip, const int32_t port, const TGetTasksParams& var_params,
                                TGetTaskInfoResult* var_result) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
