@@ -730,7 +730,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getDegreeOfParallelism() {
         if (enablePipelineEngine) {
             if (pipelineDop > 0) {
-                return pipelineDop * parallelExecInstanceNum;
+                return pipelineDop;
             }
             return BackendCoreStat.getDefaultDOP();
         } else {
