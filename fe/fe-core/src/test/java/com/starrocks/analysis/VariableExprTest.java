@@ -33,7 +33,7 @@ public class VariableExprTest {
     public void testNormal() throws Exception {
         VariableExpr desc = new VariableExpr("version_comment");
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
-        Assert.assertEquals("@@version_comment", desc.toSql());
+        Assert.assertEquals("@@SESSION.version_comment", desc.toSql());
         Assert.assertEquals("version_comment", desc.getName());
         Assert.assertEquals(ScalarType.createType(PrimitiveType.VARCHAR), desc.getType());
         Assert.assertEquals(SetType.SESSION, desc.getSetType());
