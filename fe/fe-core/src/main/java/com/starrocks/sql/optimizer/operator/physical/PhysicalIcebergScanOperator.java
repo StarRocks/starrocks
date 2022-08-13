@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -18,36 +19,27 @@ import java.util.List;
 import java.util.Map;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
-    private final List<ScalarOperator> conjuncts;
-    // List of conjuncts for min/max values that are used to skip data when scanning Parquet/Orc files.
-    private final List<ScalarOperator> minMaxConjuncts;
-    // Map of columnRefOperator to column which column in minMaxConjuncts
-    private final Map<ColumnRefOperator, Column> minMaxColumnRefMap;
+
+    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
     public PhysicalIcebergScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> columnRefMap,
-                                       List<ScalarOperator> conjuncts,
-                                       List<ScalarOperator> minMaxConjuncts,
-                                       Map<ColumnRefOperator, Column> minMaxColumnRefMap,
+                                       ScanOperatorPredicates predicates,
                                        long limit,
                                        ScalarOperator predicate,
                                        Projection projection) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, table, columnRefMap, limit, predicate, projection);
-        this.conjuncts = conjuncts;
-        this.minMaxConjuncts = minMaxConjuncts;
-        this.minMaxColumnRefMap = minMaxColumnRefMap;
+        this.predicates = predicates;
     }
 
-    public List<ScalarOperator> getConjuncts() {
-        return conjuncts;
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return this.predicates;
     }
 
-    public List<ScalarOperator> getMinMaxConjuncts() {
-        return minMaxConjuncts;
-    }
-
-    public Map<ColumnRefOperator, Column> getMinMaxColumnRefMap() {
-        return minMaxColumnRefMap;
+    @Override
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
+        this.predicates = predicates;
     }
 
     @Override
@@ -72,24 +64,29 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
             return false;
         }
 
-        PhysicalIcebergScanOperator that = (PhysicalIcebergScanOperator) o;
+        PhysicalHiveScanOperator that = (PhysicalHiveScanOperator) o;
+        ScanOperatorPredicates targetPredicts = ((PhysicalHiveScanOperator) o).getScanOperatorPredicates();
         return Objects.equal(table, that.table) &&
-                Objects.equal(conjuncts, that.conjuncts) &&
-                Objects.equal(minMaxConjuncts, that.minMaxConjuncts) &&
-                Objects.equal(minMaxColumnRefMap, that.minMaxColumnRefMap);
+                Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
+                Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
+                Objects.equal(predicates.getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
+                Objects.equal(predicates.getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
+                Objects.equal(predicates.getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
+                Objects.equal(predicates.getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(super.hashCode(), table, conjuncts, minMaxConjuncts, minMaxColumnRefMap);
+        return Objects.hashCode(super.hashCode(), table, predicates);
     }
 
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
-        conjuncts.forEach(d -> refs.union(d.getUsedColumns()));
-        minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
-        minMaxColumnRefMap.keySet().forEach(refs::union);
+        predicates.getNoEvalPartitionConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
+        predicates.getPartitionConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
+        predicates.getMinMaxConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
+        predicates.getMinMaxColumnRefMap().keySet().forEach(refs::union);
         return refs;
     }
 }
