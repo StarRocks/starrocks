@@ -608,8 +608,13 @@ public class HiveMetaClient {
     }
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
+<<<<<<< HEAD
                                                 StorageDescriptor sd) throws Exception {
         URI uri = new URI(dirPath);
+=======
+                                               StorageDescriptor sd) throws Exception {
+        URI uri = new Path(dirPath).toUri();
+>>>>>>> b78f21a27 ([BugFix] fix uri to support file path contains blank space & more fit hadoop uri (#8061) (#9813))
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 
