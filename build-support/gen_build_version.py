@@ -50,7 +50,7 @@ def get_hostname():
     return out.decode('utf-8').strip()
 
 def get_java_version():
-    java_home = os.getenv("JAVA_HOME")
+    java_home = "/Library/Java/JavaVirtualMachines/jdk1.8.0_151.jdk/Contents/Home"
     java_res = subprocess.Popen([java_home + "/bin/java", "-fullversion"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     out, err = java_res.communicate()
 
