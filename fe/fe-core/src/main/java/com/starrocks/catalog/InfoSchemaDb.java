@@ -21,8 +21,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.SystemIdGenerator;
+import com.starrocks.common.SystemId;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -33,7 +32,7 @@ public class InfoSchemaDb extends Database {
     public static final String DATABASE_NAME = "information_schema";
 
     public InfoSchemaDb() {
-        super(SystemIdGenerator.getNextId(), ClusterNamespace.getFullName(DATABASE_NAME));
+        super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
         initTables();
     }
 
@@ -79,18 +78,13 @@ public class InfoSchemaDb extends Database {
     }
 
     public static String getFullInfoSchemaDbName() {
-        return ClusterNamespace.getFullName(DATABASE_NAME);
+        return DATABASE_NAME;
     }
 
     public static boolean isInfoSchemaDb(String dbName) {
         if (dbName == null) {
             return false;
         }
-        String[] ele = dbName.split(ClusterNamespace.CLUSTER_DELIMITER);
-        String newDbName = dbName;
-        if (ele.length == 2) {
-            newDbName = ele[1];
-        }
-        return DATABASE_NAME.equalsIgnoreCase(newDbName);
+        return DATABASE_NAME.equalsIgnoreCase(dbName);
     }
 }

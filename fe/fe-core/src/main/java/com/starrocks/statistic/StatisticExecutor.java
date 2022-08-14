@@ -289,7 +289,7 @@ public class StatisticExecutor {
             }
         } else {
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), table.getId(),
-                    statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
+                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
         }
         return analyzeStatus;
     }

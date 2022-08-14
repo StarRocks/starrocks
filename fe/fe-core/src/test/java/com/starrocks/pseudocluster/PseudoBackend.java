@@ -70,6 +70,8 @@ import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
 import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TPushType;
@@ -83,6 +85,7 @@ import com.starrocks.thrift.TScanCloseResult;
 import com.starrocks.thrift.TScanNextBatchParams;
 import com.starrocks.thrift.TScanOpenParams;
 import com.starrocks.thrift.TScanOpenResult;
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
@@ -153,6 +156,12 @@ public class PseudoBackend {
 
     private Random random;
 
+    private static ThreadLocal<PseudoBackend> currentBackend = new ThreadLocal<>();
+
+    public static PseudoBackend getCurrentBackend() {
+        return currentBackend.get();
+    }
+
     String genRowsetId() {
         return String.format("rowset-%d-%d", be.getId(), nextRowsetId.incrementAndGet());
     }
@@ -194,6 +203,7 @@ public class PseudoBackend {
         this.pBackendService = new PseudoPBackendService();
 
         reportTabletsWorker = new Thread(() -> {
+            currentBackend.set(PseudoBackend.this);
             while (!stopped) {
                 try {
                     Random r = new Random();
@@ -220,6 +230,7 @@ public class PseudoBackend {
         reportTabletsWorker.start();
 
         reportDisksWorker = new Thread(() -> {
+            currentBackend.set(PseudoBackend.this);
             while (!stopped) {
                 try {
                     Random r = new Random();
@@ -246,6 +257,7 @@ public class PseudoBackend {
         reportDisksWorker.start();
 
         reportTasksWorker = new Thread(() -> {
+            currentBackend.set(PseudoBackend.this);
             while (!stopped) {
                 try {
                     Random r = new Random();
@@ -401,6 +413,7 @@ public class PseudoBackend {
     }
 
     void handlePublish(TAgentTaskRequest request, TFinishTaskRequest finish) {
+        cluster.getConfig().injectPublishTaskLatency();
         TPublishVersionRequest task = request.publish_version_req;
         txnManager.publish(task.transaction_id, task.partition_version_infos, finish);
     }
@@ -496,7 +509,6 @@ public class PseudoBackend {
         finish.setRequest_version(pushReq.getVersion());
     }
 
-
     private class HeartBeatClient extends HeartbeatService.Client {
         public HeartBeatClient() {
             super(null);
@@ -515,6 +527,7 @@ public class PseudoBackend {
         BeThriftClient() {
             super(null);
             new Thread(() -> {
+                currentBackend.set(PseudoBackend.this);
                 while (true) {
                     try {
                         TAgentTaskRequest request = taskQueue.take();
@@ -634,6 +647,12 @@ public class PseudoBackend {
 
     private class PseudoPBackendService implements PBackendServiceAsync {
         private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        PseudoPBackendService() {
+            executor.submit(() -> {
+                currentBackend.set(PseudoBackend.this);
+            });
+        }
 
         @Override
         public PExecPlanFragmentResult execPlanFragment(PExecPlanFragmentRequest request) {
@@ -796,6 +815,13 @@ public class PseudoBackend {
         }
     }
 
+    static TStatus status(TStatusCode code, String msg) {
+        TStatus status = new TStatus();
+        status.status_code = code;
+        status.error_msgs = Lists.newArrayList(msg);
+        return status;
+    }
+
     void execPlanFragmentWithReport(TExecPlanFragmentParams params) {
         LOG.info("exec_plan_fragment {}", params.params.fragment_instance_id.toString());
         TReportExecStatusParams report = new TReportExecStatusParams();
@@ -807,6 +833,11 @@ public class PseudoBackend {
         report.setDone(true);
         // TODO: support error injection
         report.setStatus(new TStatus(TStatusCode.OK));
+        for (TPlanNode planNode : params.fragment.plan.nodes) {
+            if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
+                runOlapScan(report, planNode, params.params.per_node_scan_ranges.get(planNode.getNode_id()));
+            }
+        }
         if (params.fragment.output_sink != null) {
             TDataSink tDataSink = params.fragment.output_sink;
             runSink(report, tDataSink);
@@ -831,6 +862,11 @@ public class PseudoBackend {
         report.setDone(true);
         // TODO: support error injection
         report.setStatus(new TStatus(TStatusCode.OK));
+        for (TPlanNode planNode : commonParams.fragment.plan.nodes) {
+            if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
+                runOlapScan(report, planNode, uniqueParams.params.per_node_scan_ranges.get(planNode.getNode_id()));
+            }
+        }
         if (uniqueParams.fragment.output_sink != null) {
             TDataSink tDataSink = uniqueParams.fragment.output_sink;
             runSink(report, tDataSink);
@@ -856,24 +892,42 @@ public class PseudoBackend {
         }
     }
 
+    private void runOlapScan(TReportExecStatusParams report, TPlanNode olapScanNode, List<TScanRangeParams> tScanRangeParams) {
+        for (TScanRangeParams scanRangeParams : tScanRangeParams) {
+            long tablet_id = scanRangeParams.scan_range.internal_scan_range.tablet_id;
+            long version = Long.parseLong(scanRangeParams.scan_range.internal_scan_range.version);
+            Tablet tablet = tabletManager.getTablet(tablet_id);
+            if (tablet == null) {
+                report.setStatus(status(TStatusCode.INTERNAL_ERROR,
+                        String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tablet_id,
+                                version)));
+                return;
+            }
+            try {
+                tablet.read(version);
+            } catch (Exception e) {
+                report.setStatus(status(TStatusCode.INTERNAL_ERROR, e.getMessage()));
+                return;
+            }
+        }
+    }
+
     private void runSink(TReportExecStatusParams report, TDataSink tDataSink) {
         if (tDataSink.type != TDataSinkType.OLAP_TABLE_SINK) {
             return;
         }
+        cluster.getConfig().injectTableSinkWriteLatency();
         PseudoOlapTableSink sink = new PseudoOlapTableSink(cluster, tDataSink);
         if (!sink.open()) {
             sink.cancel();
-            report.status.status_code = TStatusCode.INTERNAL_ERROR;
-            report.status.error_msgs =
-                    Lists.newArrayList(String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
+            report.status = status(TStatusCode.INTERNAL_ERROR,
+                    String.format("open sink failed, backend:%s txn:%d", be.getId(), sink.txnId));
             return;
         }
         if (!sink.close()) {
             sink.cancel();
-            report.status.status_code = TStatusCode.INTERNAL_ERROR;
-            report.status.error_msgs =
-                    Lists.newArrayList(String.format("close sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId,
-                            sink.getErrorMessage()));
+            report.status = status(TStatusCode.INTERNAL_ERROR,
+                    String.format("open sink failed, backend:%s txn:%d %s", be.getId(), sink.txnId, sink.getErrorMessage()));
             return;
         }
         List<TTabletCommitInfo> commitInfos = sink.getTabletCommitInfos();

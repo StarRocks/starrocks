@@ -33,6 +33,15 @@ public class DateUtils {
     public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern(QUARTER_FORMAT);
     public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern(MONTH_FORMAT);
 
+    public static final DateTimeFormatter DATE_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
+    public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
+    public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
+    public static final DateTimeFormatter DATETIMEKEY_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H%i%s").toFormatter();
+
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {
             return DateUtils.DATEKEY_FORMATTER;

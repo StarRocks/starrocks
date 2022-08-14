@@ -27,13 +27,13 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class SysVariableDescTest {
+public class VariableExprTest {
 
     @Test
     public void testNormal() throws Exception {
-        SysVariableDesc desc = new SysVariableDesc("version_comment");
+        VariableExpr desc = new VariableExpr("version_comment");
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
-        Assert.assertEquals("@@version_comment", desc.toSql());
+        Assert.assertEquals("@@SESSION.version_comment", desc.toSql());
         Assert.assertEquals("version_comment", desc.getName());
         Assert.assertEquals(ScalarType.createType(PrimitiveType.VARCHAR), desc.getType());
         Assert.assertEquals(SetType.SESSION, desc.getSetType());
@@ -46,7 +46,7 @@ public class SysVariableDescTest {
 
     @Test(expected = SemanticException.class)
     public void testNoVar() throws Exception {
-        SysVariableDesc desc = new SysVariableDesc("zcPrivate");
+        VariableExpr desc = new VariableExpr("zcPrivate");
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(desc, UtFrameUtils.createDefaultCtx());
         Assert.fail("No exception throws.");
     }

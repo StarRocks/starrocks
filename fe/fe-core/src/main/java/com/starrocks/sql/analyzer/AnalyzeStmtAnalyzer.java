@@ -11,7 +11,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -102,7 +101,6 @@ public class AnalyzeStmtAnalyzer {
                 TableName tbl = statement.getTableName();
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    tbl.setDb(ClusterNamespace.getFullName(tbl.getDb()));
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -164,7 +162,8 @@ public class AnalyzeStmtAnalyzer {
                     Column column = analyzeTable.getColumn(columnName);
                     if (column.getType().isComplexType()
                             || column.getType().isJsonType()
-                            || column.getType().isOnlyMetricType()) {
+                            || column.getType().isOnlyMetricType()
+                            || column.getType().isChar() || column.getType().isVarchar()) {
                         throw new SemanticException("Can't create histogram statistics on column type is %s",
                                 column.getType().toSql());
                     }

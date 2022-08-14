@@ -75,10 +75,11 @@ public:
     // submit a routine load task
     Status submit_task(const TRoutineLoadTask& task);
 
-    Status get_kafka_partition_meta(const PKafkaMetaProxyRequest& request, std::vector<int32_t>* partition_ids);
+    Status get_kafka_partition_meta(const PKafkaMetaProxyRequest& request, std::vector<int32_t>* partition_ids,
+                                    int timeout);
 
     Status get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request, std::vector<int64_t>* beginning_offsets,
-                                      std::vector<int64_t>* latest_offsets);
+                                      std::vector<int64_t>* latest_offsets, int timeout);
 
 private:
     // execute the task

@@ -144,14 +144,15 @@ public class DbPrivEntry extends PrivEntry {
             isClassNameWrote = true;
         }
         super.write(out);
-        Text.writeString(out, origDb);
+        // compatible with old version
+        Text.writeString(out, ClusterNamespace.getFullName(origDb));
         isClassNameWrote = false;
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        origDb = Text.readString(in);
+        origDb = ClusterNamespace.getNameFromFullName(Text.readString(in));
     }
 
     @Override

@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.transaction;
 
-import com.ibm.icu.impl.Assert;
 import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.pseudocluster.Tablet;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -26,8 +27,9 @@ public class ConcurrentTxnTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(true);
     }
+
+    static AtomicInteger totalRead = new AtomicInteger(0);
 
     class TableLoad {
         String db;
@@ -36,14 +38,16 @@ public class ConcurrentTxnTest {
         int numTablet;
         int replicationNum;
         int loadIntervalMs;
+        boolean withRead;
 
-        TableLoad(String db, int id, int numTablet, int replicationNum, int loadIntervalMs) {
+        TableLoad(String db, int id, int numTablet, int replicationNum, int loadIntervalMs, boolean withRead) {
             this.db = db;
             this.table = "table_" + id;
             this.id = id;
             this.numTablet = numTablet;
             this.replicationNum = replicationNum;
             this.loadIntervalMs = loadIntervalMs;
+            this.withRead = withRead;
         }
 
         void createTable() throws SQLException {
@@ -60,21 +64,25 @@ public class ConcurrentTxnTest {
 
         void loadOnce() throws SQLException {
             PseudoCluster.getInstance()
-                    .runSql(null, "insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\");");
+                    .runSqlList(null, "insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\");",
+                            "select * from " + db + "." + table + ";");
+            totalRead.addAndGet(numTablet);
         }
     }
 
     class DBLoad {
         int numDB;
         int numTable;
+        boolean withRead = false;
         List<TableLoad> tableLoads;
         volatile Exception error;
 
         AtomicInteger finishedTask = new AtomicInteger(0);
 
-        DBLoad(int numDB, int numTable) {
+        DBLoad(int numDB, int numTable, boolean withRead) {
             this.numDB = numDB;
             this.numTable = numTable;
+            this.withRead = withRead;
         }
 
         void run(int numThread, int runSeconds) {
@@ -82,7 +90,7 @@ public class ConcurrentTxnTest {
                 try {
                     PseudoCluster.getInstance().runSql(null, "create database db_" + i);
                 } catch (SQLException e) {
-                    Assert.fail(e);
+                    Assert.fail(e.getMessage());
                 }
             }
             ThreadPoolExecutor executor
@@ -96,7 +104,7 @@ public class ConcurrentTxnTest {
                 int replicationNum = 3;
                 int loadIntervalMs = (r.nextInt(40) + 1) * scheduleIntervalMs;
                 String dbName = "db_" + (i % numDB);
-                TableLoad tableLoad = new TableLoad(dbName, i, numTablet, replicationNum, loadIntervalMs);
+                TableLoad tableLoad = new TableLoad(dbName, i, numTablet, replicationNum, loadIntervalMs, withRead);
                 tableLoads.add(tableLoad);
                 futures.add(executor.submit(() -> {
                     try {
@@ -106,14 +114,14 @@ public class ConcurrentTxnTest {
                     }
                 }));
                 if (error != null) {
-                    Assert.fail(error);
+                    Assert.fail(error.getMessage());
                 }
             }
             for (Future<?> future : futures) {
                 try {
                     future.get();
                 } catch (Exception e) {
-                    Assert.fail(e);
+                    Assert.fail(e.getMessage());
                 }
             }
             futures.clear();
@@ -129,7 +137,8 @@ public class ConcurrentTxnTest {
                                 tableLoad.loadOnce();
                                 finishedTask.incrementAndGet();
                             } catch (SQLException e) {
-                                System.out.printf("load error db:%s table:%s\n", tableLoad.db, tableLoad.table);
+                                System.out.printf("load error db:%s table:%s %s\n", tableLoad.db, tableLoad.table,
+                                        e.getMessage());
                                 e.printStackTrace();
                                 error = e;
                             }
@@ -137,7 +146,7 @@ public class ConcurrentTxnTest {
                     }
                 }
                 if (error != null) {
-                    Assert.fail(error);
+                    Assert.fail(error.getMessage());
                 }
                 try {
                     Thread.sleep(scheduleIntervalMs);
@@ -149,7 +158,7 @@ public class ConcurrentTxnTest {
                 try {
                     future.get();
                 } catch (Exception e) {
-                    Assert.fail(e);
+                    Assert.fail(e.getMessage());
                 }
             }
             double t = (System.nanoTime() - startTs) / 1e9;
@@ -167,7 +176,7 @@ public class ConcurrentTxnTest {
     int numDB = 20;
     int numTable = 1000;
     int numThread = 20;
-    int runSeconds = 10;
+    int runSeconds = 5;
 
     void setup() throws SQLException {
         Config.enable_new_publish_mechanism = false;
@@ -176,7 +185,9 @@ public class ConcurrentTxnTest {
     @Test
     public void testConcurrentLoad() throws Exception {
         setup();
-        DBLoad dbLoad = new DBLoad(numDB, numTable);
+        DBLoad dbLoad = new DBLoad(numDB, numTable, true);
         dbLoad.run(numThread, runSeconds);
+        Assert.assertEquals(totalRead.get(), Tablet.getTotalReadSucceed());
+        PseudoCluster.getInstance().shutdown(true);
     }
 }

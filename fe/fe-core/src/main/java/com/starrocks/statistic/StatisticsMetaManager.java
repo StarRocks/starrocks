@@ -209,7 +209,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
             BasicStatsMeta basicStatsMeta = entry.getValue();
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
                     basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
         }
 

@@ -161,14 +161,14 @@ public class Cluster implements Writable {
         }
 
         int dbCount = dbIds.size();
-        if (dbNames.contains(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
+        if (dbNames.contains(InfoSchemaDb.DATABASE_NAME)) {
             dbCount--;
         }
 
         out.writeInt(dbCount);
         // don't persist InfoSchemaDb meta
         for (String name : dbNames) {
-            if (!name.equals(ClusterNamespace.getFullName(InfoSchemaDb.DATABASE_NAME))) {
+            if (!name.equals(InfoSchemaDb.DATABASE_NAME)) {
                 Text.writeString(out, name);
             } else {
                 dbIds.remove(dbNameToIDs.get(name));

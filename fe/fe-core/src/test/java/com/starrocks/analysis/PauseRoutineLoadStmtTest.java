@@ -20,7 +20,7 @@ public class PauseRoutineLoadStmtTest {
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("PAUSE ROUTINE LOAD FOR testDb.label", stmt.toSql());
-        Assert.assertEquals("default_cluster:testDb", stmt.getDbFullName());
+        Assert.assertEquals("testDb", stmt.getDbFullName());
     }
 
 }

@@ -33,9 +33,9 @@ public class AnalyzeCreateTableLikeTest {
     public void testNormal() {
         CreateTableLikeStmt stmt = (CreateTableLikeStmt) analyzeSuccess(
                 "CREATE TABLE tbl2 LIKE tbl1");
-        Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("tbl2", stmt.getTableName());
-        Assert.assertEquals("default_cluster:test", stmt.getExistedDbName());
+        Assert.assertEquals("test", stmt.getExistedDbName());
         Assert.assertEquals("tbl1", stmt.getExistedTableName());
         Assert.assertEquals("CREATE TABLE `test`.`tbl2` LIKE `test`.`tbl1`", stmt.toSql());
     }

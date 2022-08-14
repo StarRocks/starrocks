@@ -417,12 +417,20 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private boolean checkBaseTablePartitionChange() {
         // check snapshotBaseTables and current tables in catalog
         for (OlapTable snapshotTable : snapshotBaseTables.values()) {
-            Map<String, Range<PartitionKey>> snapshotPartitionMap = snapshotTable.getRangePartitionMap();
-            Map<String, Range<PartitionKey>> currentPartitionMap =
-                    ((OlapTable) database.getTable(snapshotTable.getId())).getRangePartitionMap();
-            boolean changed = SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-            if (changed) {
-                return true;
+            if (snapshotTable.getPartitionInfo() instanceof SinglePartitionInfo) {
+                Set<String> partitionNames = ((OlapTable) database.getTable(snapshotTable.getId())).getPartitionNames();
+                if (!snapshotTable.getPartitionNames().equals(partitionNames)) {
+                    // there is partition rename
+                    return true;
+                }
+            } else {
+                Map<String, Range<PartitionKey>> snapshotPartitionMap = snapshotTable.getRangePartitionMap();
+                Map<String, Range<PartitionKey>> currentPartitionMap =
+                        ((OlapTable) database.getTable(snapshotTable.getId())).getRangePartitionMap();
+                boolean changed = SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
+                if (changed) {
+                    return true;
+                }
             }
         }
         return false;
