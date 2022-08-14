@@ -218,13 +218,11 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
                 _packet_seq_map.emplace(be_number, sequence);
             }
         } else {
-            if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
-                _max_processed_sequences[be_number] = -1;
-            }
+            _max_processed_sequences.lazy_emplace(be_number, [be_number](const auto& ctor) { ctor(be_number, -1); });
 
-            if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
-                _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkQueue>();
-            }
+            _buffered_chunk_queues.lazy_emplace(be_number, [be_number](const auto& ctor) {
+                ctor(be_number, phmap::flat_hash_map<int64_t, ChunkQueue>());
+            });
         }
 
         // Following situation will match the following condition.
@@ -608,13 +606,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
 
-        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
-            _max_processed_sequences[be_number] = -1;
-        }
+        _max_processed_sequences.lazy_emplace(be_number, [be_number](const auto& ctor) { ctor(be_number, -1); });
 
-        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
-            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkList>();
-        }
+        _buffered_chunk_queues.lazy_emplace(be_number, [be_number](const auto& ctor) {
+            ctor(be_number, phmap::flat_hash_map<int64_t, ChunkList>());
+        });
 
         auto& chunk_queues = _buffered_chunk_queues[be_number];
 
