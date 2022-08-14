@@ -183,6 +183,17 @@ bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(vectorized::Chunk** 
 
 Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                            ::google::protobuf::Closure** done) {
+    return add_chunks<false>(request, done);
+}
+
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
+                                                                          ::google::protobuf::Closure** done) {
+    return add_chunks<true>(request, done);
+}
+
+template <bool keep_order>
+Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                           ::google::protobuf::Closure** done) {
     DCHECK(request.chunks_size() > 0);
     int32_t be_number = request.be_number();
     int64_t sequence = request.sequence();
@@ -193,17 +204,27 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
         if (_is_cancelled) {
             return Status::OK();
         }
-        // TODO(zc): Do we really need this check?
-        auto iter = _packet_seq_map.find(be_number);
-        if (iter != _packet_seq_map.end()) {
-            if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
-                             << " receive_packet_id=" << sequence << "]";
-                return Status::OK();
+        if (!keep_order) {
+            // TODO(zc): Do we really need this check?
+            auto iter = _packet_seq_map.find(be_number);
+            if (iter != _packet_seq_map.end()) {
+                if (iter->second >= sequence) {
+                    LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
+                                 << " receive_packet_id=" << sequence << "]";
+                    return Status::OK();
+                }
+                iter->second = sequence;
+            } else {
+                _packet_seq_map.emplace(be_number, sequence);
             }
-            iter->second = sequence;
         } else {
-            _packet_seq_map.emplace(be_number, sequence);
+            if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
+                _max_processed_sequences[be_number] = -1;
+            }
+
+            if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
+                _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkQueue>();
+            }
         }
 
         // Following situation will match the following condition.
@@ -250,125 +271,55 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
             return Status::OK();
         }
 
-        const auto original_size = _chunk_queue.size();
-        for (auto& item : chunks) {
-            _chunk_queue.emplace_back(std::move(item));
-        }
-        bool has_new_chunks = _chunk_queue.size() > original_size;
-        if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            _chunk_queue.back().closure = *done;
-            _chunk_queue.back().queue_enter_time = MonotonicNanos();
-            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
-            *done = nullptr;
-        }
-
-        _recvr->_num_buffered_bytes += total_chunk_bytes;
-    }
-    _data_arrival_cv.notify_one();
-    return Status::OK();
-}
-
-Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks_and_keep_order(const PTransmitChunkParams& request,
-                                                                          ::google::protobuf::Closure** done) {
-    DCHECK(request.chunks_size() > 0);
-    const int32_t be_number = request.be_number();
-    const int32_t sequence = request.sequence();
-
-    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-    {
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-        if (_is_cancelled) {
-            return Status::OK();
-        }
-
-        if (_max_processed_sequences.find(be_number) == _max_processed_sequences.end()) {
-            _max_processed_sequences[be_number] = -1;
-        }
-
-        if (_buffered_chunk_queues.find(be_number) == _buffered_chunk_queues.end()) {
-            _buffered_chunk_queues[be_number] = phmap::flat_hash_map<int64_t, ChunkQueue>();
-        }
-        // Following situation will match the following condition.
-        // Sender send a packet failed, then close the channel.
-        // but closed packet reach first, then the failed packet.
-        // Then meet the assert
-        // we remove the assert
-        if (_num_remaining_senders <= 0) {
-            DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
-            return Status::OK();
-        }
-        // We only need to build chunk meta on first chunk
-        if (_chunk_meta.types.empty()) {
-            SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
-            auto& pchunk = request.chunks(0);
-            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-        }
-    }
-
-    size_t total_chunk_bytes = 0;
-    faststring uncompressed_buffer;
-    ChunkQueue local_chunk_queue;
-
-    for (auto i = 0; i < request.chunks().size(); ++i) {
-        auto& pchunk = request.chunks().Get(i);
-        int64_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-
-        ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
-
-        // TODO(zc): review this chunk_bytes
-        local_chunk_queue.emplace_back(std::move(item));
-
-        total_chunk_bytes += chunk_bytes;
-    }
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
-
-    wait_timer.start();
-    {
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-
-        // _is_cancelled may be modified after checking _is_cancelled above,
-        // because lock is release temporarily when deserializing chunk.
-        if (_is_cancelled) {
-            return Status::OK();
-        }
-
-        auto& chunk_queues = _buffered_chunk_queues[be_number];
-
-        if (!local_chunk_queue.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            local_chunk_queue.back().closure = *done;
-            local_chunk_queue.back().queue_enter_time = MonotonicNanos();
-            COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
-            *done = nullptr;
-        }
-
-        // The queue in chunk_queues cannot be changed, so it must be
-        // assigned to chunk_queues after local_chunk_queue is initialized
-        // Otherwise, other threads may see the intermediate state because
-        // the initialization of local_chunk_queue is beyond mutex
-        chunk_queues[sequence] = std::move(local_chunk_queue);
-
-        phmap::flat_hash_map<int64_t, ChunkQueue>::iterator it;
-        int64_t& max_processed_sequence = _max_processed_sequences[be_number];
-
-        // max_processed_sequence + 1 means the first unprocessed sequence
-        while ((it = chunk_queues.find(max_processed_sequence + 1)) != chunk_queues.end()) {
-            ChunkQueue& unprocessed_chunk_queue = (*it).second;
-
-            // Now, all the packets with sequance <= unprocessed_sequence have been received
-            // so chunks of unprocessed_sequence can be flushed to ready queue
-            for (auto& item : unprocessed_chunk_queue) {
+        if (!keep_order) {
+            const auto original_size = _chunk_queue.size();
+            for (auto& item : chunks) {
                 _chunk_queue.emplace_back(std::move(item));
             }
+            bool has_new_chunks = _chunk_queue.size() > original_size;
+            if (has_new_chunks && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+                _chunk_queue.back().closure = *done;
+                _chunk_queue.back().queue_enter_time = MonotonicNanos();
+                COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+                *done = nullptr;
+            }
+            _recvr->_num_buffered_bytes += total_chunk_bytes;
+            _data_arrival_cv.notify_one();
+        } else {
+            auto& chunk_queues = _buffered_chunk_queues[be_number];
 
-            chunk_queues.erase(it);
-            ++max_processed_sequence;
+            if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
+                chunks.back().closure = *done;
+                chunks.back().queue_enter_time = MonotonicNanos();
+                COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
+                *done = nullptr;
+            }
+
+            // The queue in chunk_queues cannot be changed, so it must be
+            // assigned to chunk_queues after local_chunk_queue is initialized
+            // Otherwise, other threads may see the intermediate state because
+            // the initialization of local_chunk_queue is beyond mutex
+            chunk_queues[sequence] = std::move(chunks);
+
+            phmap::flat_hash_map<int64_t, ChunkQueue>::iterator it;
+            int64_t& max_processed_sequence = _max_processed_sequences[be_number];
+
+            // max_processed_sequence + 1 means the first unprocessed sequence
+            while ((it = chunk_queues.find(max_processed_sequence + 1)) != chunk_queues.end()) {
+                ChunkQueue& unprocessed_chunk_queue = (*it).second;
+
+                // Now, all the packets with sequance <= unprocessed_sequence have been received
+                // so chunks of unprocessed_sequence can be flushed to ready queue
+                for (auto& item : unprocessed_chunk_queue) {
+                    _chunk_queue.emplace_back(std::move(item));
+                }
+
+                chunk_queues.erase(it);
+                ++max_processed_sequence;
+            }
+
+            _recvr->_num_buffered_bytes += total_chunk_bytes;
         }
-
-        _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
     return Status::OK();
 }

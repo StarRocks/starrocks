@@ -77,6 +77,9 @@ public:
 private:
     void clean_buffer_queues();
 
+    template <bool keep_order>
+    Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+
     struct ChunkItem {
         int64_t chunk_bytes = 0;
         ChunkUniquePtr chunk_ptr;
