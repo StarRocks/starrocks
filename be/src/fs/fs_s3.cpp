@@ -316,19 +316,21 @@ Status S3FileSystem::rename_file(const std::string& src, const std::string& targ
     }
     auto client = new_s3client(src_uri, _options);
     Aws::S3::Model::CopyObjectRequest copy_request;
-    copy_request.WithCopySource(src);
+    copy_request.WithCopySource(src_uri.bucket() + "/" + src_uri.key());
     copy_request.WithBucket(dest_uri.bucket());
     copy_request.WithKey(dest_uri.key());
     Aws::S3::Model::CopyObjectOutcome copy_outcome = client->CopyObject(copy_request);
     if (!copy_outcome.IsSuccess()) {
-        return Status::InvalidArgument(fmt::format("Fail to copy from src {} to target {}", src, target));
+        return Status::InvalidArgument(fmt::format("Fail to copy from src {} to target {}, msg: {}", src, target,
+                                                   copy_outcome.GetError().GetMessage()));
     }
 
     Aws::S3::Model::DeleteObjectRequest delete_request;
     delete_request.WithBucket(src_uri.bucket()).WithKey(src_uri.key());
     Aws::S3::Model::DeleteObjectOutcome delete_outcome = client->DeleteObject(delete_request);
     if (!delete_outcome.IsSuccess()) {
-        return Status::InvalidArgument(fmt::format("Fail to delte src {}", src));
+        return Status::InvalidArgument(
+                fmt::format("Fail to delte src {}, msg: {}", src, delete_outcome.GetError().GetMessage()));
     }
 
     return Status::OK();
