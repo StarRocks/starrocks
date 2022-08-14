@@ -79,6 +79,7 @@ statement
     | deleteStatement                                                                       #delete
 
     //Routine Statement
+    | createRoutineLoadStatement                                                            #createRoutineLoad
     | stopRoutineLoadStatement                                                              #stopRoutineLoad
     | resumeRoutineLoadStatement                                                            #resumeRoutineLoad
     | pauseRoutineLoadStatement                                                             #pauseRoutineLoad
@@ -637,6 +638,32 @@ deleteStatement
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
+createRoutineLoadStatement
+    : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
+    (loadProperties (',' loadProperties)*)?
+    jobProperties?
+    FROM source=identifier
+    dataSourceProperties?
+    ;
+
+loadProperties
+    :(COLUMNS TERMINATED BY string)|
+    (COLUMNS columnProperties)|
+    (WHERE expression)|
+    (partitionNames)
+    ;
+
+columnProperties
+    :'(' identifier (',' identifier)* (',' assignment)* ')'
+    ;
+
+jobProperties
+    :properties
+    ;
+
+dataSourceProperties
+    :propertyList
+    ;
 
 stopRoutineLoadStatement
     : STOP ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
