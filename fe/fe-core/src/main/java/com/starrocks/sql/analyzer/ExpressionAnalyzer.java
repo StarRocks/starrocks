@@ -105,8 +105,11 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < childSize - 1; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
-                scope.putLambdaArgument(new PlaceHolderExpr(visitor.getLambdaID(), expr.isNullable(),
-                        ((ArrayType) expr.getType()).getItemType()));
+                Type itemType = ((ArrayType) expr.getType()).getItemType();
+                if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
+                    itemType = Type.INT;
+                }
+                scope.putLambdaArgument(new PlaceHolderExpr(visitor.getLambdaID(), expr.isNullable(), itemType));
             }
             // visit LambdaFunction
             visitor.visit(expression.getChild(childSize - 1), scope);

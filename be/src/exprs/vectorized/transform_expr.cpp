@@ -24,7 +24,7 @@ TransformExpr::TransformExpr(const TExprNode& node) : Expr(node, false) {}
 ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
     ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[0], ptr);
     NullColumnPtr null_map = nullptr;
-    ColumnPtr column = nullptr;
+    ColumnPtr column = child_col;
     if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col); nullable != nullptr) {
         column = nullable->data_column();
         null_map = nullable->null_column();
