@@ -29,6 +29,7 @@ import com.starrocks.analysis.ComputeNodeClause;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -384,6 +385,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDropMaterializedViewStatement(DropMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {

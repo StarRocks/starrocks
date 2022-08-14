@@ -9,6 +9,7 @@ import com.starrocks.analysis.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -426,6 +427,11 @@ public class Analyzer {
         @Override
         public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
             RecoverPartitionAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
+            CreateRoutineLoadAnalyzer.analyze(statement, session);
             return null;
         }
 

@@ -45,6 +45,7 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
@@ -78,6 +79,9 @@ import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.HashDistributionDesc;
+import com.starrocks.analysis.ImportColumnDesc;
+import com.starrocks.analysis.ImportColumnsStmt;
+import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
@@ -1589,6 +1593,79 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return ret;
     }
     // ------------------------------------------- Routine Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateRoutineLoadStatement(StarRocksParser.CreateRoutineLoadStatementContext context) {
+        String database = null;
+        if (context.db != null) {
+            database = context.db.getText();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = context.name.getText();
+        }
+        String tableName = null;
+        if (context.table != null) {
+            tableName = context.table.getText();
+        }
+
+        List<ParseNode> loadPropertyList = new ArrayList<>();
+        List<StarRocksParser.LoadPropertiesContext> list = context.loadProperties();
+        for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : list) {
+            if (loadPropertiesContext.string() != null) {
+                String literal = ((StringLiteral) visit(loadPropertiesContext.string())).getValue();
+                loadPropertyList.add(new ColumnSeparator(literal));
+            }
+
+            if (loadPropertiesContext.columnProperties() != null) {
+                List<ImportColumnDesc> columns = new ArrayList<>();
+                for (int i = 0; i < loadPropertiesContext.columnProperties().getChildCount(); i++) {
+                    ParseTree node = loadPropertiesContext.columnProperties().getChild(i);
+                    if (node instanceof StarRocksParser.UnquotedIdentifierContext) {
+                        String column = ((Identifier) (visit(node))).getValue();
+                        ImportColumnDesc columnDesc = new ImportColumnDesc(column);
+                        columns.add(columnDesc);
+                    }
+                    if (node instanceof StarRocksParser.AssignmentContext) {
+                        ColumnAssignment columnAssignment = (ColumnAssignment) (visit(node));
+                        Expr expr = columnAssignment.getExpr();
+                        ImportColumnDesc columnDesc = new ImportColumnDesc(columnAssignment.getColumn(), expr);
+                        columns.add(columnDesc);
+                    }
+                }
+                loadPropertyList.add(new ImportColumnsStmt(columns));
+            }
+
+            if (loadPropertiesContext.expression() != null) {
+                Expr where = (Expr) visit(loadPropertiesContext.expression());
+                loadPropertyList.add(new ImportWhereStmt(where));
+            }
+
+            if (loadPropertiesContext.partitionNames() != null) {
+                loadPropertyList.add(visit(loadPropertiesContext.partitionNames()));
+            }
+        }
+
+        String typeName = context.source.getText();
+
+        Map<String, String> jobProperties = new HashMap<>();
+        if (context.jobProperties() != null) {
+            List<Property> propertyList = visit(context.jobProperties().properties().property(), Property.class);
+            for (Property property : propertyList) {
+                jobProperties.put(property.getKey(), property.getValue());
+            }
+        }
+
+        Map<String, String> dataSourceProperties = new HashMap<>();
+        if (context.dataSourceProperties() != null) {
+            List<Property> propertyList = visit(context.dataSourceProperties().propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                dataSourceProperties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateRoutineLoadStmt(new LabelName(database, name),
+                tableName, loadPropertyList, jobProperties, typeName, dataSourceProperties);
+    }
 
     @Override
     public ParseNode visitStopRoutineLoadStatement(StarRocksParser.StopRoutineLoadStatementContext context) {
