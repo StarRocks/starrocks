@@ -30,7 +30,7 @@ public class LambdaFunction extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return String.format("%s->%s", getChild(0).toSqlImpl(), getChild(1).toSqlImpl());
+        return String.format("%s -> %s", getChild(0).toSqlImpl(), getChild(1).toSqlImpl());
     }
 
     @Override

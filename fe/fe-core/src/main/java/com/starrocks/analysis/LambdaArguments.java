@@ -7,6 +7,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TExprNode;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class LambdaArguments extends Expr {
     public List<String> getNames() {
@@ -39,7 +40,12 @@ public class LambdaArguments extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return String.format("%s", names.toString());
+        Preconditions.checkState(names.size() > 0);
+        String name = names.get(0);
+        if (children.size() > 2) {
+            name = "(" + names.stream().map(String::valueOf).collect(Collectors.joining(",")) + ")";
+        }
+        return String.format("%s", name);
     }
 
     @Override
