@@ -20,7 +20,7 @@ public:
         int64_t write_cache_bytes = 0;
     };
 
-    static constexpr int64_t BLOCK_SIZE = 4 * 1024 * 1024;
+    static constexpr int64_t BLOCK_SIZE = 1 * 1024 * 1024;
     explicit CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream);
 
     ~CacheInputStream() override = default;
@@ -36,14 +36,13 @@ public:
     const Stats& stats() { return _stats; }
 
 private:
-    void make_cache_key(uint64_t offset);
-
     std::string _cache_key;
     std::string _filename;
     std::shared_ptr<SeekableInputStream> _stream;
     int64_t _offset;
     std::string _buffer;
     Stats _stats;
+    int64_t _size;
 };
 
 } // namespace starrocks::io

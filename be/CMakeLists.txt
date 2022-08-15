@@ -73,6 +73,8 @@ option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
+option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -144,8 +146,14 @@ message(STATUS ${Boost_LIBRARIES})
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
-add_library(gflags STATIC IMPORTED)
-set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CACHELIB_DIR "$ENV{CACHELIB_DIR}")
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${CACHELIB_DIR}/lib/libgflags_debug.a)
+else()
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+endif()
 
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
@@ -379,6 +387,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
 if (${USE_STAROS} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
 endif()
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BLOCK_CACHE")
+endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -524,7 +535,6 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
-    Cache
     StarRocksGen
     Webserver
     TestUtil
@@ -532,6 +542,10 @@ set(STARROCKS_LINK_LIBS
     Geo
     ${WL_END_GROUP}
 )
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} BlockCache)
+endif()
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
@@ -751,7 +765,10 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
-add_subdirectory(${SRC_DIR}/cache)
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    add_subdirectory(${SRC_DIR}/block_cache)
+endif()
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
