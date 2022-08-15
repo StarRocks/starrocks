@@ -55,12 +55,15 @@
 namespace starrocks::vectorized {
 
 constexpr const char* CLASS_UDF_HELPER_NAME = "com.starrocks.udf.UDFHelper";
+constexpr const char* CLASS_NATIVE_METHOD_HELPER_NAME = "com.starrocks.utils.NativeMethodHelper";
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wwrite-strings"
 static JNINativeMethod java_native_methods[] = {
         {"resizeStringData", "(JI)J", (void*)&JavaNativeMethods::resizeStringData},
         {"getAddrs", "(J)[J", (void*)&JavaNativeMethods::getAddrs},
+        {"memoryTrackerMalloc", "(J)J", (void*)&JavaNativeMethods::memory_malloc},
+        {"memoryTrackerFree", "(J)V", (void*)&JavaNativeMethods::memory_free},
 };
 #pragma GCC diagnostic pop
 
@@ -80,8 +83,9 @@ std::pair<JNIEnv*, JVMFunctionHelper&> JVMFunctionHelper::getInstanceWithEnv() {
 
 void JVMFunctionHelper::_init() {
     std::string home = getenv("STARROCKS_HOME");
-    std::vector<std::string> class_paths = {home + "/lib/udf-extensions-jar-with-dependencies.jar",
-                                            home + "/lib/starrocks-jdbc-bridge-jar-with-dependencies.jar"};
+    std::vector<std::string> class_paths = {home + "/lib/jni-packages/starrocks-java-utils-jar-with-dependencies.jar",
+                                            home + "/lib/jni-packages/udf-extensions-jar-with-dependencies.jar",
+                                            home + "/lib/jni-packages/starrocks-jdbc-bridge-jar-with-dependencies.jar"};
     for (auto path : class_paths) {
         _add_class_path(path);
     }
@@ -123,7 +127,11 @@ void JVMFunctionHelper::_init() {
     std::string name = JVMFunctionHelper::to_jni_class_name(CLASS_UDF_HELPER_NAME);
     _udf_helper_class = JNI_FIND_CLASS(name.c_str());
     DCHECK(_udf_helper_class != nullptr);
-    int res = _env->RegisterNatives(_udf_helper_class, java_native_methods,
+
+    std::string native_method_name = JVMFunctionHelper::to_jni_class_name(CLASS_NATIVE_METHOD_HELPER_NAME);
+    jclass _native_method_class = JNI_FIND_CLASS(native_method_name.c_str());
+    DCHECK(_native_method_class != nullptr);
+    int res = _env->RegisterNatives(_native_method_class, java_native_methods,
                                     sizeof(java_native_methods) / sizeof(java_native_methods[0]));
     DCHECK_EQ(res, 0);
     _create_boxed_array = _env->GetStaticMethodID(_udf_helper_class, "createBoxedArray",
