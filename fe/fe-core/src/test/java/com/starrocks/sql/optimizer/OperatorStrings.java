@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
@@ -229,6 +230,19 @@ public class OperatorStrings {
         public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
             PhysicalJDBCScanOperator scan = (PhysicalJDBCScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("JDBC SCAN (");
+            sb.append("columns").append(scan.getUsedColumns());
+            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(")");
+            if (scan.getLimit() >= 0) {
+                sb.append(" Limit ").append(scan.getLimit());
+            }
+            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalHiveScan(OptExpression optExpression, Integer step) {
+            PhysicalHiveScanOperator scan = (PhysicalHiveScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("SCAN (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
