@@ -68,7 +68,7 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 | 导入方式           | 业务场景                                                     | 数据量（单作业）                 | 数据源                                       | 数据格式              | 同步模式 |
 | ------------------ | ------------------------------------------------------------ | -------------------------------- | -------------------------------------------- | --------------------- | -------- |
-| Stream Load        | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内（CSV 格式不受此限制） | - 本地文件<br> - 程序                            | - CSV<br> - JSON          | 同步     |
+| Stream Load        | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内 | - 本地文件<br> - 程序                            | - CSV<br> - JSON          | 同步     |
 | Broker Load        | 通过独立的 Broker 程序从外部云存储系统导入。                 | 数十到数百 GB                    | - HDFS<br> - Amazon S3<br> - 阿里云 OSS<br> - 腾讯云 COS<br> | - CSV<br> - ORC<br> - Parquet | 异步     |
 | Routine Load       | 从 Apache Kafka® 等流式数据源实时地导入数据。                | 微批导入 MB 到 GB 级             | Kafka                                        | - CSV<br> - JSON          | 异步     |
 | Spark Load         | - 通过 Apache Spark™ 集群初次从云存储系统迁移导入大量数据。<br> - 需要做全局数据字典来精确去重。 | 数十 GB 到 TB级别                | - HDFS<br> - Hive                                | - CSV<br> - Apache Hive™  | 异步     |
