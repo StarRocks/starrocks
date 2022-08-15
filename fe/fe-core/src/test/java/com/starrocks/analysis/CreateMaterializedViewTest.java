@@ -18,6 +18,7 @@ import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
@@ -318,7 +319,7 @@ public class CreateMaterializedViewTest {
             SlotRef slotRef = tableSlotRefs.get(0);
             TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
             Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
-            Table baseTable = testDb.getTable(baseTableName.getTbl());
+            Table baseTable = testDb.getTable(ClusterNamespace.getNameFromFullName(baseTableName.getTbl()));
             Assert.assertNotNull(baseTable);
             Assert.assertEquals(baseTableInfos.get(0).getTableId(), baseTable.getId());
             Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
