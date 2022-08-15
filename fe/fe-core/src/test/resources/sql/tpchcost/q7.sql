@@ -316,7 +316,7 @@ OutPut Exchange Id: 12
 7:OlapScanNode
 table: nation, rollup: nation
 preAggregation: on
-Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
+Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
 partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=29.0
 cardinality: 25
@@ -333,7 +333,7 @@ OutPut Exchange Id: 09
 8:OlapScanNode
 table: nation, rollup: nation
 preAggregation: on
-Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
+Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
 partitionsRatio=1/1, tabletsRatio=1/1
 actualRows=0, avgRowSize=29.0
 cardinality: 25

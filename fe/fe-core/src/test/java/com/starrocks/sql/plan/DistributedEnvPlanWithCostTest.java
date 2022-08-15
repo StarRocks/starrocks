@@ -1206,10 +1206,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         ExecPlan execPlan = getExecPlan(sql);
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         // check without error
-        assertContains(plan, "  4:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+        assertContains(plan, "  3:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 18: P_RETAILPRICE = 21: cast\n");
+                "  |  other join predicates: 21: cast = 18: P_RETAILPRICE\n" +
+                "  |  limit: 63");
     }
 
     @Test
@@ -1254,10 +1255,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  <slot 2> : 2: O_CUSTKEY\n" +
                 "  |  <slot 14> : 14: C_ADDRESS\n" +
                 "  |  \n" +
-                "  7:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  7:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 12: C_CUSTKEY = 2: O_CUSTKEY\n");
+                "  |  other join predicates: 2: O_CUSTKEY = 12: C_CUSTKEY");
     }
 
     @Test
