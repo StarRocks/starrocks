@@ -524,6 +524,7 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
+    Cache
     StarRocksGen
     Webserver
     TestUtil
@@ -750,6 +751,7 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+add_subdirectory(${SRC_DIR}/cache)
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
