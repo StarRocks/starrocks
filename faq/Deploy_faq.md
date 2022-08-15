@@ -144,3 +144,8 @@ netstat  -anp  |grep  port
 ## 当前 FE 节点已经启动，且状态为 `transfer：follower`，但是调用 `show frontends` 命令返回 `isAlive` 状态为 `false`。我该如何解决？
 
 以上问题是由于超过半数的 Java Virtual Machine（JVM）内存被使用且未标记 checkpoint。通常情况下，每积累 50,000 条日志，系统便会标记一个 checkpoint。建议您在业务低峰期修改各 FE 节点的 JVM 参数并重启 FE 使修改生效。
+
+## 查询报错 “could not initialize class com.starrocks.rpc.BackendServiceProxy”。我该如何解决？
+
+* 请确认环境变量 `$JAVA_HOME` 是否为正确的 JDK 路径。
+* 请确认所有节点的 JDK 是否是同一个版本，所有节点需要使用相同版本的 JDK。
