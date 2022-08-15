@@ -119,7 +119,6 @@ public class MaterializedViewAnalyzer {
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             // collect table from query statement
             Map<TableName, Table> aliasToTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
-            Map<TableName, Table> tableNameToTableMap = AnalyzerUtils.collectAllTable(queryStatement);
             List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
@@ -140,22 +139,11 @@ public class MaterializedViewAnalyzer {
                                     table.getName() + " is: Materialized View");
                 }
                 BaseTableInfo baseTableInfo = new BaseTableInfo();
-                String baseDb = null;
-                if (tableInfo.getDb() != null) {
-                    baseDb = tableInfo.getDb();
-                } else {
-                    for (Map.Entry<TableName, Table> tableNameTableEntry : tableNameToTableMap.entrySet()) {
-                        if (tableNameTableEntry.getValue().equals(table)) {
-                            baseDb = tableNameTableEntry.getKey().getDb();
-                            break;
-                        }
-                    }
+                Database baseDb = GlobalStateMgr.getCurrentState().getDb(tableInfo.getDb());
+                if (baseDb == null) {
+                    baseDb = db;
                 }
-                Database base = GlobalStateMgr.getCurrentState().getDb(baseDb);
-                if (base == null) {
-                    base = db;
-                }
-                baseTableInfo.setDbId(base.getId());
+                baseTableInfo.setDbId(baseDb.getId());
                 baseTableInfo.setTableId(table.getId());
                 baseTableInfos.add(baseTableInfo);
             });

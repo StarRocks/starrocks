@@ -130,7 +130,7 @@ public class ViewDefBuilder {
             }
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAlias()).append("`");
+                sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
             return sqlBuilder.toString();
         }
