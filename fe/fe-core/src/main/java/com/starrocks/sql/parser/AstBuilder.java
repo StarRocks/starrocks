@@ -135,6 +135,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCharsetStmt;
 import com.starrocks.analysis.ShowColumnStmt;
@@ -2804,6 +2805,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean allowRevert = context.WITH() == null;
         // we only support WITH NO REVERT for now
         return new ExecuteAsStmt(toUser, allowRevert);
+    }
+
+    @Override
+    public ParseNode visitShowAllAuthentication(StarRocksParser.ShowAllAuthenticationContext context) {
+        return new ShowAuthenticationStmt(null, true);
+    }
+
+    @Override
+    public ParseNode visitShowAuthenticationForUser(StarRocksParser.ShowAuthenticationForUserContext context) {
+        if (context.user() != null) {
+            UserIdentity user = ((UserIdentifier) visit(context.user())).getUserIdentity();
+            return new ShowAuthenticationStmt(user, false);
+        } else {
+            return new ShowAuthenticationStmt(null, false);
+        }
     }
 
     @Override
