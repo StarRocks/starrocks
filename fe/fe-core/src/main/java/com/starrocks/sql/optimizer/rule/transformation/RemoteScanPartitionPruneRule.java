@@ -67,6 +67,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         try {
             if (operator.getTable() instanceof IcebergTable) {
                 // A little trick to set min max for iceberg table here
+                LOG.info("Add min max conjuncts for iceberg table!" + ((IcebergTable) operator.getTable()).getTable());
                 computeMinMaxConjuncts(operator, context);
             } else {
                 initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
@@ -162,6 +163,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         for (ScalarOperator scalarOperator : scanOperatorPredicates.getNonPartitionConjuncts()) {
             if (isSupportedMinMaxConjuncts(scalarOperator)) {
+                LOG.info("test scalar " + scalarOperator);
                 addMinMaxConjuncts(scalarOperator, operator, context);
             }
         }
