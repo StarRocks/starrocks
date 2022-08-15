@@ -32,7 +32,12 @@ public class ShowAuthenticationStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return null;
+        return META_DATA;
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     public UserIdentity getUserIdent() {
