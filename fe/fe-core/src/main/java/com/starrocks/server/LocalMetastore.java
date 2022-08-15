@@ -4218,7 +4218,7 @@ public class LocalMetastore implements ConnectorMetadata {
             deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
             throw e;
         } catch (MetaNotFoundException e) {
-            LOG.warn("Table {} related materialized view can not find", e);
+            LOG.warn("Table related materialized view can not be found", e);
         } finally {
             db.writeUnlock();
         }
