@@ -90,9 +90,6 @@ Status S3OutputStream::create_multipart_upload() {
 Status S3OutputStream::singlepart_upload() {
     VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " via singlepart upload";
     DCHECK(_upload_id.empty());
-    if (_buffer.empty()) {
-        return Status::OK();
-    }
     Aws::S3::Model::PutObjectRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
