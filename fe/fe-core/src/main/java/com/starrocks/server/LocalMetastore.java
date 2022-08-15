@@ -4210,7 +4210,8 @@ public class LocalMetastore implements ConnectorMetadata {
             for (long mvId : relatedMvs) {
                 MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(),
+                            Constants.TaskRunPriority.NORMAL.value());
                 }
             }
         } catch (DdlException e) {
