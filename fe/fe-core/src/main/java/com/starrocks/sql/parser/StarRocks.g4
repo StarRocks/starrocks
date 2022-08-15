@@ -81,6 +81,7 @@ statement
 
     //Routine Statement
     | createRoutineLoadStatement
+    | alterRoutineLoadStatement
     | stopRoutineLoadStatement
     | resumeRoutineLoadStatement
     | pauseRoutineLoadStatement
@@ -735,6 +736,33 @@ columnProperties
     : '('
         (qualifiedName | assignmentList) (',' (qualifiedName | assignmentList))*
       ')'
+    ;
+
+jobProperties
+    : properties
+    ;
+
+dataSourceProperties
+    : propertyList
+    ;
+
+alterRoutineLoadStatement
+    : ALTER ROUTINE LOAD FOR (db=qualifiedName '.')? name=identifier
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        FROM source=identifier
+        dataSourceProperties?
+    ;
+
+loadProperties
+    : (COLUMNS TERMINATED BY string)
+    | (COLUMNS columnProperties)
+    | (WHERE expression)
+    | (partitionNames)
+    ;
+
+columnProperties
+    : '(' identifier (',' identifier)* (',' assignment)* ')'
     ;
 
 jobProperties
