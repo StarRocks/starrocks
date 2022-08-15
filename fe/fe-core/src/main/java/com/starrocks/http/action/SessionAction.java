@@ -44,6 +44,7 @@ public class SessionAction extends WebBaseAction {
         SESSION_TABLE_HEADER.add("Cluster");
         SESSION_TABLE_HEADER.add("Db");
         SESSION_TABLE_HEADER.add("Command");
+        SESSION_TABLE_HEADER.add("ConnectionStartTime");
         SESSION_TABLE_HEADER.add("Time");
         SESSION_TABLE_HEADER.add("State");
         SESSION_TABLE_HEADER.add("Info");
@@ -72,7 +73,9 @@ public class SessionAction extends WebBaseAction {
         List<List<String>> rowSet = Lists.newArrayList();
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
-            rowSet.add(info.toRow(nowMs, false));
+            if (info.isRunning()) {
+                rowSet.add(info.toRow(nowMs, false));
+            }
         }
 
         buffer.append("<p>This page lists the session info, there are "
