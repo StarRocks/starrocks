@@ -80,9 +80,8 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+    | showAuthenticationStatement                                                           #showAuthentication
     ;
-
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -390,6 +389,11 @@ varType
     : GLOBAL
     | LOCAL
     | SESSION
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
