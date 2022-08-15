@@ -10,6 +10,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
@@ -21,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -66,6 +68,12 @@ public class ScalarApply2JoinRule extends TransformationRule {
 
     private List<OptExpression> transformCorrelate(OptExpression input, LogicalApplyOperator apply,
                                                    OptimizerContext context) {
+        // check correlation filter
+        if (!SubqueryUtils.checkAllIsBinaryEQ(Utils.extractConjuncts(apply.getCorrelationConjuncts()),
+                apply.getCorrelationColumnRefs())) {
+            throw new SemanticException("Not support Non-EQ correlation predicate correlation scalar-subquery");
+        }
+
         if (apply.isNeedCheckMaxRows()) {
             return transformCorrelateWithCheckOneRows(input, apply, context);
         } else {
@@ -112,6 +120,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
             rightChild = OptExpression.create(new LogicalProjectOperator(rightChildProjectMap), rightChild);
         }
 
+        // Non-correlated predicates
+        if (apply.getPredicate() != null) {
+            rightChild = OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), rightChild);
+        }
+
         /*
          * Step1: build agg
          *      output: count(1) as countRows, any_value(t1.v2) as anyValue
@@ -153,7 +166,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
                 .build();
         OptExpression newLeftOuterJoinOpt = OptExpression.create(joinOp, input.inputAt(0), newAggOpt);
 
-        // Step3: build project
+        /*
+         * Step3: build project
+         */
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         // Other columns
         projectMap.put(countRows, countRows);

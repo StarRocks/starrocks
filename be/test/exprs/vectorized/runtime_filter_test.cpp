@@ -575,5 +575,23 @@ TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilterWithBucketAbsent2) {
     test_bucket_shuffle_grf_helper(3, 3, 4, {0, 1, 2, 0});
 }
 
+TEST_F(RuntimeFilterTest, TestGlobalRuntimeFilterMinMax) {
+    RuntimeBloomFilter<TYPE_INT> prototype;
+    ObjectPool pool;
+
+    RuntimeBloomFilter<TYPE_INT>* global = prototype.create_empty(&pool);
+    for (int i = 0; i < 3; i++) {
+        RuntimeBloomFilter<TYPE_INT> local;
+        local.init(10);
+        for (int j = 0; j < 4; j++) {
+            int value = (i + 1) * 10 + j;
+            local.insert(&value);
+        }
+        global->concat(&local);
+    }
+    EXPECT_EQ(global->min_value(), 10);
+    EXPECT_EQ(global->max_value(), 33);
+}
+
 } // namespace vectorized
 } // namespace starrocks

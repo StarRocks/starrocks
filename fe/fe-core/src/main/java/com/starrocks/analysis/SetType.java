@@ -23,7 +23,8 @@ import com.starrocks.thrift.TVarType;
 public enum SetType {
     DEFAULT("DEFAULT"),
     GLOBAL("GLOBAL"),
-    SESSION("SESSION");
+    SESSION("SESSION"),
+    USER("USER");
 
     private final String desc;
 

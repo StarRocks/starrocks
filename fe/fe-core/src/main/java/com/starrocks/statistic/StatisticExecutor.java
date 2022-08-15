@@ -23,6 +23,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -174,6 +175,10 @@ public class StatisticExecutor {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
 
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+        }
+
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
@@ -284,7 +289,7 @@ public class StatisticExecutor {
             }
         } else {
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(db.getId(), table.getId(),
-                    statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
+                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties()));
         }
         return analyzeStatus;
     }

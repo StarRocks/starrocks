@@ -27,8 +27,8 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -274,7 +274,7 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitSysVariableDesc(SysVariableDesc node, Void context) {
+        public Boolean visitVariableExpr(VariableExpr node, Void context) {
             return true;
         }
 

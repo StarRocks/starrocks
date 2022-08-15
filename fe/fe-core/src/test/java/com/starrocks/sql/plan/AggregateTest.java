@@ -227,7 +227,7 @@ public class AggregateTest extends PlanTestBase {
                         + "  0:OlapScanNode"));
 
                 PlanFragment aggPlan = plan.second.getFragments().get(0);
-                Assert.assertEquals(instanceNum, aggPlan.getParallelExecNum());
+                Assert.assertEquals(1, aggPlan.getParallelExecNum());
                 Assert.assertEquals(pipelineDop, aggPlan.getPipelineDop());
             }
         } finally {

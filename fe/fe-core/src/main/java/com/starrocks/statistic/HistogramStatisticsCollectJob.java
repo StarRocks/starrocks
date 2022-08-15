@@ -4,13 +4,12 @@ package com.starrocks.statistic;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,11 +35,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "$tableId as table_id, " +
                     "`$columnName` as column_key, " +
                     "count(`$columnName`) as column_value " +
-                    "from $dbName.$tableName " +
+                    "from $dbName.$tableName where `$columnName` is not null " +
                     "group by `$columnName` " +
                     "order by count(`$columnName`) desc limit $topN ) t";
 
-    public HistogramStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+    public HistogramStatisticsCollectJob(Database db, Table table, List<String> columns,
                                          StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                          Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
@@ -70,7 +69,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private String buildCollectMCV(Database database, OlapTable table, Long topN, String columnName) {
+    private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
         context.put("columnName", columnName);
@@ -83,8 +82,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
     }
 
-    private String buildCollectHistogram(Database database, OlapTable table, double sampleRatio,
-                                        Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
+    private String buildCollectHistogram(Database database, Table table, double sampleRatio,
+                                         Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
         VelocityContext context = new VelocityContext();
@@ -104,9 +103,11 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
             String key;
             if (column.getType().isDate()) {
-                key = LocalDate.parse(entry.getKey(), DateUtils.DATE_FORMATTER).format(DateUtils.DATEKEY_FORMATTER);
+                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_FORMATTER_UNIX)
+                        .format(DateUtils.DATEKEY_FORMATTER_UNIX);
             } else if (column.getType().isDatetime()) {
-                key = LocalDate.parse(entry.getKey(), DateUtils.DATE_TIME_FORMATTER).format(DateUtils.SECOND_FORMATTER);
+                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_TIME_FORMATTER_UNIX)
+                        .format(DateUtils.DATETIMEKEY_FORMATTER_UNIX);
             } else {
                 key = entry.getKey();
             }
@@ -121,8 +122,13 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         if (!mostCommonValues.isEmpty()) {
-            context.put("MCVExclude", " and " + columnName + " not in (" +
-                    Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+            if (column.getType().getPrimitiveType().isDateType()) {
+                context.put("MCVExclude", " and " + columnName + " not in (\"" +
+                        Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
+            } else {
+                context.put("MCVExclude", " and " + columnName + " not in (" +
+                        Joiner.on(",").join(mostCommonValues.keySet()) + ")");
+            }
         } else {
             context.put("MCVExclude", "");
         }

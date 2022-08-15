@@ -37,7 +37,7 @@ public:
             _rewrite_status = rewrite_result.status();
             if (_rewrite_status.ok()) {
                 dict_func_expr = rewrite_result.value();
-                add_child(dict_func_expr);
+                DCHECK(dict_func_expr != nullptr);
             }
         });
         return _rewrite_status;

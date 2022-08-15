@@ -15,6 +15,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatisticData;
@@ -22,9 +23,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,8 +38,6 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCacheKey, Optional<Histogram>> {
     private static final Logger LOG = LogManager.getLogger(ColumnBasicStatsCacheLoader.class);
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
-    private static DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-    private static DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     @Override
     public @NonNull
@@ -140,13 +136,15 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             double low;
             double high;
             if (type.isDate()) {
-                low = (double) getLongFromDateTime(
-                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
-                high = (double) getLongFromDateTime(
-                        LocalDate.parse(bucketJsonArray.get(1).getAsString(), dateFormatter).atStartOfDay());
+                low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
+                high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                        bucketJsonArray.get(1).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
             } else if (type.isDatetime()) {
-                low = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
-                high = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(1).getAsString(), dateTimeFormatter));
+                low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
+                high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                        bucketJsonArray.get(1).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
             } else {
                 low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
                 high = Double.parseDouble(bucketJsonArray.get(1).getAsString());
@@ -174,10 +172,11 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
             double key;
             if (type.isDate()) {
-                key = (double) getLongFromDateTime(
-                        LocalDate.parse(bucketJsonArray.get(0).getAsString(), dateFormatter).atStartOfDay());
+                key = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
             } else if (type.isDatetime()) {
-                key = (double) getLongFromDateTime(LocalDateTime.parse(bucketJsonArray.get(0).getAsString(), dateTimeFormatter));
+                key = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
             } else {
                 key = Double.parseDouble(bucketJsonArray.get(0).getAsString());
             }
