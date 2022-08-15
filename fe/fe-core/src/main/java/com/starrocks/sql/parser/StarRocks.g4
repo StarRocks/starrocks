@@ -144,6 +144,7 @@ statement
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | showAuthenticationStatement                                                           #showAuthentication
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -808,6 +809,11 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
