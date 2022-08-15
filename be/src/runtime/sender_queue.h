@@ -89,7 +89,7 @@ private:
         // the callback is closed- >run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
         // Time in nano of saving closure
-        int64_t queue_enter_time;
+        int64_t queue_enter_time = -1;
     };
 
     typedef std::mutex Mutex;
@@ -166,7 +166,7 @@ private:
         google::protobuf::Closure* closure = nullptr;
         ChunkUniquePtr chunk_ptr;
         // Time in nano of saving closure
-        int64_t queue_enter_time;
+        int64_t queue_enter_time = -1;
 
         ChunkItem() {}
 
