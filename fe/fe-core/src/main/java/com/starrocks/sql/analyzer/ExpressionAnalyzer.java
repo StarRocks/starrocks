@@ -71,7 +71,9 @@ import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
@@ -105,6 +107,8 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < childSize - 1; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
+                Preconditions.checkArgument(expr.getType().isArrayType(),
+                        "Lambda input: " + expr.toString() + " should be arrays");
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
                     itemType = Type.INT;
@@ -139,7 +143,7 @@ public class ExpressionAnalyzer {
             throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
         }
 
-        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) { // related to statics?
+        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
             if (resolvedField.isFromLambda()) {
                 Preconditions.checkArgument(resolvedField.getField().getOriginExpression() instanceof PlaceHolderExpr);
@@ -258,13 +262,28 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitLambdaArguments(LambdaArguments node, Scope scope) {
-            // bind argument names with its type
-            // TODO: add error msg
-            Preconditions.checkArgument(scope.getLambdaArguments().size() == node.getNames().size());
-            for (int i = 0; i < node.getNames().size(); ++i) {
-                scope.getLambdaArguments().get(i).setName(node.getNames().get(i));
+            // lambda arguments should be unique and less than input arrays.
+            List<String> names = node.getNames();
+            Set<String> set = new HashSet<>();
+            for (String name : names) {
+                Preconditions.checkArgument(!set.contains(name), "Lambda argument: " + name + " is duplicated.");
+                set.add(name);
             }
-            node.putArguments(scope.getLambdaArguments());
+
+            Preconditions.checkArgument(scope.getLambdaInputs().size() >= names.size(),
+                    "Lambda arguments shouldn't be more than lambda input arrays.");
+            // bind argument names with its type
+            for (int i = 0; i < names.size(); ++i) {
+                scope.getLambdaInputs().get(i).setName(names.get(i));
+            }
+            List<PlaceHolderExpr> inputs = scope.getLambdaInputs();
+            // remove unnecessary inputs, then inputs and argument names are the same number.
+            if (inputs.size() > names.size()) {
+                for (int i = names.size(); i < inputs.size(); ++i) {
+                    inputs.remove(i);
+                }
+            }
+            node.putArguments(inputs);
             return null;
         }
 

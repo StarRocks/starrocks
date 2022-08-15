@@ -29,6 +29,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
         return lambdaExpr;
     }
 
+    // only need to concern the lambda expression.
     @Override
     public List<ScalarOperator> getChildren() {
         return Lists.newArrayList(lambdaExpr);
@@ -51,7 +52,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return "(" + refColumns + "->" + lambdaExpr  + ")";
+        return "(" + refColumns.toString() + "->" + lambdaExpr.toString()  + ")";
     }
 
     @Override

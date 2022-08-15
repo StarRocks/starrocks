@@ -479,7 +479,6 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
             // lambda arguments
-            // TODO 1: add columnRefOperator -> Slot to context.colRefToExpr, the key is the columnID
             List<Expr> arguments = Lists.newArrayList();
             for (ColumnRefOperator ref : operator.getRefColumns()) {
                 SlotRef slot = new SlotRef(new SlotDescriptor(
@@ -487,10 +486,10 @@ public class ScalarOperatorToExpr {
                 context.colRefToExpr.put(ref, slot);
                 arguments.add(slot);
             }
-            // TODO 2: set the lambda argument be intLiteral so that push down to BE.
-            final ScalarOperator call = operator.getLambdaExpr();
-            final Expr callExpr = buildExpr.build(call, context);
-            arguments.add(callExpr);
+            // lambda expression
+            final ScalarOperator lambdaOp = operator.getLambdaExpr();
+            final Expr lambdaExpr = buildExpr.build(lambdaOp, context);
+            arguments.add(lambdaExpr);
             Expr result = new LambdaFunction(arguments);
             result.setType(Type.FUNCTION);
             return result;
