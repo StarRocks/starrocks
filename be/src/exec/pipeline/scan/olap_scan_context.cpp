@@ -95,8 +95,8 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 /// OlapScanContextFactory.
 OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _dop);
-    // ScanOperators sharing one morsel and chunk buffer use the same context.
-    int32_t idx = _shared_scan ? 0 : driver_sequence;
+    // ScanOperators sharing one morsel use the same context.
+    int32_t idx = _shared_morsel_queue ? 0 : driver_sequence;
     DCHECK_LT(idx, _contexts.size());
 
     if (_contexts[idx] == nullptr) {

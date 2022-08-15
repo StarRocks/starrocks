@@ -758,7 +758,9 @@ void OlapScanNode::_close_pending_scanners() {
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
-    size_t dop = context->dop_of_source_operator(id());
+    auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
+    size_t dop = morsel_queue_factory->size();
+    bool shared_morsel_queue = morsel_queue_factory->is_shared();
 
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, estimated_max_concurrent_chunks());
@@ -766,15 +768,15 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
 
-    auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(this, dop, _enable_shared_scan,
-                                                                               std::move(buffer_limiter));
+    auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(
+            this, dop, shared_morsel_queue, _enable_shared_scan, std::move(buffer_limiter));
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     // scan_prepare_op.
     auto scan_prepare_op = std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(),
                                                                                       this, scan_ctx_factory);
-    scan_prepare_op->set_degree_of_parallelism(_enable_shared_scan ? 1 : dop);
+    scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
     this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
 
     auto scan_prepare_pipeline = pipeline::OpFactories{
