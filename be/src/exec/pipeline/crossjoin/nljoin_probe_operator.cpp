@@ -321,7 +321,7 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         return nullptr;
     }
 
-    while (ChunkPtr chunk = _output_accumulator.pull()) {
+    if (ChunkPtr chunk = _output_accumulator.pull()) {
         return chunk;
     }
     while (_probe_chunk && _probe_row_current < _probe_chunk->num_rows()) {

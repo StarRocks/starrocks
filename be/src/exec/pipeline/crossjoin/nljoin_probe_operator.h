@@ -76,7 +76,7 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::shared_ptr<CrossJoinContext>& _cross_join_context;
 
-    RuntimeState* _runtime_state;
+    RuntimeState* _runtime_state = nullptr;
     bool _input_finished = false;
     mutable JoinStage _join_stage = JoinStage::Probe;
     ChunkAccumulator _output_accumulator;
