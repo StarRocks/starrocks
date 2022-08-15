@@ -171,7 +171,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
                 // remove partition info of not-exist partition for snapshot table from version map
                 BaseTableInfo baseTableInfo = snapshotBaseTables.get(tableId);
-                OlapTable snapshotOlapTable = baseTableInfo.getBaseTableCache();
+                OlapTable snapshotOlapTable = baseTableInfo.getCachedBaseTable();
                 Iterator<String> infoKeyIterator = currentTablePartitionInfo.keySet().iterator();
                 while (infoKeyIterator.hasNext()) {
                     String partitionName = infoKeyIterator.next();
@@ -236,7 +236,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef slotRef = slotRefs.get(0);
         for (BaseTableInfo baseTableInfo : olapTables.values()) {
-            OlapTable olapTable = baseTableInfo.getBaseTableCache();
+            OlapTable olapTable = baseTableInfo.getCachedBaseTable();
             if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(olapTable.getName())) {
                 return Pair.create(olapTable, olapTable.getColumn(slotRef.getColumnName()));
             }
@@ -310,7 +310,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private boolean needToRefreshNonPartitionTable(OlapTable partitionTable) {
         for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
-            OlapTable olapTable = baseTableInfo.getBaseTableCache();
+            OlapTable olapTable = baseTableInfo.getCachedBaseTable();
             if (olapTable.getId() == partitionTable.getId()) {
                 continue;
             }
@@ -370,7 +370,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
         Map<String, Set<String>> tableNamePartitionNames = Maps.newHashMap();
         for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
-            OlapTable olapTable = baseTableInfo.getBaseTableCache();
+            OlapTable olapTable = baseTableInfo.getCachedBaseTable();
             if (partitionTable != null && olapTable.getId() == partitionTable.getId()) {
                 Set<String> needRefreshTablePartitionNames = Sets.newHashSet();
                 Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvToBaseNameRef();
@@ -422,7 +422,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private boolean checkBaseTablePartitionChange() {
         // check snapshotBaseTables and current tables in catalog
         for (BaseTableInfo baseTableInfo : snapshotBaseTables.values()) {
-            OlapTable snapshotTable = baseTableInfo.getBaseTableCache();
+            OlapTable snapshotTable = baseTableInfo.getCachedBaseTable();
             Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
             if (baseDb == null) {
                 return true;
@@ -513,7 +513,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 BaseTableInfo info = new BaseTableInfo();
                 info.setDbId(baseDb.getId());
                 info.setTableId(copied.getId());
-                info.setBaseTableCache(copied);
+                info.setCachedBaseTable(copied);
                 olapTables.put(baseTable.getId(), info);
             } finally {
                 baseDb.readUnlock();

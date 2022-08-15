@@ -118,16 +118,17 @@ public class MaterializedViewAnalyzer {
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             // collect table from query statement
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(queryStatement);
+            Map<TableName, Table> aliasToTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
+            Map<TableName, Table> tableNameToTableMap = AnalyzerUtils.collectAllTable(queryStatement);
             List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());
             }
-            if (tableNameTableMap.isEmpty()) {
+            if (aliasToTableMap.isEmpty()) {
                 throw new SemanticException("Can not find base table in query statement");
             }
-            tableNameTableMap.forEach((tableInfo, table) -> {
+            aliasToTableMap.forEach((tableInfo, table) -> {
                 if (!(table instanceof OlapTable)) {
                     throw new SemanticException(
                             "Materialized view only supports olap table, but the type of table: " +
@@ -139,13 +140,22 @@ public class MaterializedViewAnalyzer {
                                     table.getName() + " is: Materialized View");
                 }
                 BaseTableInfo baseTableInfo = new BaseTableInfo();
-                Database baseDb;
+                String baseDb = null;
                 if (tableInfo.getDb() != null) {
-                    baseDb = GlobalStateMgr.getCurrentState().getDb(tableInfo.getDb());
+                    baseDb = tableInfo.getDb();
                 } else {
-                    baseDb = db;
+                    for (Map.Entry<TableName, Table> tableNameTableEntry : tableNameToTableMap.entrySet()) {
+                        if (tableNameTableEntry.getValue().equals(table)) {
+                            baseDb = tableNameTableEntry.getKey().getDb();
+                            break;
+                        }
+                    }
                 }
-                baseTableInfo.setDbId(baseDb.getId());
+                Database base = GlobalStateMgr.getCurrentState().getDb(baseDb);
+                if (base == null) {
+                    base = db;
+                }
+                baseTableInfo.setDbId(base.getId());
                 baseTableInfo.setTableId(table.getId());
                 baseTableInfos.add(baseTableInfo);
             });
@@ -163,10 +173,10 @@ public class MaterializedViewAnalyzer {
                 // check whether partition expression functions are allowed if it exists
                 checkPartitionExpParams(statement);
                 // check partition column must be base table's partition column
-                checkPartitionColumnWithBaseTable(statement, tableNameTableMap);
+                checkPartitionColumnWithBaseTable(statement, aliasToTableMap);
             }
             // check and analyze distribution
-            checkDistribution(statement, tableNameTableMap);
+            checkDistribution(statement, aliasToTableMap);
             return null;
         }
 

@@ -187,6 +187,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
             testRefreshWithFailure(testDb, materializedView, taskRun);
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail(e.getMessage());
         }
     }
@@ -304,8 +305,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, OlapTable> olapTables = Maps.newHashMap();
+            private Map<Long, BaseTableInfo> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, BaseTableInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -320,7 +321,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), copied);
+                    baseTableInfo.setCachedBaseTable(copied);
+                    olapTables.put(olapTable.getId(), baseTableInfo);
                 }
                 String renamePartitionSql = "ALTER TABLE test.tbl1 RENAME PARTITION p1 p1_1";
                 try {
@@ -388,8 +390,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, OlapTable> olapTables = Maps.newHashMap();
+            public Map<Long, BaseTableInfo> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, BaseTableInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -404,7 +406,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), copied);
+                    baseTableInfo.setCachedBaseTable(copied);
+                    olapTables.put(olapTable.getId(), baseTableInfo);
                 }
                 String replacePartitionSql = "ALTER TABLE test.tbl1 REPLACE PARTITION (p3) WITH TEMPORARY PARTITION (tp3)\n" +
                         "PROPERTIES (\n" +
@@ -438,8 +441,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            public Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, OlapTable> olapTables = Maps.newHashMap();
+            public Map<Long, BaseTableInfo> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, BaseTableInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -454,7 +457,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), copied);
+                    baseTableInfo.setCachedBaseTable(copied);
+                    olapTables.put(olapTable.getId(), baseTableInfo);
                 }
                 String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p99 VALUES [('9999-03-01'),('9999-04-01'))";
                 try {
@@ -518,8 +522,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
         new MockUp<PartitionBasedMaterializedViewRefreshProcessor>() {
             @Mock
-            private Map<Long, OlapTable> collectBaseTables(MaterializedView materializedView) {
-                Map<Long, OlapTable> olapTables = Maps.newHashMap();
+            private Map<Long, BaseTableInfo> collectBaseTables(MaterializedView materializedView) {
+                Map<Long, BaseTableInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
@@ -534,7 +538,8 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                     if (!DeepCopy.copy(olapTable, copied, OlapTable.class)) {
                         throw new SemanticException("Failed to copy olap table: " + olapTable.getName());
                     }
-                    olapTables.put(olapTable.getId(), copied);
+                    baseTableInfo.setCachedBaseTable(copied);
+                    olapTables.put(olapTable.getId(), baseTableInfo);
                 }
                 String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p4";
                 try {

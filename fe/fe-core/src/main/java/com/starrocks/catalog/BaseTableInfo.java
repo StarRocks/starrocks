@@ -15,8 +15,8 @@ public class BaseTableInfo {
     @SerializedName(value = "tableId")
     private long tableId;
 
-    // this use for snapshot
-    private OlapTable baseTableCache;
+    // used for snapshot
+    private OlapTable cachedBaseTable;
 
     public boolean isExternal() {
         return isExternal;
@@ -42,11 +42,11 @@ public class BaseTableInfo {
         this.tableId = tableId;
     }
 
-    public OlapTable getBaseTableCache() {
-        return baseTableCache;
+    public OlapTable getCachedBaseTable() {
+        return cachedBaseTable;
     }
 
-    public void setBaseTableCache(OlapTable baseTableCache) {
-        this.baseTableCache = baseTableCache;
+    public void setCachedBaseTable(OlapTable cachedBaseTable) {
+        this.cachedBaseTable = cachedBaseTable;
     }
 }

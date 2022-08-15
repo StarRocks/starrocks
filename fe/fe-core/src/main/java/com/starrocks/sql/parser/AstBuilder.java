@@ -1158,8 +1158,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        //process refresh
-        RefreshSchemeDesc refreshSchemeDesc = null;
+        // process refresh
+        RefreshSchemeDesc refreshSchemeDesc;
         if (context.refreshSchemeDesc() == null) {
             refreshSchemeDesc = new SyncRefreshSchemeDesc();
         } else {
