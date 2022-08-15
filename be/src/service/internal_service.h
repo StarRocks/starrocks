@@ -92,7 +92,7 @@ public:
 
 private:
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
-                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout);
+                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
 
