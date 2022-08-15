@@ -3402,10 +3402,18 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
+        disableMaterializedView(db, olapTable);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         editLog.logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
+    }
+
+    private void disableMaterializedView(Database db, OlapTable olapTable) {
+        for (long mvId : olapTable.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId);
+            mv.setActive(false);
+        }
     }
 
     public void replayRenameTable(TableInfo tableInfo) {
@@ -3421,6 +3429,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.createTable(table);
+            disableMaterializedView(db, table);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
@@ -3457,6 +3466,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         olapTable.renamePartition(partitionName, newPartitionName);
+        disableMaterializedView(db, olapTable);
 
         // log
         TableInfo tableInfo = TableInfo.createForPartitionRename(db.getId(), olapTable.getId(), partition.getId(),
@@ -3477,6 +3487,7 @@ public class LocalMetastore implements ConnectorMetadata {
             OlapTable table = (OlapTable) db.getTable(tableId);
             Partition partition = table.getPartition(partitionId);
             table.renamePartition(partition.getName(), newPartitionName);
+            disableMaterializedView(db, table);
             LOG.info("replay rename partition[{}] to {}", partition.getName(), newPartitionName);
         } finally {
             db.writeUnlock();
