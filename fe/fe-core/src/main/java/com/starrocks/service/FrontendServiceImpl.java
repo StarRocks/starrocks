@@ -23,6 +23,7 @@ package com.starrocks.service;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
@@ -31,11 +32,14 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
@@ -48,11 +52,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -1325,18 +1331,96 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTablesMetaResponse getTablesMeta(TGetTablesMetaRequest request) throws TException {
         TGetTablesMetaResponse resp = new TGetTablesMetaResponse();
         List<TTableMetaInfo> tList = new ArrayList<>();
-        TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
-        tableMetaInfo.setTable_schema("test_db");
-        tableMetaInfo.setTable_name("cjs");
-        tableMetaInfo.setPrimary_key("date");
-        tableMetaInfo.setPartition_key("partition key");
-        tableMetaInfo.setDistribute_bucket("8");
-        tableMetaInfo.setDistribute_type("HASH");
-        tableMetaInfo.setDistribute_key("bucket key");
-        tableMetaInfo.setSort_key("sort key");
-        tableMetaInfo.setProperties("{}");
-        tList.add(tableMetaInfo);
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
+
+        dbNames.forEach(dbName -> {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (db != null) {
+                db.readLock();
+                try {
+                    List<Table> tables = db.getTables();
+                    tables.forEach(table -> {
+                        TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
+                        tableMetaInfo.setTable_schema(dbName.split(":")[1]);
+                        tableMetaInfo.setTable_name(table.getName());
+                        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) { 
+                            tableMetaInfo = genNormalTableMetaInfo(table, tableMetaInfo);
+                        } else {
+                            tableMetaInfo = genDefaultMetaInfo(tableMetaInfo);
+                        }
+                        tList.add(tableMetaInfo);
+                    });
+                } finally {
+                    db.readUnlock();
+                }                
+            }            
+        });
         resp.tables_meta_infos = tList;
         return resp;
+    }
+
+    static final ImmutableList<String> SHOW_PROPERTIES_NAME = new ImmutableList.Builder<String>()
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+            .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+            .build();
+
+    private TTableMetaInfo genNormalTableMetaInfo(Table table, TTableMetaInfo tableMetaInfo) {
+        OlapTable olapTable = (OlapTable) table;
+        // Distribution info
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+        String distributeKey = distributionInfo.getDistributionKey();
+        String distributeNum = String.valueOf(distributionInfo.getBucketNum());
+        // Partition info
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        // partitionInfo.get
+
+        StringBuilder partitionKeySb = new StringBuilder();
+        int idx = 0;
+        try {
+            for (Column column : partitionInfo.getPartitionColumns()) {
+                if (idx != 0) {
+                    partitionKeySb.append(", ");
+                }
+                partitionKeySb.append("`").append(column.getName()).append("`");
+                idx++;
+            }
+        } catch (NotImplementedException e) {
+            partitionKeySb.append("NULL");
+        }
+        tableMetaInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) ? "PRIMARY" : "NULL");
+        tableMetaInfo.setPartition_key(partitionKeySb.toString());
+        tableMetaInfo.setDistribute_bucket(distributeNum);
+        tableMetaInfo.setDistribute_type("HASH");
+        tableMetaInfo.setDistribute_key(distributeKey);
+        tableMetaInfo.setSort_key(olapTable.getKeysType().toSql().split(" ")[0]);
+
+        Map<String, String> properties = olapTable.getTableProperty().getProperties();
+        Map<String, String> showProperties = new HashMap<>();
+        SHOW_PROPERTIES_NAME.forEach(key -> {
+            if (properties.containsKey(key)) {
+                showProperties.put(key, properties.get(key));
+            }
+        });
+        if (null != olapTable.getColocateGroup()) {
+            showProperties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, olapTable.getColocateGroup());
+        }
+        Short replicationNum = olapTable.getDefaultReplicationNum();
+        showProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
+        tableMetaInfo.setProperties(showProperties.toString());
+        return tableMetaInfo;
+    }
+
+    private TTableMetaInfo genDefaultMetaInfo(TTableMetaInfo tableMetaInfo) {
+        tableMetaInfo.setPrimary_key("def");
+        tableMetaInfo.setPartition_key("def");
+        tableMetaInfo.setDistribute_bucket("def");
+        tableMetaInfo.setDistribute_type("def");
+        tableMetaInfo.setDistribute_key("def");
+        tableMetaInfo.setSort_key("def");
+        tableMetaInfo.setProperties("def");
+        return tableMetaInfo;
     }
 }

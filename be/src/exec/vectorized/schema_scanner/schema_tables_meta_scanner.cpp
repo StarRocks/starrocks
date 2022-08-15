@@ -70,6 +70,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 2: {
             // table_name
@@ -79,6 +80,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 3: {
             // primary_key
@@ -88,6 +90,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 4: {
             // partition_key
@@ -97,6 +100,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 5: {
             // distribute_key
@@ -106,6 +110,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 6: {
             // distribute_type
@@ -115,6 +120,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 7: {
             // distribute_bucket
@@ -124,6 +130,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 8: {
             // sort_key
@@ -133,6 +140,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         case 9: {
             // properties
@@ -142,6 +150,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
+            break;
         }
         default:
             break;
