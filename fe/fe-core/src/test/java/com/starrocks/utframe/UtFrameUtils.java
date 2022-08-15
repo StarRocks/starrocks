@@ -280,7 +280,7 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
-    public static Backend addMockBackend(int backendId) throws Exception {
+    public static void addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
@@ -299,8 +299,6 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
-
-        return be;
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
