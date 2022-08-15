@@ -246,6 +246,17 @@ void VersionGraph::add_version_to_graph(const Version& version) {
     _add_version_to_graph(version);
     if (version.first == _max_continuous_version + 1) {
         _max_continuous_version = _get_max_continuous_version_from(_max_continuous_version + 1);
+    } else if (version.first == 0) {
+        // We need to reconstruct max_continuous_version from zero if input version is starting from zero
+        // e.g.
+        // 1. Tablet A is doing schema change
+        // 2. We create a new tablet B releated A, and we will create a initial rowset and _max_continuous_version
+        //    will be updated to 0
+        // 3. Tablet A has a version [0, m], [m+1, n]
+        // 4. Schema change will try convert rowsets with version [0, m]
+        // 5. The input_version's first(0) is not equal to _max_continuous_version + 1, and the _max_continuous_version
+        //    will not update
+        _max_continuous_version = _get_max_continuous_version_from(0);
     }
 }
 
