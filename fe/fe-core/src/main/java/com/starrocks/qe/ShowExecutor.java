@@ -387,9 +387,7 @@ public class ShowExecutor {
         List<ConnectContext.ThreadInfo> threadInfos = ctx.getConnectScheduler().listConnection(ctx.getQualifiedUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
-            if (info.isRunning()) {
-                rowSet.add(info.toRow(nowMs, showStmt.showFull()));
-            }
+            rowSet.add(info.toRow(nowMs, showStmt.showFull()));
         }
 
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
