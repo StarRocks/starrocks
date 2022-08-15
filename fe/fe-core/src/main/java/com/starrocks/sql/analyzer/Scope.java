@@ -23,7 +23,7 @@ public class Scope {
     private final RelationFields relationFields;
     private final Map<String, CTERelation> cteQueries = Maps.newLinkedHashMap();
 
-    private List<PlaceHolderExpr> lambdaArguments = Lists.newArrayList();
+    private List<PlaceHolderExpr> lambdaInputs = Lists.newArrayList();
 
     private boolean isLambdaScope = false;
 
@@ -37,7 +37,7 @@ public class Scope {
         List<Field> fieldList = Lists.newArrayList();
         for (int i = 0; i < exprs.size(); ++i) {
             fieldList.add(new Field(exprs.get(i).getName(), exprs.get(i).getType(),
-                    new TableName("select", "select"), exprs.get(i), false));
+                    new TableName(TableName.LAMBDA_FUNC_TABLE, TableName.LAMBDA_FUNC_TABLE), exprs.get(i), false));
         }
         relationFields = new RelationFields(fieldList);
         this.parent = parent;
@@ -45,15 +45,15 @@ public class Scope {
     }
 
     public Scope getLambdaScope() {
-        return new Scope(lambdaArguments, this);
+        return new Scope(lambdaInputs, this);
     }
 
     public void putLambdaArgument(PlaceHolderExpr expr) {
-        lambdaArguments.add(expr);
+        lambdaInputs.add(expr);
     }
 
-    public List<PlaceHolderExpr> getLambdaArguments() {
-        return lambdaArguments;
+    public List<PlaceHolderExpr> getLambdaInputs() {
+        return lambdaInputs;
     }
 
     public RelationId getRelationId() {
@@ -98,7 +98,8 @@ public class Scope {
         } else {
             if (parent != null
                     //Correlated subqueries currently only support accessing properties in the first level outer layer
-                    && !relationId.equals(outerRelationId) || isLambdaScope) {
+                    && !relationId.equals(outerRelationId)
+                    || isLambdaScope) { // also to analyze the nested lambda arguments.
                 return parent.resolveField(expression, fieldIndexOffset + relationFields.getAllFields().size(),
                         outerRelationId);
             }

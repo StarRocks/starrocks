@@ -300,7 +300,7 @@ public class SlotRef extends Expr {
 
     @Override
     public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        if (getTblNameWithoutAnalyzed().getTbl() == "select") { // skip lambda argument
+        if (isFromLambda()) { // skip lambda argument
             return;
         }
         Preconditions.checkState(type.isValid());
@@ -311,6 +311,10 @@ public class SlotRef extends Expr {
         if (tupleIds != null) {
             tupleIds.add(desc.getParent().getId());
         }
+    }
+
+    public boolean isFromLambda() {
+        return java.util.Objects.equals(tblName.getTbl(), TableName.LAMBDA_FUNC_TABLE);
     }
 
     public Table getTable() {

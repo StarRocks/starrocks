@@ -178,14 +178,12 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Void context) {
-            // no nested, so here be identified by unique slot_id
-            if (node.getTblNameWithoutAnalyzed().getTbl() == "select") {
+            if (node.isFromLambda()) { // identified by unique slot_id
                 return new ColumnRefOperator(node.getSlotId().asInt(), node.getType(), node.getColumnName(),
                         node.isNullable(), true);
             }
             ResolvedField resolvedField =
                     expressionMapping.getScope().resolveField(node, expressionMapping.getOuterScopeRelationId());
-            // TODO(fzh) how to bind the relations between resolvedField and columnRefIndex?
             ColumnRefOperator columnRefOperator =
                     expressionMapping.getColumnRefWithIndex(resolvedField.getRelationFieldIndex());
 
