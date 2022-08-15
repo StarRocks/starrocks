@@ -334,7 +334,7 @@ void DataStreamRecvr::NonPipelineSenderQueue::decrement_senders(int be_number) {
               << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
               << " be_number=" << be_number;
     if (_num_remaining_senders == 0) {
-        _data_arrival_cv.notify_one();
+        _data_arrival_cv.notify_all();
     }
 }
 
@@ -616,6 +616,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
+            chunks.back().queue_enter_time = MonotonicNanos();
             COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
             *done = nullptr;
         }
