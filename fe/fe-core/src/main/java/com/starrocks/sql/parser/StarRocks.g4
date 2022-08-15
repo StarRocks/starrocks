@@ -147,6 +147,7 @@ statement
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
     | DROP USER user                                                                        #dropUser
+    | showAuthenticationStatement                                                           #showAuthentication
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -837,6 +838,11 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
