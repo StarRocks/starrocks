@@ -9,6 +9,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -46,6 +47,8 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final RemoteScanPartitionPruneRule HUDI_SCAN =
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final RemoteScanPartitionPruneRule ICEBERG_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
 
     public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
@@ -62,9 +65,14 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
 
         try {
-            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
-            classifyConjuncts(operator, columnToPartitionValuesMap);
-            computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+            if (operator.getTable() instanceof IcebergTable) {
+                // A little trick to set min max for iceberg table here
+                computeMinMaxConjuncts(operator, context);
+            } else {
+                initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+                classifyConjuncts(operator, columnToPartitionValuesMap);
+                computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+            }
         } catch (Exception e) {
             LOG.warn("HMS table partition prune failed : " + e);
             throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);

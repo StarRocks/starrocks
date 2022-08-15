@@ -192,6 +192,7 @@ public class RuleSet {
                 new DistributionPruneRule(),
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
+                RemoteScanPartitionPruneRule.ICEBERG_SCAN,
                 new EsScanPartitionPruneRule(),
                 new CastToEmptyRule(),
                 new PartitionPredicatePrune()
