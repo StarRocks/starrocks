@@ -3,6 +3,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetType;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -10,7 +15,24 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+<<<<<<< HEAD
 import com.starrocks.cluster.ClusterNamespace;
+=======
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -101,5 +123,23 @@ public class ShowStmtAnalyzer {
             }
             return db;
         }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null) {
+                try {
+                    user.analyze();
+                } catch (AnalysisException e) {
+                    SemanticException exception = new SemanticException("failed to show authentication for " + user.toString());
+                    exception.initCause(e);
+                    throw exception;
+                }
+            } else if (! statement.isAll()) {
+                statement.setUserIdent(context.getCurrentUserIdentity());
+            }
+            return null;
+        }
+
     }
 }

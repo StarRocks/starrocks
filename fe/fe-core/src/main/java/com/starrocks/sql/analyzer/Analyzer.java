@@ -16,6 +16,19 @@ import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.LimitElement;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.LoadStmt;
+import com.starrocks.analysis.PauseRoutineLoadStmt;
+import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverPartitionStmt;
+import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowDynamicPartitionStmt;
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UpdateStmt;
@@ -179,6 +192,12 @@ public class Analyzer {
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            ShowStmtAnalyzer.analyze(statement, context);
             return null;
         }
 

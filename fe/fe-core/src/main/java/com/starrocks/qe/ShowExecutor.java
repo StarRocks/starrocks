@@ -33,6 +33,7 @@ import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowBackupStmt;
@@ -271,11 +272,36 @@ public class ShowExecutor {
             handleShowUser();
         } else if (stmt instanceof ShowCatalogsStmt) {
             handleShowCatalogs();
+<<<<<<< HEAD
+=======
+        } else if (stmt instanceof ShowComputeNodesStmt) {
+            handleShowComputeNodes();
+        } else if (stmt instanceof ShowAuthenticationStmt) {
+            handleShowAuthentication();
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
         } else {
             handleEmtpy();
         }
 
+<<<<<<< HEAD
         return resultSet;
+=======
+        List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
+        return new ShowResultSet(resultSet.getMetaData(), rows);
+    }
+
+    private void handleShowAuthentication() {
+        final ShowAuthenticationStmt showAuthenticationStmt = (ShowAuthenticationStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getAuth().getAuthenticationInfo(
+                showAuthenticationStmt.getUserIdent());
+        resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), rows);
+    }
+
+    private void handleShowComputeNodes() {
+        final ShowComputeNodesStmt showStmt = (ShowComputeNodesStmt) stmt;
+        List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
+        resultSet = new ShowResultSet(showStmt.getMetaData(), computeNodesInfos);
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
     }
 
     private void handleShowMaterializedView() throws AnalysisException {

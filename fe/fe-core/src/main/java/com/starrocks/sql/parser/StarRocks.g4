@@ -80,6 +80,55 @@ statement
     | REVOKE identifierOrString FROM user                                                   #revokeRole
     | REVOKE IMPERSONATE ON user FROM user                                                  #revokeImpersonate
     | EXECUTE AS user (WITH NO REVERT)?                                                     #executeAs
+<<<<<<< HEAD
+=======
+    | ALTER USER user authOption                                                            #alterUser
+    | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
+    | DROP USER user                                                                        #dropUser
+    | showAuthenticationStatement                                                           #showAuthentication
+
+    // procedure
+    | showProcedureStatement                                                                 #showProcedure
+
+    // proc
+    | showProcStatement                                                                      #showProc
+
+    // Backup Restore Satement
+    | backupStatement                                                                        #backup
+    ;
+
+// ---------------------------------------- DataBase Statement ---------------------------------------------------------
+alterDbQuotaStmt
+    : ALTER DATABASE identifier SET DATA QUOTA identifier
+    | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
+    ;
+
+createDbStatement
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    ;
+
+dropDbStatement
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    ;
+
+showCreateDbStatement
+    : SHOW CREATE (DATABASE | SCHEMA) identifier
+    ;
+
+
+alterDatabaseRename
+    : ALTER DATABASE identifier RENAME identifier
+    ;
+
+
+recoverDbStmt
+    : RECOVER (DATABASE | SCHEMA) identifier
+    ;
+
+showDataStmt
+    : SHOW DATA
+    | SHOW DATA FROM qualifiedName
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
     ;
 
 
@@ -390,6 +439,11 @@ varType
     : GLOBAL
     | LOCAL
     | SESSION
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

@@ -49,6 +49,20 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.PauseRoutineLoadStmt;
+import com.starrocks.analysis.RecoverDbStmt;
+import com.starrocks.analysis.RecoverPartitionStmt;
+import com.starrocks.analysis.RecoverTableStmt;
+import com.starrocks.analysis.ReorderColumnsClause;
+import com.starrocks.analysis.ResumeRoutineLoadStmt;
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBrokerStmt;
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowMaterializedViewStmt;
@@ -120,7 +134,19 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+<<<<<<< HEAD
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
+=======
+    public R visitShowAuthenticationStatement(ShowAuthenticationStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+>>>>>>> ba98870f6 ([Feature] suport SHOW AUTHENTICATION (#9996))
         return visitStatement(statement, context);
     }
 
