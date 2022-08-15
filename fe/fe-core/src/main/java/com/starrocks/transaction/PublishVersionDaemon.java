@@ -173,7 +173,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         publishErrorReplicaIds);
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
                             transactionState, publishErrorReplicaIds.size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
@@ -201,7 +201,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
                             transactionState, transactionState.getErrorReplicas().size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
@@ -298,7 +298,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
     boolean publishPartition(TransactionState txnState, LakeTable table, Partition partition,
                              PartitionCommitInfo partitionCommitInfo) {
         if (partition.getVisibleVersion() + 1 != partitionCommitInfo.getVersion()) {
-            LOG.warn("partiton version is " + partition.getVisibleVersion() + " commit version is " +
+            LOG.warn("partition version is " + partition.getVisibleVersion() + " commit version is " +
                     partitionCommitInfo.getVersion());
             return false;
         }
