@@ -70,9 +70,6 @@ public class AnalyzeStmtAnalyzer {
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
             }
-            if (!analyzeTable.isNativeTable()) {
-                throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
-            }
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -116,10 +113,6 @@ public class AnalyzeStmtAnalyzer {
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
-                    if (!analyzeTable.isNativeTable()) {
-                        throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
-                    }
-
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
@@ -128,7 +121,8 @@ public class AnalyzeStmtAnalyzer {
                         for (String colName : columnNames) {
                             Column col = analyzeTable.getColumn(colName);
                             if (col == null) {
-                                throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
+                                throw new SemanticException("Unknown column '%s' in '%s'", colName,
+                                        analyzeTable.getName());
                             }
                             if (!mentionedColumns.add(colName)) {
                                 throw new SemanticException("Column '%s' specified twice", colName);
@@ -158,7 +152,8 @@ public class AnalyzeStmtAnalyzer {
             }
         }
 
-        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
+                                            AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
                 List<String> columns = statement.getColumnNames();
                 OlapTable analyzeTable = (OlapTable) MetaUtils.getTable(session, statement.getTableName());

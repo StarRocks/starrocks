@@ -127,6 +127,10 @@ public class Statistics {
             return this;
         }
 
+        public ColumnStatistic getColumnStatistics(ColumnRefOperator columnRefOperator) {
+            return this.columnStatistics.get(columnRefOperator);
+        }
+
         public Builder removeColumnStatistics(ColumnRefOperator column) {
             columnStatistics.remove(column);
             return this;

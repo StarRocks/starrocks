@@ -5,7 +5,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -27,16 +26,16 @@ public abstract class StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     protected final Database db;
-    protected final OlapTable table;
+    protected final Table table;
     protected final List<String> columns;
 
     protected final StatsConstants.AnalyzeType type;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
 
-    protected StatisticsCollectJob(Database db, OlapTable table, List<String> columns,
-                                StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
-                                Map<String, String> properties) {
+    protected StatisticsCollectJob(Database db, Table table, List<String> columns,
+                                   StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                   Map<String, String> properties) {
         this.db = db;
         this.table = table;
         this.columns = columns;
@@ -118,7 +117,7 @@ public abstract class StatisticsCollectJob {
         return sw.toString();
     }
 
-    protected String getSampleTabletHint(OlapTable table, long rows) {
+    protected String getSampleTabletHint(Table table, long rows) {
         Set<String> randomTablets = Sets.newHashSet();
         rows = Math.max(rows, 1);
 

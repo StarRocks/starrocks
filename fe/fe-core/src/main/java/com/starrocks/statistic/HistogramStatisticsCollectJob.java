@@ -4,7 +4,7 @@ package com.starrocks.statistic;
 import com.google.common.base.Joiner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatisticData;
@@ -39,7 +39,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
                     "group by `$columnName` " +
                     "order by count(`$columnName`) desc limit $topN ) t";
 
-    public HistogramStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+    public HistogramStatisticsCollectJob(Database db, Table table, List<String> columns,
                                          StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                          Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
@@ -69,7 +69,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
-    private String buildCollectMCV(Database database, OlapTable table, Long topN, String columnName) {
+    private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
         VelocityContext context = new VelocityContext();
         context.put("tableId", table.getId());
         context.put("columnName", columnName);
@@ -82,7 +82,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         return build(context, COLLECT_MCV_STATISTIC_TEMPLATE);
     }
 
-    private String buildCollectHistogram(Database database, OlapTable table, double sampleRatio,
+    private String buildCollectHistogram(Database database, Table table, double sampleRatio,
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName) {
         StringBuilder builder = new StringBuilder("INSERT INTO ").append(HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
 
