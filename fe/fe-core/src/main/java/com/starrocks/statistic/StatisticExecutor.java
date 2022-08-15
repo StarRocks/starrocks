@@ -101,6 +101,10 @@ public class StatisticExecutor {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
 
+        if (!table.isOlapTable()) {
+            throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+        }
+
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);

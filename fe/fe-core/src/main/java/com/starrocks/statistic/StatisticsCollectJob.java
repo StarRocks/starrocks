@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -24,14 +23,14 @@ public abstract class StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     protected final Database db;
-    protected final OlapTable table;
+    protected final Table table;
     protected final List<String> columns;
 
     protected final StatsConstants.AnalyzeType type;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
 
-    protected StatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+    protected StatisticsCollectJob(Database db, Table table, List<String> columns,
                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                    Map<String, String> properties) {
         this.db = db;
