@@ -114,6 +114,7 @@ import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -565,6 +566,10 @@ public class LeaderImpl {
             }
         }
         publishVersionTask.setIsFinished(true);
+        TransactionState txnState = publishVersionTask.getTxnState();
+        if (txnState != null) {
+            txnState.updatePublishTaskFinishTime();
+        }
 
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
             // not remove the task from queue and be will retry
