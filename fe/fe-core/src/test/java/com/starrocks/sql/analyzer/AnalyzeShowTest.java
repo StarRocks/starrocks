@@ -93,7 +93,7 @@ public class AnalyzeShowTest {
         String sql = "SHOW AUTHENTICATION;";
         ShowAuthenticationStmt stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("default_cluster:root", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("root", stmt.getUserIdent().getQualifiedUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
         stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
@@ -103,7 +103,7 @@ public class AnalyzeShowTest {
         sql = "SHOW AUTHENTICATION FOR xx";
         stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("xx", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("default_cluster:xx", stmt.getUserIdent().getQualifiedUser());
 
     }
 }
