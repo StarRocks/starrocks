@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
@@ -231,7 +231,7 @@ public class QueryAnalyzer {
                     }
                 }
 
-                Table table = resolveTable(tableRelation);
+                Table table = resolveTable(tableRelation.getName());
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
@@ -644,9 +644,8 @@ public class QueryAnalyzer {
         }
     }
 
-    private Table resolveTable(TableRelation tableRelation) {
+    private Table resolveTable(TableName tableName) {
         try {
-            TableName tableName = tableRelation.getName();
             MetaUtils.normalizationTableName(session, tableName);
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
@@ -657,10 +656,6 @@ public class QueryAnalyzer {
 
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-            }
-
-            if (tableRelation.getAlias() != null) {
-                tableRelation.setAlias(new TableName(catalogName, dbName, tableRelation.getAlias().getTbl()));
             }
 
             Database database = metadataMgr.getDb(catalogName, dbName);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
@@ -82,7 +82,6 @@ public class DeletePlanner {
         // and guaranteed order of data writing
         // It can be parallel only in some scenes, for easy use 1 dop now.
         execPlan.getFragments().get(0).setPipelineDop(1);
-        ;
         return execPlan;
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
@@ -106,8 +106,8 @@ public class InsertPlanner {
                 columnRefFactory);
 
         //7. Build fragment exec plan
-        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation &&
-                queryRelation.hasLimit()) || insertStmt.getTargetTable() instanceof MysqlTable);
+        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                || insertStmt.getTargetTable() instanceof MysqlTable);
         ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                 optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                 queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
@@ -69,26 +69,44 @@ public class StatisticExecutor {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
 
-        return executeSQL(sql);
+        return executeDQL(sql);
     }
 
     public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
-        executeSQL(sql);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
     }
 
     public List<TStatisticData> queryHistogram(Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
-        return executeSQL(sql);
+        return executeDQL(sql);
     }
 
     public List<TStatisticData> queryMCV(String sql) {
-        return executeSQL(sql);
+        return executeDQL(sql);
     }
 
     public void dropHistogram(Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
-        executeSQL(sql);
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            executor.execute();
+        } catch (Exception e) {
+            LOG.warn("Execute statistic table expire fail.", e);
+        }
     }
 
     // If you call this function, you must ensure that the db lock is added
@@ -124,7 +142,7 @@ public class StatisticExecutor {
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, false, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmt(context, execPlan);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             return Pair.create(Collections.emptyList(), sqlResult.second);
         } else {
@@ -206,12 +224,12 @@ public class StatisticExecutor {
         return analyzeStatus;
     }
 
-    private List<TStatisticData> executeSQL(String sql) {
+    private List<TStatisticData> executeDQL(String sql) {
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmt(context, execPlan);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());
         } else {

@@ -78,39 +78,7 @@ public class SetExecutor {
             if (var.getType().equals(SetType.USER)) {
                 UserVariable userVariable = (UserVariable) var;
                 if (userVariable.getResolvedExpression() == null) {
-                    ConnectContext context = StatisticUtils.buildConnectContext();
-                    Expr expr = userVariable.getExpression();
-                    StatementBase parsedStmt = ((Subquery) expr).getQueryStatement();
-
-                    ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.VARIABLE);
-                    StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-                    Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmt(context, execPlan);
-                    if (!sqlResult.second.ok()) {
-                        throw new SemanticException(sqlResult.second.getErrorMsg());
-                    } else {
-                        try {
-                            List<TVariableData> result = deserializerStatisticData(sqlResult.first);
-                            LiteralExpr resultExpr;
-                            if (result.isEmpty()) {
-                                resultExpr = new NullLiteral();
-                            } else {
-                                Preconditions.checkState(result.size() == 1);
-                                if (result.get(0).isIsNull()) {
-                                    resultExpr = new NullLiteral();
-                                } else {
-                                    resultExpr = LiteralExpr.create(
-                                            result.get(0).result, execPlan.getOutputExprs().get(0).getType());
-                                }
-                            }
-                            userVariable.setResolvedExpression(resultExpr);
-                        } catch (TException | AnalysisException e) {
-                            throw new SemanticException(e.getMessage());
-                        }
-                    }
-
-                    if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                        throw new SemanticException(context.getState().getErrorMessage());
-                    }
+                    deriveExpressionResult(userVariable);
                 }
 
                 ctx.modifyUserVariable(userVariable);
@@ -149,7 +117,43 @@ public class SetExecutor {
         }
     }
 
-    private static List<TVariableData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
+    private void deriveExpressionResult(UserVariable userVariable) {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        Expr expr = userVariable.getExpression();
+        StatementBase parsedStmt = ((Subquery) expr).getQueryStatement();
+
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.VARIABLE);
+        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
+        if (!sqlResult.second.ok()) {
+            throw new SemanticException(sqlResult.second.getErrorMsg());
+        } else {
+            try {
+                List<TVariableData> result = deserializerVariableData(sqlResult.first);
+                LiteralExpr resultExpr;
+                if (result.isEmpty()) {
+                    resultExpr = new NullLiteral();
+                } else {
+                    Preconditions.checkState(result.size() == 1);
+                    if (result.get(0).isIsNull()) {
+                        resultExpr = new NullLiteral();
+                    } else {
+                        resultExpr = LiteralExpr.create(
+                                result.get(0).result, execPlan.getOutputExprs().get(0).getType());
+                    }
+                }
+                userVariable.setResolvedExpression(resultExpr);
+            } catch (TException | AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            throw new SemanticException(context.getState().getErrorMessage());
+        }
+    }
+
+    private static List<TVariableData> deserializerVariableData(List<TResultBatch> sqlResult) throws TException {
         List<TVariableData> statistics = Lists.newArrayList();
 
         TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());

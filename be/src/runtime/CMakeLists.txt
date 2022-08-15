@@ -76,12 +76,12 @@ set(RUNTIME_FILES
     small_file_mgr.cpp
     record_batch_queue.cpp
     result_queue_mgr.cpp
-    statistic_result_writer.cpp
-    variable_result_writer.cpp
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
-    file_result_writer.cpp
     mysql_result_writer.cpp
+    file_result_writer.cpp
+    statistic_result_writer.cpp
+    variable_result_writer.cpp
     memory/system_allocator.cpp
     memory/chunk_allocator.cpp
     chunk_cursor.cpp

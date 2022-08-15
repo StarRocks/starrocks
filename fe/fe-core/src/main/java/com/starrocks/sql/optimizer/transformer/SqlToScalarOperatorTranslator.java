@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
@@ -479,9 +479,6 @@ public final class SqlToScalarOperatorTranslator {
                     return ConstantOperator.createFloat(node.getFloatValue());
                 case CHAR:
                 case VARCHAR:
-                    if (node.getStrValue() == null) {
-                        return ConstantOperator.createNull(Type.VARCHAR);
-                    }
                     return ConstantOperator.createVarchar(node.getStrValue());
                 default:
                     throw new StarRocksPlannerException("Not support variable type "

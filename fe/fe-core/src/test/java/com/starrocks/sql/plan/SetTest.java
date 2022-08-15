@@ -1,9 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SetExecutor;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -517,5 +521,14 @@ public class SetTest extends PlanTestBase {
                 "  |  order by: <slot 8> 8: expr ASC"));
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 4> : 1: v1 + 2: v2"));
+    }
+
+    @Test
+    public void testUserVariable() {
+        String sql = "set @var = (select v1,v2 from test.t0)";
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parseFirstStatement(sql, connectContext.getSessionVariable().getSqlMode());
+        SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
+        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class, () -> setExecutor.execute());
     }
 }

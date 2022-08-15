@@ -332,8 +332,7 @@ public class StmtExecutor {
             boolean execPlanBuildByNewPlanner = false;
 
             // Entrance to the new planner
-            if (isStatisticsOrAnalyzer(parsedStmt, context) ||
-                    StatementPlanner.supportedByNewPlanner(parsedStmt)) {
+            if (StatementPlanner.supportedByNewPlanner(parsedStmt)) {
                 try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToLeader()) {
@@ -346,10 +345,10 @@ public class StmtExecutor {
                             QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
                             if (selectStmt != null) {
                                 parsedStmt = selectStmt;
-                                execPlan = new StatementPlanner().plan(parsedStmt, context);
+                                execPlan = StatementPlanner.plan(parsedStmt, context);
                             }
                         } else {
-                            execPlan = new StatementPlanner().plan(parsedStmt, context);
+                            execPlan = StatementPlanner.plan(parsedStmt, context);
                         }
                         execPlanBuildByNewPlanner = true;
                     }
@@ -1368,10 +1367,10 @@ public class StmtExecutor {
         return originStmt.originStmt;
     }
 
-    public Pair<List<TResultBatch>, Status> executeStmt(ConnectContext context, ExecPlan plan) {
+    public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
         List<TResultBatch> sqlResult = Lists.newArrayList();
         try {
-            Coordinator coord = new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            coord = new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 
             coord.exec();

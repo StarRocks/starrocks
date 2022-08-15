@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.CastExpr;
@@ -11,7 +11,7 @@ import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Type;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +24,10 @@ public class UserVariable extends SetVar {
 
     @Override
     public void analyze() {
+        if (getVariable().length() > 64) {
+            throw new SemanticException("User variable name '" + getVariable() + "' is illegal");
+        }
+
         Expr expression = getExpression();
         if (expression instanceof NullLiteral) {
             setResolvedExpression(NullLiteral.create(Type.STRING));
@@ -48,9 +52,6 @@ public class UserVariable extends SetVar {
 
                 SelectRelation selectRelation = new SelectRelation(selectList, valuesRelation, null, null, null);
                 QueryStatement queryStatement = new QueryStatement(selectRelation);
-                //System.out.println(ViewDefBuilder.build(queryStatement));
-
-                com.starrocks.sql.analyzer.Analyzer.analyze(queryStatement, new ConnectContext());
                 setExpression(new Subquery(queryStatement));
             }
         }
