@@ -779,29 +779,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     /**
-     * Gather conjuncts from this expr and return them in a list.
-     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
-     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
-     */
-    public List<Expr> getConjuncts() {
-        List<Expr> list = Lists.newArrayList();
-        if (this instanceof CompoundPredicate && ((CompoundPredicate) this).getOp() ==
-                CompoundPredicate.Operator.AND) {
-            // TODO: we have to convert CompoundPredicate.AND to two expr trees for
-            // conjuncts because NULLs are handled differently for CompoundPredicate.AND
-            // and conjunct evaluation.  This is not optimal for jitted exprs because it
-            // will result in two functions instead of one. Create a new CompoundPredicate
-            // Operator (i.e. CONJUNCT_AND) with the right NULL semantics and use that
-            // instead
-            list.addAll((getChild(0)).getConjuncts());
-            list.addAll((getChild(1)).getConjuncts());
-        } else {
-            list.add(this);
-        }
-        return list;
-    }
-
-    /**
      * Create a deep copy of 'this'. If sMap is non-null,
      * use it to substitute 'this' or its subnodes.
      * <p/>

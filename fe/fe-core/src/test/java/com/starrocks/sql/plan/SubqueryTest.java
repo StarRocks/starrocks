@@ -836,7 +836,7 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testOnClauseExistentialSubquery() throws Exception {
         {
-            // Uncorrelated
+            // Uncorrelated 1
             String sql = "select * from t0 " +
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 = (exists (select v7 from t2 where t2.v8 = 1))";
@@ -851,7 +851,21 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  equal join conjunct: 1: v1 = 12: cast");
         }
         {
-            // correlated
+            // Uncorrelated 2
+            String sql = "select * from t0 " +
+                    "join t1 on " +
+                    "t0.v1 = (exists (select v7 from t2 where t2.v8 = 1))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  10:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  colocate: false, reason: ");
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 12: cast");
+        }
+        {
+            // correlated 1
             String sql = "select * from t0 " +
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 = (exists (select v7 from t2 where t2.v8 = t1.v5))";
@@ -867,12 +881,28 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +
                     "  |  other predicates: CAST(8: v8 IS NOT NULL AS BIGINT) IS NOT NULL");
         }
+        {
+            // correlated 2
+            String sql = "select * from t0 " +
+                    "join t1 on " +
+                    "t0.v1 = (exists (select v7 from t2 where t2.v8 = t1.v5))";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  8:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 11: cast = 1: v1");
+            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 5: v5 = 8: v8\n" +
+                    "  |  other predicates: CAST(8: v8 IS NOT NULL AS BIGINT) IS NOT NULL");
+        }
     }
 
     @Test
     public void testOnClauseQuantifiedSubquery() throws Exception {
         {
-            // Uncorrelated
+            // Uncorrelated 1
             String sql = "select * from t0 " +
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 in (select v7 from t2 where t2.v8 = 1)";
@@ -887,7 +917,21 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  equal join conjunct: 1: v1 = 7: v7");
         }
         {
-            // correlated
+            // Uncorrelated 2
+            String sql = "select * from t0 " +
+                    "join t1 on " +
+                    "t0.v1 in (select v7 from t2)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  colocate: false, reason: ");
+            assertContains(plan, "  3:HASH JOIN\n" +
+                    "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 7: v7");
+        }
+        {
+            // correlated 1
             String sql = "select * from t0 " +
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 in (select v7 from t2 where t2.v9 = t0.v3)";
@@ -896,6 +940,21 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
+            assertContains(plan, "  3:HASH JOIN\n" +
+                    "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 7: v7\n" +
+                    "  |  equal join conjunct: 3: v3 = 9: v9");
+        }
+        {
+            // correlated 2
+            String sql = "select * from t0 " +
+                    "join t1 on " +
+                    "t0.v1 in (select v7 from t2 where t2.v9 = t0.v3)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:NESTLOOP JOIN\n" +
+                    "  |  join op: CROSS JOIN\n" +
+                    "  |  colocate: false, reason:");
             assertContains(plan, "  3:HASH JOIN\n" +
                     "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +

@@ -27,6 +27,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.RelationFields;
@@ -582,6 +583,21 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         leftOpt = pair.first;
         rightOpt = pair.second;
 
+        // Join on predicate may be removed by processOnClauseSubquery
+        if (node.getOnPredicate() == null) {
+            OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
+                    .setJoinType(JoinOperator.CROSS_JOIN)
+                    .setJoinHint(node.getJoinHint())
+                    .build(), Lists.newArrayList(leftOpt, rightOpt),
+                    expressionMapping);
+
+            LogicalProjectOperator projectOperator =
+                    new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
+                            .collect(Collectors.toMap(Function.identity(), Function.identity())));
+            return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
+                    expressionMapping.getFieldMappings(), null);
+        }
+
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
                 .translateWithoutRewrite(node.getOnPredicate(), expressionMapping);
         ScalarOperator onPredicate = SqlToScalarOperatorTranslator.translate(node.getOnPredicate(), expressionMapping);
@@ -705,25 +721,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         final int kind;
         SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
         if (correlatedFieldIds.isEmpty()) {
-            // Find the smallest part of join on predicate that contains the subquery
-            // TODO Utils
-            Expr subqueryConjunct = node.getOnPredicate();
-            while (true) {
-                List<Expr> conjuncts = subqueryConjunct.getConjuncts();
-                if (conjuncts.size() == 1) {
-                    // Cannot be split anymore
-                    break;
-                }
-                Expr prev = subqueryConjunct;
-                for (Expr conjunct : conjuncts) {
-                    if (conjunct.getSubquery() != null) {
-                        // Continue split
-                        subqueryConjunct = conjunct;
-                        break;
-                    }
-                }
-                Preconditions.checkState(subqueryConjunct != prev);
-            }
+            List<Expr> conjuncts = AnalyzerUtils.extractConjuncts(node.getOnPredicate());
+            Expr subqueryConjunct =
+                    conjuncts.stream().filter(expr -> expr.getSubquery() != null).findAny().orElseThrow(null);
             List<SlotRef> slotRefs = Lists.newArrayList();
             subqueryConjunct.collect(SlotRef.class, slotRefs);
             RelationFields leftRelationFields = node.getLeft().getRelationFields();

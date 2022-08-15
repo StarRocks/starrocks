@@ -372,6 +372,11 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Gather conjuncts from this expr and return them in a list.
+     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
+     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
+     */
     public static List<Expr> extractConjuncts(Expr root) {
         List<Expr> conjuncts = Lists.newArrayList();
         if (null == root) {
