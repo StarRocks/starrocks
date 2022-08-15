@@ -39,6 +39,7 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.security.LdapSecurity;
@@ -1589,6 +1590,11 @@ public class AuthTest {
                         currentUser));
         Assert.assertFalse(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
                 "456".getBytes(StandardCharsets.UTF_8), null, currentUser));
+        List<List<String>> authInfos = auth.getAuthenticationInfo(currentUser.get(0));
+        Assert.assertEquals(1, authInfos.size());
+        Assert.assertEquals("No", authInfos.get(0).get(1));
+        Assert.assertEquals("AUTHENTICATION_LDAP_SIMPLE", authInfos.get(0).get(2));
+        Assert.assertEquals("uid=zhangsan,ou=company,dc=example,dc=com", authInfos.get(0).get(3));
 
         // alter user zhangsan identified with authentication_ldap_simple
         String alterUserSql = "alter user zhangsan identified with authentication_ldap_simple";
@@ -1611,6 +1617,11 @@ public class AuthTest {
                         currentUser));
         Assert.assertFalse(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":zhangsan", "192.168.8.8",
                 "456".getBytes(StandardCharsets.UTF_8), null, currentUser));
+        authInfos = auth.getAuthenticationInfo(currentUser.get(0));
+        Assert.assertEquals(1, authInfos.size());
+        Assert.assertEquals("No", authInfos.get(0).get(1));
+        Assert.assertEquals("AUTHENTICATION_LDAP_SIMPLE", authInfos.get(0).get(2));
+        Assert.assertEquals(FeConstants.null_string, authInfos.get(0).get(3));
 
         /*
             mysql_native_password
@@ -1633,6 +1644,11 @@ public class AuthTest {
                 currentUser));
         Assert.assertTrue(auth.checkPassword(SystemInfoService.DEFAULT_CLUSTER + ":lisi", "192.168.8.8", scramble, seed,
                 currentUser));
+        authInfos = auth.getAuthenticationInfo(currentUser.get(0));
+        Assert.assertEquals(1, authInfos.size());
+        Assert.assertEquals("Yes", authInfos.get(0).get(1));
+        Assert.assertEquals("MYSQL_NATIVE_PASSWORD", authInfos.get(0).get(2));
+        Assert.assertEquals(FeConstants.null_string, authInfos.get(0).get(3));
 
         // alter user lisi identified with mysql_native_password by '654321'
         String sql = "alter user lisi identified with mysql_native_password by '654321'";

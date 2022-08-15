@@ -35,6 +35,7 @@ import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
 import com.starrocks.analysis.ShowBackendsStmt;
 import com.starrocks.analysis.ShowBackupStmt;
@@ -285,12 +286,21 @@ public class ShowExecutor {
             handleShowCatalogs();
         } else if (stmt instanceof ShowComputeNodesStmt) {
             handleShowComputeNodes();
+        } else if (stmt instanceof ShowAuthenticationStmt) {
+            handleShowAuthentication();
         } else {
             handleEmtpy();
         }
 
         List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
         return new ShowResultSet(resultSet.getMetaData(), rows);
+    }
+
+    private void handleShowAuthentication() {
+        final ShowAuthenticationStmt showAuthenticationStmt = (ShowAuthenticationStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getAuth().getAuthenticationInfo(
+                showAuthenticationStmt.getUserIdent());
+        resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), rows);
     }
 
     private void handleShowComputeNodes() {
