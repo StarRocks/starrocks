@@ -700,6 +700,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return defaultDistributionInfo;
     }
 
+    @Override
     public Set<String> getDistributionColumnNames() {
         Set<String> distributionColumnNames = Sets.newHashSet();
         if (defaultDistributionInfo instanceof RandomDistributionInfo) {
@@ -853,6 +854,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     // get all partitions except temp partitions
+    @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
     }
@@ -1344,7 +1346,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
-    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions, boolean resetState,
+    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions,
+                                              boolean resetState,
                                               IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
@@ -1899,7 +1902,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
             // drop all replicas
             for (Partition partition : table.getAllPartitions()) {
-                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                List<MaterializedIndex> allIndices =
+                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = table.getSchemaHashByIndexId(indexId);

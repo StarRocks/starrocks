@@ -329,9 +329,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
 
+        Statistics.Builder nativeBuilder = estimateScanColumns(table, colRefToColumnMetaMap);
+
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
-            builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
+            ColumnRefOperator columnRefOperator = requiredColumns.get(i);
+            ColumnStatistic columnStatistic = columnStatisticList.get(i);
+            // if column stats is unavailable from HMS, then use native column stats.
+            if (columnStatistic.isUnknown()) {
+                columnStatistic = nativeBuilder.getColumnStatistics(columnRefOperator);
+            }
+            builder.addColumnStatistic(columnRefOperator, columnStatistic);
             optimizerContext.getDumpInfo()
                     .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
         }
