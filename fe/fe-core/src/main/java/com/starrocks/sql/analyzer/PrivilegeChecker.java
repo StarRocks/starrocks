@@ -35,6 +35,7 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -1004,6 +1005,16 @@ public class PrivilegeChecker {
                     && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            if (statement.isAll() || ! context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
             }
             return null;
         }
