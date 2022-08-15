@@ -286,7 +286,7 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator join, ExpressionContext context) {
-            final double nestLoopPunishment = 1000 * 1000;
+            final double nestLoopPunishment = 1000000.0;
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
