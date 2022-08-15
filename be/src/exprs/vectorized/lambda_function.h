@@ -27,8 +27,8 @@ public:
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 
-    // the slot ids of lambda expression may be from the arguments of this lambda function
-    // or its parent lambda functions, or captured columns.
+    // the slot ids of lambda expression may be originally from the arguments of this lambda function
+    // or its parent lambda functions, or captured columns, remove the former 2, only left captured columns.
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
         slot_ids->assign(captured_slot_ids.begin(), captured_slot_ids.end());
         return captured_slot_ids.size();
