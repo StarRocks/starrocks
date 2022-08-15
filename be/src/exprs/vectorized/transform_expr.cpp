@@ -25,6 +25,10 @@ ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
     ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[0], ptr);
     NullColumnPtr null_map = nullptr;
     ColumnPtr column = child_col;
+    // the column is null.
+    if (column->is_constant() && column->size() == 1 && column->is_null(0)) {
+        return column;
+    }
     if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col); nullable != nullptr) {
         column = nullable->data_column();
         null_map = nullable->null_column();

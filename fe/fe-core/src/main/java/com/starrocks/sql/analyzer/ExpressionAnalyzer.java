@@ -70,6 +70,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
+// import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -106,8 +107,11 @@ public class ExpressionAnalyzer {
             for (int i = 0; i < childSize - 1; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
+                if (expr instanceof NullLiteral) {
+                    expr.setType(Type.ARRAY_INT);
+                }
                 Preconditions.checkArgument(expr.getType().isArrayType(),
-                        "Lambda input: " + expr.toString() + " should be arrays");
+                        "Lambda input: " + expr.toString() + " should be arrays.");
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
                     itemType = Type.INT;
