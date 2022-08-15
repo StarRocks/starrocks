@@ -104,6 +104,5 @@ public class AnalyzeShowTest {
         stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
         Assert.assertEquals("default_cluster:xx", stmt.getUserIdent().getQualifiedUser());
-
     }
 }
