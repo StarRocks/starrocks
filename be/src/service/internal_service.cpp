@@ -389,7 +389,8 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
 
     GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
 
-    int timeout_ms = request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
+    int timeout_ms =
+            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
 
     // watch estimates the interval before the task is actually executed.
     MonotonicStopWatch watch;
