@@ -25,7 +25,7 @@ ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
     ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[0], ptr);
     NullColumnPtr null_map = nullptr;
     ColumnPtr column = child_col;
-    // the column is null.
+    // the column is a null literal.
     if (column->is_constant() && column->size() == 1 && column->is_null(0)) {
         return column;
     }
