@@ -1345,8 +1345,25 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
                         tableMetaInfo.setTable_schema(dbName);
                         tableMetaInfo.setTable_name(table.getName());
+                        // MYSQL,
+                        // OLAP, (done)
+                        // OLAP_EXTERNAL, (done)
+                        // SCHEMA,
+                        // INLINE_VIEW,
+                        // VIEW,
+                        // BROKER,
+                        // ELASTICSEARCH,
+                        // HIVE,
+                        // ICEBERG,
+                        // HUDI,
+                        // JDBC,
+                        // MATERIALIZED_VIEW,
+                        // LAKE (done)
                         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) { 
                             tableMetaInfo = genNormalTableMetaInfo(table, tableMetaInfo);
+                        } else if (table.getType() == TableType.MATERIALIZED_VIEW) {
+                            // TODO(cjs): other table type
+                            tableMetaInfo = genDefaultMetaInfo(tableMetaInfo);
                         } else {
                             tableMetaInfo = genDefaultMetaInfo(tableMetaInfo);
                         }
@@ -1375,8 +1392,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String distributeNum = String.valueOf(distributionInfo.getBucketNum());
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        // partitionInfo.get
-
         StringBuilder partitionKeySb = new StringBuilder();
         int idx = 0;
         try {
