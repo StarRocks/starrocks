@@ -162,6 +162,9 @@ public class ConcurrentTxnTest {
                     Assert.fail(e.getMessage());
                 }
             }
+            if (error != null) {
+                Assert.fail(error.getMessage());
+            }
             double t = (System.nanoTime() - startTs) / 1e9;
             System.out.printf("numThread:%d numDB:%d numLoad:%d Time: %.2fs, %.2f tps\n", numThread, numDB, finishedTask.get(), t,
                     finishedTask.get() / t);
@@ -185,6 +188,7 @@ public class ConcurrentTxnTest {
     int numTable = 100;
     int numThread = 2;
     int runSeconds = 2;
+    boolean withRead = true;
 
     void setup() throws SQLException {
         Config.enable_new_publish_mechanism = false;
@@ -194,7 +198,7 @@ public class ConcurrentTxnTest {
     public void testConcurrentLoad() throws Exception {
         setup();
         for (int i = 0; i < 3; i++) {
-            DBLoad dbLoad = new DBLoad(numDB, numTable, true);
+            DBLoad dbLoad = new DBLoad(numDB, numTable, withRead);
             dbLoad.run(numThread, runSeconds);
         }
         System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
