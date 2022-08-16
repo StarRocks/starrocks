@@ -246,8 +246,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             tablet.write(out);
         }
 
-        out.writeLong(-1L); // For rollback compatibility of rollupIndexId
-        out.writeLong(-1L); // For rollback compatibility of rollupFinishedVersion
+        out.writeLong(-1L); // For rollback compatibility of field rollupIndexId
+        out.writeLong(-1L); // For rollback compatibility of field rollupFinishedVersion
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -266,8 +266,8 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             idToTablets.put(tablet.getId(), tablet);
         }
 
-        in.readLong(); // For backward compatibility of rollupIndexId
-        in.readLong(); // For backward compatibility of rollupFinishedVersion
+        in.readLong(); // For backward compatibility of field rollupIndexId
+        in.readLong(); // For backward compatibility of field rollupFinishedVersion
     }
 
     public static MaterializedIndex read(DataInput in) throws IOException {
