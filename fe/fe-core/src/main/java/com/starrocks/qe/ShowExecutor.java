@@ -512,7 +512,8 @@ public class ShowExecutor {
 
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(), CaseSensibility.DATABASE.getCaseSensibility());
+            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                    CaseSensibility.DATABASE.getCaseSensibility());
         }
         Set<String> dbNameSet = Sets.newTreeSet();
         for (String fullName : dbNames) {
@@ -1625,7 +1626,8 @@ public class ShowExecutor {
 
     private void handleShowResourceGroup() throws AnalysisException {
         ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
+        List<List<String>> rows =
+                GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
         resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 
