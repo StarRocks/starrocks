@@ -1230,9 +1230,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.addPartition(partition);
             }
 
-            ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
-                    info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
-                    info.isInMemory());
+            if (partitionInfo instanceof RangePartitionInfo) {
+                ((RangePartitionInfo) partitionInfo).unprotectHandleNewSinglePartitionDesc(partition.getId(),
+                        info.isTempPartition(), info.getRange(), info.getDataProperty(), info.getReplicationNum(),
+                        info.isInMemory());
+            } else {
+                // for materialized view compatibility
+                return;
+            }
 
             if (!isCheckpointThread()) {
                 // add to inverted index

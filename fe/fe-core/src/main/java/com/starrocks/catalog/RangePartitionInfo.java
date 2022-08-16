@@ -373,6 +373,12 @@ public class RangePartitionInfo extends PartitionInfo {
 
     @Override
     public void postDeserialized() throws IOException {
+        if (idToRange == null) {
+            idToRange = Maps.newHashMap();
+        }
+        if (idToTempRange == null) {
+            idToTempRange = Maps.newHashMap();
+        }
         if (serializedIdToRange != null && !serializedIdToRange.isEmpty()) {
             for (Map.Entry<Long, byte[]> entry : serializedIdToRange.entrySet()) {
                 idToRange.put(entry.getKey(), deserializeRange(entry.getValue()));
