@@ -908,7 +908,6 @@ public class Load {
             OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
             Partition partition = olapTable.getPartition(info.getPartitionId());
             MaterializedIndex index = partition.getIndex(info.getIndexId());
-            index.clearRollupIndexInfo();
         } finally {
             db.writeUnlock();
         }
