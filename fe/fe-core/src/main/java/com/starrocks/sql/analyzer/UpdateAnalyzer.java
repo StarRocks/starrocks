@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
@@ -80,6 +81,7 @@ public class UpdateAnalyzer {
 
 
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
+        Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());
         List<Expr> castOutputExpressions = Lists.newArrayList();
         for (int i = 0; i < table.getBaseSchema().size(); ++i) {
             Expr e = outputExpression.get(i);
