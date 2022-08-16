@@ -332,6 +332,13 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
+        if (config::pipeline_print_profile) {
+            std::stringstream ss;
+            // Print profile for this fragment
+            _fragment_ctx->runtime_state()->runtime_profile()->compute_time_in_profile();
+            _fragment_ctx->runtime_state()->runtime_profile()->pretty_print(&ss);
+            LOG(INFO) << ss.str();
+        }
         _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
         _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
