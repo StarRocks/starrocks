@@ -1006,7 +1006,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
     // only for RangePartition
     public static class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
-        protected Range<PartitionKey> range;
+        private Range<PartitionKey> range;
 
         public RecyclePartitionInfoV1() {
             super();
@@ -1048,7 +1048,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
     public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo  {
         @SerializedName(value = "storageInfo")
-        protected StorageInfo storageInfo;
+        private StorageInfo storageInfo;
 
         public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory,
@@ -1077,7 +1077,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public static class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements GsonPreProcessable,
             GsonPostProcessable {
 
-        protected Range<PartitionKey> range;
+        private Range<PartitionKey> range;
         // because Range<PartitionKey> and PartitionKey can not be serialized by gson
         // ATTN: call preSerialize before serialization and postDeserialized after deserialization
         @SerializedName(value = "serializedRange")
@@ -1095,14 +1095,14 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             return range;
         }
 
-        byte[] serializeRange(Range<PartitionKey> range) throws IOException {
+        private byte[] serializeRange(Range<PartitionKey> range) throws IOException {
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
             DataOutputStream dos = new DataOutputStream(stream);
             RangeUtils.writeRange(dos, range);
             return stream.toByteArray();
         }
 
-        Range<PartitionKey> deserializeRange(byte[] serializedRange) throws IOException {
+        private Range<PartitionKey> deserializeRange(byte[] serializedRange) throws IOException {
             InputStream inputStream = new ByteArrayInputStream(serializedRange);
             DataInput dataInput = new DataInputStream(inputStream);
             return RangeUtils.readRange(dataInput);
