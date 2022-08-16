@@ -182,8 +182,8 @@ public class ConcurrentTxnTest {
     }
 
     int numDB = 20;
-    int numTable = 1000;
-    int numThread = 20;
+    int numTable = 100;
+    int numThread = 2;
     int runSeconds = 2;
 
     void setup() throws SQLException {
