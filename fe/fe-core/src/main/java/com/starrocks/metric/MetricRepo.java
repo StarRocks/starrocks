@@ -41,7 +41,6 @@ import com.starrocks.load.loadv2.LoadManager;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
-import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmService;
@@ -228,23 +227,6 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(scheduledTabletNum);
-
-        // routine load jobs
-        RoutineLoadManager routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
-        for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
-            GaugeMetric<Long> gauge = (GaugeMetric<Long>) new GaugeMetric<Long>("routine_load_jobs",
-                    MetricUnit.NOUNIT, "routine load jobs") {
-                @Override
-                public Long getValue() {
-                    if (null == routineLoadManger) {
-                        return 0L;
-                    }
-                    return (long) routineLoadManger.getRoutineLoadJobByState(Sets.newHashSet(state)).size();
-                }
-            };
-            gauge.addLabel(new MetricLabel("state", state.name()));
-            STARROCKS_METRIC_REGISTER.addMetric(gauge);
-        }
 
         // qps, rps, error rate and query latency
         // these metrics should be set an init value, in case that metric calculator is not running
@@ -520,6 +502,8 @@ public final class MetricRepo {
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
         }
+        // routine load jobs
+        collectRoutineLoadStateMetrics(visitor);
 
         // node info
         visitor.getNodeInfo();
@@ -629,6 +613,35 @@ public final class MetricRepo {
                 metric.addLabel(new MetricLabel("job_name", kJob.getName()));
                 metric.setValue(maxLag);
                 visitor.visit(metric);
+            }
+        }
+    }
+
+    private static void collectRoutineLoadStateMetrics(MetricVisitor visitor) {
+        boolean isMaster = GlobalStateMgr.getCurrentState().isLeader();
+        if (!isMaster) {
+            return;
+        }
+        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
+                Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+                        RoutineLoadJob.JobState.PAUSED,
+                        RoutineLoadJob.JobState.RUNNING));
+
+        List<RoutineLoadJob> kafkaJobs = jobs.stream()
+                .filter(job -> (job instanceof KafkaRoutineLoadJob)).collect(Collectors.toList());
+
+        for (RoutineLoadJob job : kafkaJobs) {
+            try {
+                GaugeMetricImpl<Long> metric =
+                        new GaugeMetricImpl<>("routine_load_jobs", MetricUnit.NOUNIT, "routine load jobs");
+                metric.addLabel(new MetricLabel("name", job.getName()));
+                metric.addLabel(new MetricLabel("table", job.getTableName()));
+                metric.addLabel(new MetricLabel("database", job.getDbFullName()));
+                metric.addLabel(new MetricLabel("state", job.getState().name()));
+                metric.setValue(1L);
+                visitor.visit(metric);
+            } catch (Exception ignoreException) {
+                // database or table have been deleted.
             }
         }
     }
