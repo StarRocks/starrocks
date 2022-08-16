@@ -15,6 +15,9 @@ import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -2832,7 +2835,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
     }
-
+    @Override
+    public ParseNode visitAdminRepairTable(StarRocksParser.AdminRepairTableContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+    @Override
+    public ParseNode visitAdminCancelRepairTable(StarRocksParser.AdminCancelRepairTableContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminCancelRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+    @Override
+    public ParseNode visitAdminCheckTablets(StarRocksParser.AdminCheckTabletsContext context) {
+        // tablet_ids and properties
+        List<Long> tabletIds = Lists.newArrayList();
+        if (context.tabletList() != null) {
+            tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
+                    .map(Long::parseLong).collect(toList());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AdminCheckTabletsStmt(tabletIds, properties);
+    }
     @Override
     public ParseNode visitTruncateTableStatement(StarRocksParser.TruncateTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());

@@ -89,6 +89,9 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | ADMIN REPAIR TABLE qualifiedName partitionNames?                                      #adminRepairTable
+    | ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?                               #adminCancelRepairTable
+    | ADMIN CHECK tabletList properties                                                     #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
