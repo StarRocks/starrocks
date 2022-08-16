@@ -164,7 +164,7 @@ public class PseudoCluster {
         }
     }
 
-    public void runSqlList(String db, String... sqls) throws SQLException {
+    public void runSqlList(String db, List<String> sqls) throws SQLException {
         Connection connection = getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -178,6 +178,10 @@ public class PseudoCluster {
             stmt.close();
             connection.close();
         }
+    }
+
+    public void runSqlList(String db, String... sqls) throws SQLException {
+        runSqlList(db, sqls);
     }
 
     public String getRunDir() {

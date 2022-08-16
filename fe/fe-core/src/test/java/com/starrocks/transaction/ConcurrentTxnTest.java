@@ -63,9 +63,12 @@ public class ConcurrentTxnTest {
         }
 
         void loadOnce() throws SQLException {
-            PseudoCluster.getInstance()
-                    .runSqlList(null, "insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\");",
-                            "select * from " + db + "." + table + ";");
+            List<String> sqls = new ArrayList<>();
+            sqls.add("insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\");");
+            if (withRead) {
+                sqls.add("select * from " + db + "." + table + ";");
+            }
+            PseudoCluster.getInstance().runSqlList(null, sqls);
             totalRead.addAndGet(numTablet);
         }
     }
