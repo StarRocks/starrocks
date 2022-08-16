@@ -203,7 +203,11 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public long getDataSize() {
-        return getTablets().stream().mapToLong(t -> t.getDataSize(false)).sum();
+        long dataSize = 0;
+        for (Tablet tablet : getTablets()) {
+            dataSize += tablet.getDataSize(false);
+        }
+        return dataSize;
     }
 
     public long getReplicaCount() {
@@ -216,7 +220,12 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
             return tablets.size();
         } else {
             Preconditions.checkState(t instanceof LocalTablet);
-            return getTablets().stream().mapToLong(tablet -> ((LocalTablet) tablet).getImmutableReplicas().size()).sum();
+            long replicaCount = 0;
+            for (Tablet tablet : getTablets()) {
+                LocalTablet localTablet = (LocalTablet) tablet;
+                replicaCount += localTablet.getImmutableReplicas().size();
+            }
+            return replicaCount;
         }
     }
 
