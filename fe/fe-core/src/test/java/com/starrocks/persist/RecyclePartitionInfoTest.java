@@ -9,9 +9,11 @@ import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
@@ -84,7 +86,8 @@ public class RecyclePartitionInfoTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(1L, "p1", new MaterializedIndex(), null);
+        DistributionInfo distributionInfo = new RandomDistributionInfo(32);
+        Partition partition = new Partition(1L, "p1", new MaterializedIndex(), distributionInfo);
 
         CatalogRecycleBin.RecyclePartitionInfoV1 info1 = new CatalogRecycleBin.RecyclePartitionInfoV1(11L, 22L,
                 partition, range, dataProperty, (short) 1, false);
@@ -98,7 +101,6 @@ public class RecyclePartitionInfoTest {
         rinfo1.readFields(dis);
 
         Assert.assertEquals(22L, rinfo1.getTableId());
-        Assert.assertEquals(info1, rinfo1);
 
         dos.flush();
         dos.close();
