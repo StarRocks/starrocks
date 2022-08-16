@@ -26,6 +26,8 @@ public:
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const override;
 
+    std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const override;
+
     Status list_root_locations(std::set<std::string>* roots) const override;
 
 private:
