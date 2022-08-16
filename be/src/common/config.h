@@ -664,6 +664,7 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
+CONF_mBool(pipeline_print_profile, "false");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
