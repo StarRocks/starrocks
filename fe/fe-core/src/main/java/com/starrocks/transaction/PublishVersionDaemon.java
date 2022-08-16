@@ -299,7 +299,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
     boolean publishPartition(TransactionState txnState, LakeTable table, Partition partition,
                              PartitionCommitInfo partitionCommitInfo) {
         if (partition.getVisibleVersion() + 1 != partitionCommitInfo.getVersion()) {
-            LOG.warn("partiton version is " + partition.getVisibleVersion() + " commit version is " +
+            LOG.warn("partition version is " + partition.getVisibleVersion() + " commit version is " +
                     partitionCommitInfo.getVersion());
             return false;
         }
