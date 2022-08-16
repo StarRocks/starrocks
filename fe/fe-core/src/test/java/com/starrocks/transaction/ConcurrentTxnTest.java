@@ -90,6 +90,7 @@ public class ConcurrentTxnTest {
                 try {
                     PseudoCluster.getInstance().runSql(null, "create database db_" + i);
                 } catch (SQLException e) {
+                    e.printStackTrace();
                     Assert.fail(e.getMessage());
                 }
             }

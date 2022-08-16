@@ -54,6 +54,14 @@ public class PseudoCluster {
 
     private BasicDataSource dataSource;
 
+    static {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
             super(name);
