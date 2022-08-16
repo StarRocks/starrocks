@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,6 +37,12 @@ public class DistributionPruneRule extends TransformationRule {
 
     public DistributionPruneRule() {
         super(RuleType.TF_DISTRIBUTION_PRUNE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
+    }
+
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
+        return CollectionUtils.isNotEmpty(olapScanOperator.getSelectedPartitionId());
     }
 
     @Override
