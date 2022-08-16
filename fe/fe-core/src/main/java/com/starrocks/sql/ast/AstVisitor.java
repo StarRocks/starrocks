@@ -4,6 +4,9 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -205,7 +208,15 @@ public abstract class AstVisitor<R, C> {
     public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
         return visitStatement(statement, context);
     }
-
+    public R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
     public R visitBaseViewStatement(BaseViewStmt statement, C context) {
         return visitStatement(statement, context);
     }
