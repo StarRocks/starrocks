@@ -130,6 +130,7 @@ add_library(Storage STATIC
     push_handler.cpp
     row_source_mask.cpp
     schema_change.cpp
+    schema_change_utils.cpp
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
