@@ -188,7 +188,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         RecyclePartitionInfo partitionInfo = null;
         if (isLakeTable) {
             // lake table
-            partitionInfo = new RecyclePartitionInfoV2(dbId, tableId, partition,
+            partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
                     range, dataProperty, replicationNum, isInMemory, storageInfo);
         } else {
             partitionInfo = new RecyclePartitionInfoV1(dbId, tableId, partition,
@@ -220,7 +220,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public synchronized Range<PartitionKey> getPartitionRange(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
         if (partitionInfo != null) {
-            return partitionInfo.getRange();
+            if (partitionInfo instanceof RecyclePartitionInfoV1) {
+                return ((RecyclePartitionInfoV1) partitionInfo).getRange();
+            } else {
+                return ((RecycleRangePartitionInfo) partitionInfo).getRange();
+            }
         }
         return null;
     }
@@ -593,7 +597,12 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
 
         // check if range is invalid
-        Range<PartitionKey> recoverRange = recoverPartitionInfo.getRange();
+        Range<PartitionKey> recoverRange = null;
+        if (recoverPartitionInfo instanceof RecyclePartitionInfoV1) {
+            recoverRange = ((RecyclePartitionInfoV1) recoverPartitionInfo).getRange();
+        } else {
+            recoverRange = ((RecycleRangePartitionInfo) recoverPartitionInfo).getRange();
+        }
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         if (partitionInfo.getAnyIntersectRange(recoverRange, false) != null) {
             throw new DdlException("Can not recover partition[" + partitionName + "]. Range conflict.");
@@ -610,6 +619,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         partitionInfo.setDataProperty(partitionId, recoverPartitionInfo.getDataProperty());
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
+        if (table.isLakeTable()) {
+            partitionInfo.setStorageInfo(partitionId, ((RecyclePartitionInfoV2) recoverPartitionInfo).getStorageInfo());
+        }
 
         // remove from recycle bin
         idToPartition.remove(partitionId);
@@ -635,10 +647,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
             table.addPartition(partitionInfo.getPartition());
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-            rangePartitionInfo.setRange(partitionId, false, partitionInfo.getRange());
+            if (partitionInfo instanceof RecyclePartitionInfoV1) {
+                rangePartitionInfo.setRange(partitionId, false, ((RecyclePartitionInfoV1) partitionInfo).getRange());
+            } else {
+                rangePartitionInfo.setRange(partitionId, false, ((RecycleRangePartitionInfo) partitionInfo).getRange());
+            }
             rangePartitionInfo.setDataProperty(partitionId, partitionInfo.getDataProperty());
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
+
+            if (table.isLakeTable()) {
+                rangePartitionInfo.setStorageInfo(partitionId, ((RecyclePartitionInfoV2) partitionInfo).getStorageInfo());
+            }
 
             iterator.remove();
             idToRecycleTime.remove(partitionId);
@@ -828,13 +848,17 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             long id = in.readLong();
             long dbId = in.readLong();
             RecyclePartitionInfo partitionInfo;
-            if (dbId > 0) {
+            // dbId is used to distinguish if it is lake table. We write a -1 in it.
+            // If this dbId < 0, then the table is a lake table, so use RecyclePartitionInfoV2 to read it
+            // else, it is an olap table, just read it as usual, but because dbId has been read, set it into partitionInfo
+            // and read the remain part
+            if (dbId < 0) {
+                partitionInfo = RecyclePartitionInfoV2.read(in);
+            } else {
                 RecyclePartitionInfoV1 v1 = new RecyclePartitionInfoV1();
                 v1.readFields(in);
                 v1.setDbId(dbId);
                 partitionInfo = v1;
-            } else {
-                partitionInfo = RecyclePartitionInfoV2.read(in);
             }
             idToPartition.put(id, partitionInfo);
         }
@@ -890,7 +914,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
     }
 
-    public static class RecycleTableInfo implements Writable {
+    private class RecycleTableInfo implements Writable {
         private long dbId;
         private Table table;
 
@@ -930,7 +954,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         protected long tableId;
         @SerializedName(value = "partition")
         protected Partition partition;
-        protected Range<PartitionKey> range;
         @SerializedName(value = "dataProperty")
         protected DataProperty dataProperty;
         @SerializedName(value = "replicationNum")
@@ -942,12 +965,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
 
         protected RecyclePartitionInfo(long dbId, long tableId, Partition partition,
-                                       Range<PartitionKey> range, DataProperty dataProperty, short replicationNum,
+                                       DataProperty dataProperty, short replicationNum,
                                        boolean isInMemory) {
             this.dbId = dbId;
             this.tableId = tableId;
             this.partition = partition;
-            this.range = range;
             this.dataProperty = dataProperty;
             this.replicationNum = replicationNum;
             this.isInMemory = isInMemory;
@@ -963,10 +985,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
         public Partition getPartition() {
             return partition;
-        }
-
-        public Range<PartitionKey> getRange() {
-            return range;
         }
 
         public DataProperty getDataProperty() {
@@ -986,14 +1004,22 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
     }
 
+    // only for RangePartition
     public static class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
+        protected Range<PartitionKey> range;
+
         public RecyclePartitionInfoV1() {
             super();
         }
 
         public RecyclePartitionInfoV1(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory) {
-            super(dbId, tableId, partition, range, dataProperty, replicationNum, isInMemory);
+            super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+            this.range = range;
+        }
+
+        public Range<PartitionKey> getRange() {
+            return range;
         }
 
         @Override
@@ -1020,19 +1046,14 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
     }
 
-    public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo implements GsonPreProcessable,
-            GsonPostProcessable {
-        // because Range<PartitionKey> and PartitionKey can not be serialized by gson
-        // ATTN: call preSerialize before serialization and postDeserialized after deserialization
-        @SerializedName(value = "serializedRange")
-        private byte[] serializedRange;
+    public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo  {
         @SerializedName(value = "storageInfo")
         protected StorageInfo storageInfo;
 
-        public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
+        public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
                                       DataProperty dataProperty, short replicationNum, boolean isInMemory,
                                       StorageInfo storageInfo) {
-            super(dbId, tableId, partition, range, dataProperty, replicationNum, isInMemory);
+            super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
             this.storageInfo = storageInfo;
         }
 
@@ -1041,11 +1062,37 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
         }
 
+        public StorageInfo getStorageInfo() {
+            return storageInfo;
+        }
+
         @Override
         public void write(DataOutput out) throws IOException {
             out.writeLong(-1L);
             String json = GsonUtils.GSON.toJson(this);
             Text.writeString(out, json);
+        }
+    }
+
+    public static class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements GsonPreProcessable,
+            GsonPostProcessable {
+
+        protected Range<PartitionKey> range;
+        // because Range<PartitionKey> and PartitionKey can not be serialized by gson
+        // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+        @SerializedName(value = "serializedRange")
+        private byte[] serializedRange;
+
+        public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
+                                      DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                      StorageInfo storageInfo) {
+            super(dbId, tableId, partition, dataProperty, replicationNum,
+                    isInMemory, storageInfo);
+            this.range = range;
+        }
+
+        public Range<PartitionKey> getRange() {
+            return range;
         }
 
         byte[] serializeRange(Range<PartitionKey> range) throws IOException {

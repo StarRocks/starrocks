@@ -55,6 +55,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -185,6 +186,11 @@ public class GsonUtils {
             .registerSubtype(ListPartitionPersistInfo.class, ListPartitionPersistInfo.class.getSimpleName())
             .registerSubtype(RangePartitionPersistInfo.class, RangePartitionPersistInfo.class.getSimpleName());
 
+    private static final RuntimeTypeAdapterFactory<CatalogRecycleBin.RecyclePartitionInfoV2> recyclePartitionInfoV2AdapterFactory
+            = RuntimeTypeAdapterFactory.of(CatalogRecycleBin.RecyclePartitionInfoV2.class, "clazz")
+            .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class,
+                    CatalogRecycleBin.RecycleRangePartitionInfo.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> localDateTimeTypeSerializer =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -219,6 +225,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(heartbeatResponseAdapterFactor)
             .registerTypeAdapterFactory(partitionInfoTypeAdapterFactory)
             .registerTypeAdapterFactory(partitionPersistInfoV2AdapterFactory)
+            .registerTypeAdapterFactory(recyclePartitionInfoV2AdapterFactory)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeSerializer)
             .registerTypeAdapter(LocalDateTime.class, localDateTimeTypeDeserializer)
             .registerTypeAdapter(QueryDumpInfo.class, dumpInfoSerializer)
