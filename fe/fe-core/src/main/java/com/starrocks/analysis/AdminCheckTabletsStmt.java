@@ -22,23 +22,20 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import org.apache.commons.collections.CollectionUtils;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 import java.util.Map;
 
-// ADDMIN CHECK TABLET (id1, id2, ...) PROPERTIES ("type" = "check_consistency");
+// ADMIN CHECK TABLET (id1, id2, ...) PROPERTIES ("type" = "check_consistency");
 public class AdminCheckTabletsStmt extends DdlStmt {
 
     private List<Long> tabletIds;
     private Map<String, String> properties;
+    private CheckType type;
+    public void setType(CheckType type) {
+        this.type = type;
+    }
 
     public enum CheckType {
         CONSISTENCY; // check the consistency of replicas of tablet
@@ -51,9 +48,6 @@ public class AdminCheckTabletsStmt extends DdlStmt {
             }
         }
     }
-
-    private CheckType type;
-
     public AdminCheckTabletsStmt(List<Long> tabletIds, Map<String, String> properties) {
         this.tabletIds = tabletIds;
         this.properties = properties;
@@ -66,31 +60,16 @@ public class AdminCheckTabletsStmt extends DdlStmt {
     public CheckType getType() {
         return type;
     }
+    public Map<String, String> getProperties() { return properties; }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        if (CollectionUtils.isEmpty(tabletIds)) {
-            throw new AnalysisException("Tablet id list is empty");
-        }
-
-        String typeStr = PropertyAnalyzer.analyzeType(properties);
-        if (typeStr == null) {
-            throw new AnalysisException("Should specify 'type' property");
-        }
-        type = CheckType.getTypeFromString(typeStr);
-
-        if (properties != null && !properties.isEmpty()) {
-            throw new AnalysisException("Unknown properties: " + properties.keySet());
-        }
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminCheckTabletsStatement(this, context);
     }
-
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
