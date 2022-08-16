@@ -29,11 +29,10 @@
 #include "column/datum_convert.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_mapping.h"
-#include "storage/convert_helper.h"
 #include "storage/delete_handler.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/schema_change_utils.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
@@ -43,36 +42,6 @@ class Field;
 class Tablet;
 
 namespace vectorized {
-
-class ChunkChanger {
-public:
-    ChunkChanger(const TabletSchema& tablet_schema);
-
-    virtual ~ChunkChanger();
-
-    ColumnMapping* get_mutable_column_mapping(size_t column_index);
-
-    SchemaMapping get_schema_mapping() const { return _schema_mapping; }
-
-    std::vector<ColumnId>* get_mutable_selected_column_indexs() { return &_selected_column_indexs; }
-
-    bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
-                      const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
-
-    bool change_chunkV2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema, const Schema& new_schema,
-                        MemPool* mem_pool);
-
-    static const MaterializeTypeConverter* _get_materialize_type_converter(std::string materialized_function,
-                                                                           FieldType type);
-
-private:
-    // @brief column-mapping specification of new schema
-    SchemaMapping _schema_mapping;
-
-    std::vector<ColumnId> _selected_column_indexs;
-
-    DISALLOW_COPY(ChunkChanger);
-};
 
 class ChunkAllocator {
 public:
@@ -99,8 +68,8 @@ public:
     virtual bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 
-    virtual Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
-                             TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+    virtual Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
+                              TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 };
 
 class LinkedSchemaChange : public SchemaChange {
@@ -111,8 +80,8 @@ public:
     bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -128,8 +97,8 @@ public:
     bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger* _chunk_changer = nullptr;
@@ -145,8 +114,8 @@ public:
     bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status processV2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                     TabletSharedPtr base_tablet, RowsetSharedPtr rowset);
+    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset);
 
 private:
     static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
@@ -161,31 +130,25 @@ private:
 class SchemaChangeHandler {
 public:
     SchemaChangeHandler() = default;
-    virtual ~SchemaChangeHandler() = default;
+    ~SchemaChangeHandler() = default;
 
     // schema change v2, it will not set alter task in base tablet
     Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
-    struct AlterMaterializedViewParam {
-        std::string column_name;
-        std::string origin_column_name;
-        std::string mv_expr;
-    };
-
+private:
     struct SchemaChangeParams {
         AlterTabletType alter_tablet_type;
         TabletSharedPtr base_tablet;
         TabletSharedPtr new_tablet;
         std::vector<std::unique_ptr<TabletReader>> rowset_readers;
         Version version;
-        std::unordered_map<std::string, AlterMaterializedViewParam> materialized_params_map;
+        MaterializedViewParamMap materialized_params_map;
         std::vector<RowsetSharedPtr> rowsets_to_change;
         bool sc_sorting = false;
         bool sc_directly = false;
         std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
     };
 
-private:
     static Status _get_versions_to_be_changed(TabletSharedPtr base_tablet,
                                               std::vector<Version>* versions_to_be_changed);
 
@@ -198,16 +161,6 @@ private:
 
     static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
-    static Status _parse_request(
-            const std::shared_ptr<Tablet>& base_tablet, const std::shared_ptr<Tablet>& new_tablet,
-            ChunkChanger* chunk_changer, bool* sc_sorting, bool* sc_directly,
-            const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map);
-
-    // default_value for new column is needed
-    static Status _init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
-                                       const std::string& value);
-
-private:
     DISALLOW_COPY(SchemaChangeHandler);
 };
 
