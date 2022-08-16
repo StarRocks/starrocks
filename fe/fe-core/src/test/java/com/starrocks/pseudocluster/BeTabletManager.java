@@ -45,15 +45,15 @@ public class BeTabletManager {
 
     public synchronized void dropTablet(long tabletId, boolean force) {
         Tablet removed = tablets.remove(tabletId);
-        Set<Long> tabletIds = tabletIdsByPartition.get(removed.partitionId);
-        tabletIds.remove(tabletId);
-        if (tabletIds.isEmpty()) {
-            tabletIdsByPartition.remove(removed.partitionId);
-        }
         if (removed != null) {
+            Set<Long> tabletIds = tabletIdsByPartition.get(removed.partitionId);
+            tabletIds.remove(tabletId);
+            if (tabletIds.isEmpty()) {
+                tabletIdsByPartition.remove(removed.partitionId);
+            }
             LOG.info("Dropped tablet {} force:{}", removed.id, force);
         } else {
-            LOG.info("Drop Tablet {} not found", tabletId);
+            LOG.warn("Drop Tablet {} not found", tabletId);
         }
     }
 
