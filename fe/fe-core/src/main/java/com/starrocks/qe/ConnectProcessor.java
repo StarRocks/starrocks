@@ -400,7 +400,7 @@ public class ConnectProcessor {
             }
 
         } catch (StarRocksIcebergException e) {
-            LOG.warn("errors happened when getting Iceberg table " + tableName, e);
+            LOG.warn("errors happened when getting Iceberg table {}", tableName, e);
         } finally {
             db.readUnlock();
         }
