@@ -1343,7 +1343,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     List<Table> tables = db.getTables();
                     tables.forEach(table -> {
                         TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
-                        tableMetaInfo.setTable_schema(dbName.split(":")[1]);
+                        tableMetaInfo.setTable_schema(dbName);
                         tableMetaInfo.setTable_name(table.getName());
                         if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) { 
                             tableMetaInfo = genNormalTableMetaInfo(table, tableMetaInfo);

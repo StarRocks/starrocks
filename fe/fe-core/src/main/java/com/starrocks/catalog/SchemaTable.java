@@ -461,7 +461,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("tables_meta",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.TABLES_META_ID,
                                     "tables_meta",
                                     TableType.SCHEMA,
                                     builder()
