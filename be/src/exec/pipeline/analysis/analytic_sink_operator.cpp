@@ -104,6 +104,7 @@ Status AnalyticSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
     _analytor->input_chunks().emplace_back(chunk);
 
+    RETURN_IF_ERROR((this->*_process_by_partition_if_necessary)());
     return _analytor->check_has_error();
 }
 
