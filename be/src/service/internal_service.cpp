@@ -322,9 +322,9 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
 }
 
 template <typename T>
-void PInternalServiceImpl<T>::_get_info_impl(
-        const PProxyRequest* request, PProxyResult* response,
-        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
+void PInternalServiceImpl<T>::_get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                                             GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch,
+                                             int timeout_ms) {
     DeferOp defer([latch] { latch->count_down(); });
 
     if (timeout_ms <= 0) {
