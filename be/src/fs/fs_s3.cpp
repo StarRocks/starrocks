@@ -108,21 +108,39 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     S3ClientPtr client;
     string access_key_id;
     string secret_access_key;
+<<<<<<< HEAD
     if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
         DCHECK(opts.scan_range_params->hdfs_properties.__isset.access_key);
         DCHECK(opts.scan_range_params->hdfs_properties.__isset.secret_key);
         access_key_id = opts.scan_range_params->hdfs_properties.access_key;
         secret_access_key = opts.scan_range_params->hdfs_properties.secret_key;
+=======
+    bool path_style_access = config::object_storage_endpoint_path_style_access;
+    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    if (hdfs_properties != nullptr) {
+        DCHECK(hdfs_properties->__isset.access_key);
+        DCHECK(hdfs_properties->__isset.secret_key);
+        access_key_id = hdfs_properties->access_key;
+        secret_access_key = hdfs_properties->secret_key;
+>>>>>>> a8bad0792 ([Enhancement] s3 sdk support path-style-access (#10010))
     } else {
         access_key_id = config::object_storage_access_key_id;
         secret_access_key = config::object_storage_secret_access_key;
     }
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
-        client = std::make_shared<Aws::S3::S3Client>(credentials, config);
+        client = std::make_shared<Aws::S3::S3Client>(credentials, config,
+                                                     /* signPayloads */
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     /* useVirtualAddress */
+                                                     !path_style_access);
     } else {
         // if not cred provided, we can use default cred in aws profile.
-        client = std::make_shared<Aws::S3::S3Client>(config);
+        client = std::make_shared<Aws::S3::S3Client>(config,
+                                                     /* signPayloads */
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     /* useVirtualAddress */
+                                                     !path_style_access);
     }
 
     if (UNLIKELY(_items >= kMaxItems)) {
