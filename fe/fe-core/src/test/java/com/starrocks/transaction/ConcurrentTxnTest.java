@@ -170,13 +170,20 @@ public class ConcurrentTxnTest {
             double writeBytes = MetricRepo.HISTO_JOURNAL_WRITE_BYTES.getSnapshot().getMedian();
             System.out.printf("numLog:%d writeBatch:%f writeLatency:%f writeBytes:%f\n\n", numLog, writeBatch, writeLatency,
                     writeBytes);
+            for (int i = 0; i < numDB; i++) {
+                try {
+                    PseudoCluster.getInstance().runSql(null, "drop database db_" + i + " force");
+                } catch (SQLException e) {
+                    Assert.fail(e.getMessage());
+                }
+            }
         }
     }
 
     int numDB = 20;
     int numTable = 1000;
     int numThread = 20;
-    int runSeconds = 5;
+    int runSeconds = 2;
 
     void setup() throws SQLException {
         Config.enable_new_publish_mechanism = false;
@@ -185,8 +192,10 @@ public class ConcurrentTxnTest {
     @Test
     public void testConcurrentLoad() throws Exception {
         setup();
-        DBLoad dbLoad = new DBLoad(numDB, numTable, true);
-        dbLoad.run(numThread, runSeconds);
+        for (int i = 0; i < 3; i++) {
+            DBLoad dbLoad = new DBLoad(numDB, numTable, true);
+            dbLoad.run(numThread, runSeconds);
+        }
         Assert.assertEquals(totalRead.get(), Tablet.getTotalReadSucceed());
         PseudoCluster.getInstance().shutdown(true);
     }
