@@ -19,7 +19,11 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.PartitionColPredicateEvaluator;
+import com.starrocks.sql.optimizer.rewrite.PartitionColPredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,11 +70,26 @@ public class PartitionPruneRule extends TransformationRule {
                     .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());
         }
 
+        if (isNeedFurtherPrune(selectedPartitionIds, olapScanOperator)) {
+            PartitionColPredicateExtractor extractor = new PartitionColPredicateExtractor(
+                    (RangePartitionInfo) partitionInfo, olapScanOperator.getColumnMetaToColRefMap());
+            PartitionColPredicateEvaluator evaluator = new PartitionColPredicateEvaluator((RangePartitionInfo) partitionInfo,
+                    selectedPartitionIds);
+            selectedPartitionIds = evaluator.prunePartitions(extractor.extract(olapScanOperator.getPredicate()));
+        }
+
         LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+
+        if (CollectionUtils.isEmpty(selectedPartitionIds)) {
+            return Lists.newArrayList(OptExpression.create(
+                    builder.withOperator(olapScanOperator).setPredicate(ConstantOperator.createBoolean(false)).build(),
+                    input.getInputs()));
+        }
         return Lists.newArrayList(OptExpression.create(
                 builder.withOperator(olapScanOperator).setSelectedPartitionId(selectedPartitionIds).build(),
                 input.getInputs()));
     }
+
 
     private List<Long> partitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
                                       LogicalOlapScanOperator operator) {
@@ -96,4 +115,14 @@ public class PartitionPruneRule extends TransformationRule {
         }
         return null;
     }
+
+    private boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator) {
+
+        if (olapScanOperator.getPredicate() == null) {
+            return false;
+        }
+
+        return true;
+    }
+
 }
