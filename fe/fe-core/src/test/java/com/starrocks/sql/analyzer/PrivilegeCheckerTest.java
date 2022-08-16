@@ -431,7 +431,9 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(badStatement2, starRocksAssert.getCtx()));
 
-        starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        TablePattern pattern = new TablePattern("*", "*");
+        pattern.analyze("default_cluster");
+        auth.grantPrivs(testUser, pattern, PrivBitSet.of(Privilege.GRANT_PRIV), true);
 
         sql = "show authentication for test;";
         statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
