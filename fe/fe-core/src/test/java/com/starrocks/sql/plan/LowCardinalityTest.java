@@ -269,6 +269,7 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testDecodeNodeRewrite10() throws Exception {
         String sql = "select upper(S_ADDRESS) as a, count(*) from supplier group by a";
         String plan = getFragmentPlan(sql);
+        System.out.println("plan = " + plan);
         Assert.assertTrue(plan.contains("  3:Decode\n" +
                 "  |  <dict id 12> : <string id 9>"));
         Assert.assertTrue(plan.contains("<function id 12> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])"));
@@ -910,12 +911,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "min(upper(S_COMMENT)) from supplier_nullable " +
                 "group by upper(S_COMMENT)";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  5:Decode\n" +
-                "  |  <dict id 17> : <string id 12>\n" +
-                "  |  <dict id 15> : <string id 9>\n" +
-                "  |  string functions:\n" +
-                "  |  <function id 17> : DictExpr(14: S_COMMENT,[upper(<place-holder>)])\n" +
-                "  |  <function id 15> : DictExpr(14: S_COMMENT,[upper(<place-holder>)])"));
+        Assert.assertFalse(plan.contains("Decode"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
