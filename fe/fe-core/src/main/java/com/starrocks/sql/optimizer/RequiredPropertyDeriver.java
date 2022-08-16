@@ -260,7 +260,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(requirementsFromParent));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         return null;
     }
 
