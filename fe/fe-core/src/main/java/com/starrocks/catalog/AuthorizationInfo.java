@@ -19,6 +19,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -64,7 +65,7 @@ public class AuthorizationInfo implements Writable {
             out.writeBoolean(false);
         } else {
             out.writeBoolean(true);
-            Text.writeString(out, dbName);
+            Text.writeString(out, ClusterNamespace.getFullName(dbName));
         }
         if (tableNameList == null) {
             out.writeBoolean(false);
@@ -79,7 +80,7 @@ public class AuthorizationInfo implements Writable {
 
     public void readFields(DataInput in) throws IOException {
         if (in.readBoolean()) {
-            dbName = Text.readString(in);
+            dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
         if (in.readBoolean()) {
             tableNameList = Sets.newHashSet();
