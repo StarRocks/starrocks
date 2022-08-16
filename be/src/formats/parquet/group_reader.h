@@ -60,6 +60,8 @@ struct GroupReaderParam {
     RandomAccessFile* file = nullptr;
 
     FileMetaData* file_metadata = nullptr;
+
+    bool case_sensitive = false;
 };
 
 class GroupReader {
