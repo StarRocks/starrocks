@@ -104,6 +104,10 @@ public class QueryState {
         return stateType == MysqlStateType.ERR;
     }
 
+    public boolean isRunning() {
+        return stateType == MysqlStateType.OK;
+    }
+
     public void setStateType(MysqlStateType stateType) {
         this.stateType = stateType;
     }
