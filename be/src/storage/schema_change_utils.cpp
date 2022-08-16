@@ -557,7 +557,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
                                         const MaterializedViewParamMap& materialized_view_param_map,
                                         bool has_delete_predicates, bool* sc_sorting, bool* sc_directly) {
     std::map<ColumnId, ColumnId> base_to_new;
-    for (int i = 0; i < base_schema.num_columns(); ++i) {
+    for (int i = 0; i < new_schema.num_columns(); ++i) {
         const TabletColumn& new_column = new_schema.column(i);
         std::string column_name(new_column.name());
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
