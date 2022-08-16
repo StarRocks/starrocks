@@ -27,6 +27,7 @@ import com.starrocks.analysis.ShowMaterializedViewStmt;
 import com.starrocks.analysis.ShowPartitionsStmt;
 import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
@@ -179,6 +180,19 @@ public class ShowStmtAnalyzer {
             String dbName = node.getDbFullName();
             dbName = getDatabaseName(dbName, context);
             node.setDb(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDbFullName(dbName);
+            try {
+                node.checkJobNameExpr();
+            } catch (AnalysisException e) {
+                throw new RuntimeException(e);
+            }
             return null;
         }
 

@@ -29,6 +29,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Arrays;
 import java.util.List;
@@ -75,13 +76,19 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
         return dbFullName;
     }
 
+    public void setDbFullName(String dbFullName) {
+        this.dbFullName = dbFullName;
+    }
+
+    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
         checkDB(analyzer);
-        checkJobNameExpr(analyzer);
+        checkJobNameExpr();
     }
 
+    @Deprecated
     private void checkDB(Analyzer analyzer) throws AnalysisException {
         if (Strings.isNullOrEmpty(dbName)) {
             if (Strings.isNullOrEmpty(analyzer.getDefaultDb())) {
@@ -91,7 +98,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
         }
     }
 
-    private void checkJobNameExpr(Analyzer analyzer) throws AnalysisException {
+    public void checkJobNameExpr() throws AnalysisException {
         if (jobNameExpr == null) {
             throw new AnalysisException("please designate a jobName in where expr such as JobName=\"ILoveStarRocks\"");
         }
@@ -153,5 +160,15 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
 
     public static List<String> getTitleNames() {
         return TITLE_NAMES;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRoutineLoadTaskStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }
