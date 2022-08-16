@@ -11,6 +11,9 @@ import java.util.List;
 import java.util.Map;
 
 public interface HiveMetaStoreTable {
+    String getResourceName();
+
+    String getDbName();
 
     String getTableName();
 
