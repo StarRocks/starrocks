@@ -212,6 +212,15 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
+    if (config::block_cache_enable) {
+        _profile.cache_read_counter = ADD_COUNTER(_runtime_profile, "CacheReadCounter", TUnit::UNIT);
+        _profile.cache_read_bytes = ADD_COUNTER(_runtime_profile, "CacheReadBytes", TUnit::BYTES);
+        _profile.cache_read_timer = ADD_TIMER(_runtime_profile, "CacheReadTimer");
+        _profile.cache_write_counter = ADD_COUNTER(_runtime_profile, "CacheWriteCounter", TUnit::UNIT);
+        _profile.cache_write_bytes = ADD_COUNTER(_runtime_profile, "CacheWriteBytes", TUnit::BYTES);
+        _profile.cache_write_timer = ADD_TIMER(_runtime_profile, "CacheWriteTimer");
+    }
+
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
     }

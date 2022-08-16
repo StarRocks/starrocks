@@ -24,6 +24,8 @@
 #include <sys/file.h>
 #include <unistd.h>
 
+#include "cache/block_cache.h"
+
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
@@ -164,6 +166,8 @@ int main(int argc, char** argv) {
         return -1;
     }
 #endif
+    starrocks::BlockCache* cache = starrocks::BlockCache::instance();
+    cache->init();
 
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
