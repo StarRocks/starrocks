@@ -30,7 +30,7 @@ public class PartitionPersistInfoV2 implements Writable {
     private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
-    @SerializedName("StoarageInfo")
+    @SerializedName("StorageInfo")
     private StorageInfo storageInfo;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
