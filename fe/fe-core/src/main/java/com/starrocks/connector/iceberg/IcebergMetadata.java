@@ -2,8 +2,12 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
@@ -19,6 +23,7 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
@@ -26,6 +31,7 @@ import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergCustomCatalog;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergHiveCatalog;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -35,6 +41,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     private String catalogImpl;
     private IcebergCatalog icebergCatalog;
     private Map<String, String> customProperties;
+    private LoadingCache<String, Database> dbCache;
+    private LoadingCache<TableIdentifier, Table> tableCache;
+    private static final long MAX_TABLE_CACHE_SIZE = 1000L;
 
     public IcebergMetadata(Map<String, String> properties) {
         if (IcebergCatalogType.HIVE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG))) {
@@ -52,6 +61,28 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             throw new RuntimeException(String.format("Property %s is missing or not supported now.", ICEBERG_CATALOG));
         }
+        tableCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE).build(new CacheLoader<TableIdentifier, Table>() {
+            @Override
+            public Table load(TableIdentifier ti) throws Exception {
+                return loadTable(ti);
+            }
+        });
+        dbCache = newCacheBuilder(MAX_TABLE_CACHE_SIZE).build(new CacheLoader<String, Database>() {
+            @Override
+            public Database load(String key) throws Exception {
+                return loadDatabase(key);
+            }
+        });
+    }
+
+    /**
+     * Currently we only support either refreshAfterWrite or automatic refresh by events.
+     */
+    private static CacheBuilder<Object, Object> newCacheBuilder(long maximumSize) {
+        CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
+        cacheBuilder.expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS);
+        cacheBuilder.maximumSize(maximumSize);
+        return cacheBuilder;
     }
 
     @Override
@@ -62,8 +93,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Database getDb(String dbName) {
         try {
-            return icebergCatalog.getDB(dbName);
-        } catch (InterruptedException | TException e) {
+            return dbCache.get(dbName);
+        } catch (ExecutionException e) {
             LOG.error("Failed to get iceberg database " + dbName, e);
             return null;
         }
@@ -75,17 +106,29 @@ public class IcebergMetadata implements ConnectorMetadata {
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
 
+    public Table loadTable(TableIdentifier ti) throws DdlException {
+        org.apache.iceberg.Table icebergTable
+                = icebergCatalog.loadTable(ti);
+        String dbName = ti.namespace().level(0);
+        String tblName = ti.name();
+        if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
+            return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName,
+                    customProperties);
+        }
+        return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, dbName, tblName);
+    }
+
+    public Database loadDatabase(String dbName) throws TException, InterruptedException {
+        return icebergCatalog.getDB(dbName);
+    }
+
     @Override
     public Table getTable(String dbName, String tblName) {
+        TableIdentifier ti = IcebergUtil.getIcebergTableIdentifier(dbName, tblName);
         try {
-            org.apache.iceberg.Table icebergTable
-                    = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-            if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
-                return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName, customProperties);
-            }
-            return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, dbName, tblName);
-        } catch (DdlException e) {
-            LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
+            return tableCache.get(ti);
+        } catch (ExecutionException e) {
+            LOG.error("Failed to get iceberg table " + ti, e);
             return null;
         }
     }
