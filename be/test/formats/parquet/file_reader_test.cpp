@@ -38,8 +38,12 @@ private:
     HdfsScannerContext* _create_context_for_min_max();
     HdfsScannerContext* _create_context_for_filter_file();
     HdfsScannerContext* _create_context_for_dict_filter();
+    HdfsScannerContext* _create_context_for_struct_solumn();
+
+    HdfsScannerContext* _create_file4_base_context();
 
     static vectorized::ChunkPtr _create_chunk();
+    static vectorized::ChunkPtr _create_struct_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
     static vectorized::ChunkPtr _create_chunk_for_not_exist();
 
@@ -48,6 +52,9 @@ private:
     void _create_conjunct_ctxs_for_min_max(std::vector<ExprContext*>* conjunct_ctxs);
     void _create_conjunct_ctxs_for_filter_file(std::vector<ExprContext*>* conjunct_ctxs);
     void _create_conjunct_ctxs_for_dict_filter(std::vector<ExprContext*>* conjunct_ctxs);
+    void _create_conjunct_ctxs_for_struct_column(std::vector<ExprContext*>* conjunct_ctxs);
+
+
 
     // c1      c2      c3       c4
     // -------------------------------------------
@@ -73,6 +80,21 @@ private:
     // NULL    NULL    NULL    NULL
     std::string _file_2_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet2";
     int64_t _file_2_size = 850;
+
+    // Description: A complex parquet file contains contains struct, array and uppercase columns
+    //
+    //c1    | c2                                       | c3   |                      c4                      | B1
+    // --------------------------------- ------------------------------------------------------------------------
+    // 0    | {'f1': 0, 'f2': 'a', 'f3': [0, 1, 2]}   |  a   |  [{'e1': 0, 'e2': 'a'} {'e1': 1, 'e2': 'a'}]  | A
+    // 1    | {'f1': 1, 'f2': 'a', 'f3': [1, 2, 3]}   |  a   |  [{'e1': 1, 'e2': 'a'} {'e1': 2, 'e2': 'a'}]  | A
+    // 2    | {'f1': 2, 'f2': 'a', 'f3': [2, 3, 4]}   |  a   |  [{'e1': 2, 'e2': 'a'} {'e1': 3, 'e2': 'a'}]  | A
+    // 3    | {'f1': 3, 'f2': 'c', 'f3': [3, 4, 5]}   |  c   |  [{'e1': 3, 'e2': 'c'} {'e1': 4, 'e2': 'c'}]  | C
+    // 4    | {'f1': 4, 'f2': 'c', 'f3': [4, 5, 6]}   |  c   |  [{'e1': 4, 'e2': 'c'} {'e1': 5, 'e2': 'c'}]  | C
+    // 5    | {'f1': 5, 'f2': 'c', 'f3': [5, 6, 7]}   |  c   |  [{'e1': 5, 'e2': 'c'} {'e1': 6, 'e2': 'c'}]  | C
+    // 6    | {'f1': 6, 'f2': 'a', 'f3': [6, 7, 8]}   |  a   |  [{'e1': 6, 'e2': 'a'} {'e1': 7, 'e2': 'a'}]  | A
+    // 7    | {'f1': 7, 'f2': 'a', 'f3': [7, 8, 9]}   |  a   |  [{'e1': 7, 'e2': 'a'} {'e1': 8, 'e2': 'a'}]  | A
+    std::string _file_4_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet4";
+    int64_t _file_4_size = 28823;
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     ObjectPool _pool;
 };
@@ -260,6 +282,52 @@ void FileReaderTest::_create_conjunct_ctxs_for_dict_filter(std::vector<ExprConte
     Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
 }
 
+void FileReaderTest::_create_conjunct_ctxs_for_struct_column(std::vector<ExprContext*>* conjunct_ctxs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::BINARY_PRED;
+    node0.opcode = TExprOpcode::EQ;
+    node0.child_type = TPrimitiveType::VARCHAR;
+    node0.num_children = 2;
+    node0.__isset.opcode = true;
+    node0.__isset.child_type = true;
+    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    node0.use_vectorized = true;
+    nodes.emplace_back(node0);
+
+    TExprNode node1;
+    node1.node_type = TExprNodeType::SLOT_REF;
+    node1.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node1.num_children = 0;
+    TSlotRef t_slot_ref = TSlotRef();
+    t_slot_ref.slot_id = 1;
+    t_slot_ref.tuple_id = 0;
+    node1.__set_slot_ref(t_slot_ref);
+    node1.use_vectorized = true;
+    node1.is_nullable = true;
+    nodes.emplace_back(node1);
+
+    TExprNode node2;
+    node2.node_type = TExprNodeType::STRING_LITERAL;
+    node2.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node2.num_children = 0;
+    TStringLiteral string_literal;
+    string_literal.value = "c";
+    node2.__set_string_literal(string_literal);
+    node2.use_vectorized = true;
+    node2.is_nullable = false;
+    nodes.emplace_back(node2);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+
+    std::vector<TExpr> t_conjuncts;
+    t_conjuncts.emplace_back(t_expr);
+
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+}
+
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
     return *FileSystem::Default()->new_random_access_file(file_path);
 }
@@ -360,6 +428,35 @@ HdfsScannerContext* FileReaderTest::_create_file2_base_context() {
     return ctx;
 }
 
+HdfsScannerContext* FileReaderTest::_create_file4_base_context() {
+    auto* ctx = _pool.add(new HdfsScannerContext());
+
+    // tuple desc and conjuncts
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {"B1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+            {""},
+    };
+    TupleDescriptor* tuple_desc;
+    create_tuple_descriptor(&_pool, slot_descs, &tuple_desc);
+    ctx->tuple_desc = tuple_desc;
+    make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+
+    // scan range
+    auto* scan_range = _pool.add(new THdfsScanRange());
+    scan_range->relative_path = _file_4_path;
+    scan_range->offset = 4;
+    scan_range->length = 28823;
+    scan_range->file_length = _file_4_size;
+    ctx->scan_ranges.emplace_back(scan_range);
+
+    ctx->timezone = "Asia/Shanghai";
+    ctx->stats = &g_hdfs_scan_stats;
+
+    return ctx;
+}
+
 HdfsScannerContext* FileReaderTest::_create_context_for_min_max() {
     auto* ctx = _create_file2_base_context();
 
@@ -409,6 +506,15 @@ HdfsScannerContext* FileReaderTest::_create_context_for_dict_filter() {
     return ctx;
 }
 
+HdfsScannerContext* FileReaderTest::_create_context_for_struct_solumn() {
+    auto* ctx = _create_file4_base_context();
+    // create conjuncts
+    // c3 = "c"
+    ctx->conjunct_ctxs_by_slot[1] = std::vector<ExprContext*>();
+    _create_conjunct_ctxs_for_struct_column(&ctx->conjunct_ctxs_by_slot[1]);
+    return ctx;
+}
+
 THdfsScanRange* FileReaderTest::_create_scan_range() {
     auto* scan_range = _pool.add(new THdfsScanRange());
 
@@ -434,6 +540,21 @@ vectorized::ChunkPtr FileReaderTest::_create_chunk() {
     chunk->append_column(c2, 1);
     chunk->append_column(c3, 2);
     chunk->append_column(c4, 3);
+
+    return chunk;
+} 
+
+vectorized::ChunkPtr FileReaderTest::_create_struct_chunk() {
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    auto c1 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT),
+                                                      true);
+    auto c2 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR),
+                                                      true);
+    auto c3 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR),
+                                                      true);
+    chunk->append_column(c1, 0);
+    chunk->append_column(c2, 1);
+    chunk->append_column(c3, 2);
 
     return chunk;
 }
@@ -605,6 +726,39 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
 
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.is_end_of_file());
+}
+
+TEST_F(FileReaderTest, TestReadStructUpperColumns) {
+    auto file = _create_file(_file_4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    _file_4_size);
+
+	// init
+	auto* ctx = _create_context_for_struct_solumn();
+	Status status = file_reader->init(ctx);
+	ASSERT_TRUE(status.ok());
+
+	// c3 is dict filter column
+	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+
+	// get next
+	auto chunk = _create_struct_chunk();
+	status = file_reader->get_next(&chunk);
+	ASSERT_TRUE(status.ok());
+	ASSERT_EQ(3, chunk->num_rows());
+	for (int i = 0; i < chunk->num_rows(); ++i) {
+		std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+	}
+
+    ColumnPtr int_col = chunk->get_column_by_slot_id(0);
+    int i = int_col->get(0).get_int32();
+    EXPECT_EQ(i, 3);
+
+    ColumnPtr char_col = chunk->get_column_by_slot_id(2);
+    Slice s = char_col->get(0).get_slice();
+    std::string res(s.data, s.size);
+    EXPECT_EQ(res, "C");
 }
 
 } // namespace starrocks::parquet

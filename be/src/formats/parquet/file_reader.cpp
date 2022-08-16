@@ -327,7 +327,7 @@ bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
 void FileReader::_prepare_read_columns() {
     const vectorized::HdfsScannerContext& param = *_scanner_ctx;
     for (auto& materialized_column : param.materialized_columns) {
-        int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name);
+        int field_index = _file_metadata->schema().get_column_index(materialized_column.col_name, param.case_sensitive);
         if (field_index < 0) continue;
 
         auto parquet_type = _file_metadata->schema().get_stored_column_by_idx(field_index)->physical_type;
