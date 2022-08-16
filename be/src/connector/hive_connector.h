@@ -99,6 +99,7 @@ private:
 
     std::vector<std::string> _hive_column_names;
     const LakeTableDescriptor* _lake_table = nullptr;
+    bool _case_sensitive = false;
 
     // ======================================
     // The following are profile metrics
