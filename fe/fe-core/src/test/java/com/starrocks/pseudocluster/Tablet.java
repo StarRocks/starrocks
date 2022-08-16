@@ -316,11 +316,17 @@ public class Tablet {
         return String.format("[%d-%d #pending:%d]", versions.get(0).major, maxContinuousVersion(), pendingRowsets.size());
     }
 
-    public synchronized void cloneFrom(Tablet src) throws Exception {
+    /**
+     *
+     * @param src tablet to clone from
+     * @return number of rowset cloned
+     * @throws Exception
+     */
+    public synchronized int cloneFrom(Tablet src) throws Exception {
         if (maxContinuousVersion() >= src.maxContinuousVersion()) {
             LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
                     versionInfo());
-            return;
+            return 0;
         }
         String oldInfo = versionInfo();
         List<Long> missingVersions = getMissingVersions();
@@ -337,6 +343,8 @@ public class Tablet {
                     versionInfo());
         }
         cloneExecuted.incrementAndGet();
+        System.out.printf("\ntablet:%s clone src:%s before:%s after:%s\n", id, src.versionInfo(), oldInfo, versionInfo());
+        return versionAndRowsets.size();
     }
 
     private void fullCloneFrom(Tablet src) throws Exception {

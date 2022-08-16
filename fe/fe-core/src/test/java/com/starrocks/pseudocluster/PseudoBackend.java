@@ -3,6 +3,7 @@ package com.starrocks.pseudocluster;
 
 import com.baidu.brpc.RpcContext;
 import com.baidu.brpc.client.RpcCallback;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -160,6 +161,15 @@ public class PseudoBackend {
     private volatile float writeFailureRate = 0.0f;
     private volatile float publishFailureRate = 0.0f;
 
+    public static final long DEFAULT_TOTA_CAP_B = 100000000000L;
+    public static final long DEFAULT_AVAI_CAP_B = 50000000000L;
+    public static final long DEFAULT_USED_CAP_B = 20000000000L;
+    public static final long DEFAULT_CHUNK_SIZE_ON_DISK_B = 1 << 20;
+
+    private long currentDataUsedCapacityB;
+    private long currentAvailableCapacityB;
+    private long currentTotalCapacityB;
+
     Backend be;
     HeartBeatClient heatBeatClient;
     BeThriftClient backendClient;
@@ -307,16 +317,9 @@ public class PseudoBackend {
         this.be = new Backend(backendId, host, heartBeatPort);
         this.tBackend = new TBackend(host, beThriftPort, httpPort);
 
-        Map<String, DiskInfo> disks = Maps.newHashMap();
-        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
         // TODO: maintain disk info with tablet/rowset count
-        diskInfo1.setTotalCapacityB(100000000000L);
-        diskInfo1.setAvailableCapacityB(50000000000L);
-        diskInfo1.setDataUsedCapacityB(20000000000L);
-        diskInfo1.setPathHash(PATH_HASH);
-        diskInfo1.setStorageMedium(TStorageMedium.SSD);
-        disks.put(diskInfo1.getRootPath(), diskInfo1);
-        be.setDisks(ImmutableMap.copyOf(disks));
+        setInitialCapacity(PseudoBackend.DEFAULT_TOTA_CAP_B, PseudoBackend.DEFAULT_AVAI_CAP_B,
+                PseudoBackend.DEFAULT_USED_CAP_B);
         be.setAlive(true);
         be.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
         be.setBePort(beThriftPort);
@@ -333,6 +336,25 @@ public class PseudoBackend {
         addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportDisks);
         addMaintenanceTask(nextScheduleTime(reportIntervalMs), this::reportTasks);
         addMaintenanceTask(nextScheduleTime(tabletCheckIntervalMs), this::tabletMaintenance);
+    }
+
+    public void setInitialCapacity(long totalCapacityB, long availableCapacityB, long usedCapacityB) {
+        Preconditions.checkState(usedCapacityB < availableCapacityB);
+        Preconditions.checkState(availableCapacityB + usedCapacityB <= totalCapacityB);
+
+        Map<String, DiskInfo> disks = Maps.newHashMap();
+        DiskInfo diskInfo1 = new DiskInfo(runPath + "/storage");
+        diskInfo1.setTotalCapacityB(totalCapacityB);
+        currentTotalCapacityB = totalCapacityB;
+        diskInfo1.setAvailableCapacityB(availableCapacityB);
+        currentAvailableCapacityB = availableCapacityB;
+        diskInfo1.setDataUsedCapacityB(usedCapacityB);
+        currentDataUsedCapacityB = usedCapacityB;
+        diskInfo1.setPathHash(PATH_HASH);
+        diskInfo1.setStorageMedium(TStorageMedium.SSD);
+        disks.put(diskInfo1.getRootPath(), diskInfo1);
+
+        be.setDisks(ImmutableMap.copyOf(disks));
     }
 
     public String getHost() {
@@ -397,9 +419,9 @@ public class PseudoBackend {
             TDisk tdisk = new TDisk();
             tdisk.setRoot_path(entry.getKey());
             tdisk.setPath_hash(entry.getValue().getPathHash());
-            tdisk.setDisk_total_capacity(entry.getValue().getTotalCapacityB());
-            tdisk.setDisk_available_capacity(entry.getValue().getAvailableCapacityB());
-            tdisk.setData_used_capacity(entry.getValue().getDataUsedCapacityB());
+            tdisk.setDisk_total_capacity(currentTotalCapacityB);
+            tdisk.setDisk_available_capacity(currentAvailableCapacityB);
+            tdisk.setData_used_capacity(currentDataUsedCapacityB);
             tdisk.setStorage_medium(entry.getValue().getStorageMedium());
             tdisk.setUsed(true);
             tdisks.put(entry.getKey(), tdisk);
@@ -497,7 +519,8 @@ public class PseudoBackend {
         }
         // currently, only incremental clone is supported
         String oldInfo = destTablet.versionInfo();
-        destTablet.cloneFrom(srcTablet);
+        int numRowsetCloned = destTablet.cloneFrom(srcTablet);
+        updateDiskUsage(numRowsetCloned * PseudoBackend.DEFAULT_CHUNK_SIZE_ON_DISK_B);
         System.out.printf("clone tablet:%d src:%s dest:%s %s->%s\n", task.tablet_id, srcBackend.be.getId(), be.getId(),
                 oldInfo, destTablet.versionInfo());
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
@@ -1183,6 +1206,15 @@ public class PseudoBackend {
         return result;
     }
 
+    private synchronized void updateDiskUsage(long delta) {
+        if ((currentAvailableCapacityB - delta) < currentTotalCapacityB * 0.05) {
+            return;
+        }
+        System.out.println("backend " + getId() + ", delta " + delta);
+        currentDataUsedCapacityB += delta;
+        currentAvailableCapacityB -= delta;
+    }
+
     synchronized PTabletWriterAddBatchResult tabletWriterAddChunk(PTabletWriterAddChunkRequest request) {
         PTabletWriterAddBatchResult result = new PTabletWriterAddBatchResult();
         result.status = new StatusPB();
@@ -1210,6 +1242,7 @@ public class PseudoBackend {
                     result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
                     result.status.errorMsgs.add(e.getMessage());
                 }
+                updateDiskUsage(PseudoBackend.DEFAULT_CHUNK_SIZE_ON_DISK_B);
             } else {
                 result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
                 result.status.errorMsgs.add("no associated load channel");
