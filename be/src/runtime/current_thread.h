@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
 #include <string>
 
+#include "fmt/format.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"

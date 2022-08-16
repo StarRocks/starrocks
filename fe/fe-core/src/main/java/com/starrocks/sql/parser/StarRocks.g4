@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 grammar StarRocks;
 import StarRocksLex;
@@ -147,6 +147,7 @@ statement
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
     | DROP USER user                                                                        #dropUser
+    | showAuthenticationStatement                                                           #showAuthentication
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -837,6 +838,11 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

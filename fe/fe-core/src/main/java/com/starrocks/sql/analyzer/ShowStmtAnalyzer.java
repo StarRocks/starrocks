@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
@@ -13,6 +13,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -36,6 +37,7 @@ import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -588,5 +590,23 @@ public class ShowStmtAnalyzer {
             ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
             return null;
         }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null) {
+                try {
+                    user.analyze();
+                } catch (AnalysisException e) {
+                    SemanticException exception = new SemanticException("failed to show authentication for " + user.toString());
+                    exception.initCause(e);
+                    throw exception;
+                }
+            } else if (! statement.isAll()) {
+                statement.setUserIdent(context.getCurrentUserIdentity());
+            }
+            return null;
+        }
+
     }
 }
