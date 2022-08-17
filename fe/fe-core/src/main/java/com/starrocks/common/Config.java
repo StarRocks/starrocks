@@ -1107,6 +1107,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int tablet_sched_checker_interval_seconds = 20;
 
+    @ConfField(mutable = true)
+    public static int tablet_sched_max_migration_task_sent_once = 1000;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;

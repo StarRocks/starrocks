@@ -29,6 +29,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -191,7 +192,8 @@ public class TabletInvertedIndex {
                                             LOG.debug("available storage medium type count is less than 1, " +
                                                             "no need to send migrate task. tabletId={}, backendId={}.",
                                                     tabletId, backendId);
-                                        } else {
+                                        } else if (tabletMigrationMap.size() <=
+                                                Config.tablet_sched_max_migration_task_sent_once) {
                                             tabletMigrationMap.put(storageMedium, tabletId);
                                         }
                                     }
