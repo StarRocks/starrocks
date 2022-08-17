@@ -45,15 +45,15 @@ class KeyColumnAggregator final : public ColumnAggregatorBase {
 
 class ValueColumnAggregatorBase : public ColumnAggregatorBase {
 public:
-    virtual void reset() {}
+    virtual void reset() = 0;
 
-    virtual void append_data(Column* agg) {}
-
-    // |data| is readonly.
-    virtual void aggregate_impl(int row, const ColumnPtr& data) {}
+    virtual void append_data(Column* agg) = 0;
 
     // |data| is readonly.
-    virtual void aggregate_batch_impl(int start, int end, const ColumnPtr& data) {}
+    virtual void aggregate_impl(int row, const ColumnPtr& data) = 0;
+
+    // |data| is readonly.
+    virtual void aggregate_batch_impl(int start, int end, const ColumnPtr& data) = 0;
 };
 
 using ColumnAggregatorPtr = std::unique_ptr<ColumnAggregatorBase>;
@@ -102,12 +102,6 @@ public:
 
     void reset() override { this->data() = StateType{}; }
 
-    void append_data(Column* agg) override = 0;
-
-    void aggregate_impl(int row, const ColumnPtr& src) override = 0;
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override = 0;
-
 private:
     StateType _data{};
 };
@@ -129,7 +123,7 @@ public:
     void update_aggregate(Column* agg) override {
         _aggregate_column = agg;
 
-        NullableColumn* n = down_cast<NullableColumn*>(agg);
+        auto* n = down_cast<NullableColumn*>(agg);
         _child->update_aggregate(n->data_column().get());
 
         _aggregate_nulls = down_cast<NullColumn*>(n->null_column().get());
@@ -146,12 +140,12 @@ public:
             reset();
         }
 
-        int row_nums = 0;
+        size_t row_nums = 0;
         for (int i = 0; i < nums; ++i) {
             row_nums += aggregate_loops[i];
         }
 
-        int zeros = SIMD::count_zero(_source_nulls_data + start, row_nums);
+        size_t zeros = SIMD::count_zero(_source_nulls_data + start, row_nums);
 
         if (zeros == 0) {
             // all null
@@ -218,6 +212,18 @@ public:
     void reset() override {
         _row_is_null = 1;
         _child->reset();
+    }
+
+    void append_data(Column* agg) override {
+        LOG(FATAL) << "append_data is not implemented in ValueNullableColumnAggregator";
+    }
+
+    void aggregate_impl(int row, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_impl is not implemented in ValueNullableColumnAggregator";
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_batch_impl is not implemented in ValueNullableColumnAggregator";
     }
 
 private:
