@@ -151,6 +151,8 @@ public:
 
     RuntimeState* runtime_state() const;
 
+    void set_prepare_time(int64_t cost_ns);
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -184,6 +186,7 @@ protected:
     RuntimeProfile::Counter* _finishing_timer = nullptr;
     RuntimeProfile::Counter* _finished_timer = nullptr;
     RuntimeProfile::Counter* _close_timer = nullptr;
+    RuntimeProfile::Counter* _prepare_timer = nullptr;
 
     RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
     RuntimeProfile::Counter* _push_row_num_counter = nullptr;
