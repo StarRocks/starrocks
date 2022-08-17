@@ -155,7 +155,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         cntl->SetFailed("missing tablet_ids");
         return;
     }
-    if (request->has_txn_id() == 0) {
+    if (!request->has_txn_id()) {
         cntl->SetFailed("missing txn_id");
         return;
     }
@@ -171,7 +171,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         auto task = std::make_shared<PublishLogVersionTask>(tablet_id, context);
         auto st = thread_pool->submit(std::move(task));
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit publish version task: " << st;
+            LOG(WARNING) << "Fail to submit publish log version task: " << st;
             std::lock_guard l(context->_response_mtx);
             response->add_failed_tablets(tablet_id);
         }
