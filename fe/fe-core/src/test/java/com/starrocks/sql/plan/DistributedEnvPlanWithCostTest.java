@@ -53,11 +53,17 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_PARTKEY) from part group by P_BRAND;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  output: multi_distinct_count(1: P_PARTKEY)");
-        assertContains(plan, "3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count)");
+        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: P_PARTKEY)\n" +
+                "  |  group by: 4: P_BRAND\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: P_BRAND, 1: P_PARTKEY\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: P_BRAND, 1: P_PARTKEY");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -1251,9 +1257,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testDisableOneStageAggWithDistinct() throws Exception {
         String sql = "select count(distinct L_ORDERKEY) from lineitem group by L_PARTKEY";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 1: L_ORDERKEY, 2: L_PARTKEY");
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: L_PARTKEY, 1: L_ORDERKEY\n");
 
         sql = "select count(distinct P_NAME) from part";
         plan = getFragmentPlan(sql);

@@ -278,7 +278,8 @@ public class PlanTestBase {
                 "  `v5` int(11) SUM NULL,\n" +
                 "  `v6` int(11) SUM NULL,\n" +
                 "  `b1` bitmap BITMAP_UNION NULL,\n" +
-                "  `h1` hll hll_union NULL\n" +
+                "  `h1` hll hll_union NULL," +
+                "  `p1` PERCENTILE PERCENTILE_UNION NULL\n" +
                 ") ENGINE=OLAP\n" +
                 "AGGREGATE KEY(`k1`, `k2`, `k3`)\n" +
                 "DISTRIBUTED BY HASH(`k2`) BUCKETS 10\n" +
