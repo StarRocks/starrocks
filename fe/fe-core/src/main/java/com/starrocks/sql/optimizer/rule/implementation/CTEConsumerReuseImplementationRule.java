@@ -13,13 +13,14 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class CTEConsumerImplementationRule extends ImplementationRule {
-    public CTEConsumerImplementationRule() {
-        super(RuleType.IMP_CTE_CONSUMER, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME));
+public class CTEConsumerReuseImplementationRule extends ImplementationRule {
+    public CTEConsumerReuseImplementationRule() {
+        super(RuleType.IMP_CTE_CONSUME_REUSE, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        // delete children of cte consume
         LogicalCTEConsumeOperator logical = (LogicalCTEConsumeOperator) input.getOp();
         PhysicalCTEConsumeOperator consume =
                 new PhysicalCTEConsumeOperator(logical.getCteId(), logical.getCteOutputColumnRefMap(),
