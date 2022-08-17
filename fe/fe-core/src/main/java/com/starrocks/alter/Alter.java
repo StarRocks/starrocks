@@ -290,29 +290,27 @@ public class Alter {
 
         taskManager.createTask(task, false);
         // for event triggered type, run task
-        if (newRefreshType == MaterializedView.RefreshType.ASYNC &&
-                task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+        if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
             taskManager.executeTask(task.getName());
         }
 
         final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+        refreshScheme.setType(newRefreshType);
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
             if (intervalLiteral != null) {
-                final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
+                final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
                 final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
                 asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
                 asyncRefreshContext.setStep(step.getLongValue());
-                asyncRefreshContext.setTimeUnit(
-                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+                asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
             }
         }
-        refreshScheme.setType(newRefreshType);
 
         final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
-        LOG.info("change materialized view refresh type [{}] to {}, id: {}", oldRefreshType,
+        LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                 newRefreshType, materializedView.getId());
     }
 

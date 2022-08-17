@@ -3300,8 +3300,7 @@ public class LocalMetastore implements ConnectorMetadata {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
             // for event triggered type, run task
-            if (refreshType == MaterializedView.RefreshType.ASYNC &&
-                    task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
                 taskManager.executeTask(task.getName());
             }
         }
