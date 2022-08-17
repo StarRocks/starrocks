@@ -32,6 +32,7 @@ DIAGNOSTIC_POP
 #include <unordered_map>
 #include <unordered_set>
 
+#include "column/chunk.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "gen_cpp/InternalService_types.h"
@@ -39,6 +40,7 @@ DIAGNOSTIC_POP
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
+#include "serde/protobuf_serde.h"
 #include "util/uid_util.h"
 
 namespace brpc {
@@ -51,6 +53,7 @@ class Cache;
 class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
+class OlapTableSchemaParam;
 
 // A LoadChannel manages tablets channels for all indexes
 // corresponding to a certain load job
@@ -68,8 +71,9 @@ public:
     void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
               google::protobuf::Closure* done);
 
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
+    void add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
+
+    void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
 
     void cancel();
 
@@ -88,9 +92,20 @@ public:
     Span get_span() { return _span; }
 
 private:
+    void _add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+                    PTabletWriterAddBatchResult* response);
+    Status _build_chunk_meta(const ChunkPB& pb_chunk);
+    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
+
     LoadChannelMgr* _load_mgr;
     UniqueId _load_id;
     int64_t _timeout_s;
+    std::atomic<bool> _has_chunk_meta;
+    mutable bthread::Mutex _chunk_meta_lock;
+    serde::ProtobufChunkMeta _chunk_meta;
+    std::shared_ptr<OlapTableSchemaParam> _schema;
+    std::unique_ptr<RowDescriptor> _row_desc;
+
     std::unique_ptr<MemTracker> _mem_tracker;
     std::atomic<time_t> _last_updated_time;
 
