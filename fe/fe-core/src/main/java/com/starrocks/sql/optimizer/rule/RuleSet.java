@@ -91,6 +91,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownMinMaxConjunctsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEAnchor;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEConsumeRule;
@@ -107,7 +108,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRu
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownMinMaxConjunctsRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;

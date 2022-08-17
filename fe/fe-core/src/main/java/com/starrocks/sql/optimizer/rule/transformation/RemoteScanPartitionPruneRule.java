@@ -72,7 +72,8 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
 
     private void initPartitionInfo(LogicalScanOperator operator,
                                    Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws DdlException, AnalysisException {
+                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
+            throws DdlException, AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
