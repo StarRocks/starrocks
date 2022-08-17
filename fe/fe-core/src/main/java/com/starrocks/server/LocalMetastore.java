@@ -879,7 +879,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // partition properties is prior to clause properties
         // clause properties is prior to table properties
         Map<String, String> properties = Maps.newHashMap();
-        properties = getOrSetDefaultProperties(olapTable, properties);
+        properties = olapTable.getOrSetDefaultProperties(properties);
         Map<String, String> clauseProperties = addPartitionClause.getProperties();
         if (clauseProperties != null && !clauseProperties.isEmpty()) {
             properties.putAll(clauseProperties);
@@ -1291,41 +1291,6 @@ public class LocalMetastore implements ConnectorMetadata {
             cleanTabletIdSetForAll(tabletIdSetForAll, olapTable.isLakeTable());
             throw e;
         }
-    }
-
-    public Map<String, String> getOrSetDefaultProperties(OlapTable olapTable, Map<String, String> sourceProperties) {
-        // partition properties should inherit table properties
-        Short replicationNum = olapTable.getDefaultReplicationNum();
-        if (sourceProperties == null) {
-            sourceProperties = Maps.newConcurrentMap();
-        }
-        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-            sourceProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, replicationNum.toString());
-        }
-        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-            sourceProperties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, olapTable.isInMemory().toString());
-        }
-        // enable_storage_cache
-        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)) {
-            if (olapTable.isLakeTable()) {
-                sourceProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
-                        String.valueOf(((LakeTable) olapTable).getTableProperty().getStorageInfo().isEnableStorageCache()));
-            }
-        }
-        // storage_cache_ttl
-        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)) {
-            if (olapTable.isLakeTable()) {
-                sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                        String.valueOf(((LakeTable) olapTable).getTableProperty().getStorageInfo().getStorageCacheTtlS()));
-            }
-        }
-
-        Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
-        }
-        return sourceProperties;
     }
 
     public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {

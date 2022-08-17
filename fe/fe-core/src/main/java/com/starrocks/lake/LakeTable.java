@@ -18,6 +18,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -31,6 +32,7 @@ import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Metadata for StarRocks lake table
@@ -130,5 +132,23 @@ public class LakeTable extends OlapTable {
     @Override
     public AlterJobV2Builder alterTable() {
         return new LakeTableAlterJobV2Builder();
+    }
+
+    @Override
+    public Map<String, String> getOrSetDefaultProperties(Map<String, String> sourceProperties) {
+        sourceProperties = super.getOrSetDefaultProperties(sourceProperties);
+        // enable_storage_cache
+        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)) {
+            sourceProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
+                    String.valueOf(getTableProperty().getStorageInfo().isEnableStorageCache()));
+
+        }
+        // storage_cache_ttl
+        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)) {
+            sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
+                    String.valueOf(getTableProperty().getStorageInfo().getStorageCacheTtlS()));
+
+        }
+        return sourceProperties;
     }
 }
