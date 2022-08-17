@@ -135,8 +135,8 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public Map<String, String> getOrSetDefaultProperties(Map<String, String> sourceProperties) {
-        sourceProperties = super.getOrSetDefaultProperties(sourceProperties);
+    public Map<String, String> getProperties() {
+        Map<String, String> sourceProperties = super.getProperties();
         // enable_storage_cache
         if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)) {
             sourceProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,

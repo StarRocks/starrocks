@@ -477,4 +477,8 @@ public class Table extends MetaObject implements Writable {
     public boolean isSupported() {
         return false;
     }
+    
+    public Map<String, String> getProperties() {
+        throw new NotImplementedException();
+    }
 }
