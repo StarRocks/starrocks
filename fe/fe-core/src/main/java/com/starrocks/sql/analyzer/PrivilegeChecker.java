@@ -1,6 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -35,6 +38,8 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
@@ -261,7 +266,27 @@ public class PrivilegeChecker {
             }
             return null;
         }
-
+        @Override
+        public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+        @Override
+        public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+        @Override
+        public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
         @Override
         public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
@@ -1004,6 +1029,26 @@ public class PrivilegeChecker {
                     && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackupStmt(ShowBackupStmt showBackupStmt, ConnectContext context) {
+            String dbName = showBackupStmt.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ConnectContext.get().getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            if (statement.isAll() || ! context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
             }
             return null;
         }

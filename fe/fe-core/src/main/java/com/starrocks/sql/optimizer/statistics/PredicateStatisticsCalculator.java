@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -212,10 +212,15 @@ public class PredicateStatisticsCalculator {
                 leftChildOpt = leftChild.isColumnRef() ? Optional.of((ColumnRefOperator) leftChild) : Optional.empty();
 
                 if (rightChild.isConstant()) {
-                    ConstantOperator constant = (ConstantOperator) rightChild;
+                    Optional<ConstantOperator> constantOperator;
+                    if (rightChild.isConstantRef()) {
+                        constantOperator = Optional.of((ConstantOperator) rightChild);
+                    } else {
+                        constantOperator = Optional.empty();
+                    }
                     Statistics binaryStats =
                             BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(leftChildOpt,
-                                    leftColumnStatistic, predicate, constant, statistics);
+                                    leftColumnStatistic, predicate, constantOperator, statistics);
                     return StatisticsEstimateUtils.adjustStatisticsByRowCount(binaryStats,
                             binaryStats.getOutputRowCount());
                 } else {

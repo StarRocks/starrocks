@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "fs/fs.h"
 
@@ -111,7 +111,7 @@ const THdfsProperties* FSOptions::hdfs_properties() const {
     } else if (export_sink != nullptr && export_sink->__isset.hdfs_properties) {
         return &export_sink->hdfs_properties;
     } else if (result_file_options != nullptr) {
-        return result_file_options->hdfs_properties;
+        return &result_file_options->hdfs_properties;
     } else if (upload != nullptr && upload->__isset.hdfs_properties) {
         return &upload->hdfs_properties;
     } else if (download != nullptr && download->__isset.hdfs_properties) {

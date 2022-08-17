@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
@@ -9,7 +9,6 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -100,7 +99,7 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
-            OlapTable table = (OlapTable) db.getTable(tableName);
+            Table table = db.getTable(tableName);
             if (table == null) {
                 return false;
             }
@@ -118,7 +117,7 @@ public class StatisticUtils {
     }
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
-        long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
+        long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
     }
@@ -129,7 +128,7 @@ public class StatisticUtils {
     }
 
     public static boolean isEmptyTable(Table table) {
-        return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
+        return table.getPartitions().stream().noneMatch(Partition::hasData);
     }
 
     public static List<ColumnDef> buildStatsColumnDef(String tableName) {
@@ -206,6 +205,12 @@ public class StatisticUtils {
             throw new StarRocksPlannerException("Error statistic type : " + type.toSql(), ErrorType.INTERNAL_ERROR);
         }
         switch (type.getPrimitiveType()) {
+            case BOOLEAN:
+                if (statistic.equalsIgnoreCase("TRUE")) {
+                    return Optional.of(1D);
+                } else {
+                    return Optional.of(0D);
+                }
             case DATE:
                 return Optional.of((double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
                         statistic, DateUtils.DATE_FORMATTER_UNIX)));

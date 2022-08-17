@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
 #include <atomic>
+#include <boost/algorithm/string.hpp>
 #include <utility>
 
 #include "column/chunk.h"
@@ -112,6 +113,8 @@ struct HdfsScannerParams {
 
     std::vector<std::string>* hive_column_names = nullptr;
 
+    bool case_sensitive = false;
+
     HdfsScanProfile* profile = nullptr;
 
     std::atomic<int32_t>* open_limit;
@@ -124,6 +127,10 @@ struct HdfsScannerContext {
         SlotId slot_id;
         std::string col_name;
         SlotDescriptor* slot_desc;
+
+        std::string formated_col_name(bool case_sensitive) {
+            return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+        }
     };
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -149,6 +156,8 @@ struct HdfsScannerContext {
 
     // runtime filters.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
+
+    bool case_sensitive = false;
 
     std::string timezone;
 

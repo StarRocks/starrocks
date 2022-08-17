@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.InsertStmt;
@@ -224,7 +224,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
-                        "  |  <slot 8> : CAST(NULL AS BIGINT)\n"));
+                        "  |  <slot 8> : NULL\n"));
 
         explainString = getInsertExecPlan("insert into ti2 select * from ti2");
         Assert.assertTrue(explainString.contains("  1:Project\n" +
@@ -677,5 +677,23 @@ public class InsertPlanTest extends PlanTestBase {
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testInsertSelectWithConstant() throws Exception {
+        String explainString = getInsertExecPlan("insert into tarray select 1,null,null from tarray");
+        System.out.printf("%s\n", explainString);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:7: v1 | 8: v2 | 9: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
+                "  |  <slot 8> : NULL\n" +
+                "  |  <slot 9> : NULL"));
     }
 }

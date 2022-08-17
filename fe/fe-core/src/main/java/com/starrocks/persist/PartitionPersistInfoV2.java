@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.persist;
 
@@ -30,7 +30,7 @@ public class PartitionPersistInfoV2 implements Writable {
     private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
-    @SerializedName("StoarageInfo")
+    @SerializedName("StorageInfo")
     private StorageInfo storageInfo;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,

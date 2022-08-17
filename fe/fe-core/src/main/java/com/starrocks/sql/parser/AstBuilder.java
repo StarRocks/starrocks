@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
@@ -15,6 +15,9 @@ import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -140,6 +143,8 @@ import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCharsetStmt;
 import com.starrocks.analysis.ShowCollationStmt;
@@ -175,7 +180,6 @@ import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.SwapTableClause;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
@@ -187,6 +191,7 @@ import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.ValueList;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
@@ -243,6 +248,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetUserVar;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -2540,7 +2546,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 return new BrokerDesc(properties);
             }
-            
+
         }
         return null;
     }
@@ -2728,19 +2734,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetVariable(StarRocksParser.SetVariableContext context) {
-        if (context.AT().isEmpty()) {
-            Expr expr = (Expr) visit(context.setExprOrDefault());
-            String variable = ((Identifier) visit(context.identifier())).getValue();
-            if (context.varType() != null) {
-                return new SetVar(getVariableType(context.varType()), variable, expr);
-            } else {
-                return new SetVar(variable, expr);
-            }
-        } else if (context.AT().size() == 1) {
+        if (context.userVariable() != null) {
+            VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
             Expr expr = (Expr) visit(context.expression());
-            String variable = ((Identifier) visit(context.identifierOrString())).getValue();
-            return new SetVar(variable, expr);
-        } else if (context.AT().size() == 2) {
+            return new SetUserVar(variableDesc.getName(), expr);
+        } else if (context.systemVariable() != null) {
+            VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
+            Expr expr = (Expr) visit(context.setExprOrDefault());
+            return new SetVar(variableDesc.getSetType(), variableDesc.getName(), expr);
+        } else {
             Expr expr = (Expr) visit(context.setExprOrDefault());
             String variable = ((Identifier) visit(context.identifier())).getValue();
             if (context.varType() != null) {
@@ -2748,8 +2750,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             } else {
                 return new SetVar(variable, expr);
             }
-        } else {
-            throw new StarRocksPlannerException("Not support set var type", ErrorType.INTERNAL_ERROR);
         }
     }
 
@@ -2836,7 +2836,43 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
     }
-
+    @Override
+    public ParseNode visitAdminRepairTable(StarRocksParser.AdminRepairTableContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+    @Override
+    public ParseNode visitAdminCancelRepairTable(StarRocksParser.AdminCancelRepairTableContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminCancelRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+    @Override
+    public ParseNode visitAdminCheckTablets(StarRocksParser.AdminCheckTabletsContext context) {
+        // tablet_ids and properties
+        List<Long> tabletIds = Lists.newArrayList();
+        if (context.tabletList() != null) {
+            tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
+                    .map(Long::parseLong).collect(toList());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AdminCheckTabletsStmt(tabletIds, properties);
+    }
     @Override
     public ParseNode visitTruncateTableStatement(StarRocksParser.TruncateTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
@@ -2882,6 +2918,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean allowRevert = context.WITH() == null;
         // we only support WITH NO REVERT for now
         return new ExecuteAsStmt(toUser, allowRevert);
+    }
+
+    @Override
+    public ParseNode visitShowAllAuthentication(StarRocksParser.ShowAllAuthenticationContext context) {
+        return new ShowAuthenticationStmt(null, true);
+    }
+
+    @Override
+    public ParseNode visitShowAuthenticationForUser(StarRocksParser.ShowAuthenticationForUserContext context) {
+        if (context.user() != null) {
+            UserIdentity user = ((UserIdentifier) visit(context.user())).getUserIdentity();
+            return new ShowAuthenticationStmt(user, false);
+        } else {
+            return new ShowAuthenticationStmt(null, false);
+        }
     }
 
     @Override
@@ -2940,6 +2991,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String repoName = ((Identifier) visit(context.identifier())).getValue();
         return new BackupStmt(labelName, repoName, tblRefs, properties);
+    }
+
+    @Override
+    public ParseNode visitShowBackupStatement(StarRocksParser.ShowBackupStatementContext context) {
+        if (context.identifier() == null) {
+            return new ShowBackupStmt(null);
+        }
+        return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue());
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
@@ -3607,9 +3666,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitVariable(StarRocksParser.VariableContext context) {
+    public ParseNode visitUserVariable(StarRocksParser.UserVariableContext context) {
+        String variable = ((Identifier) visit(context.identifierOrString())).getValue();
+        return new VariableExpr(variable, SetType.USER);
+    }
+
+    @Override
+    public ParseNode visitSystemVariable(StarRocksParser.SystemVariableContext context) {
         SetType setType = getVariableType(context.varType());
-        return new SysVariableDesc(((Identifier) visit(context.identifier())).getValue(), setType);
+        return new VariableExpr(((Identifier) visit(context.identifier())).getValue(), setType);
     }
 
     @Override

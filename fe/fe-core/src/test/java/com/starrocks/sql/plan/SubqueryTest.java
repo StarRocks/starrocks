@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -568,5 +568,17 @@ public class SubqueryTest extends PlanTestBase {
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: v7\n" +
                 "  |  <slot 8> : 5: v8 + 1");
+    }
+
+    @Test
+    public void testCorrelationScalarSubqueryWithNonEQPredicate() throws Exception {
+        String sql = "SELECT v1, SUM(v2) FROM t0\n" +
+                "GROUP BY v1\n" +
+                "HAVING SUM(v2) > (\n" +
+                "      SELECT t1.v5 FROM t1\n" +
+                "      WHERE nullif(false, t0.v1 < 0)\n" +
+                ");";
+        Assert.assertThrows("Not support Non-EQ correlation predicate correlation scalar-subquery",
+                SemanticException.class, () -> getFragmentPlan(sql));
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.google.common.collect.Lists;
@@ -31,6 +31,15 @@ public class Tablet {
     boolean enablePersistentIndex;
 
     private AtomicInteger cloneExecuted = new AtomicInteger(0);
+
+    private int readExecuted = 0;
+    private long lastReadVersion = -1;
+    private long lastSuccessReadVersion = -1;
+    private long lastFailedReadVersion = -1;
+
+    private static AtomicInteger totalReadExecuted = new AtomicInteger(0);
+    private static AtomicInteger totalReadFailed = new AtomicInteger(0);
+    private static AtomicInteger totalReadSucceed = new AtomicInteger(0);
 
     public synchronized TTabletInfo toThrift() {
         TTabletInfo info = new TTabletInfo();
@@ -119,8 +128,54 @@ public class Tablet {
         }
     }
 
+    public synchronized void read(long version) throws Exception {
+        totalReadExecuted.incrementAndGet();
+        readExecuted++;
+        lastReadVersion = version;
+        long currentVersion = maxContinuousVersion();
+        if (version > currentVersion) {
+            totalReadFailed.incrementAndGet();
+            lastFailedReadVersion = version;
+            String msg = String.format("be:%d read tablet:%d version:%d > currentVersion:%d",
+                    PseudoBackend.getCurrentBackend().getId(), version,
+                    currentVersion);
+            LOG.warn(msg);
+            throw new Exception(msg);
+        }
+        totalReadSucceed.incrementAndGet();
+        lastSuccessReadVersion = version;
+    }
+
     public int getCloneExecuted() {
         return cloneExecuted.get();
+    }
+
+    public synchronized int getReadExecuted() {
+        return readExecuted;
+    }
+
+    public synchronized long getLastReadVersion() {
+        return lastReadVersion;
+    }
+
+    public synchronized long getLastSuccessReadVersion() {
+        return lastSuccessReadVersion;
+    }
+
+    public synchronized long getLastFailedReadVersion() {
+        return lastFailedReadVersion;
+    }
+
+    public static int getTotalReadExecuted() {
+        return totalReadExecuted.get();
+    }
+
+    public static int getTotalReadFailed() {
+        return totalReadFailed.get();
+    }
+
+    public static int getTotalReadSucceed() {
+        return totalReadSucceed.get();
     }
 
     public synchronized void commitRowset(Rowset rowset, long version) throws Exception {

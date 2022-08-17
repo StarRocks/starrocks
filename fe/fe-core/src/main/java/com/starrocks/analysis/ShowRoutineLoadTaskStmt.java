@@ -127,7 +127,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                 break CHECK;
             }
             StringLiteral stringLiteral = (StringLiteral) binaryPredicate.getChild(1);
-            jobName = stringLiteral.getValue().toLowerCase();
+            jobName = stringLiteral.getValue();
         }
 
         if (!valid) {

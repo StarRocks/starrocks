@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
@@ -120,9 +120,9 @@ public class AnalyzeStmtTest {
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);
 
-        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, StatsConstants.AnalyzeType.FULL,
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(10002, 10004, null, StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
-        Assert.assertEquals("[test, t0, FULL, 2020-01-01 01:01:00, {}, 100%]",
+        Assert.assertEquals("[test, t0, ALL, FULL, 2020-01-01 01:01:00, {}, 100%]",
                 ShowBasicStatsMetaStmt.showBasicStatsMeta(basicStatsMeta).toString());
 
         sql = "show histogram meta";
@@ -180,6 +180,34 @@ public class AnalyzeStmtTest {
         DropHistogramStmt dropHistogramStmt = (DropHistogramStmt) analyzeSuccess(sql);
         Assert.assertEquals(dropHistogramStmt.getTableName().toSql(), "`test`.`t0`");
         Assert.assertEquals(dropHistogramStmt.getColumnNames().toString(), "[v1]");
+    }
+
+    @Test
+    public void testHistogramSampleRatio() {
+        OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
+                .getDb("db").getTable("tbl");
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(10000);
+        }
+
+        String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets properties(\"histogram_sample_ratio\"=\"0.1\")";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(400000);
+        }
+
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets properties(\"histogram_sample_ratio\"=\"0.2\")";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(20000000);
+        }
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets properties(\"histogram_sample_ratio\"=\"0.9\")";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
     }
 
     @Test

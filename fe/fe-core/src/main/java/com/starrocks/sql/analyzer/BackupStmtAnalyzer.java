@@ -1,11 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.PartitionNames;
+import com.starrocks.analysis.ShowBackupStmt;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Repository;
@@ -30,154 +31,67 @@ import java.util.Map;
 
 public class BackupStmtAnalyzer {
 
-    public static void analyze(BackupStmt backupStmt, ConnectContext session) {
-        new BackupStmtAnalyzerVisitor().analyze(backupStmt, session);
+    public static void analyze(StatementBase statement, ConnectContext session) {
+        new BackupStmtAnalyzerVisitor().analyze(statement, session);
     }
 
-    static class BackupStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+    public static class BackupStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         private static final String PROP_TIMEOUT = "timeout";
         private static final long MIN_TIMEOUT_MS = 600_000L; // 10 min
         private static final String PROP_TYPE = "type";
 
-        public void analyze(DdlStmt statement, ConnectContext session) {
+        public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }
 
         @Override
-        public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
-            String label = statement.getLabel();
-            if (Strings.isNullOrEmpty(label)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_LABEL_NAME, label);
-            }
-
-            String dbName = statement.getDbName();
-            if (Strings.isNullOrEmpty(dbName)) {
-                dbName = context.getDatabase();
-            } else {
-                try {
-                    FeNameFormat.checkDbName(dbName);
-                } catch (AnalysisException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
-                }
-            }
-
-            String catalog = context.getCurrentCatalog();
-
-            String currentCatalog = context.getCurrentCatalog();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(currentCatalog, dbName);
-            if (null == db) {
-                throw new SemanticException(ErrorCode.ERR_BAD_DB_ERROR.formatErrorMsg(dbName));
-            }
-
-            String repoName = statement.getRepoName();
-            if (Strings.isNullOrEmpty(repoName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not empty");
-            }
-
-            Repository repo =
-                    GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getRepo(repoName);
-            if (null == repo) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not exist");
-            }
-
+        public Void visitBackupStmt(BackupStmt backupStmt, ConnectContext context) {
+            String dbName = getDbName(backupStmt.getDbName(), context);
+            Database database = getDatabase(dbName, context);
+            analyzeLabelAndRepo(backupStmt.getLabel(), backupStmt.getRepoName());
             Map<String, TableRef> tblPartsMap = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
-            List<TableRef> tableRefs = statement.getTableRefs();
+            List<TableRef> tableRefs = backupStmt.getTableRefs();
             for (TableRef tableRef : tableRefs) {
-                TableName tableName = tableRef.getName();
-                PartitionNames partitionNames = tableRef.getPartitionNames();
-                Table tbl = db.getTable(tableName.getTbl());
-                if (null == tbl) {
-                    throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName.getTbl()));
-                }
-
-                if (!Strings.isNullOrEmpty(tableName.getDb())) {
-                    throw new SemanticException("Cannot specify database name on backup objects: "
-                            + tableName.getTbl() + ". Sepcify database name before label");
-                }
-
-                tableName.setCatalog(catalog);
-                tableName.setDb(dbName);
-                if (partitionNames != null) {
-                    if (tbl.getType() != Table.TableType.OLAP) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
-                    }
-
-                    OlapTable olapTbl = (OlapTable) tbl;
-                    for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
-                        Partition partition = olapTbl.getPartition(partName);
-                        if (partition == null) {
-                            throw new SemanticException(
-                                    "partition[" + partName + "] does not exist in table" + tableName.getTbl());
-                        }
-                    }
-                }
-
-                if (!tblPartsMap.containsKey(tableName.getTbl())) {
-                    tblPartsMap.put(tableName.getTbl(), tableRef);
-                } else {
-                    throw new SemanticException("Duplicated restore table: " + tableName.getTbl());
-                }
-
-                try {
-                    CatalogUtils.checkIsLakeTable(dbName, tableName.getTbl());
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
-                }
-
+                analyzeTableRef(tableRef, dbName, database, tblPartsMap, context.getCurrentCatalog());
                 if (tableRef.hasExplicitAlias()) {
                     throw new SemanticException("Can not set alias for table in Backup Stmt: " + tableRef);
                 }
             }
 
             tableRefs.clear();
-            for (TableRef tableRef : tblPartsMap.values()) {
-                statement.getTableRefs().add(tableRef);
-            }
-
-            Map<String, String> properties = statement.getProperties();
+            tableRefs.addAll(tblPartsMap.values());
+            Map<String, String> properties = backupStmt.getProperties();
             long timeoutMs = Config.backup_job_default_timeout_ms;
             Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
             Map<String, String> copiedProperties = new HashMap<>();
             while (iterator.hasNext()) {
                 Map.Entry<String, String> next = iterator.next();
+                String value = next.getValue();
                 switch (next.getKey()) {
                     case PROP_TIMEOUT:
-                        try {
-                            timeoutMs = Long.parseLong(next.getValue());
-                        } catch (NumberFormatException e) {
-                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                    "Invalid timeout format: "
-                                            + next.getValue());
-                        }
-
-                        if (timeoutMs * 1000 < MIN_TIMEOUT_MS) {
-                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                    "timeout must be at least 10 min");
-                        }
-
-                        timeoutMs = timeoutMs * 1000;
+                        timeoutMs = setPropTimeout(value, MIN_TIMEOUT_MS);
                         iterator.remove();
                         break;
                     case PROP_TYPE:
                         try {
                             BackupStmt.BackupType type =
-                                    BackupStmt.BackupType.valueOf(next.getValue().toUpperCase());
-                            statement.setType(type);
+                                    BackupStmt.BackupType.valueOf(value.toUpperCase());
+                            backupStmt.setType(type);
                         } catch (Exception e) {
                             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                                     "Invalid backup job type: "
-                                            + next.getValue());
+                                            + value);
                         }
                         iterator.remove();
                         break;
                     default:
-                        copiedProperties.put(next.getValue(), next.getValue());
+                        copiedProperties.put(next.getKey(), value);
                         break;
                 }
             }
 
-            statement.setTimeoutMs(timeoutMs);
+            backupStmt.setTimeoutMs(timeoutMs);
             if (!copiedProperties.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Unknown backup job properties: " + copiedProperties.keySet());
@@ -186,6 +100,116 @@ public class BackupStmtAnalyzer {
             return null;
         }
 
+        @Override
+        public Void visitShowBackupStmt(ShowBackupStmt showBackupStmt, ConnectContext context) {
+            String dbName = getDbName(showBackupStmt.getDbName(), context);
+            showBackupStmt.setDbName(dbName);
+            getDatabase(dbName, context);
+            return null;
+        }
+    }
+
+    public static String getDbName(String dbName, ConnectContext context) {
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = context.getDatabase();
+        } else {
+            try {
+                FeNameFormat.checkDbName(dbName);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
+            }
+        }
+        return dbName;
+    }
+
+    public static Database getDatabase(String dbName, ConnectContext context) {
+        Database db = context.getGlobalStateMgr().getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        return db;
+    }
+
+    public static void analyzeLabelAndRepo(String label, String repoName) {
+        if (Strings.isNullOrEmpty(label)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_LABEL_NAME, label);
+        }
+
+        if (Strings.isNullOrEmpty(repoName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository is empty");
+        }
+
+        Repository repo =
+                GlobalStateMgr.getCurrentState().getBackupHandler().getRepoMgr().getRepo(repoName);
+        if (null == repo) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Repository [" + repoName + "] does not exist");
+        }
+    }
+
+    public static void analyzeTableRef(TableRef tableRef, String dbName, Database db,
+                                       Map<String, TableRef> tblPartsMap, String catalog) {
+        TableName tableName = tableRef.getName();
+        tableName.setCatalog(catalog);
+        tableName.setDb(dbName);
+        PartitionNames partitionNames = tableRef.getPartitionNames();
+        Table tbl = db.getTable(tableName.getTbl());
+        if (null == tbl) {
+            throw new SemanticException(ErrorCode.ERR_WRONG_TABLE_NAME.formatErrorMsg(tableName.getTbl()));
+        }
+
+        String alias = tableRef.getAlias();
+        if (!tableName.getTbl().equalsIgnoreCase(alias)) {
+            Table tblAlias = db.getTable(alias);
+            if (tblAlias != null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "table [" + alias + "] existed");
+            }
+        }
+
+        if (partitionNames != null) {
+            if (tbl.getType() != Table.TableType.OLAP) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
+            }
+
+            OlapTable olapTbl = (OlapTable) tbl;
+            for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
+                Partition partition = olapTbl.getPartition(partName);
+                if (partition == null) {
+                    throw new SemanticException(
+                            "partition[" + partName + "] does not exist  in table" + tableName.getTbl());
+                }
+            }
+        }
+
+        if (!tblPartsMap.containsKey(tableName.getTbl())) {
+            tblPartsMap.put(tableName.getTbl(), tableRef);
+        } else {
+            throw new SemanticException("Duplicated table: " + tableName.getTbl());
+        }
+
+        try {
+            CatalogUtils.checkIsLakeTable(dbName, tableName.getTbl());
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+    }
+
+    public static long setPropTimeout(String value, long defaultTimeout) {
+        long timeoutMs = Config.backup_job_default_timeout_ms;
+        try {
+            timeoutMs = Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Invalid timeout format: "
+                            + value);
+        }
+
+        if (timeoutMs * 1000 < defaultTimeout) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "timeout must be at least 10 min");
+        }
+        return timeoutMs * 1000;
     }
 
 }

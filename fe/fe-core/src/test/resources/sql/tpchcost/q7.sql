@@ -45,12 +45,12 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
-cardinality: 250
+cardinality: 1
 column statistics:
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F11)
 
@@ -61,25 +61,25 @@ OutPut Exchange Id: 25
 24:SORT
 |  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, false] ASC
 |  offset: 0
-|  cardinality: 250
+|  cardinality: 1
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 250
+|  cardinality: 1
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 250.28228759765625] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 22:EXCHANGE
-cardinality: 297
+cardinality: 1
 
 PLAN FRAGMENT 2(F00)
 
@@ -91,12 +91,12 @@ OutPut Exchange Id: 22
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 297
+|  cardinality: 1
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 8.0, 296.630859375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 20:Project
 |  output columns:
@@ -104,10 +104,10 @@ OutPut Exchange Id: 22
 |  51 <-> [51: N_NAME, CHAR, false]
 |  55 <-> year[([19: L_SHIPDATE, DATE, false]); args: DATE; result: SMALLINT; args nullable: false; result nullable: false]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
-|  cardinality: 554645
+|  cardinality: 277545
 |  column statistics:
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |
@@ -118,15 +118,15 @@ OutPut Exchange Id: 22
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (50: N_NATIONKEY), remote = true
 |  output columns: 14, 15, 19, 46, 51
-|  cardinality: 554645
+|  cardinality: 277545
 |  column statistics:
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
 |

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
@@ -749,7 +749,36 @@ public class PrivilegeCheckerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase3, starRocksAssert.getCtx()));
     }
+    @Test
+    public void testAdminRepairTable() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
 
+        TablePattern db1TablePattern = new TablePattern("*", "*");
+        db1TablePattern.analyze();
+
+        String adminRepairTable = "ADMIN REPAIR TABLE default_cluster.test PARTITION(p1, p2, p3);";
+        String adminCancelRepairTable = "ADMIN CANCEL REPAIR TABLE default_cluster.test PARTITION(p1, p2, p3);";
+        String adminCheckTablets = "ADMIN CHECK TABLET (10000, 10001) PROPERTIES(\"type\" = \"consistency\");";
+        StatementBase statementBase1 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(adminRepairTable, starRocksAssert.getCtx());
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(adminCancelRepairTable, starRocksAssert.getCtx());
+        StatementBase statementBase3 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(adminCheckTablets, starRocksAssert.getCtx());
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase3, starRocksAssert.getCtx());
+
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx()));
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase2, starRocksAssert.getCtx()));
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase3, starRocksAssert.getCtx()));
+    }
     @Test
     public void testUpdateTable() throws Exception {
 
@@ -1208,5 +1237,57 @@ public class PrivilegeCheckerTest {
         auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
         Assert.assertThrows(SemanticException.class,
                 () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testShowBackup() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        String sql = "SHOW BACKUP FROM db1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
+    public void testShowAuthentication() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+
+        String sql = "SHOW authentication;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        sql = "SHOW authentication FOR test;";
+        statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        sql = "SHOW authentication FOR ROOT";
+        StatementBase badStatement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(badStatement, starRocksAssert.getCtx()));
+
+        sql = "show all authentication;";
+        StatementBase badStatement2 = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(badStatement2, starRocksAssert.getCtx()));
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+
+        sql = "show authentication for test";
+        statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+
+        sql = "show all authentication;";
+        statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
     }
 }

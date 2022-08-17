@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.google.common.base.Strings;
@@ -86,7 +86,7 @@ public class PseudoFrontend {
 
         this.runningDir = runningDir;
         this.fakeJournal = fakeJournal;
-        System.out.println("mocked frontend running in dir: " + this.runningDir);
+        System.out.println("mocked frontend running in dir: " + new File(this.runningDir).getAbsolutePath());
 
         // root running dir
         createAndClearDir(this.runningDir);

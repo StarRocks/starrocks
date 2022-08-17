@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "formats/parquet/file_reader.h"
 
@@ -750,32 +750,37 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
     ASSERT_TRUE(status.is_end_of_file());
 }
 
-TEST_F(FileReaderTest, TestReadStructColumns) {
+TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     auto file = _create_file(_file4_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(_file4_path));
-    // init
-    auto* ctx = _create_context_for_struct_solumn();
-    Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+                                                    std::filesystem::file_size(_file4_path));;
 
-    // c3 is dict filter column
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+	// init
+	auto* ctx = _create_context_for_struct_solumn();
+	Status status = file_reader->init(ctx);
+	ASSERT_TRUE(status.ok());
 
-    // get next
-    auto chunk = _create_struct_chunk();
-    status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok());
-    ASSERT_EQ(3, chunk->num_rows());
-    for (int i = 0; i < chunk->num_rows(); ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
+	// c3 is dict filter column
+	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
 
-    ColumnPtr col = chunk->get_column_by_slot_id(1);
-    Slice s = col->get(0).get_slice();
+	// get next
+	auto chunk = _create_struct_chunk();
+	status = file_reader->get_next(&chunk);
+	ASSERT_TRUE(status.ok());
+	ASSERT_EQ(3, chunk->num_rows());
+	for (int i = 0; i < chunk->num_rows(); ++i) {
+		std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+	}
+
+    ColumnPtr int_col = chunk->get_column_by_slot_id(0);
+    int i = int_col->get(0).get_int32();
+    EXPECT_EQ(i, 3);
+
+    ColumnPtr char_col = chunk->get_column_by_slot_id(2);
+    Slice s = char_col->get(0).get_slice();
     std::string res(s.data, s.size);
-    EXPECT_EQ(res, "c");
+    EXPECT_EQ(res, "C");
 }
 
 } // namespace starrocks::parquet

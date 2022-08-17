@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -227,7 +227,7 @@ public class AggregateTest extends PlanTestBase {
                         + "  0:OlapScanNode"));
 
                 PlanFragment aggPlan = plan.second.getFragments().get(0);
-                Assert.assertEquals(instanceNum, aggPlan.getParallelExecNum());
+                Assert.assertEquals(1, aggPlan.getParallelExecNum());
                 Assert.assertEquals(pipelineDop, aggPlan.getPipelineDop());
             }
         } finally {

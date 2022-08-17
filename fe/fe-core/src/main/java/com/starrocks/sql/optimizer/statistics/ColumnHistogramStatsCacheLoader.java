@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
@@ -137,14 +137,14 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             double high;
             if (type.isDate()) {
                 low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
                 high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(1).getAsString(), DateUtils.DATEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(1).getAsString(), DateUtils.DATE_FORMATTER_UNIX));
             } else if (type.isDatetime()) {
                 low = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(0).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(0).getAsString(), DateUtils.DATE_TIME_FORMATTER_UNIX));
                 high = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
-                        bucketJsonArray.get(1).getAsString(), DateUtils.DATETIMEKEY_FORMATTER_UNIX));
+                        bucketJsonArray.get(1).getAsString(), DateUtils.DATE_TIME_FORMATTER_UNIX));
             } else {
                 low = Double.parseDouble(bucketJsonArray.get(0).getAsString());
                 high = Double.parseDouble(bucketJsonArray.get(1).getAsString());

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
@@ -209,7 +209,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
             BasicStatsMeta basicStatsMeta = entry.getValue();
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
-                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(),
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
                     basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
         }
 

@@ -43,8 +43,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -340,6 +343,18 @@ public class Table extends MetaObject implements Writable {
 
     public Partition getPartition(String partitionName) {
         return null;
+    }
+
+    public Partition getPartition(long partitionId) {
+        return null;
+    }
+
+    public Collection<Partition> getPartitions() {
+        return Collections.emptyList();
+    }
+
+    public Set<String> getDistributionColumnNames() {
+        return Collections.emptySet();
     }
 
     public String getEngine() {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -100,6 +100,7 @@ private:
     bool _has_partition_columns = false;
 
     std::vector<std::string> _hive_column_names;
+    bool _case_sensitive = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
     // ======================================

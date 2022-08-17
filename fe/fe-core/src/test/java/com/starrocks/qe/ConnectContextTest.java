@@ -130,7 +130,7 @@ public class ConnectContextTest {
         Assert.assertEquals("Ping", row.get(5));
         Assert.assertEquals(TimeUtils.longToTimeString(ctx.getConnectionStartTime()), row.get(6));
         Assert.assertEquals(Long.toString((currentTimeMillis - ctx.getConnectionStartTime()) / 1000), row.get(7));
-        Assert.assertEquals("", row.get(8));
+        Assert.assertEquals("OK", row.get(8));
         Assert.assertEquals("", row.get(9));
 
         // Start time

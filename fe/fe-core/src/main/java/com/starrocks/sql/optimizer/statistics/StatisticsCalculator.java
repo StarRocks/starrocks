@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -329,9 +329,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
 
+        Statistics.Builder nativeBuilder = estimateScanColumns(table, colRefToColumnMetaMap);
+
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
-            builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
+            ColumnRefOperator columnRefOperator = requiredColumns.get(i);
+            ColumnStatistic columnStatistic = columnStatisticList.get(i);
+            // if column stats is unavailable from HMS, then use native column stats.
+            if (columnStatistic.isUnknown()) {
+                columnStatistic = nativeBuilder.getColumnStatistics(columnRefOperator);
+            }
+            builder.addColumnStatistic(columnRefOperator, columnStatistic);
             optimizerContext.getDumpInfo()
                     .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
         }
@@ -361,16 +369,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
         Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
 
-        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
-        for (ColumnRefOperator columnRefOperator : requiredColumnRefs) {
-            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
-                    .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
-                columnHasHistogram.add(columnRefOperator);
-            }
-        }
-
         Map<ColumnRefOperator, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columnHasHistogram);
+                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, requiredColumnRefs);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
@@ -734,7 +734,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
             }
         }
-        return rowCount;
+        return Math.max(1, rowCount);
     }
 
     @Override

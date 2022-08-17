@@ -25,7 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.SchemaTableType;
-import com.starrocks.common.SystemIdGenerator;
+import com.starrocks.common.SystemId;
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -76,7 +76,7 @@ public class SchemaTable extends Table {
             ImmutableMap
                     .<String, Table>builder()
                     .put("tables", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.TABLES_ID,
                             "tables",
                             TableType.SCHEMA,
                             builder()
@@ -103,7 +103,7 @@ public class SchemaTable extends Table {
                                     .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
                                     .build()))
                     .put("table_privileges", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.TABLE_PRIVILEGES_ID,
                             "table_privileges",
                             TableType.SCHEMA,
                             builder()
@@ -115,7 +115,7 @@ public class SchemaTable extends Table {
                                     .column("IS_GRANTABLE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
                     .put("referential_constraints", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.REFERENTIAL_CONSTRAINTS_ID,
                             "referential_constraints",
                             TableType.SCHEMA,
                             builder()
@@ -132,7 +132,7 @@ public class SchemaTable extends Table {
                                     .column("REFERENCED_TABLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
                     .put("key_column_usage", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.KEY_COLUMN_USAGE_ID,
                             "key_column_usage",
                             TableType.SCHEMA,
                             builder()
@@ -151,7 +151,7 @@ public class SchemaTable extends Table {
                                     .column("REFERENCED_COLUMN_NAME", ScalarType.createVarchar(64))
                                     .build()))
                     .put("routines", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.ROUTINES_ID,
                             "routines",
                             TableType.SCHEMA,
                             builder()
@@ -180,7 +180,7 @@ public class SchemaTable extends Table {
                                     .column("DATABASE_COLLATION", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
                     .put("schemata", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.SCHEMATA_ID,
                             "schemata",
                             TableType.SCHEMA,
                             builder()
@@ -191,7 +191,7 @@ public class SchemaTable extends Table {
                                     .column("SQL_PATH", ScalarType.createVarchar(512))
                                     .build()))
                     .put("session_variables", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.SESSION_VARIABLES_ID,
                             "session_variables",
                             TableType.SCHEMA,
                             builder()
@@ -199,7 +199,7 @@ public class SchemaTable extends Table {
                                     .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
                                     .build()))
                     .put("global_variables", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.GLOBAL_VARIABLES_ID,
                             "global_variables",
                             TableType.SCHEMA,
                             builder()
@@ -207,7 +207,7 @@ public class SchemaTable extends Table {
                                     .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
                                     .build()))
                     .put("columns", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.COLUMNS_ID,
                             "columns",
                             TableType.SCHEMA,
                             builder()
@@ -239,7 +239,7 @@ public class SchemaTable extends Table {
                                     .column("SRS_ID", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("character_sets", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.CHARACTER_SETS_ID,
                             "character_sets",
                             TableType.SCHEMA,
                             builder()
@@ -249,7 +249,7 @@ public class SchemaTable extends Table {
                                     .column("MAXLEN", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("collations", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.COLLATIONS_ID,
                             "collations",
                             TableType.SCHEMA,
                             builder()
@@ -261,7 +261,7 @@ public class SchemaTable extends Table {
                                     .column("SORTLEN", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("table_constraints", new SchemaTable(
-                            SystemIdGenerator.getNextId(),
+                            SystemId.TABLE_CONSTRAINTS_ID,
                             "table_constraints",
                             TableType.SCHEMA,
                             builder()
@@ -274,7 +274,7 @@ public class SchemaTable extends Table {
                                     .build()))
                     .put("engines",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.ENGINES_ID,
                                     "engines",
                                     TableType.SCHEMA,
                                     builder()
@@ -287,7 +287,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("user_privileges",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.USER_PRIVILEGES_ID,
                                     "user_privileges",
                                     TableType.SCHEMA,
                                     builder()
@@ -298,7 +298,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("schema_privileges",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.SCHEMA_PRIVILEGES_ID,
                                     "schema_privileges",
                                     TableType.SCHEMA,
                                     builder()
@@ -310,7 +310,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("statistics",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.STATISTICS_ID,
                                     "statistics",
                                     TableType.SCHEMA,
                                     builder()
@@ -333,7 +333,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("triggers",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.TRIGGERS_ID,
                                     "triggers",
                                     TableType.SCHEMA,
                                     builder()
@@ -365,7 +365,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("events",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.EVENTS_ID,
                                     "events",
                                     TableType.SCHEMA,
                                     builder()
@@ -398,7 +398,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("views",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.VIEWS_ID,
                                     "views",
                                     TableType.SCHEMA,
                                     builder()
@@ -418,7 +418,7 @@ public class SchemaTable extends Table {
                     // for task
                     .put("tasks",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.TASKS_ID,
                                     "tasks",
                                     TableType.SCHEMA,
                                     builder()
@@ -431,7 +431,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("task_runs",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.TASK_RUNS_ID,
                                     "task_runs",
                                     TableType.SCHEMA,
                                     builder()
@@ -448,7 +448,7 @@ public class SchemaTable extends Table {
                                             .build()))
                     .put("materialized_views",
                             new SchemaTable(
-                                    SystemIdGenerator.getNextId(),
+                                    SystemId.MATERIALIZED_VIEWS_ID,
                                     "materialized_views",
                                     TableType.SCHEMA,
                                     builder()

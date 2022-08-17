@@ -1,6 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -36,6 +39,8 @@ import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
@@ -132,7 +137,18 @@ public class Analyzer {
             AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
-
+        public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+        public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+        public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
         @Override
         public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
             ShowUserPropertyAnalyzer.analyze(statement, session);
@@ -270,6 +286,12 @@ public class Analyzer {
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            ShowStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -485,6 +507,12 @@ public class Analyzer {
 
         @Override
         public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
+            BackupStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackupStmt(ShowBackupStmt statement, ConnectContext context) {
             BackupStmtAnalyzer.analyze(statement, context);
             return null;
         }

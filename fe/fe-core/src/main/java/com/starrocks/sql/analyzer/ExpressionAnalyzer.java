@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
@@ -34,8 +34,8 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
@@ -834,7 +834,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSysVariableDesc(SysVariableDesc node, Scope context) {
+        public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
                 VariableMgr.fillValue(session.getSessionVariable(), node);
                 if (!Strings.isNullOrEmpty(node.getName()) &&

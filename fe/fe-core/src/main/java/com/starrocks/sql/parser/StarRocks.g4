@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 grammar StarRocks;
 import StarRocksLex;
@@ -89,6 +89,9 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | ADMIN REPAIR TABLE qualifiedName partitionNames?                                      #adminRepairTable
+    | ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?                               #adminCancelRepairTable
+    | ADMIN CHECK tabletList properties                                                     #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -147,6 +150,7 @@ statement
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
     | DROP USER user                                                                        #dropUser
+    | showAuthenticationStatement                                                           #showAuthentication
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -156,6 +160,7 @@ statement
 
     // Backup Restore Satement
     | backupStatement                                                                        #backup
+    | showBackupStatement                                                                    #showBackup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -828,8 +833,8 @@ setVar
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
     | PASSWORD FOR user '=' (string | PASSWORD '(' string ')')                                  #setPassword
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
-    | AT identifierOrString '=' expression                                                      #setVariable
-    | AT AT (varType '.')? identifier '=' setExprOrDefault                                      #setVariable
+    | userVariable '=' expression                                                         #setVariable
+    | systemVariable '=' setExprOrDefault                                                       #setVariable
     ;
 
 setExprOrDefault
@@ -837,6 +842,11 @@ setExprOrDefault
     | ON
     | ALL
     | expression
+    ;
+
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1012,6 +1022,10 @@ backupStatement
     (PROPERTIES propertyList)?
     ;
 
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
+    ;
+
 // ------------------------------------------- Expression --------------------------------------------------------------
 
 /**
@@ -1083,7 +1097,8 @@ valueExpression
     ;
 
 primaryExpression
-    : variable                                                                            #var
+    : userVariable                                                                        #userVariableExpression
+    | systemVariable                                                                      #systemVariableExpression
     | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
@@ -1133,7 +1148,11 @@ aggregationFunction
     | SUM '(' DISTINCT? expression ')'
     ;
 
-variable
+userVariable
+    : AT identifierOrString
+    ;
+
+systemVariable
     : AT AT (varType '.')? identifier
     ;
 

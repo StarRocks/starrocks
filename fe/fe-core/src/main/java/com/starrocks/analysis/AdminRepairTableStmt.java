@@ -21,18 +21,12 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
+//  ADMIN REPAIR TABLE table_name partitions;
 public class AdminRepairTableStmt extends DdlStmt {
 
     private TableRef tblRef;
@@ -43,35 +37,23 @@ public class AdminRepairTableStmt extends DdlStmt {
     public AdminRepairTableStmt(TableRef tblRef) {
         this.tblRef = tblRef;
     }
+    public void setDbName(String dbName) {
+        this.tblRef.getName().setDb(dbName);
+    }
+    public void setPartitions(PartitionNames partitionNames) {
+        this.partitions.addAll(partitionNames.getPartitionNames());
+    }
+    public void setTimeoutSec(long timeoutS) {
+        this.timeoutS = timeoutS;
+    }
 
     @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        super.analyze(analyzer);
-
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
-        }
-
-        String dbName = null;
-        if (Strings.isNullOrEmpty(tblRef.getName().getDb())) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-
-        tblRef.getName().setDb(dbName);
-
-        PartitionNames partitionNames = tblRef.getPartitionNames();
-        if (partitionNames != null) {
-            if (partitionNames.isTemp()) {
-                throw new AnalysisException("Do not support (cancel)repair temporary partitions");
-            }
-            partitions.addAll(partitionNames.getPartitionNames());
-        }
-
-        timeoutS = 4 * 3600L; // default 4 hours
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAdminRepairTableStatement(this, context);
+    }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
     public String getDbName() {
@@ -82,6 +64,7 @@ public class AdminRepairTableStmt extends DdlStmt {
         return tblRef.getName().getTbl();
     }
 
+    public PartitionNames getPartitionNames() {return tblRef.getPartitionNames();}
     public List<String> getPartitions() {
         return partitions;
     }

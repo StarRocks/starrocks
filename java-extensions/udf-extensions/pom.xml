@@ -29,6 +29,12 @@
             <scope>test</scope>
         </dependency>
 
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>java-utils</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
     </dependencies>
 
     <properties>

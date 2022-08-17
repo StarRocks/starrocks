@@ -1,14 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowTableStatusStmt;
 import com.starrocks.analysis.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -80,5 +83,26 @@ public class AnalyzeShowTest {
                         "COLUMN_KEY AS Key, COLUMN_DEFAULT AS Default, EXTRA AS Extra " +
                         "FROM information_schema.COLUMNS WHERE COLUMN_NAME = 'v1'",
                 AST2SQL.toString(statement.toSelectStmt()));
+    }
+
+    @Test
+    public void testShowAuthentication() throws AnalysisException {
+        ConnectContext connectContext = ConnectContext.get();
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+
+        String sql = "SHOW AUTHENTICATION;";
+        ShowAuthenticationStmt stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        Assert.assertFalse(stmt.isAll());
+        Assert.assertEquals("root", stmt.getUserIdent().getQualifiedUser());
+
+        sql = "SHOW ALL AUTHENTICATION;";
+        stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        Assert.assertTrue(stmt.isAll());
+        Assert.assertNull(stmt.getUserIdent());
+
+        sql = "SHOW AUTHENTICATION FOR xx";
+        stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        Assert.assertFalse(stmt.isAll());
+        Assert.assertEquals("default_cluster:xx", stmt.getUserIdent().getQualifiedUser());
     }
 }

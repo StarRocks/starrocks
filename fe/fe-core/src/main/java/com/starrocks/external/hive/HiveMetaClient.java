@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -674,7 +674,7 @@ public class HiveMetaClient {
 
     public List<HdfsFileDesc> getHdfsFileDescs(String dirPath, boolean isSplittable,
                                                StorageDescriptor sd) throws Exception {
-        URI uri = new URI(dirPath.replace(" ", "%20"));
+        URI uri = new Path(dirPath).toUri();
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 

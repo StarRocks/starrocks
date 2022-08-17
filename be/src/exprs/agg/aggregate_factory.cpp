@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/agg/aggregate_factory.h"
 
@@ -785,7 +785,7 @@ public:
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
         } else if (name == "histogram") {
-            return AggregateFactory::MakeHistogramAggregationFunction<ImmediateHistogramResultPT<ArgPT>>();
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }

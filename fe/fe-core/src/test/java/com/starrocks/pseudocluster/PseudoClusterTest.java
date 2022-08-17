@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.starrocks.server.GlobalStateMgr;
@@ -39,6 +39,7 @@ public class PseudoClusterTest {
                     "create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
             Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);"));
             System.out.printf("updated %d rows\n", stmt.getUpdateCount());
+            stmt.execute("select * from test");
         } finally {
             stmt.close();
             connection.close();
