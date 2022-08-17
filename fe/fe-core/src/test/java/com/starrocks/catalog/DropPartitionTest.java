@@ -173,7 +173,7 @@ public class DropPartitionTest {
 
     @Test
     public void testNormalDropLakePartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("lake_table");
         Partition partition = table.getPartition("p1");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
@@ -194,7 +194,7 @@ public class DropPartitionTest {
 
     @Test
     public void testForceDropLakePartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("lake_table");
         Partition partition = table.getPartition("p1");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();

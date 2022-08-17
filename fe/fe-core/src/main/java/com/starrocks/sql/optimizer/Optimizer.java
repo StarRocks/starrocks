@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -135,6 +136,7 @@ public class Optimizer {
         if (!sessionVariable.isDisableJoinReorder()
                 && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
             if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
+                CTEUtils.collectCteStatistics(memo, context);
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
@@ -192,7 +194,7 @@ public class Optimizer {
         CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
-            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
+            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         }
         cleanUpMemoGroup(memo);
@@ -279,17 +281,18 @@ public class Optimizer {
 
         // compute CTE inline by costs
         if (cteContext.needOptimizeCTE()) {
-            CTEUtils.collectCteOperators(memo, context);
+            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         }
 
-        // compute CTE inline by costs
-        while (cteContext.needOptimizeCTE() && cteContext.hasInlineCTE()) {
+        // inline CTE if consume use once
+        while (cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_CTE);
-            CTEUtils.collectCteOperators(memo, context);
+            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
         }
 
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new GroupByCountDistinctRewriteRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
 
         cleanUpMemoGroup(memo);

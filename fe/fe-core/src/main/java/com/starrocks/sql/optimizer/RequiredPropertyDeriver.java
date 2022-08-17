@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -14,6 +15,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -48,6 +50,9 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public List<List<PhysicalPropertySet>> getRequiredProps(GroupExpression groupExpression) {
         requiredProperties = Lists.newArrayList();
         groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
+
+        CTEPropertyDeriver ctePropertyDeriver = new CTEPropertyDeriver();
+        groupExpression.getOp().accept(ctePropertyDeriver, null);
         return requiredProperties;
     }
 
@@ -255,7 +260,51 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(requirementsFromParent));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         return null;
+    }
+
+    private class CTEPropertyDeriver extends OperatorVisitor<Void, Void> {
+        @Override
+        public Void visitOperator(Operator node, Void context) {
+            if (requirementsFromParent.getCteProperty().isEmpty()) {
+                return null;
+            }
+
+            // Pass CTE property to children
+            for (List<PhysicalPropertySet> requiredProperty : requiredProperties) {
+                for (int i = 0; i < requiredProperty.size(); i++) {
+                    PhysicalPropertySet property = requiredProperty.get(i).copy();
+                    property.setCteProperty(requirementsFromParent.getCteProperty());
+                    requiredProperty.set(i, property);
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, Void context) {
+            visitOperator(node, context);
+            PhysicalPropertySet requiredRight = requiredProperties.get(0).get(1);
+
+            CTEProperty thisCTE = new CTEProperty(node.getCteId());
+            thisCTE.merge(requiredRight.getCteProperty());
+            PhysicalPropertySet copy = requiredRight.copy();
+
+            copy.setCteProperty(thisCTE);
+            requiredProperties.get(0).set(1, copy);
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, Void context) {
+            visitOperator(node, context);
+            CTEProperty required = requiredProperties.get(0).get(0).getCteProperty();
+            PhysicalPropertySet copy = requiredProperties.get(0).get(0).copy();
+            copy.setCteProperty(required.removeCTE(node.getCteId()));
+            requiredProperties.get(0).set(0, copy);
+            return null;
+        }
     }
 }

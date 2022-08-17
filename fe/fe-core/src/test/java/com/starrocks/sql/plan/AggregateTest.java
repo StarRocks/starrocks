@@ -163,13 +163,13 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         String queryStr = "select avg(v1), count(distinct v1) from t0 group by v1";
         String explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains(" 4:AGGREGATE (update finalize)\n" +
+        assertContains(explainString, " 4:AGGREGATE (update finalize)\n" +
                 "  |  output: avg(4: avg), count(1: v1)\n" +
                 "  |  group by: 1: v1\n" +
                 "  |  \n" +
                 "  3:AGGREGATE (merge serialize)\n" +
                 "  |  output: avg(4: avg)\n" +
-                "  |  group by: 1: v1"));
+                "  |  group by: 1: v1");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
@@ -420,14 +420,27 @@ public class AggregateTest extends PlanTestBase {
                 "lineitem group by L_LINENUMBER, day";
         String plan = getFragmentPlan(sql);
         // check use three stage aggregate
-        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  5:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(19: count)\n" +
+                "  |  group by: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "  |  \n" +
+                "  4:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    HASH_PARTITIONED: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "\n" +
+                "  3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 1: L_ORDERKEY, 18: date_trunc, 4: L_LINENUMBER");
-        assertContains(plan, "4:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY, 18: date_trunc, 4: L_LINENUMBER");
-        assertContains(plan, "5:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
-                "  |  group by: 4: L_LINENUMBER, 18: date_trunc");
+                "  |  group by: 4: L_LINENUMBER, 18: date_trunc\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 4: L_LINENUMBER, 18: date_trunc, 1: L_ORDERKEY");
         FeConstants.runningUnitTest = false;
     }
 
@@ -670,12 +683,6 @@ public class AggregateTest extends PlanTestBase {
         String queryStr = "select count(distinct k1, k2) from baseall group by k3";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("group by: 1: k1, 2: k2, 3: k3"));
-
-        queryStr = "select count(distinct k1) from baseall group by k3";
-        explainString = getFragmentPlan(queryStr);
-        Assert.assertTrue(explainString.contains("12: count"));
-        Assert.assertTrue(explainString.contains("multi_distinct_count(1: k1)"));
-        Assert.assertTrue(explainString.contains("group by: 3: k3"));
 
         queryStr = "select count(distinct k1) from baseall";
         explainString = getFragmentPlan(queryStr);
@@ -1366,7 +1373,6 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
 
-
         int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
         try {
             connectContext.getSessionVariable().setNewPlanerAggStage(3);
@@ -1402,14 +1408,16 @@ public class AggregateTest extends PlanTestBase {
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n");
 
-        sql = "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
+        sql =
+                "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: t1a <=> 13: t1a");
 
-        sql = "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
+        sql =
+                "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
         plan = getFragmentPlan(sql);
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
@@ -1467,30 +1475,30 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testGroupByConstant() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
-        String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
+        String sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
         // check four phase aggregate
         assertContains(plan, "8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(19: count)\n" +
                 "  |  group by: 18: expr");
 
-        sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
+        sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
         // check four phase aggregate
         assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
 
-        sql = "select count(distinct L_ORDERKEY + 1) from lineitem group by 1.0001";
+        sql = "select count(distinct L_PARTKEY + 1) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(20: count)\n" +
                 "  |  group by: 18: expr");
 
-        sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
+        sql = "select count(distinct L_SUPPKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 5:Project\n" +
-                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 3> : 3: L_SUPPKEY\n" +
                 "  |  <slot 18> : 1.0001\n" +
                 "  |  <slot 20> : 20: count");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
@@ -1507,12 +1515,12 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:Project\n" +
-                "  |  <slot 1> : 1: L_ORDERKEY\n" +
-                "  |  <slot 18> : 1.0001\n" +
+                "  3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY");
+                "  |  STREAMING\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY");
 
         sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
@@ -1521,28 +1529,28 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:Project\n" +
-                "  |  <slot 1> : 1: L_ORDERKEY\n" +
-                "  |  <slot 18> : 1.0001\n" +
+                "  3:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 1: L_ORDERKEY");
+                "  |  STREAMING\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n");
 
         sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: count(1: L_ORDERKEY), count(20: count)\n" +
+                "  |  output: count(1: L_ORDERKEY), sum(21: count)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:Project\n" +
-                "  |  <slot 1> : 1: L_ORDERKEY\n" +
-                "  |  <slot 18> : 1.0001\n" +
-                "  |  <slot 20> : 20: count\n" +
+                "  3:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(21: count)\n" +
+                "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: count(2: L_PARTKEY)\n" +
-                "  |  group by: 1: L_ORDERKEY");
+                "  |  group by: 18: expr, 1: L_ORDERKEY");
         FeConstants.runningUnitTest = false;
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }

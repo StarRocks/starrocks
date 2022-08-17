@@ -1240,6 +1240,24 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testShowBackup() throws Exception {
+        auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
+        TablePattern db1TablePattern = new TablePattern("db1", "*");
+        db1TablePattern.analyze();
+        starRocksAssert.getCtx().setQualifiedUser("test");
+        starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setRemoteIP("%");
+
+        auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        String sql = "SHOW BACKUP FROM db1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        PrivilegeChecker.check(statementBase, starRocksAssert.getCtx());
+        auth.revokePrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.LOAD_PRIV), true);
+        Assert.assertThrows(SemanticException.class,
+                () -> PrivilegeChecker.check(statementBase, starRocksAssert.getCtx()));
+    }
+
+    @Test
     public void testShowAuthentication() throws Exception {
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);

@@ -2518,6 +2518,10 @@ public class GlobalStateMgr {
         return this.hiveRepository;
     }
 
+    public void setHiveRepository(HiveRepository hiveRepository) {
+        this.hiveRepository = hiveRepository;
+    }
+
     public IcebergRepository getIcebergRepository() {
         return this.icebergRepository;
     }
