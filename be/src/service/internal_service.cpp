@@ -207,6 +207,15 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunk(google::protobuf::RpcC
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::RpcController* cntl_base,
+                                                           const PTabletWriterAddChunksRequest* request,
+                                                           PTabletWriterAddBatchResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                        const PTabletWriterCancelRequest* request,
                                                        PTabletWriterCancelResult* response,
