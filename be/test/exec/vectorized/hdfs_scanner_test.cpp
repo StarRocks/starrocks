@@ -422,16 +422,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -455,16 +450,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -488,16 +478,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
@@ -671,16 +656,11 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state);
-        ctx->open(_runtime_state);
-    }
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
-    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->close(_runtime_state);
-    }
 
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
@@ -904,18 +884,12 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
             param->min_max_conjunct_ctxs.push_back(ctx);
         }
 
-        for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-            ctx->prepare(_runtime_state);
-            ctx->open(_runtime_state);
-        }
+        Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+        Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
         EXPECT_TRUE(status.ok());
-
-        for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-            ctx->close(_runtime_state);
-        }
 
         scanner->disable_use_orc_sargs();
         status = scanner->open(_runtime_state);
@@ -1022,4 +996,123 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
     scanner->close(_runtime_state);
 }
 
+// =============================================================================
+
+/*
+file:         file:/Users/dirlt/repo/private/project/pyscript/starrocks/small_row_group_data.parquet 
+creator:      parquet-cpp-arrow version 7.0.0 
+extra:        ARROW:schema = /////9gAAAAQAAAAAAAKAAwABgAFAAgACgAAAAABBAAMAAAACAAIAAAABAAIAAAABAAAAAMAAABwAAAAMAAAAAQAAACs////AAABBRAAAAAYAAAABAAAAAAAAAACAAAAYzMAAAQABAAEAAAA1P///wAAAQIQAAAAFAAAAAQAAAAAAAAAAgAAAGMyAADE////AAAAAUAAAAAQABQACAAGAAcADAAAABAAEAAAAAAAAQIQAAAAHAAAAAQAAAAAAAAAAgAAAGMxAAAIAAwACAAHAAgAAAAAAAABQAAAAAAAAAA= 
+
+file schema:  schema 
+--------------------------------------------------------------------------------
+c1:           OPTIONAL INT64 R:0 D:1
+c2:           OPTIONAL INT64 R:0 D:1
+c3:           OPTIONAL BINARY O:UTF8 R:0 D:1
+
+row group 1:  RC:5120 TS:1197023 OFFSET:4 
+--------------------------------------------------------------------------------
+c1:            INT64 SNAPPY DO:4 FPO:20522 SZ:28928/49384/1.71 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c2:            INT64 SNAPPY DO:29030 FPO:53541 SZ:32921/49384/1.50 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c3:            BINARY SNAPPY DO:62051 FPO:134420 SZ:81159/1098255/13.53 VC:5120 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+
+...
+
+row group 20: RC:2720 TS:638517 OFFSET:2732382 
+--------------------------------------------------------------------------------
+c1:            INT64 SNAPPY DO:2732382 FPO:2743296 SZ:15077/25937/1.72 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c2:            INT64 SNAPPY DO:2747562 FPO:2760616 SZ:17217/25937/1.51 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:2720 ENC:PLAIN,PLAIN_DICTIONARY,RLE
+ */
+
+TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    READ_SCANNER_ROWS(scanner, 100000);
+
+    scanner->close(_runtime_state);
+}
+
+// =============================================================================
+
+/*
+file:                  file:/Users/dirlt/Downloads/part-00000-4a878ed5-fa12-4e43-a164-1650976be336-c000.snappy.parquet
+creator:               parquet-mr version 1.10.1 (build a89df8f9932b6ef6633d06069e50c9b7970bebd1)
+extra:                 org.apache.spark.version = 2.4.7
+extra:                 org.apache.spark.sql.parquet.row.metadata = {"type":"struct","fields":[{"name":"vin","type":"string","nullable":true,"metadata":{}},{"name":"log_domain","type":"string","nullable":true,"metadata":{}},{"name":"file_name","type":"string","nullable":true,"metadata":{}},{"name":"is_collection","type":"integer","nullable":false,"metadata":{}},{"name":"is_center","type":"integer","nullable":false,"metadata":{}},{"name":"is_cloud","type":"integer","nullable":false,"metadata":{}},{"name":"collection_time","type":"string","nullable":false,"metadata":{}},{"name":"center_time","type":"string","nullable":false,"metadata":{}},{"name":"cloud_time","type":"string","nullable":false,"metadata":{}},{"name":"error_collection_tips","type":"string","nullable":false,"metadata":{}},{"name":"error_center_tips","type":"string","nullable":false,"metadata":{}},{"name":"error_cloud_tips","type":"string","nullable":false,"metadata":{}},{"name":"error_collection_time","type":"string","nullable":false,"metadata":{}},{"name":"error_center_time","type":"string","nullable":false,"metadata":{}},{"name":"error_cloud_time","type":"string","nullable":false,"metadata":{}},{"name":"original_time","type":"string","nullable":false,"metadata":{}},{"name":"is_original","type":"integer","nullable":false,"metadata":{}}]}
+
+file schema:           spark_schema
+--------------------------------------------------------------------------------
+vin:                   OPTIONAL BINARY O:UTF8 R:0 D:1
+log_domain:            OPTIONAL BINARY O:UTF8 R:0 D:1
+file_name:             OPTIONAL BINARY O:UTF8 R:0 D:1
+is_collection:         REQUIRED INT32 R:0 D:0
+is_center:             REQUIRED INT32 R:0 D:0
+is_cloud:              REQUIRED INT32 R:0 D:0
+collection_time:       REQUIRED BINARY O:UTF8 R:0 D:0
+center_time:           REQUIRED BINARY O:UTF8 R:0 D:0
+cloud_time:            REQUIRED BINARY O:UTF8 R:0 D:0
+error_collection_tips: REQUIRED BINARY O:UTF8 R:0 D:0
+error_center_tips:     REQUIRED BINARY O:UTF8 R:0 D:0
+error_cloud_tips:      REQUIRED BINARY O:UTF8 R:0 D:0
+error_collection_time: REQUIRED BINARY O:UTF8 R:0 D:0
+error_center_time:     REQUIRED BINARY O:UTF8 R:0 D:0
+error_cloud_time:      REQUIRED BINARY O:UTF8 R:0 D:0
+original_time:         REQUIRED BINARY O:UTF8 R:0 D:0
+is_original:           REQUIRED INT32 R:0 D:0
+*/
+
+TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {"is_cloud", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                {""}};
+
+    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    ObjectPool* pool = &_pool;
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // select vin,is_cloud from table where is_cloud >= '0';
+    auto* min_max_tuple_desc = _create_tuple_desc(min_max_descs);
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "0");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+    }
+
+    param->min_max_tuple_desc = min_max_tuple_desc;
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(!status.ok());
+    scanner->close(_runtime_state);
+}
 } // namespace starrocks::vectorized

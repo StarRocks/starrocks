@@ -192,7 +192,7 @@ public:
     void close(RuntimeState* runtime_state) noexcept;
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void fianlize();
+    void finalize();
 
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }

@@ -218,11 +218,6 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     DCHECK(expr != nullptr);
     if (parent != nullptr) {
         parent->add_child(expr);
-    } else {
-        DCHECK(root_expr != nullptr);
-        DCHECK(ctx != nullptr);
-        *root_expr = expr;
-        *ctx = pool->add(new ExprContext(expr));
     }
     for (int i = 0; i < num_children; i++) {
         *node_idx += 1;
@@ -232,6 +227,12 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
         if (*node_idx >= nodes.size()) {
             return Status::InternalError("Failed to reconstruct expression tree from thrift.");
         }
+    }
+    if (parent == nullptr) {
+        DCHECK(root_expr != nullptr);
+        DCHECK(ctx != nullptr);
+        *root_expr = expr;
+        *ctx = pool->add(new ExprContext(expr));
     }
     return Status::OK();
 }
