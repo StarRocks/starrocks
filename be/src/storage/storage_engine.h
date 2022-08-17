@@ -188,6 +188,8 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void do_manual_compact(bool force_compact);
+
 protected:
     static StorageEngine* _s_instance;
     int32_t _effective_cluster_id;
@@ -211,8 +213,6 @@ private:
     void _clean_unused_txns();
 
     void _clean_unused_rowset_metas();
-
-    void _do_manual_compact();
 
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 

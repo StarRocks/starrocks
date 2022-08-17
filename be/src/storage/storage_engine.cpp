@@ -784,12 +784,12 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
-    _do_manual_compact();
+    do_manual_compact(false);
 
     return res;
 }
 
-void StorageEngine::_do_manual_compact() {
+void StorageEngine::do_manual_compact(bool force_compact) {
     auto data_dirs = get_stores();
     for (auto data_dir : data_dirs) {
         uint64_t live_sst_files_size_before = 0;
@@ -797,7 +797,7 @@ void StorageEngine::_do_manual_compact() {
             LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
             continue;
         }
-        if (live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
+        if (force_compact || live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
             Status s = data_dir->get_meta()->compact();
             if (!s.ok()) {
                 LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
