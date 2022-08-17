@@ -69,6 +69,26 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testParser() {
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1\n" + "WHERE k1 > 100 and k2 like \"%starrocks%\",\n" + "COLUMNS(k1, k2, k3 = k1 + k2),\n" + "COLUMNS TERMINATED BY \"\\t\",\n" + "PARTITION(p1,p2) \n" + "PROPERTIES\n" + "(\n" + "    \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"20\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Asia/Shanghai\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n" + "    \"kafka_topic\" = \"topictest\"\n" + ");";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        List<String> partitionNames = new ArrayList<>();
+        partitionNames.add("p1");
+        partitionNames.add("p2");
+        Assert.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
+        Assert.assertEquals("\t", createRoutineLoadStmt.getRoutineLoadDesc().getColumnSeparator().getColumnSeparator());
+        Assert.assertEquals(partitionNames,
+                createRoutineLoadStmt.getRoutineLoadDesc().getPartitionNames().getPartitionNames());
+        Assert.assertEquals(3, createRoutineLoadStmt.getDesiredConcurrentNum());
+        Assert.assertEquals(20, createRoutineLoadStmt.getMaxBatchIntervalS());
+        Assert.assertEquals("kafkahost1:9092,kafkahost2:9092", createRoutineLoadStmt.getKafkaBrokerList());
+        Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
+        Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
+    }
+
+    @Test
     public void testAnalyzeWithDuplicateProperty() throws UserException {
         String jobName = "job1";
         String dbName = "db1";
