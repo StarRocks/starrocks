@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -163,18 +162,15 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 }
 
                 // before we compute the property, here need to make sure that the plan is legal
-                ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context);
-                curTotalCost = childOutputPropertyGuarantor
-                        .enforceLegalChildOutputProperty(context.getRequiredProperty(), groupExpression,
-                                childrenBestExprList, requiredProperties, childrenOutputProperties, curTotalCost);
+                ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context,
+                        groupExpression,
+                        context.getRequiredProperty(),
+                        childrenBestExprList,
+                        requiredProperties,
+                        childrenOutputProperties,
+                        curTotalCost);
+                curTotalCost = childOutputPropertyGuarantor.enforceLegalChildOutputProperty();
 
-                // compute the output property
-                OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver();
-                Pair<PhysicalPropertySet, Double> outputPropertyWithCost = outputPropertyDeriver
-                        .getOutputPropertyWithCost(context.getRequiredProperty(), groupExpression,
-                                childrenOutputProperties, curTotalCost);
-                PhysicalPropertySet outputProperty = outputPropertyWithCost.first;
-                curTotalCost = outputPropertyWithCost.second;
                 if (curTotalCost > context.getUpperBoundCost()) {
                     break;
                 }
@@ -185,6 +181,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                     return;
                 }
 
+                // compute the output property
+                OutputPropertyDeriver outputPropertyDeriver = new OutputPropertyDeriver(groupExpression,
+                        context.getRequiredProperty(), childrenOutputProperties);
+                PhysicalPropertySet outputProperty = outputPropertyDeriver.getOutputProperty();
                 recordCostsAndEnforce(outputProperty, requiredProperties);
             }
             // Reset child idx and total cost
