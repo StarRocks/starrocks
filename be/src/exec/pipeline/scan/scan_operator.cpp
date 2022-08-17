@@ -58,9 +58,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
 
-    _io_thread_submit_tasks_counter = ADD_COUNTER(_unique_metrics, "IOThreadSubmittedTasks", TUnit::UNIT);
-    _exec_thread_submit_tasks_counter = ADD_COUNTER(_unique_metrics, "ExecThreadSubmittedTasks", TUnit::UNIT);
-
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -192,7 +189,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
 
     _peak_buffer_size_counter->set(buffer_size());
 
-    RETURN_IF_ERROR(_try_to_trigger_next_scan(state, false));
+    RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
 
     vectorized::ChunkPtr res = get_chunk_from_buffer();
     if (res == nullptr) {
@@ -211,7 +208,7 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
 
-Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state, bool from_io_thread) {
+Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
@@ -219,9 +216,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state, bool from_io
         return Status::OK();
     }
 
-    std::lock_guard<std::mutex> guard(_submit_mutex);
-
-    int num_submitted_tasks = 0;
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
@@ -237,13 +231,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state, bool from_io
         } else {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
         }
-        ++num_submitted_tasks;
-    }
-
-    if (from_io_thread) {
-        _io_thread_submit_tasks_counter->update(num_submitted_tasks);
-    } else {
-        _exec_thread_submit_tasks_counter->update(num_submitted_tasks);
     }
 
     return Status::OK();
@@ -355,8 +342,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
 
             QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
-
-            _try_to_trigger_next_scan(state, true);
         }
     };
 

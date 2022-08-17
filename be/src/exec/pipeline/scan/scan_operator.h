@@ -78,7 +78,7 @@ private:
     // and all cached chunk of this morsel has benn read out
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
-    Status _try_to_trigger_next_scan(RuntimeState* state, bool from_io_thread);
+    Status _try_to_trigger_next_scan(RuntimeState* state);
     void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
@@ -131,8 +131,6 @@ private:
     std::atomic_int64_t _last_scan_rows_num = 0;
     std::atomic_int64_t _last_scan_bytes = 0;
 
-    mutable std::mutex _submit_mutex; // Avoid concurrent submit task.
-
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
@@ -143,9 +141,6 @@ private:
     RuntimeProfile::Counter* _morsels_counter = nullptr;
     RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
     RuntimeProfile::Counter* _submit_task_counter = nullptr;
-
-    RuntimeProfile::Counter* _io_thread_submit_tasks_counter = nullptr;
-    RuntimeProfile::Counter* _exec_thread_submit_tasks_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
