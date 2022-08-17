@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,7 +58,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     // children output property
     private List<PhysicalPropertySet> childrenOutputProperties;
 
-    public PhysicalPropertySet getOutputProperty(
+    private PhysicalPropertySet getOutputProperty(
             PhysicalPropertySet requirements,
             GroupExpression groupExpression,
             List<PhysicalPropertySet> childrenOutputProperties) {
@@ -76,9 +78,22 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return Pair.create(outputProperty, curTotalCost);
     }
 
+    @NotNull
+    private PhysicalPropertySet mergeCTEProperty(PhysicalPropertySet output) {
+        // set cte property
+        CTEProperty outputCte = new CTEProperty();
+        outputCte.merge(output.getCteProperty());
+        for (PhysicalPropertySet childrenOutputProperty : childrenOutputProperties) {
+            outputCte.merge(childrenOutputProperty.getCteProperty());
+        }
+        output = output.copy();
+        output.setCteProperty(outputCte);
+        return output;
+    }
+
     @Override
     public PhysicalPropertySet visitOperator(Operator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return mergeCTEProperty(PhysicalPropertySet.EMPTY);
     }
 
     private PhysicalPropertySet computeColocateJoinOutputProperty(HashDistributionSpec leftScanDistributionSpec,
@@ -139,12 +154,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
-        return visitPhysicalJoin(node, context);
+        return mergeCTEProperty(visitPhysicalJoin(node, context));
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
-        return visitPhysicalJoin(node, context);
+        return mergeCTEProperty(visitPhysicalJoin(node, context));
     }
 
     @Override
@@ -152,7 +167,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return childrenOutputProperties.get(0);
     }
 
-    public PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
+    private PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
@@ -311,7 +326,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         } else {
             outputProperty = PhysicalPropertySet.EMPTY;
         }
-        return outputProperty;
+        return mergeCTEProperty(outputProperty);
     }
 
     @Override
@@ -331,7 +346,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             // Use child distribution
             distributionProperty = childrenOutputProperties.get(0).getDistributionProperty();
         }
-        return new PhysicalPropertySet(distributionProperty, sortProperty);
+        return new PhysicalPropertySet(distributionProperty, sortProperty,
+                childrenOutputProperties.get(0).getCteProperty());
     }
 
     @Override
@@ -355,13 +371,19 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @Override
     public PhysicalPropertySet visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
-        return createPropertySetByDistribution(gather);
+        DistributionProperty distributionProperty = new DistributionProperty(gather);
+        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY,
+                childrenOutputProperties.get(0).getCteProperty());
+
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
-        return childrenOutputProperties.get(1);
+        PhysicalPropertySet output = childrenOutputProperties.get(1).copy();
+        CTEProperty cteProperty = childrenOutputProperties.get(1).getCteProperty().removeCTE(node.getCteId());
+        output.setCteProperty(cteProperty);
+        return output;
     }
 
     @Override
@@ -372,12 +394,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+                new CTEProperty(node.getCteId()));
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return childrenOutputProperties.get(0);
     }
 
     @Override

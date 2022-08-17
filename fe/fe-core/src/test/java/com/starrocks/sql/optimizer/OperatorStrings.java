@@ -452,5 +452,10 @@ public class OperatorStrings {
             String sb = "CTEConsumer(cteid=" + op.getCteId() + ")";
             return new OperatorStr(sb, step, Collections.emptyList());
         }
+
+        @Override
+        public OperatorStr visitPhysicalNoCTE(OptExpression optExpression, Integer step) {
+            return visit(optExpression.getInputs().get(0), step);
+        }
     }
 }

@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
@@ -33,7 +32,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatsConstants;
 
@@ -165,18 +163,6 @@ public class CostModel {
             // respect user hint
             int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
             return aggStage == 1 || aggStage == 0;
-        }
-
-        public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregateOperator node) {
-            if (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_COUNT) ||
-                    aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_SUM)) {
-                return true;
-            }
-            // only one stage agg node has not rewrite distinct function here
-            return node.getType().isGlobal() && !node.isSplit() &&
-                    (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
-                            aggOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) &&
-                    aggOperator.isDistinct();
         }
 
         @Override
@@ -329,14 +315,15 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-            return CostEstimate.zero();
+            // memory cost
+            Statistics cteStatistics = context.getChildStatistics(0);
+            double ratio = ConnectContext.get().getSessionVariable().getCboCTERuseRatio();
+            return CostEstimate.of(0, cteStatistics.getComputeSize() * ratio, 0);
         }
 
         @Override
         public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-            Statistics statistics = context.getStatistics();
-            Preconditions.checkNotNull(statistics);
-            return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
+            return CostEstimate.zero();
         }
 
         @Override
