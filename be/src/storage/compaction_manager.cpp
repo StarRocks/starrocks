@@ -17,6 +17,10 @@ CompactionManager::CompactionManager() : _next_task_id(0) {
     DCHECK(st.ok());
 }
 
+CompactionManager::~CompactionManager() {
+    _update_candidate_pool->wait();
+}
+
 void CompactionManager::init_max_task_num() {
     if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
         _max_task_num = static_cast<int32_t>(
