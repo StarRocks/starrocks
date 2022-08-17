@@ -30,7 +30,7 @@ public class Utils {
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),]+)>";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
-    public static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
+    private static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, false);
