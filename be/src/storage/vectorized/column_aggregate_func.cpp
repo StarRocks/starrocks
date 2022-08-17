@@ -29,7 +29,7 @@ struct SliceState {
     std::vector<uint8_t> data;
     bool has_value = false;
 
-    Slice slice() { return Slice(data.data(), data.size()); }
+    Slice slice() { return {data.data(), data.size()}; }
 
     void update(const Slice& s) {
         has_value = true;
@@ -294,7 +294,7 @@ public:
     void update_aggregate(Column* agg) override {
         _aggregate_column = agg;
 
-        NullableColumn* n = down_cast<NullableColumn*>(agg);
+        auto* n = down_cast<NullableColumn*>(agg);
         _child->update_aggregate(n->data_column().get());
         _null_child->update_aggregate(n->null_column().get());
 
@@ -318,6 +318,18 @@ public:
     void reset() override {
         _child->reset();
         _null_child->reset();
+    }
+
+    void append_data(Column* agg) override {
+        LOG(FATAL) << "append_data is not implemented in ReplaceNullableColumnAggregator";
+    }
+
+    void aggregate_impl(int row, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_impl is not implemented in ReplaceNullableColumnAggregator";
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_batch_impl is not implemented in ReplaceNullableColumnAggregator";
     }
 
 private:
