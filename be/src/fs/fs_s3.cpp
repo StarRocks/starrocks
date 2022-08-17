@@ -108,12 +108,21 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     S3ClientPtr client;
     const auto& access_key_id = config::object_storage_access_key_id;
     const auto& secret_access_key = config::object_storage_secret_access_key;
+    bool path_style_access = config::object_storage_endpoint_path_style_access;
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
-        client = std::make_shared<Aws::S3::S3Client>(credentials, config);
+        client = std::make_shared<Aws::S3::S3Client>(credentials, config,
+                                                     /* signPayloads */
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     /* useVirtualAddress */
+                                                     !path_style_access);
     } else {
         // if not cred provided, we can use default cred in aws profile.
-        client = std::make_shared<Aws::S3::S3Client>(config);
+        client = std::make_shared<Aws::S3::S3Client>(config,
+                                                     /* signPayloads */
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     /* useVirtualAddress */
+                                                     !path_style_access);
     }
 
     if (UNLIKELY(_items >= kMaxItems)) {
