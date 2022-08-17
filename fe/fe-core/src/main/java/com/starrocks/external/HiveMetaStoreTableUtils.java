@@ -154,8 +154,13 @@ public class HiveMetaStoreTableUtils {
                 if (!type.isArrayType()) {
                     return false;
                 }
-                return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
-                        ((ArrayType) type).getItemType());
+                if (type.equals(Type.UNKNOWN_TYPE)) {
+                    return Utils.HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
+                            .collect(Collectors.toList()).size() != 0;
+                } else {
+                    return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
+                            ((ArrayType) type).getItemType());
+                }
             default:
                 // for BINARY and other types, we transfer it to UNKNOWN_TYPE
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
