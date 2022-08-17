@@ -1305,6 +1305,21 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
             sourceProperties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, olapTable.isInMemory().toString());
         }
+        // enable_storage_cache
+        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)) {
+            if (olapTable.isLakeTable()) {
+                sourceProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
+                        String.valueOf(((LakeTable) olapTable).getTableProperty().getStorageInfo().isEnableStorageCache()));
+            }
+        }
+        // storage_cache_ttl
+        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)) {
+            if (olapTable.isLakeTable()) {
+                sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
+                        String.valueOf(((LakeTable) olapTable).getTableProperty().getStorageInfo().getStorageCacheTtlS()));
+            }
+        }
+
         Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
         if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
