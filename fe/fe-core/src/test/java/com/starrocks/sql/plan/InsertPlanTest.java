@@ -705,11 +705,9 @@ public class InsertPlanTest extends PlanTestBase {
             // KesType is AGG_KEYS
             String sql = "explain insert into baseall select * from baseall limit 1";
             String plan = getInsertExecPlan(sql);
-            assertContains(plan, "   STREAM DATA SINK\n" +
+            assertContains(plan, "STREAM DATA SINK\n" +
                     "    EXCHANGE ID: 01\n" +
-                    "    UNPARTITIONED\n" +
-                    "\n" +
-                    "  0:OlapScanNode");
+                    "    UNPARTITIONED");
 
             InsertPlanner.enableSingleReplicationShuffle = false;
             FeConstants.runningUnitTest = false;
