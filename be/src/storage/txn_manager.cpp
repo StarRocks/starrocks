@@ -41,7 +41,7 @@
 
 namespace starrocks {
 
-TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
+TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num)
         : _txn_map_shard_size(txn_map_shard_size), _txn_shard_size(txn_shard_size) {
     DCHECK_GT(_txn_map_shard_size, 0);
     DCHECK_GT(_txn_shard_size, 0);
@@ -50,7 +50,10 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
-    auto st = ThreadPoolBuilder("wal-flush").set_min_threads(1).set_max_threads(32).set_idle_timeout(MonoDelta::FromSeconds(30))
+    auto st = ThreadPoolBuilder("meta-flush")
+                      .set_min_threads(1)
+                      .set_max_threads(store_num * 2)
+                      .set_idle_timeout(MonoDelta::FromSeconds(30))
                       .build(&_thread_pool_flush);
     CHECK(st.ok());
 }

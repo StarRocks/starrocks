@@ -67,7 +67,7 @@ struct TabletTxnInfo {
 // txn manager is used to manage mapping between tablet and txns
 class TxnManager {
 public:
-    TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size);
+    TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num);
 
     ~TxnManager() = default;
 
