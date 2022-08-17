@@ -22,6 +22,10 @@ inline bool is_txn_log(std::string_view file_name) {
     return HasPrefixString(file_name, "txn_");
 }
 
+inline bool is_txn_vlog(std::string_view file_name) {
+    return HasPrefixString(file_name, "vtxn_");
+}
+
 inline bool is_tablet_metadata(std::string_view file_name) {
     return HasPrefixString(file_name, "tbl_");
 }
@@ -32,6 +36,10 @@ inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) 
 
 inline std::string txn_log_filename(int64_t tablet_id, int64_t txn_id) {
     return fmt::format("txn_{:016X}_{:016X}", tablet_id, txn_id);
+}
+
+inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
+    return fmt::format("vtxn_{:016X}_{:016X}", tablet_id, version);
 }
 
 // Return value: <tablet id, tablet version>

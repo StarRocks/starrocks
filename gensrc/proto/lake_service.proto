@@ -88,8 +88,20 @@ message TabletStatResponse {
     repeated TabletStat tablet_stats = 1;
 }
 
+// Rename file txn_{tablet_id}_{txn_id} to vtxn_{tablet_id}_{version}
+message PublishLogVersionRequest {
+    repeated int64 tablet_ids = 1;
+    optional int64 txn_id = 2;
+    optional int64 version = 3;
+}
+
+message PublishLogVersionResponse {
+    repeated int64 failed_tablets = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
+    rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);

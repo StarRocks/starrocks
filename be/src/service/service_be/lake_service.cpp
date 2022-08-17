@@ -21,44 +21,27 @@ DIAGNOSTIC_POP
 
 namespace starrocks {
 
-#ifndef BE_TEST
-struct PublishVersionContext {
+template <typename Request, typename Response>
+struct RpcContext {
     ::starrocks::ExecEnv* _env;
-    ::google::protobuf::Closure* _done;
-    const ::starrocks::lake::PublishVersionRequest* _request;
-    ::starrocks::lake::PublishVersionResponse* _response;
-    // response_mtx protects accesses to response.
-    bthread::Mutex _response_mtx;
-
-    PublishVersionContext(::starrocks::ExecEnv* env, ::google::protobuf::Closure* done,
-                          const ::starrocks::lake::PublishVersionRequest* request,
-                          ::starrocks::lake::PublishVersionResponse* response)
-            : _env(env), _done(done), _request(request), _response(response), _response_mtx() {}
-
-    ~PublishVersionContext() { _done->Run(); }
-};
-#else
-// For unit tests
-struct PublishVersionContext {
-    ::starrocks::ExecEnv* _env;
-    const ::starrocks::lake::PublishVersionRequest* _request;
-    ::starrocks::lake::PublishVersionResponse* _response;
+    const Request* _request;
+    Response* _response;
     // response_mtx protects accesses to response.
     bthread::Mutex _response_mtx;
     CountDownLatch _latch;
 
-    PublishVersionContext(::starrocks::ExecEnv* env, ::google::protobuf::Closure* /*done*/,
-                          const ::starrocks::lake::PublishVersionRequest* request,
-                          ::starrocks::lake::PublishVersionResponse* response)
-            : _env(env), _request(request), _response(response), _response_mtx(), _latch(request->tablet_ids_size()) {}
+    RpcContext(::starrocks::ExecEnv* env, const Request* request, Response* response, int latchCount)
+            : _env(env), _request(request), _response(response), _response_mtx(), _latch(latchCount) {}
 
-    ~PublishVersionContext() = default;
+    ~RpcContext() = default;
 
     void count_down() { _latch.count_down(); }
 
-    void wait() { _latch.wait(); }
+    void wait() const { _latch.wait(); }
 };
-#endif // BE_TEST
+
+using PublishVersionContext = RpcContext<lake::PublishVersionRequest, lake::PublishVersionResponse>;
+using PublishLogVersionContext = RpcContext<lake::PublishLogVersionRequest, lake::PublishLogVersionResponse>;
 
 class PublishVersionTask : public Runnable {
 public:
@@ -89,11 +72,36 @@ inline void PublishVersionTask::run() {
         std::lock_guard l(_context->_response_mtx);
         _context->_response->add_failed_tablets(_tablet_id);
     }
-#ifdef BE_TEST
     _context->count_down();
-#endif
-    // Will call `_context->done->Run()` if this is the ref count of _context is 1.
-    _context.reset();
+}
+
+class PublishLogVersionTask : public Runnable {
+public:
+    PublishLogVersionTask(int64_t tablet_id, std::shared_ptr<PublishLogVersionContext> context)
+            : _tablet_id(tablet_id), _context(std::move(context)) {}
+
+    ~PublishLogVersionTask() override = default;
+
+    void run() override;
+
+    DISALLOW_COPY_AND_MOVE(PublishLogVersionTask);
+
+private:
+    int64_t _tablet_id;
+    std::shared_ptr<PublishLogVersionContext> _context;
+};
+
+inline void PublishLogVersionTask::run() {
+    auto txn_id = _context->_request->txn_id();
+    auto version = _context->_request->version();
+
+    auto st = _context->_env->lake_tablet_manager()->publish_log_version(_tablet_id, txn_id, version);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to rename txn log. tablet_id=" << _tablet_id << " txn_id=" << txn_id << ": " << st;
+        std::lock_guard l(_context->_response_mtx);
+        _context->_response->add_failed_tablets(_tablet_id);
+    }
+    _context->count_down();
 }
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
@@ -121,7 +129,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
 
     auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
-    auto context = std::make_shared<PublishVersionContext>(_env, guard.release(), request, response);
+    auto context = std::make_shared<PublishVersionContext>(_env, request, response, request->tablet_ids_size());
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = std::make_shared<PublishVersionTask>(tablet_id, context);
@@ -133,9 +141,43 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         }
     }
 
-#ifdef BE_TEST
     context->wait();
-#endif
+}
+
+void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* controller,
+                                     const ::starrocks::lake::PublishLogVersionRequest* request,
+                                     ::starrocks::lake::PublishLogVersionResponse* response,
+                                     ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (request->has_txn_id() == 0) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto context = std::make_shared<PublishLogVersionContext>(_env, request, response, request->tablet_ids_size());
+
+    for (auto tablet_id : request->tablet_ids()) {
+        auto task = std::make_shared<PublishLogVersionTask>(tablet_id, context);
+        auto st = thread_pool->submit(std::move(task));
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit publish version task: " << st;
+            std::lock_guard l(context->_response_mtx);
+            response->add_failed_tablets(tablet_id);
+        }
+    }
+
+    context->wait();
 }
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
