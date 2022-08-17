@@ -98,6 +98,10 @@ public class ListPartitionPruner implements PartitionPruner {
         return noEvalConjuncts;
     }
 
+    public List<ScalarOperator> getPartitionConjuncts() {
+        return partitionConjuncts;
+    }
+
     /**
      * Return a list of partitions left after applying the conjuncts on partition columns.
      * Null is returned if all partitions.
