@@ -160,6 +160,7 @@ statement
 
     // Backup Restore Satement
     | backupStatement                                                                        #backup
+    | showBackupStatement                                                                    #showBackup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -1019,6 +1020,10 @@ backupStatement
     TO identifier
     ON '(' tableDesc (',' tableDesc) * ')'
     (PROPERTIES propertyList)?
+    ;
+
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------

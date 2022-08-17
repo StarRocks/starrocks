@@ -40,6 +40,7 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
 import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.ShowUserPropertyStmt;
@@ -506,6 +507,12 @@ public class Analyzer {
 
         @Override
         public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
+            BackupStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackupStmt(ShowBackupStmt statement, ConnectContext context) {
             BackupStmtAnalyzer.analyze(statement, context);
             return null;
         }

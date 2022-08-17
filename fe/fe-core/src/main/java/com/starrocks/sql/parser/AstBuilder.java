@@ -144,6 +144,7 @@ import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.ShowAlterStmt;
 import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowCharsetStmt;
 import com.starrocks.analysis.ShowCollationStmt;
@@ -2990,6 +2991,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String repoName = ((Identifier) visit(context.identifier())).getValue();
         return new BackupStmt(labelName, repoName, tblRefs, properties);
+    }
+
+    @Override
+    public ParseNode visitShowBackupStatement(StarRocksParser.ShowBackupStatementContext context) {
+        if (context.identifier() == null) {
+            return new ShowBackupStmt(null);
+        }
+        return new ShowBackupStmt(((Identifier) visit(context.identifier())).getValue());
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
