@@ -22,17 +22,19 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterRoutineLoadAnalyzer;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 /*
@@ -42,14 +44,19 @@ import java.util.Map;
 
 public class AlterRoutineLoadStmtTest {
 
-    private Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @Mocked
     private Auth auth;
 
     @Before
+<<<<<<< HEAD
     public void setUp() {
         analyzer = AccessTestUtil.fetchAdminAnalyzer();
+=======
+    public void setUp() throws IOException {
+        connectContext = UtFrameUtils.createDefaultCtx();
+>>>>>>> alterroutineload test
 
         new Expectations() {
             {
@@ -69,6 +76,24 @@ public class AlterRoutineLoadStmtTest {
     }
 
     @Test
+    public void testParser() {
+        String sql = "alter ROUTINE LOAD for testdb.routine_name\n" + "WHERE k1 > 1 and k2 like \"%starrocks%\",\n" + "COLUMNS(k1, k2, k4 = k1 + k2),\n" + "COLUMNS TERMINATED BY \"\\t\",\n" + "PARTITION(p1,p2) \n" + "PROPERTIES\n" + "(\n" + "\t\"max_batch_rows\"=\"200000\",\n" + "\t\"max_error_number\"=\"1\",\n" + "    \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"21\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Africa/Abidjan\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_partitions\" = \"0, 1, 2\",\n" + "    \"kafka_offsets\" = \"100, 200, 100\",\n" + "    \"property.group.id\" = \"group1\"\n" + ");";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
+
+        Assert.assertEquals(6, stmt.getAnalyzedJobProperties().size());
+        Assert.assertTrue(
+                stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+        Assert.assertTrue(
+                stmt.getAnalyzedJobProperties().containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        Assert.assertTrue(stmt.hasDataSourceProperty());
+        Assert.assertEquals(1, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
+        Assert.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
+        Assert.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
+    }
+
+    @Test
     public void testNormal() {
         {
             Map<String, String> jobProperties = Maps.newHashMap();
@@ -84,11 +109,7 @@ public class AlterRoutineLoadStmtTest {
                     typeName, dataSourceProperties);
             AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"),
                     null, jobProperties, routineLoadDataSourceProperties);
-            try {
-                stmt.analyze(analyzer);
-            } catch (UserException e) {
-                Assert.fail();
-            }
+            AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
 
             Assert.assertEquals(2, stmt.getAnalyzedJobProperties().size());
             Assert.assertTrue(
@@ -103,11 +124,11 @@ public class AlterRoutineLoadStmtTest {
         }
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoPproperties() throws AnalysisException, UserException {
+    @Test
+    public void testNoPproperties() {
         AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                 Maps.newHashMap(), new RoutineLoadDataSourceProperties());
-        stmt.analyze(analyzer);
+        AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
     }
 
     @Test
@@ -118,12 +139,10 @@ public class AlterRoutineLoadStmtTest {
             AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, new RoutineLoadDataSourceProperties());
             try {
-                stmt.analyze(analyzer);
+                AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (RuntimeException e) {
                 Assert.assertTrue(e.getMessage().contains("format is invalid property"));
-            } catch (UserException e) {
-                Assert.fail();
             }
         }
 
@@ -139,12 +158,10 @@ public class AlterRoutineLoadStmtTest {
                     jobProperties, routineLoadDataSourceProperties);
 
             try {
-                stmt.analyze(analyzer);
+                AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (RuntimeException e) {
                 Assert.assertTrue(e.getMessage().contains("kafka_topic is invalid kafka custom property"));
-            } catch (UserException e) {
-                Assert.fail();
             }
         }
 
@@ -159,12 +176,10 @@ public class AlterRoutineLoadStmtTest {
             AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
             try {
-                stmt.analyze(analyzer);
+                AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (RuntimeException e) {
                 Assert.assertTrue(e.getMessage().contains("Partition and offset must be specified at the same time"));
-            } catch (UserException e) {
-                Assert.fail();
             }
         }
 
@@ -180,12 +195,10 @@ public class AlterRoutineLoadStmtTest {
             AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
             try {
-                stmt.analyze(analyzer);
+                AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (RuntimeException e) {
                 Assert.assertTrue(e.getMessage().contains("Partitions number should be equals to offsets number"));
-            } catch (UserException e) {
-                Assert.fail();
             }
         }
 
@@ -200,12 +213,10 @@ public class AlterRoutineLoadStmtTest {
             AlterRoutineLoadStmt stmt = new AlterRoutineLoadStmt(new LabelName("db1", "label1"), null,
                     jobProperties, routineLoadDataSourceProperties);
             try {
-                stmt.analyze(analyzer);
+                AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (RuntimeException e) {
                 Assert.assertTrue(e.getMessage().contains("Missing kafka partition info"));
-            } catch (UserException e) {
-                Assert.fail();
             }
         }
     }
