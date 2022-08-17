@@ -760,7 +760,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getRange(partition.getId()),
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()));
+                        rangePartitionInfo.getIsInMemory(partition.getId()),
+                        rangePartitionInfo.getStorageInfo(partition.getId()),
+                        isLakeTable());
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }

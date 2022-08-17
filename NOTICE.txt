@@ -1,6 +1,6 @@
 StarRocks
 
-Copyright 2021-present, StarRocks Limited
+Copyright 2021-present, StarRocks Inc.
 
 ---------------------------
 apache-doris-incubating NOTICE

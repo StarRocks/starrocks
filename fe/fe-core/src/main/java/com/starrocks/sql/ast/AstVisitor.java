@@ -4,6 +4,9 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
+import com.starrocks.analysis.AdminCancelRepairTableStmt;
+import com.starrocks.analysis.AdminCheckTabletsStmt;
+import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.analysis.AdminSetConfigStmt;
 import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AdminShowConfigStmt;
@@ -85,6 +88,8 @@ import com.starrocks.analysis.ResumeRoutineLoadStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.ShowAlterStmt;
+import com.starrocks.analysis.ShowAuthenticationStmt;
+import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowColumnStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
@@ -189,6 +194,9 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowAuthenticationStatement(ShowAuthenticationStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
 
     public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
         return visitStatement(statement, context);
@@ -201,7 +209,15 @@ public abstract class AstVisitor<R, C> {
     public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
         return visitStatement(statement, context);
     }
-
+    public R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+    public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
     public R visitBaseViewStatement(BaseViewStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -478,6 +494,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitBackupStmt(BackupStmt statement, C context) {
         return visitDDLStatement(statement, context);
+    }
+
+    public R visitShowBackupStmt(ShowBackupStmt statement, C context) {
+        return visitShowStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

@@ -89,6 +89,9 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | ADMIN REPAIR TABLE qualifiedName partitionNames?                                      #adminRepairTable
+    | ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?                               #adminCancelRepairTable
+    | ADMIN CHECK tabletList properties                                                     #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -147,6 +150,7 @@ statement
     | ALTER USER user authOption                                                            #alterUser
     | CREATE USER (IF NOT EXISTS)? user authOption? (DEFAULT ROLE string)?                  #createUser
     | DROP USER user                                                                        #dropUser
+    | showAuthenticationStatement                                                           #showAuthentication
 
     // procedure
     | showProcedureStatement                                                                 #showProcedure
@@ -156,6 +160,7 @@ statement
 
     // Backup Restore Satement
     | backupStatement                                                                        #backup
+    | showBackupStatement                                                                    #showBackup
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -839,6 +844,11 @@ setExprOrDefault
     | expression
     ;
 
+showAuthenticationStatement
+    : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
+    | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
+    ;
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -1010,6 +1020,10 @@ backupStatement
     TO identifier
     ON '(' tableDesc (',' tableDesc) * ')'
     (PROPERTIES propertyList)?
+    ;
+
+showBackupStatement
+    : SHOW BACKUP ((FROM | IN) identifier)?
     ;
 
 // ------------------------------------------- Expression --------------------------------------------------------------

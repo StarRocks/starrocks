@@ -54,6 +54,14 @@ public class PseudoCluster {
 
     private BasicDataSource dataSource;
 
+    static {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
             super(name);
@@ -61,8 +69,7 @@ public class PseudoCluster {
 
         @Override
         public HeartbeatService.Client borrowObject(TNetworkAddress address) throws Exception {
-            Preconditions.checkState(backends.containsKey(address.getHostname()));
-            return backends.get(address.getHostname()).heatBeatClient;
+            return getBackendByHost(address.getHostname()).heatBeatClient;
         }
     }
 
@@ -73,8 +80,7 @@ public class PseudoCluster {
 
         @Override
         public BackendService.Client borrowObject(TNetworkAddress address) throws Exception {
-            Preconditions.checkState(backends.containsKey(address.getHostname()));
-            return backends.get(address.getHostname()).backendClient;
+            return getBackendByHost(address.getHostname()).backendClient;
         }
 
     }
@@ -82,13 +88,12 @@ public class PseudoCluster {
     private class PseudoBrpcRroxy extends BrpcProxy {
         @Override
         protected PBackendServiceAsync getBackendServiceImpl(TNetworkAddress address) {
-            Preconditions.checkState(backends.containsKey(address.getHostname()));
-            return backends.get(address.getHostname()).pBackendService;
+            return getBackendByHost(address.getHostname()).pBackendService;
         }
 
         @Override
         protected LakeServiceAsync getLakeServiceImpl(TNetworkAddress address) {
-            Preconditions.checkState(backends.containsKey(address.getHostname()));
+            Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;
         }
@@ -107,7 +112,11 @@ public class PseudoCluster {
     }
 
     public PseudoBackend getBackendByHost(String host) {
-        return backends.get(host);
+        PseudoBackend be = backends.get(host);
+        if (be == null) {
+            LOG.warn("no backend found for host {} hosts:{}", host, backends.keySet());
+        }
+        return be;
     }
 
     public Connection getQueryConnection() throws SQLException {
@@ -155,7 +164,7 @@ public class PseudoCluster {
         }
     }
 
-    public void runSqlList(String db, String... sqls) throws SQLException {
+    public void runSqlList(String db, List<String> sqls) throws SQLException {
         Connection connection = getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -169,6 +178,10 @@ public class PseudoCluster {
             stmt.close();
             connection.close();
         }
+    }
+
+    public void runSqlList(String db, String... sqls) throws SQLException {
+        runSqlList(db, sqls);
     }
 
     public String getRunDir() {
@@ -231,6 +244,7 @@ public class PseudoCluster {
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
+            LOG.warn("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
         while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
 #include "column/column_helper.h"
@@ -89,12 +90,17 @@ public:
             _hive_column_names = v;
         }
     }
+    void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
 
     static void build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
                                                 const std::vector<std::string>* hive_column_names,
-                                                const orc::Type& root_type);
+                                                const orc::Type& root_type, bool case_sensitive);
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
-                                      const std::vector<std::string>* hive_column_names, const orc::Type& root_type);
+                                      const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
+                                      bool case_sensitive);
+    static std::string format_column_name(const std::string& col_name, bool case_sensitive) {
+        return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+    }
 
     void set_runtime_state(RuntimeState* state) { _state = state; }
     RuntimeState* runtime_state() { return _state; }
@@ -158,6 +164,7 @@ private:
     std::shared_ptr<Column::Filter> _broker_load_filter;
     size_t _num_rows_filtered;
     const std::vector<std::string>* _hive_column_names = nullptr;
+    bool _case_sensitive = false;
     std::unordered_map<std::string, int> _name_to_column_id;
     RuntimeState* _state;
     SlotDescriptor* _current_slot;

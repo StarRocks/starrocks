@@ -2,17 +2,18 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /*
  * Recorder CTE node info, contains:
@@ -38,6 +39,8 @@ public class CTEContext {
 
     // All Cte produce costs
     private Map<Integer, Double> produceCosts;
+
+    private Map<Integer, Statistics> produceStatistics;
 
     // Nums of CTE consume
     private Map<Integer, Integer> consumeNums;
@@ -79,6 +82,8 @@ public class CTEContext {
         consumeInlineCosts = Maps.newHashMap();
         produceCosts = Maps.newHashMap();
         produceComplexityScores = Maps.newHashMap();
+
+        produceStatistics = Maps.newHashMap();
     }
 
     public void setEnableCTE(boolean enableCTE) {
@@ -114,9 +119,15 @@ public class CTEContext {
         }
     }
 
-    public OptExpression getCTEProduce(int cteId) {
-        Preconditions.checkState(produces.containsKey(cteId));
-        return produces.get(cteId);
+    public void addCTEStatistics(int cteId, Statistics statistics) {
+        produceStatistics.put(cteId, statistics);
+    }
+
+    public Optional<Statistics> getCTEStatistics(int cteId) {
+        if (produceStatistics.containsKey(cteId)) {
+            return Optional.of(produceStatistics.get(cteId));
+        }
+        return Optional.empty();
     }
 
     public Map<Integer, OptExpression> getAllCTEProduce() {
@@ -182,9 +193,7 @@ public class CTEContext {
      * Inline CTE consume sense:
      * 1. Disable CTE reuse, must inline all CTE
      * 2. CTE consume only use once, it's meanings none CTE data reuse
-     * 3. CTE produce cost > sum of all consume inline costs, should considered CTE extract cost(network/memory),
-     *    so produce cost will multi a rate
-     *
+     * 3. CTE ratio is zero
      */
     public boolean needInline(int cteId) {
         if (forceCTEList.contains(cteId)) {
@@ -197,31 +206,7 @@ public class CTEContext {
             return true;
         }
 
-        // Wasn't collect costs, don't inline
-        if (produceCosts.isEmpty() && consumeInlineCosts.isEmpty()) {
-            return false;
-        }
-
-        Preconditions.checkState(produceCosts.containsKey(cteId));
-        if (!consumeInlineCosts.containsKey(cteId)) {
-            return false;
-        }
-
-        if (inlineCTERatio <= 0) {
-            return false;
-        }
-
-        double p = produceCosts.get(cteId);
-        double c = consumeInlineCosts.get(cteId).stream().reduce(Double::sum).orElse(Double.MAX_VALUE);
-
-        // 3. Statistic is unknown, must inline
-        if (p <= 0 || c <= 0) {
-            return true;
-        }
-
-        // 4. CTE produce cost > sum of all consume inline costs
-        // Consume output rows less produce rows * rate choose inline
-        return p * (inlineCTERatio + produceComplexityScores.getOrDefault(cteId, 0D)) > c;
+        return inlineCTERatio < 0;
     }
 
     public boolean hasInlineCTE() {
@@ -236,5 +221,9 @@ public class CTEContext {
 
     public void addForceCTE(int cteId) {
         this.forceCTEList.add(cteId);
+    }
+
+    public boolean isForceCTE(int cteId) {
+        return inlineCTERatio == 0 || this.forceCTEList.contains(cteId);
     }
 }

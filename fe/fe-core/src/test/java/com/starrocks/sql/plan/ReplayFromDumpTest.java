@@ -279,7 +279,7 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(1);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"), sessionVariable);
-        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
+        Assert.assertTrue(replayPair.second.contains("1:AGGREGATE (update finalize)"));
     }
 
     @Test
@@ -557,7 +557,8 @@ public class ReplayFromDumpTest {
     @Test
     public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null, TExplainLevel.NORMAL);
+                getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
+                        TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +

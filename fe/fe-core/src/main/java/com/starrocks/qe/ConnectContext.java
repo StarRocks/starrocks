@@ -579,6 +579,10 @@ public class ConnectContext {
     }
 
     public class ThreadInfo {
+        public boolean isRunning() {
+            return state.isRunning();
+        }
+
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
@@ -593,7 +597,7 @@ public class ConnectContext {
             // Time
             row.add("" + (nowMs - startTime) / 1000);
             // State
-            row.add("");
+            row.add(state.toString());
             // Info
             String stmt = "";
             if (executor != null) {

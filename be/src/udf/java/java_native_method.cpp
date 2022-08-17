@@ -77,4 +77,16 @@ jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAd
     env->SetLongArrayRegion(jarr, 0, array_size, array);
     return jarr;
 }
+
+jlong JavaNativeMethods::memory_malloc(JNIEnv* env, jclass clazz, jlong bytes) {
+    long address = reinterpret_cast<long>(malloc(bytes));
+    VLOG_ROW << "Allocated " << bytes << " bytes of memory address " << address;
+    return address;
+}
+
+void JavaNativeMethods::memory_free(JNIEnv* env, jclass clazz, jlong address) {
+    VLOG_ROW << "Freed memory address " << address << ".";
+    free(reinterpret_cast<void*>(address));
+}
+
 } // namespace starrocks::vectorized

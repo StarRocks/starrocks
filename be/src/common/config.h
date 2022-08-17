@@ -664,6 +664,7 @@ CONF_Int64(pipeline_sink_brpc_dop, "8");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
+CONF_mBool(pipeline_print_profile, "false");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -702,6 +703,9 @@ CONF_Int64(object_storage_max_connection, "102400");
 // Acccess object storage using https.
 // this options is applicable only if `object_storage_endpoint` is not specified.
 CONF_Bool(object_storage_endpoint_use_https, "false");
+// https://github.com/aws/aws-sdk-cpp/issues/587
+// https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
+CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
@@ -734,6 +738,8 @@ CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
+
+CONF_Bool(enable_load_colocate_mv, "false");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
