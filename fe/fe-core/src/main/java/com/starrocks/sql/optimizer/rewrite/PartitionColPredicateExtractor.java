@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite;
 
@@ -89,6 +89,8 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+        // EliminateNegationsRewriter has eliminated most not predicate scenes except not like clause.
+        // For not like clause, replace it with true condition.
         if (predicate.isNot()) {
             return ConstantOperator.createBoolean(true);
         }
@@ -120,13 +122,11 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         } else {
             ScalarOperator second = predicate.getChild(1).accept(this, null);
             if (first instanceof ConstantOperator) {
-                return second;
+                return ((ConstantOperator) first).getBoolean() ? first : second;
+            } else if (second instanceof ConstantOperator) {
+                return ((ConstantOperator) second).getBoolean() ? second : first;
             } else {
-                if (second instanceof ConstantOperator) {
-                    return first;
-                } else {
-                    return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, first, second);
-                }
+                return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, first, second);
             }
         }
     }
@@ -138,8 +138,9 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
             return ConstantOperator.createBoolean(true);
         } else {
             if (predicate.allValuesMatch(ScalarOperator::isConstantRef)) {
-                if (predicate.isNotIn() && predicate.hasAnyNullValues()) {
-                    return ConstantOperator.createBoolean(false);
+                if (predicate.isNotIn()) {
+                    // not in (null, value) always return false, otherwise, always return true
+                    return ConstantOperator.createBoolean(!predicate.hasAnyNullValues());
                 }
                 return predicate;
             } else {
@@ -151,12 +152,10 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     @Override
     public ScalarOperator visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
         ScalarOperator first = predicate.getChild(0).accept(this, null);
-        if (isShortCut(first)) {
+        if (isShortCut(first) || predicate.isNotNull()) {
             return ConstantOperator.createBoolean(true);
-        } else if (!first.isNullable()) {
-            return ConstantOperator.createBoolean(predicate.isNotNull() ? true : false);
         } else {
-            return predicate;
+            return ConstantOperator.createBoolean(false);
         }
     }
 

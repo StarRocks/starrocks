@@ -1,4 +1,5 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
@@ -82,7 +83,6 @@ public class PartitionColPredicateEvaluator {
             PartitionKey conditionKey = new PartitionKey();
             conditionKey.pushColumn(literalExpr, partitionColumn.getPrimitiveType());
             Range<PartitionKey> predicateRange;
-            boolean isNotEq = false;
             switch (type) {
                 case EQ:
                     predicateRange = Range.closed(conditionKey, conditionKey);
@@ -90,25 +90,22 @@ public class PartitionColPredicateEvaluator {
                 case EQ_FOR_NULL:
                     BitSet res = new BitSet();
                     if (literalExpr instanceof NullLiteral) {
-                        if (partitionColumn.isAllowNull()) {
-                            res.set(0, true);
-                        }
                         return res;
                     } else {
                         predicateRange = Range.closed(conditionKey, conditionKey);
                     }
                     break;
                 case GE:
-                    predicateRange = Range.greaterThan(conditionKey);
+                    predicateRange = Range.atLeast(conditionKey);
                     break;
                 case GT:
-                    predicateRange = Range.downTo(conditionKey, BoundType.OPEN);
+                    predicateRange = Range.greaterThan(conditionKey);
                     break;
                 case LE:
-                    predicateRange = Range.lessThan(conditionKey);
+                    predicateRange = Range.atMost(conditionKey);
                     break;
                 case LT:
-                    predicateRange = Range.upTo(conditionKey, BoundType.OPEN);
+                    predicateRange = Range.lessThan(conditionKey);
                     break;
                 case NE:
                 default:
@@ -133,11 +130,9 @@ public class PartitionColPredicateEvaluator {
             return first;
         }
 
+        // only process in scene
         @Override
         public BitSet visitInPredicate(InPredicateOperator predicate, Void context) {
-            if (predicate.isNotIn()) {
-                return createAllTrueBitSet();
-            }
             List<ConstantOperator> constList = predicate.getChildren().stream()
                     .skip(1).map(e -> (ConstantOperator) e)
                     .filter(e -> !e.isNull()).sorted().collect(Collectors.toList());
@@ -179,11 +174,7 @@ public class PartitionColPredicateEvaluator {
 
         @Override
         public BitSet visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            BitSet res = new BitSet();
-            if (partitionColumn.isAllowNull()) {
-                res.set(0, true);
-            }
-            return res;
+            return new BitSet();
         }
 
         private BitSet evaluateRangeHitSet(Range<PartitionKey> predicateRange) {
