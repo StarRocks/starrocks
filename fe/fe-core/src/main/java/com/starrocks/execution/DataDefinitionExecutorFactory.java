@@ -3,11 +3,6 @@
 package com.starrocks.execution;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterResourceStmt;
@@ -62,6 +57,11 @@ import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;

@@ -1,8 +1,8 @@
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.analysis.RedirectStatus;
 import org.junit.Assert;
 import org.junit.BeforeClass;
