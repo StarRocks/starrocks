@@ -16,6 +16,7 @@
 package com.starrocks.connector.iceberg.hive;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.connector.hive.DLFProxyMetaStoreClient;
 import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -28,6 +29,9 @@ import org.apache.iceberg.common.DynMethods;
 import org.apache.iceberg.hive.RuntimeMetaException;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;
+
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.hive.HiveMetaClient.DLF_HIVE_METASTORE;
 
 public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException> {
 
@@ -49,7 +53,8 @@ public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
         try {
             try {
                 return GET_CLIENT.invoke(hiveConf, (HiveMetaHookLoader) tbl -> null,
-                        HiveMetaStoreThriftClient.class.getName());
+                        !DLF_HIVE_METASTORE.equalsIgnoreCase(hiveConf.get(HIVE_METASTORE_TYPE))
+                                ? HiveMetaStoreThriftClient.class.getName() : DLFProxyMetaStoreClient.class.getName());
             } catch (RuntimeException e) {
                 // any MetaException would be wrapped into RuntimeException during reflection, so let's double-check type here
                 if (e.getCause() instanceof MetaException) {
