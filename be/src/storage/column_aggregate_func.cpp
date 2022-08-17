@@ -32,7 +32,7 @@ struct SliceState {
     std::vector<uint8_t> data;
     bool has_value = false;
 
-    Slice slice() { return Slice(data.data(), data.size()); }
+    Slice slice() { return {data.data(), data.size()}; }
 
     void update(const Slice& s) {
         has_value = true;
@@ -228,8 +228,8 @@ public:
     }
 
     void append_data(Column* agg) override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(agg);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data());
+        auto* col = down_cast<BitmapColumn*>(agg);
+        auto& bitmap = const_cast<BitmapValue&>(this->data());
         col->append(std::move(bitmap));
     }
 };
@@ -248,8 +248,8 @@ public:
     }
 
     void append_data(Column* agg) override {
-        HyperLogLogColumn* col = down_cast<HyperLogLogColumn*>(agg);
-        HyperLogLog& hll = const_cast<HyperLogLog&>(this->data());
+        auto* col = down_cast<HyperLogLogColumn*>(agg);
+        auto& hll = const_cast<HyperLogLog&>(this->data());
         col->append(std::move(hll));
     }
 };
@@ -268,8 +268,8 @@ public:
     }
 
     void append_data(Column* agg) override {
-        PercentileColumn* col = down_cast<PercentileColumn*>(agg);
-        PercentileValue& per = const_cast<PercentileValue&>(this->data());
+        auto* col = down_cast<PercentileColumn*>(agg);
+        auto& per = const_cast<PercentileValue&>(this->data());
         col->append(std::move(per));
     }
 };
@@ -287,8 +287,8 @@ public:
     }
 
     void append_data(Column* agg) override {
-        JsonColumn* col = down_cast<JsonColumn*>(agg);
-        JsonValue& per = const_cast<JsonValue&>(this->data());
+        auto* col = down_cast<JsonColumn*>(agg);
+        auto& per = const_cast<JsonValue&>(this->data());
         col->append(std::move(per));
     }
 };
@@ -375,7 +375,7 @@ public:
     void update_aggregate(Column* agg) override {
         _aggregate_column = agg;
 
-        NullableColumn* n = down_cast<NullableColumn*>(agg);
+        auto* n = down_cast<NullableColumn*>(agg);
         _child->update_aggregate(n->data_column().get());
         _null_child->update_aggregate(n->null_column().get());
 
@@ -399,6 +399,18 @@ public:
     void reset() override {
         _child->reset();
         _null_child->reset();
+    }
+
+    void append_data(Column* agg) override {
+        LOG(FATAL) << "append_data is not implemented in ReplaceNullableColumnAggregator";
+    }
+
+    void aggregate_impl(int row, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_impl is not implemented in ReplaceNullableColumnAggregator";
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_batch_impl is not implemented in ReplaceNullableColumnAggregator";
     }
 
 private:
