@@ -153,16 +153,15 @@ public class HiveMetaStoreTableUtils {
             case "BOOLEAN":
                 return primitiveType == PrimitiveType.BOOLEAN;
             case "ARRAY":
-                if (!type.isArrayType()) {
-                    return false;
-                }
                 if (type.equals(Type.UNKNOWN_TYPE)) {
                     return !HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
                             .collect(Collectors.toList()).isEmpty();
-                } else {
-                    return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
-                            ((ArrayType) type).getItemType());
                 }
+                if (!type.isArrayType()) {
+                    return false;
+                }
+                return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
+                        ((ArrayType) type).getItemType());
             default:
                 // for BINARY and other types, we transfer it to UNKNOWN_TYPE
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
