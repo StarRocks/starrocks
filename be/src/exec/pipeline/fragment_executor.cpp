@@ -511,11 +511,6 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     }
     prepare_success = true;
 
-    if (_wg) {
-        int64_t elapsed = MonotonicNanos() - _fragment_start_time;
-        _wg->increment_real_runtime_ns(elapsed);
-    }
-
     auto* executor =
             _fragment_ctx->enable_resource_group() ? exec_env->wg_driver_executor() : exec_env->driver_executor();
     for (const auto& driver : _fragment_ctx->drivers()) {

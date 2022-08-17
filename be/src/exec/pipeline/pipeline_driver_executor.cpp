@@ -17,9 +17,8 @@ GlobalDriverExecutor::GlobalDriverExecutor(std::string name, std::unique_ptr<Thr
                                            bool enable_resource_group)
         : Base(name),
           _enable_resource_group(enable_resource_group),
-          _driver_queue(enable_resource_group
-                                ? std::unique_ptr<DriverQueue>(std::make_unique<DriverQueueWithWorkGroup>())
-                                : std::make_unique<QuerySharedDriverQueue>()),
+          _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
+                                              : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
@@ -85,7 +84,7 @@ void GlobalDriverExecutor::_worker_thread() {
         CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
-        auto maybe_driver = this->_driver_queue->take(worker_id);
+        auto maybe_driver = this->_driver_queue->take();
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
