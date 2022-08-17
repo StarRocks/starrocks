@@ -118,6 +118,10 @@ public class PartitionPruneRule extends TransformationRule {
 
     private boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator) {
 
+        if (candidatePartitions.size() == 0) {
+            return false;
+        }
+
         if (olapScanOperator.getPredicate() == null) {
             return false;
         }

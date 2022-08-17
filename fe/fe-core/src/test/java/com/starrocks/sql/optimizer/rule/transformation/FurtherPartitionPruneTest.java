@@ -41,27 +41,230 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
                 + "\"in_memory\" = \"false\",\n"
                 + "\"storage_format\" = \"DEFAULT\"\n"
                 + ");");
+        starRocksAssert.withTable("CREATE TABLE `tbl_int` (\n" +
+                "  `k1` int(11) NULL,\n" +
+                "  `s1` varchar(5) NULL ,\n" +
+                "  `s2` varchar(5) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "(PARTITION p1 VALUES [('0'), ('100')),\n" +
+                "PARTITION p2 VALUES [('100'), ('200')),\n" +
+                "PARTITION p3 VALUES [('200'), ('300')),\n" +
+                "PARTITION p4 VALUES [('300'), ('400')))\n" +
+                "DISTRIBUTED BY HASH(`s1`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("emptyPartitionSqlList")
     public void testEmptyPartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertTrue(plan, plan.contains("0:EMPTYSET"));
     }
 
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("onePartitionSqlList")
+    public void testOnePartitionSql(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertTrue(plan, plan.contains("partitions=1/4"));
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("twoPartitionsSqlList")
+    public void testTwoPartitionsSql(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertTrue(plan, plan.contains("partitions=2/4"));
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("threePartitionsSqlList")
+    public void testThreePartitionsSql(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertTrue(plan, plan.contains("partitions=3/4"));
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("fourPartitionsSqlList")
+    public void testFourPartitionsSql(String sql) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertTrue(plan, plan.contains("partitions=4/4"));
+    }
 
     private static Stream<Arguments> emptyPartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from ptest where d2 <=> null");
+        sqlList.add("select * from tbl_int where (k1 = 1 or k1 > s1) and k1 is null");
         sqlList.add("select * from ptest where d2 in (null, '2021-01-01')");
         sqlList.add("select * from ptest where (d2 < '1000-01-01') or (d2 in (null, '2021-01-01'))");
         sqlList.add("select * from ptest where d2 not in ('2021-12-01', null)");
-        sqlList.add("select * from ptest where d2 < '1000-01-01' and d2 >= '2020-12-01'");
-        sqlList.add("select * from ptest where d2 not between '1000-01-01' and '2020-12-01'");
+        sqlList.add("select * from ptest where (d2 < '1000-01-01' and s1 >= '2020-12-01') or (d2 >= '2020-12-01')");
+        sqlList.add(
+                "select * from ptest where (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') or (d2 >= '2020-12-01')");
         sqlList.add("select * from ptest where d2 = '1000-01-01' and d2 not between '1000-01-01' and '2020-12-01'");
-        sqlList.add("select * from ptest where s1 not like '1000-01-01'");
+        sqlList.add("select * from ptest where s1 like '%1' and d2 in (null, null)");
+        sqlList.add("select * from ptest where s1 is null and d2 not in (null, '2022-01-01')");
+        sqlList.add("select * from ptest where s1 not like '%s1' and d2 in (null, null)");
+        sqlList.add("select * from ptest where d2 not in (null, null) and s1 like '%1'");
+        sqlList.add("select * from ptest where (d2 < '1000-01-01' and d2 >= '2020-12-01') and s1 = 'str'");
+        sqlList.add(
+                "select * from ptest where (d2 < '1000-01-01' or s1 >= '2020-12-01') and d2 not in ('2020-01-01', null)");
+        sqlList.add(
+                "select * from ptest where (d2 < '1900-01-01' or d2 in ('2020-01-01') or d2 is null) and d2 > '2020-07-01'");
+        sqlList.add("select * from tbl_int where not (k1 in (null, 1) or k1 not in (1,2,3))");
+        sqlList.add("select * from tbl_int where not (k1 >= 0 and k1 < 400)");
+        sqlList.add("select * from tbl_int where not (k1 >= 0 and k1 < 400 or s1 > s2)");
+
+        sqlList.add("select * from ptest where not not d2 <=> null");
+        sqlList.add(
+                "select * from ptest where not not (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') or (d2 >= '2020-12-01')");
+
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> onePartitionSqlList() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add(
+                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') and d2 < '2020-04-01'");
+        sqlList.add(
+                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') and s1 not like ''" +
+                        " and d2 < '2020-04-01' and s1 like 'a'");
+
+        sqlList.add("select * from tbl_int where (k1 in (200,201,202,203,204) or k1 > 400) and k1 <= 300");
+        sqlList.add("select * from tbl_int where not not (k1 in (200,201,202,203,204) or k1 > 400) and k1 <= 300");
+        sqlList.add(
+                "select * from tbl_int where (k1 in (200,201,202,203,204) or k1 > 400 and s1 is null) and k1 <= 300 and s1 in ('a', 'b') and s1 != s2");
+        sqlList.add("select * from tbl_int where (k1 in (200,201,202,203,204,200,201,202,203,204,200,201,202,203,204" +
+                ",200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204" +
+                ",200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204) or k1 > 400) and k1 <= 300");
+        sqlList.add("select * from tbl_int where (k1 = 1 or k1 between 300 and 400) and k1 >=100");
+        sqlList.add("select * from tbl_int where not not (k1 = 1 or k1 between 300 and 400) and k1 >=100");
+
+        sqlList.add("select * from tbl_int where ((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) and k1 >=100)");
+        sqlList.add(
+                "select * from tbl_int where ((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) and not not k1 >=100)");
+        sqlList.add(
+                "select * from tbl_int where ((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) and k1 >=100) and s1 > s2");
+        sqlList.add(
+                "select * from tbl_int where not not (((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) and k1 >=100) and s1 > s2)");
+
+        sqlList.add("select * from tbl_int where (k1 = 1 or k1 not between 50 and 400) and k1 <300");
+        sqlList.add("select * from tbl_int where not not (k1 = 1 or k1 not between 50 and 400) and k1 <300");
+        sqlList.add(
+                "select * from tbl_int where ((k1 = 1 or k1 not between 50 and 400) and k1 <300) or k1 > floor(1000.5)");
+        sqlList.add(
+                "select * from tbl_int where ((k1 = 1 or k1 not between 50 and 400) and k1 <300) or k1 > floor(1000.5) and s1 > s1 + s2");
+
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    public static Stream<Arguments> twoPartitionsSqlList() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from tbl_int where k1 between 0 and 99 or k1 between 300 and 399");
+        sqlList.add("select * from tbl_int where (k1 between 0 and 99 or k1 between 300 and 399) and s1 > upper(s2)");
+
+        sqlList.add("select * from tbl_int where k1 <= 100 or k1 > 400");
+        sqlList.add("select * from tbl_int where k1 < 100 or k1 >= 300");
+        sqlList.add("select * from tbl_int where k1 = 0 or k1 >= 300");
+        sqlList.add("select * from tbl_int where k1 != 350 and (k1 > 300 or k1 < 100)");
+        sqlList.add("select * from tbl_int where k1 = 300 or k1 < 100");
+        sqlList.add("select * from tbl_int where (k1 = 300 or k1 < 100) and (s1 = s2 or s1 > 'a' and k1 < s1)");
+        sqlList.add("select * from tbl_int where k1 in (1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10" +
+                ",1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,350);");
+        sqlList.add("select * from tbl_int where (k1 in (1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10," +
+                "1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,150) or k1 > 400) and k1 <= 300");
+
+        sqlList.add("select * from tbl_int where (k1 >= 0 and k1 < 100) or (k1 >= 300 and k1 < 400)");
+        sqlList.add(
+                "select * from tbl_int where (k1 >= 0 and k1 < 100) or (k1 >= 300 and k1 < 400) and (k1 not in (1,2,3) or k1 not in (300,301,302))");
+
+        sqlList.add("select * from tbl_int where k1 = 1 or k1 between 200 and 299");
+        sqlList.add("select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400)");
+        sqlList.add(
+                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302)");
+        sqlList.add(
+                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302) and abs(k1) = 1");
+        sqlList.add(
+                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302) and (k1 = 1 or s1 < s2)");
+
+        sqlList.add("select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301)) or k1 in (50,99,300)");
+        sqlList.add(
+                "select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301,null,null)) or k1 in (50,99,300,null,null)");
+        sqlList.add(
+                "select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301,null,null)) or k1 in (50,99,300,null,null) and (k1 in (1,2,3) or k1 != 1)");
+
+        sqlList.add("select * from tbl_int where k1 not in (null,1,2,3,100) or (k1 < 100 or k1 > 300)");
+        sqlList.add("select * from tbl_int where s1 like 'a' and (k1 < 100 or k1 > 300)");
+        sqlList.add("select * from tbl_int where s1 not like 'a' and (k1 < 100 or k1 > 300)");
+
+        sqlList.add("select * from tbl_int where not (k1 between 100 and 300) and k1 in (1,100,300,305)");
+
+        sqlList.add("select * from tbl_int where not (k1 >= 100 and k1 < 300)");
+        sqlList.add("select * from tbl_int where not not not (k1 >= 100 and k1 < 300)");
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    public static Stream<Arguments> threePartitionsSqlList() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select s1 from tbl_int where k1 <= 100 or k1 >= 300");
+        sqlList.add("select s1 from tbl_int where k1 > 300 or k1 < 200");
+        sqlList.add("select s1 from tbl_int where k1 != 0 and (k1 < 100 or (k1 > 150 and k1 <= 200))");
+        sqlList.add("select s1 from tbl_int where k1 != 0 and (k1 in (1,5,100,400) or k1 > 300)");
+        sqlList.add("select s1 from tbl_int where k1 not in (1,400) and (k1 = 1 or k1 = 200 or k1 > 300)");
+
+        sqlList.add("select s1 from tbl_int where k1 in (1, '1', 2) or (k1 < 100 or k1 > 200)");
+        sqlList.add("select s1 from tbl_int where not not (k1 > 200 or k1 < 100)");
+        sqlList.add("select * from tbl_int where (k1 in (1, 100) or k1 > 0 and k1 <= 300) and (k1 < 100 or k1 > 200)");
+        sqlList.add(
+                "select * from tbl_int where not (k1 in (1, 100) or k1 > 0 and k1 <= 300) or (k1 < 100 or k1 > 200)");
+        sqlList.add("select * from tbl_int where k1 in (1, 300) or (k1 > 200 and k1 <=350) or k1 = 50");
+        sqlList.add(
+                "select * from tbl_int where (k1 in (1, 300) or (k1 > 200 and k1 <=350) or k1 = 50) and (k1 > 0 and k1 < 400)");
+
+        sqlList.add(
+                "select * from tbl_int where (k1 = 1 and s1 = 2 and s2 = 300) or (k1 > 100 and k1 < 200 and s1 = 1) or (k1 in (300, 350))");
+        sqlList.add("select * from tbl_int where (k1 < 400 or k1 > 300) and k1 > 1 and not (k1 >= 200 and k1 < 300)");
+        sqlList.add(
+                "select * from tbl_int where k1 not in (1,2,3) and s1 not in ('a') and s1 = s2 and (k1 < 200 or k1 > 300)");
+
+        sqlList.add("select * from tbl_int where (k1 in (1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10" +
+                ",1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,200) or k1 > 400) and k1 <= 300;");
+        sqlList.add("select * from tbl_int where k1 in (1,201,202,203,204,200,201,202,203,204,200,201,202,203,204," +
+                "200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204," +
+                "200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,350)");
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+    public static Stream<Arguments> fourPartitionsSqlList() {
+        List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from tbl_int where k1 is not null");
+        sqlList.add("select * from tbl_int where k1 < 200 or floor(k1) < 10");
+        sqlList.add("select * from tbl_int where k1 != 5 and k1 != 6");
+        sqlList.add("select * from tbl_int where k1 not in (5,15,115,225)");
+        sqlList.add("select * from tbl_int where not (k1 > 5 and k1 < 15)");
+        sqlList.add("select * from tbl_int where not (k1 between 5 and 15)");
+        sqlList.add("select * from tbl_int where not (k1 between 5 and 15 or k1 between 25 and 35)");
+
+        sqlList.add("select * from tbl_int where s1 like 'a' or k1 = 1");
+        sqlList.add("select * from tbl_int where (k1 = 1 or k1 > s1) and s1 like 'a'");
+        sqlList.add("select * from tbl_int where (k1 = 1 or k1 > s1) or k1 = 2");
+        sqlList.add("select * from tbl_int where k1 is null or (k1 != 1)");
+
+        sqlList.add(
+                "select * from tbl_int where (k1 < s1 and k1 not in (1,2,3) or k1 =300) and (k1 in (1, 300) or k1 > 0 or k1 <= 350 or k1 = 200)");
+        sqlList.add(
+                "select * from tbl_int where (s1 like 'a' and k1 > floor(k1) or s2 like 'b') or k1 in (1,100,400) and k1 > 0");
+        sqlList.add(
+                "select * from tbl_int where not (s1 like 'a' and k1 > floor(k1) or s2 like 'b') or k1 in (1,100,400) and k1 > 0");
+
+        sqlList.add("select * from tbl_int where k1 in (1,'a',200,300)");
+        sqlList.add("select * from tbl_int where (k1 in (1,'a') and k1 != s1) or k1 > 150");
+
+        sqlList.add("select * from tbl_int where k1 in (1,100,200,300) or k1 > 300");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }
