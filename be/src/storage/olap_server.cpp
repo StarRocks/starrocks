@@ -118,8 +118,8 @@ Status StorageEngine::start_bg_threads() {
         if (config::base_compaction_num_threads_per_disk >= 0 &&
             config::cumulative_compaction_num_threads_per_disk >= 0) {
             max_task_num = static_cast<int32_t>(StorageEngine::instance()->get_store_num() *
-                                                 (config::cumulative_compaction_num_threads_per_disk +
-                                                  config::base_compaction_num_threads_per_disk));
+                                                (config::cumulative_compaction_num_threads_per_disk +
+                                                 config::base_compaction_num_threads_per_disk));
         } else {
             // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
             // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
