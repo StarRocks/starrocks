@@ -304,7 +304,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_ORC_ROWS(scanner, exp)                                                    \
+#define READ_SCANNER_ROWS(scanner, exp)                                                \
     do {                                                                               \
         auto chunk = vectorized::ChunkHelper::new_chunk(*tuple_desc, 0);               \
         uint64_t records = 0;                                                          \
@@ -341,7 +341,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -423,7 +423,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 0);
+    READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
     scanner->close(_runtime_state);
 }
@@ -456,7 +456,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -489,7 +489,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 100);
+    READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
     scanner->close(_runtime_state);
 }
@@ -571,7 +571,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1000);
+    READ_SCANNER_ROWS(scanner, 1000);
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
@@ -675,7 +675,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 4640);
+    READ_SCANNER_ROWS(scanner, 4640);
     EXPECT_EQ(scanner->raw_rows_read(), 4640);
     scanner->close(_runtime_state);
 }
@@ -782,11 +782,80 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     scanner->disable_use_orc_sargs();
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok());
-    READ_ORC_ROWS(scanner, 1000);
+    READ_SCANNER_ROWS(scanner, 1000);
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
     scanner->close(_runtime_state);
 }
 
+// =============================================================================
+
+/*
+file:                  file:/Users/dirlt/Downloads/part-00000-4a878ed5-fa12-4e43-a164-1650976be336-c000.snappy.parquet
+creator:               parquet-mr version 1.10.1 (build a89df8f9932b6ef6633d06069e50c9b7970bebd1)
+extra:                 org.apache.spark.version = 2.4.7
+extra:                 org.apache.spark.sql.parquet.row.metadata = {"type":"struct","fields":[{"name":"vin","type":"string","nullable":true,"metadata":{}},{"name":"log_domain","type":"string","nullable":true,"metadata":{}},{"name":"file_name","type":"string","nullable":true,"metadata":{}},{"name":"is_collection","type":"integer","nullable":false,"metadata":{}},{"name":"is_center","type":"integer","nullable":false,"metadata":{}},{"name":"is_cloud","type":"integer","nullable":false,"metadata":{}},{"name":"collection_time","type":"string","nullable":false,"metadata":{}},{"name":"center_time","type":"string","nullable":false,"metadata":{}},{"name":"cloud_time","type":"string","nullable":false,"metadata":{}},{"name":"error_collection_tips","type":"string","nullable":false,"metadata":{}},{"name":"error_center_tips","type":"string","nullable":false,"metadata":{}},{"name":"error_cloud_tips","type":"string","nullable":false,"metadata":{}},{"name":"error_collection_time","type":"string","nullable":false,"metadata":{}},{"name":"error_center_time","type":"string","nullable":false,"metadata":{}},{"name":"error_cloud_time","type":"string","nullable":false,"metadata":{}},{"name":"original_time","type":"string","nullable":false,"metadata":{}},{"name":"is_original","type":"integer","nullable":false,"metadata":{}}]}
+
+file schema:           spark_schema
+--------------------------------------------------------------------------------
+vin:                   OPTIONAL BINARY O:UTF8 R:0 D:1
+log_domain:            OPTIONAL BINARY O:UTF8 R:0 D:1
+file_name:             OPTIONAL BINARY O:UTF8 R:0 D:1
+is_collection:         REQUIRED INT32 R:0 D:0
+is_center:             REQUIRED INT32 R:0 D:0
+is_cloud:              REQUIRED INT32 R:0 D:0
+collection_time:       REQUIRED BINARY O:UTF8 R:0 D:0
+center_time:           REQUIRED BINARY O:UTF8 R:0 D:0
+cloud_time:            REQUIRED BINARY O:UTF8 R:0 D:0
+error_collection_tips: REQUIRED BINARY O:UTF8 R:0 D:0
+error_center_tips:     REQUIRED BINARY O:UTF8 R:0 D:0
+error_cloud_tips:      REQUIRED BINARY O:UTF8 R:0 D:0
+error_collection_time: REQUIRED BINARY O:UTF8 R:0 D:0
+error_center_time:     REQUIRED BINARY O:UTF8 R:0 D:0
+error_cloud_time:      REQUIRED BINARY O:UTF8 R:0 D:0
+original_time:         REQUIRED BINARY O:UTF8 R:0 D:0
+is_original:           REQUIRED INT32 R:0 D:0
+*/
+
+TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {"is_cloud", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                {""}};
+
+    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    ObjectPool* pool = &_pool;
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // select vin,is_cloud from table where is_cloud >= '0';
+    auto* min_max_tuple_desc = _create_tuple_desc(min_max_descs);
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "0");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, min_max_tuple_desc->slots()[0], TPrimitiveType::VARCHAR,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+    }
+
+    param->min_max_tuple_desc = min_max_tuple_desc;
+    Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
+    Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
+        ctx->close(_runtime_state);
+    }
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(!status.ok());
+    scanner->close(_runtime_state);
+}
 } // namespace starrocks::vectorized
