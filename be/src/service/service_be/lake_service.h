@@ -40,8 +40,9 @@ public:
                           ::starrocks::lake::TabletStatResponse* response, ::google::protobuf::Closure* done) override;
 
     void publish_log_version(::google::protobuf::RpcController* controller,
-                        const ::starrocks::lake::PublishLogVersionRequest* request,
-                        ::starrocks::lake::PublishLogVersionResponse* response, ::google::protobuf::Closure* done) override;
+                             const ::starrocks::lake::PublishLogVersionRequest* request,
+                             ::starrocks::lake::PublishLogVersionResponse* response,
+                             ::google::protobuf::Closure* done) override;
 
 private:
     ExecEnv* _env;
