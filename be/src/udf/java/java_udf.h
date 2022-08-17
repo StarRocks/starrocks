@@ -123,7 +123,6 @@ public:
 private:
     JVMFunctionHelper() { _init(); };
     void _init();
-    void _add_class_path(const std::string& path);
     // pack input array to java object array
     jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
 

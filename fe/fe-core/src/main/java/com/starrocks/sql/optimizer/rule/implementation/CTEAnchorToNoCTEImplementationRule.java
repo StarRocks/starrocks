@@ -20,6 +20,12 @@ public class CTEAnchorToNoCTEImplementationRule extends ImplementationRule {
     }
 
     @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalCTEAnchorOperator anchor = (LogicalCTEAnchorOperator) input.getOp();
+        return !context.getCteContext().isForceCTE(anchor.getCteId());
+    }
+
+    @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         return Lists.newArrayList(OptExpression
                 .create(new PhysicalNoCTEOperator(((LogicalCTEAnchorOperator) input.getOp()).getCteId()),

@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OutputPropertyDeriver;
 import com.starrocks.sql.optimizer.RequiredPropertyDeriver;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -22,9 +23,11 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -155,6 +158,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // Successfully optimize all child group
             if (curChildIndex == groupExpression.getInputs().size()) {
+                if (!checkCTEPropertyValid(groupExpression, context.getRequiredProperty())) {
+                    break;
+                }
+
                 // before we compute the property, here need to make sure that the plan is legal
                 ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context);
                 curTotalCost = childOutputPropertyGuarantor
@@ -187,6 +194,25 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             childrenBestExprList.clear();
             childrenOutputProperties.clear();
         }
+    }
+
+    private boolean checkCTEPropertyValid(GroupExpression childBestExpr, PhysicalPropertySet requiredPropertySet) {
+        if (!OperatorType.PHYSICAL_CTE_CONSUME.equals(childBestExpr.getOp().getOpType()) &&
+                !OperatorType.PHYSICAL_NO_CTE.equals(childBestExpr.getOp().getOpType())) {
+            return true;
+        }
+
+        CTEProperty property = requiredPropertySet.getCteProperty();
+
+        if (OperatorType.PHYSICAL_NO_CTE.equals(childBestExpr.getOp().getOpType())) {
+            int cteId = ((PhysicalNoCTEOperator) childBestExpr.getOp()).getCteId();
+            return !property.getCteIds().contains(cteId);
+        } else if (OperatorType.PHYSICAL_CTE_CONSUME.equals(childBestExpr.getOp().getOpType())) {
+            int cteId = ((PhysicalCTEConsumeOperator) childBestExpr.getOp()).getCteId();
+            return property.getCteIds().contains(cteId);
+        }
+
+        return true;
     }
 
     private void initRequiredProperties() {
@@ -269,8 +295,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                                               List<PhysicalPropertySet> inputProperties) {
         // groupExpression can satisfy its own output property
         setPropertyWithCost(groupExpression, outputProperty, inputProperties);
-        // groupExpression can satisfy the ANY type output property
-        setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.EMPTY, inputProperties);
+        if (outputProperty.getCteProperty().isEmpty()) {
+            // groupExpression can satisfy the ANY type output property
+            setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.EMPTY, inputProperties);
+        }
     }
 
     private void recordCostsAndEnforce(PhysicalPropertySet outputProperty, List<PhysicalPropertySet> inputProperties) {
