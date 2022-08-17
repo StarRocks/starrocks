@@ -168,8 +168,8 @@ public class Utils {
 
     // Array string like "Array<Array<int>>"
     public static Type convertToArrayType(String typeStr) throws DdlException {
-        if (HIVE_UNSUPPORTED_TYPES.stream().filter(typeStr.toUpperCase()::contains).collect(Collectors.toList())
-                .size() != 0) {
+        if (!HIVE_UNSUPPORTED_TYPES.stream().filter(typeStr.toUpperCase()::contains).collect(Collectors.toList())
+                .isEmpty()) {
             return Type.UNKNOWN_TYPE;
         }
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));

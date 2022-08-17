@@ -155,8 +155,8 @@ public class HiveMetaStoreTableUtils {
                     return false;
                 }
                 if (type.equals(Type.UNKNOWN_TYPE)) {
-                    return Utils.HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
-                            .collect(Collectors.toList()).size() != 0;
+                    return !Utils.HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
+                            .collect(Collectors.toList()).isEmpty();
                 } else {
                     return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
                             ((ArrayType) type).getItemType());
