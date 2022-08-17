@@ -78,6 +78,7 @@ set(EXEC_FILES
     vectorized/except_node.cpp
     vectorized/file_scanner.cpp
     vectorized/orc_scanner.cpp
+    vectorized/jni_scanner.cpp
     vectorized/arrow_to_starrocks_converter.cpp
     vectorized/arrow_to_json_converter.cpp
     vectorized/parquet_scanner.cpp
