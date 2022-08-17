@@ -51,7 +51,6 @@ set(EXEC_FILES
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp

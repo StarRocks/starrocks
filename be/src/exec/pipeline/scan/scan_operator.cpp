@@ -58,6 +58,9 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
 
+    _io_thread_submit_tasks_counter = ADD_COUNTER(_unique_metrics, "IOThreadSubmittedTasks", TUnit::UNIT);
+    _exec_thread_submit_tasks_counter = ADD_COUNTER(_unique_metrics, "ExecThreadSubmittedTasks", TUnit::UNIT);
+
     RETURN_IF_ERROR(do_prepare(state));
 
     return Status::OK();
@@ -189,10 +192,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
 
     _peak_buffer_size_counter->set(buffer_size());
 
-    RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
-    if (_workgroup != nullptr) {
-        _workgroup->incr_period_ask_chunk_num(1);
-    }
+    RETURN_IF_ERROR(_try_to_trigger_next_scan(state, false));
 
     vectorized::ChunkPtr res = get_chunk_from_buffer();
     if (res == nullptr) {
@@ -211,7 +211,7 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
 
-Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
+Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state, bool from_io_thread) {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
@@ -219,6 +219,9 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         return Status::OK();
     }
 
+    std::lock_guard<std::mutex> guard(_submit_mutex);
+
+    int num_submitted_tasks = 0;
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
@@ -234,6 +237,13 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         } else {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
         }
+        ++num_submitted_tasks;
+    }
+
+    if (from_io_thread) {
+        _io_thread_submit_tasks_counter->update(num_submitted_tasks);
+    } else {
+        _exec_thread_submit_tasks_counter->update(num_submitted_tasks);
     }
 
     return Status::OK();
@@ -304,12 +314,12 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     int32_t driver_id = CurrentThread::current().get_driver_id();
 
     workgroup::ScanTask task;
-    task.workgroup = _workgroup;
+    task.workgroup = _workgroup.get();
     // TODO: consider more factors, such as scan bytes and i/o time.
     task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano](int worker_id) {
+                          io_task_start_nano]() {
         if (auto sp = wp.lock()) {
             // Set driver_id here to share some driver-local contents.
             // Current it's used by ExprContext's driver-local state
@@ -334,24 +344,19 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
-            // Read chunk
-            auto [status, num_read_chunks] =
-                    chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup, worker_id);
+            auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
                 _set_scan_status(status);
             }
 
             int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
-            if (_workgroup != nullptr) {
-                _workgroup->increment_real_runtime_ns(delta_cpu_time);
-                _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-            }
-
             _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                       chunk_source->get_scan_rows() - prev_scan_rows,
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
 
             QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+
+            _try_to_trigger_next_scan(state, true);
         }
     };
 
