@@ -98,11 +98,13 @@ void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns
 
     auto* wg_entity = wg->scan_sched_entity();
 
+    // Update bandwidth control information.
     _update_bandwidth_control_period();
     if (!wg_entity->is_rt_wg()) {
         _bandwidth_usage_ns += runtime_ns;
     }
 
+    // Update sched entity information.
     bool is_in_queue = _wg_entities.find(wg_entity) != _wg_entities.end();
     if (is_in_queue) {
         _wg_entities.erase(wg_entity);
