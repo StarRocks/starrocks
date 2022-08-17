@@ -187,11 +187,12 @@ public class ResourceGroupAnalyzer {
             if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
                 try {
                     resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL) {
-                        throw new SemanticException("Only support 'normal' type");
+                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_REALTIME) {
+                        throw new SemanticException("Only support 'normal' and 'realtime' type");
                     }
                 } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' type");
+                    throw new SemanticException("Only support 'normal' and 'realtime' type");
                 }
                 continue;
             }
