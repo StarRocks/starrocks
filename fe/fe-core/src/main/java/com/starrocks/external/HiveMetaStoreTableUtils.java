@@ -35,6 +35,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -43,6 +44,7 @@ public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
     public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
     public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
+    public static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -155,7 +157,7 @@ public class HiveMetaStoreTableUtils {
                     return false;
                 }
                 if (type.equals(Type.UNKNOWN_TYPE)) {
-                    return !Utils.HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
+                    return !HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
                             .collect(Collectors.toList()).isEmpty();
                 } else {
                     return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
