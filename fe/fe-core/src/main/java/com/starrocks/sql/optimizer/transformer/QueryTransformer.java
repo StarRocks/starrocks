@@ -69,13 +69,14 @@ class QueryTransformer {
         if (queryBlock.hasOrderBy()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
-                builder = projectForOrderWithoutAggregation(
-                        builder, queryBlock.getOutputExpr(), builder.getFieldMappings(), queryBlock.getOrderScope());
+                builder = projectForOrder(builder, queryBlock.getOutputExpr(), builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), false);
             } else {
                 //requires output fields, groups and translated aggregations to be visible for queries with aggregation
-                builder = projectForOrderWithAggregation(builder,
+                builder = projectForOrder(builder,
                         Iterables.concat(queryBlock.getOutputExpr(), queryBlock.getOrderSourceExpressions()),
-                        queryBlock.getOrderScope());
+                        builder.getFieldMappings(),
+                        queryBlock.getOrderScope(), true);
             }
 
             builder = window(builder, queryBlock.getOrderByAnalytic());
@@ -117,41 +118,28 @@ class QueryTransformer {
                 node).getRootBuilder();
     }
 
-    private OptExprBuilder projectForOrderWithoutAggregation(OptExprBuilder subOpt, Iterable<Expr> outputExpression,
-                                                             List<ColumnRefOperator> sourceExpression, Scope scope) {
+    private OptExprBuilder projectForOrder(OptExprBuilder subOpt, Iterable<Expr> expressions,
+                                           List<ColumnRefOperator> sourceExpression, Scope scope,
+                                           boolean withAggregation) {
         ExpressionMapping outputTranslations = new ExpressionMapping(scope);
 
         List<ColumnRefOperator> fieldMappings = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
-        for (Expr expression : outputExpression) {
-            ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
-                    subOpt.getExpressionMapping(), projections, columnRefFactory);
-            fieldMappings.add(columnRef);
-            outputTranslations.put(expression, columnRef);
-        }
-
-        for (ColumnRefOperator expression : sourceExpression) {
-            projections.put(expression, expression);
-            fieldMappings.add(expression);
-        }
-
-        LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
-        outputTranslations.setFieldMappings(fieldMappings);
-        return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
-    }
-
-    private OptExprBuilder projectForOrderWithAggregation(OptExprBuilder subOpt, Iterable<Expr> expressions,
-                                                          Scope scope) {
-        ExpressionMapping outputTranslations = new ExpressionMapping(scope);
-
-        List<ColumnRefOperator> fieldMappings = new ArrayList<>();
-        Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         for (Expr expression : expressions) {
+            subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
             fieldMappings.add(columnRef);
             outputTranslations.put(expression, columnRef);
+        }
+
+        if (!withAggregation) {
+            for (ColumnRefOperator expression : sourceExpression) {
+                projections.put(expression, expression);
+                fieldMappings.add(expression);
+            }
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
