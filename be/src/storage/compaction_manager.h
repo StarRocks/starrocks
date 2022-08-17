@@ -27,7 +27,7 @@ class CompactionManager {
 public:
     CompactionManager();
 
-    ~CompactionManager() = default;
+    ~CompactionManager();
 
     void init_max_task_num();
 
