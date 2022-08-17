@@ -42,6 +42,8 @@ public class PseudoCluster {
 
     private static volatile PseudoCluster instance;
 
+    public static boolean logToConsole = false;
+
     ClusterConfig config = new ClusterConfig();
 
     String runDir;
@@ -237,8 +239,10 @@ public class PseudoCluster {
         cluster.frontend.init(fakeJournal, runDir + "/fe", feConfMap);
         cluster.frontend.start(new String[0]);
 
-        System.out.println("start add console appender");
-        logAddConsoleAppender();
+        if (logToConsole) {
+            System.out.println("start add console appender");
+            logAddConsoleAppender();
+        }
 
         LOG.info("start create and start backends");
         cluster.backends = Maps.newConcurrentMap();

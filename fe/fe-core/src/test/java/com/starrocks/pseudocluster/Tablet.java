@@ -48,6 +48,13 @@ public class Tablet {
     private static AtomicInteger totalReadSucceed = new AtomicInteger(0);
     private static AtomicInteger totalVersionGCed = new AtomicInteger(0);
 
+    public static void clearStats() {
+        totalReadExecuted.set(0);
+        totalReadFailed.set(0);
+        totalReadSucceed.set(0);
+        totalVersionGCed.set(0);
+    }
+
     public synchronized TTabletInfo toThrift() {
         TTabletInfo info = new TTabletInfo();
         info.setTablet_id(id);
@@ -76,9 +83,10 @@ public class Tablet {
         @SerializedName(value = "createTimeMs")
         long createTimeMs;
 
-        EditVersion(long major, long minor) {
+        EditVersion(long major, long minor, long createTimeMs) {
             this.major = major;
             this.minor = minor;
+            this.createTimeMs = createTimeMs;
         }
     }
 
@@ -97,7 +105,7 @@ public class Tablet {
         this.partitionId = partitionId;
         this.schemaHash = schemaHash;
         this.enablePersistentIndex = enablePersistentIndex;
-        versions = Lists.newArrayList(new EditVersion(1, 0));
+        versions = Lists.newArrayList(new EditVersion(1, 0, System.currentTimeMillis()));
     }
 
     public synchronized int numRowsets() {
@@ -227,11 +235,10 @@ public class Tablet {
 
     private void commitNextRowset(Rowset rowset, long version, EditVersion lastVersion) {
         rowset.id = ++nextRssId;
-        EditVersion ev = new EditVersion(version, 0);
+        EditVersion ev = new EditVersion(version, 0, System.currentTimeMillis());
         ev.rowsets.addAll(lastVersion.rowsets);
         ev.rowsets.add(rowset);
         ev.delta = rowset;
-        ev.createTimeMs = System.currentTimeMillis();
         versions.add(ev);
         LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #version:{} #rowset:{}", rowset.txnId, id, version,
                 rowset.id, versions.size(), ev.rowsets.size());
@@ -295,23 +302,22 @@ public class Tablet {
             LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", src.id,
                     src.minVersion(), src.maxContinuousVersion(), id, missingVersions));
             fullCloneFrom(src);
-            return;
-        }
-        List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
-        for (Pair<Long, Rowset> p : versionAndRowsets) {
-            commitRowset(p.second.copy(), p.first);
+        } else {
+            List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
+            for (Pair<Long, Rowset> p : versionAndRowsets) {
+                commitRowset(p.second.copy(), p.first);
+            }
+            LOG.info("tablet:{} incremental clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo, versionInfo());
         }
         cloneExecuted.incrementAndGet();
-        LOG.info("tablet:{} incremental clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo, versionInfo());
     }
 
     private void fullCloneFrom(Tablet src) throws Exception {
         String oldInfo = versionInfo();
         // only copy the maxContinuousVersion, not pendingRowsets, to be same as current BE's behavior
         EditVersion srcVersion = src.getMaxContinuousEditVersion();
-        EditVersion destVersion = new EditVersion(srcVersion.major, srcVersion.minor);
+        EditVersion destVersion = new EditVersion(srcVersion.major, srcVersion.minor, System.currentTimeMillis());
         destVersion.rowsets = srcVersion.rowsets.stream().map(Rowset::copy).collect(Collectors.toList());
-        destVersion.createTimeMs = System.currentTimeMillis();
         versions = Lists.newArrayList(destVersion);
         pendingRowsets.clear();
         nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);

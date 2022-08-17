@@ -18,6 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.optimizer.statistics.EmptyStatisticStorage;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.utframe.MockJournal;
 import mockit.Mock;
@@ -189,6 +190,7 @@ public class PseudoFrontend {
                 }
 
                 GlobalStateMgr.getCurrentState().initialize(args);
+                GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
