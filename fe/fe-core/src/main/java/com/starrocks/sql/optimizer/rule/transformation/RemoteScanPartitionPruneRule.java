@@ -60,7 +60,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
 
         try {
-            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions);
             classifyConjuncts(operator, columnToPartitionValuesMap);
             computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions);
         } catch (Exception e) {
@@ -72,8 +72,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
 
     private void initPartitionInfo(LogicalScanOperator operator,
                                    Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-                                   OptimizerContext context) throws DdlException, AnalysisException {
+                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws DdlException, AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
@@ -130,15 +129,18 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
     private void computePartitionInfo(LogicalScanOperator operator,
                                       Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
                                       Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
-        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
-        ListPartitionPruner partitionPruner =
-                new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
-                        scanOperatorPredicates.getPartitionConjuncts());
-        Collection<Long> selectedPartitionIds = partitionPruner.prune();
-        if (selectedPartitionIds == null) {
-            selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
+        Table table = operator.getTable();
+        if (table instanceof HiveMetaStoreTable) {
+            ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
+            ListPartitionPruner partitionPruner =
+                    new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
+                            scanOperatorPredicates.getPartitionConjuncts());
+            Collection<Long> selectedPartitionIds = partitionPruner.prune();
+            if (selectedPartitionIds == null) {
+                selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
+            }
+            scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
+            scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         }
-        scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
-        scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
     }
 }
