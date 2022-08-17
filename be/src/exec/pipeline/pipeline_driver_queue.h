@@ -166,13 +166,16 @@ private:
     template <bool from_executor>
     void _put_back(const DriverRawPtr driver);
     workgroup::WorkGroupDriverSchedEntity* _take_next_wg();
-    // _update_min_wg is invoked when an entity is enqueued or dequeued from _ready_wg_entities.
+    // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
     // Apply hard bandwidth control to non-realtime workgroups, when there are queries of the realtime workgroup.
     bool _throttled(const workgroup::WorkGroupDriverSchedEntity* wg_entity, int64_t unaccounted_runtime_ns = 0) const;
     // _update_bandwidth_control_period resets period_end_ns and period_usage_ns, when a new period comes.
     // It is invoked when taking a task to execute or an executed task is finished.
     void _update_bandwidth_control_period();
+    template <bool from_executor>
+    void _enqueue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity);
+    void _dequeue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity);
 
     int64_t _bandwidth_quota_ns() const;
     // The ideal runtime of a work group is the weighted average of the schedule period.
@@ -193,9 +196,9 @@ private:
     bool _is_closed = false;
 
     // Contains the workgroups which include the drivers ready to be run.
-    // The entity is sorted by vruntime in set.
+    // Entities are sorted by vruntime in set.
     // MUST guarantee the entity is not in set, when updating its vruntime.
-    WorkgroupSet _ready_wg_entities;
+    WorkgroupSet _wg_entities;
 
     size_t _sum_cpu_limit = 0;
 

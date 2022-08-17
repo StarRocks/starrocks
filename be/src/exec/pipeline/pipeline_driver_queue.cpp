@@ -221,7 +221,7 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
 
         _update_bandwidth_control_period();
 
-        if (_ready_wg_entities.empty()) {
+        if (_wg_entities.empty()) {
             _cv.wait(lock);
         } else if (wg_entity = _take_next_wg(); wg_entity == nullptr) {
             int64_t cur_ns = MonotonicNanos();
@@ -238,9 +238,7 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
     // If wg only contains one ready driver, it will be not ready anymore
     // after taking away the only one driver.
     if (wg_entity->queue()->size() == 1) {
-        _sum_cpu_limit -= wg_entity->cpu_limit();
-        _ready_wg_entities.erase(wg_entity);
-        _update_min_wg();
+        _dequeue_workgroup(wg_entity);
     }
 
     return wg_entity->queue()->take();
@@ -272,14 +270,14 @@ void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
     }
 
     // Update sched entity information.
-    bool is_in_queue = _ready_wg_entities.find(wg_entity) != _ready_wg_entities.end();
+    bool is_in_queue = _wg_entities.find(wg_entity) != _wg_entities.end();
     if (is_in_queue) {
-        _ready_wg_entities.erase(wg_entity);
+        _wg_entities.erase(wg_entity);
     }
-    DCHECK(_ready_wg_entities.find(wg_entity) == _ready_wg_entities.end());
+    DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
     wg_entity->incr_runtime_ns(runtime_ns);
     if (is_in_queue) {
-        _ready_wg_entities.emplace(wg_entity);
+        _wg_entities.emplace(wg_entity);
         _update_min_wg();
     }
 
@@ -291,7 +289,7 @@ size_t WorkGroupDriverQueue::size() const {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
     size_t size = 0;
-    for (auto wg_entity : _ready_wg_entities) {
+    for (auto wg_entity : _wg_entities) {
         size += wg_entity->queue()->size();
     }
 
@@ -328,28 +326,8 @@ void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
     wg_entity->set_in_queue(this);
     wg_entity->queue()->put_back(driver);
 
-    if (_ready_wg_entities.find(wg_entity) == _ready_wg_entities.end()) {
-        _sum_cpu_limit += wg_entity->cpu_limit();
-        // The runtime needn't be adjusted for the workgroup put back from executor thread,
-        // because it has updated before executor thread put the workgroup back by update_statistics().
-        if constexpr (!from_executor) {
-            if (auto* min_wg_entity = _min_wg_entity.load(); min_wg_entity != nullptr) {
-                // The workgroup maybe leaves for a long time, which results in that the runtime of it
-                // may be much smaller than the other workgroups. If the runtime isn't adjusted, the others
-                // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
-                // and give it half of ideal runtime in a schedule period as compensation.
-                int64_t new_vruntime_ns = std::min(min_wg_entity->vruntime_ns() - _ideal_runtime_ns(wg_entity) / 2,
-                                                   min_wg_entity->runtime_ns() / int64_t(wg_entity->cpu_limit()));
-                int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
-                if (diff_vruntime_ns > 0) {
-                    DCHECK(_ready_wg_entities.find(wg_entity) == _ready_wg_entities.end());
-                    wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
-                }
-            }
-        }
-
-        _ready_wg_entities.emplace(wg_entity);
-        _update_min_wg();
+    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
+        _enqueue_workgroup<from_executor>(wg_entity);
     }
 
     _cv.notify_one();
@@ -368,7 +346,7 @@ void WorkGroupDriverQueue::_update_min_wg() {
 
 workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_take_next_wg() {
     workgroup::WorkGroupDriverSchedEntity* min_unthrottled_wg_entity = nullptr;
-    for (auto* wg_entity : _ready_wg_entities) {
+    for (auto* wg_entity : _wg_entities) {
         if (!_throttled(wg_entity)) {
             min_unthrottled_wg_entity = wg_entity;
             break;
@@ -378,8 +356,39 @@ workgroup::WorkGroupDriverSchedEntity* WorkGroupDriverQueue::_take_next_wg() {
     return min_unthrottled_wg_entity;
 }
 
+template <bool from_executor>
+void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity) {
+    _sum_cpu_limit += wg_entity->cpu_limit();
+    // The runtime needn't be adjusted for the workgroup put back from executor thread,
+    // because it has updated before executor thread put the workgroup back by update_statistics().
+    if constexpr (!from_executor) {
+        if (auto* min_wg_entity = _min_wg_entity.load(); min_wg_entity != nullptr) {
+            // The workgroup maybe leaves for a long time, which results in that the runtime of it
+            // may be much smaller than the other workgroups. If the runtime isn't adjusted, the others
+            // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
+            // and give it half of ideal runtime in a schedule period as compensation.
+            int64_t new_vruntime_ns = std::min(min_wg_entity->vruntime_ns() - _ideal_runtime_ns(wg_entity) / 2,
+                                               min_wg_entity->runtime_ns() / int64_t(wg_entity->cpu_limit()));
+            int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
+            if (diff_vruntime_ns > 0) {
+                DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
+                wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
+            }
+        }
+    }
+
+    _wg_entities.emplace(wg_entity);
+    _update_min_wg();
+}
+
+void WorkGroupDriverQueue::_dequeue_workgroup(workgroup::WorkGroupDriverSchedEntity* wg_entity) {
+    _sum_cpu_limit -= wg_entity->cpu_limit();
+    _wg_entities.erase(wg_entity);
+    _update_min_wg();
+}
+
 int64_t WorkGroupDriverQueue::_ideal_runtime_ns(workgroup::WorkGroupDriverSchedEntity* wg_entity) const {
-    return SCHEDULE_PERIOD_PER_WG_NS * _ready_wg_entities.size() * wg_entity->cpu_limit() / _sum_cpu_limit;
+    return SCHEDULE_PERIOD_PER_WG_NS * _wg_entities.size() * wg_entity->cpu_limit() / _sum_cpu_limit;
 }
 
 void WorkGroupDriverQueue::_update_bandwidth_control_period() {
