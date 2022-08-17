@@ -58,6 +58,24 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE `two_key` (\n" +
+                "  `k1` int(11) NULL,\n" +
+                "  `d1` date NULL COMMENT \"\",\n" +
+                "  `s1` varchar(5) NULL ,\n" +
+                "  `s2` varchar(5) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "PARTITION BY RANGE(`k1`,`d1`)\n" +
+                "(PARTITION p1 VALUES [('0', '2020-01-01'), ('100', '2020-03-01')),\n" +
+                "PARTITION p2 VALUES [('100', '2020-03-01'), ('200', '2020-06-01')),\n" +
+                "PARTITION p3 VALUES [('200', '2020-06-01'), ('300', '2020-09-01')),\n" +
+                "PARTITION p4 VALUES [('300', '2020-09-01'), ('400', '2021-01-01')))\n" +
+                "DISTRIBUTED BY HASH(`s1`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
@@ -159,6 +177,9 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add(
                 "select * from tbl_int where ((k1 = 1 or k1 not between 50 and 400) and k1 <300) or k1 > floor(1000.5) and s1 > s1 + s2");
 
+        sqlList.add("select * from two_key where k1 = 5");
+        sqlList.add("select * from two_key where k1 = 5 and d1 = '2020-09-01'");
+
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
@@ -205,6 +226,9 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
         sqlList.add("select * from tbl_int where not (k1 >= 100 and k1 < 300)");
         sqlList.add("select * from tbl_int where not not not (k1 >= 100 and k1 < 300)");
+
+
+        sqlList.add("select * from two_key where k1 = 100");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
@@ -236,6 +260,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from tbl_int where k1 in (1,201,202,203,204,200,201,202,203,204,200,201,202,203,204," +
                 "200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204," +
                 "200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,350)");
+
+        sqlList.add("select * from two_key where k1 < 100 or (k1 > 200 and k1 < 300)");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
@@ -263,8 +289,9 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
         sqlList.add("select * from tbl_int where k1 in (1,'a',200,300)");
         sqlList.add("select * from tbl_int where (k1 in (1,'a') and k1 != s1) or k1 > 150");
-
         sqlList.add("select * from tbl_int where k1 in (1,100,200,300) or k1 > 300");
+
+        sqlList.add("select * from two_key where k1 < 100 or k1 > 200");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }

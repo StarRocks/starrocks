@@ -70,7 +70,7 @@ public class PartitionPruneRule extends TransformationRule {
                     .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());
         }
 
-        if (isNeedFurtherPrune(selectedPartitionIds, olapScanOperator)) {
+        if (isNeedFurtherPrune(selectedPartitionIds, olapScanOperator, partitionInfo)) {
             PartitionColPredicateExtractor extractor = new PartitionColPredicateExtractor(
                     (RangePartitionInfo) partitionInfo, olapScanOperator.getColumnMetaToColRefMap());
             PartitionColPredicateEvaluator evaluator = new PartitionColPredicateEvaluator((RangePartitionInfo) partitionInfo,
@@ -116,9 +116,18 @@ public class PartitionPruneRule extends TransformationRule {
         return null;
     }
 
-    private boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator) {
+    private boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
+                                       PartitionInfo partitionInfo) {
 
         if (candidatePartitions.size() == 0) {
+            return false;
+        }
+
+        if (partitionInfo.getType() != PartitionType.RANGE) {
+            return false;
+        }
+
+        if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
             return false;
         }
 
