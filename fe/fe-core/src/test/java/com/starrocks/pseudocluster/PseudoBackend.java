@@ -35,7 +35,6 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.PBackendServiceAsync;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
@@ -174,21 +173,21 @@ public class PseudoBackend {
         currentBackend.set(PseudoBackend.this);
         while (!stopped) {
             try {
-                Runnable task;
+                Runnable task = null;
                 synchronized (maintenanceTasks) {
-                    if (maintenanceTasks.isEmpty()) {
-                        Thread.sleep(500);
-                        continue;
+                    if (!maintenanceTasks.isEmpty()) {
+                        long ts = maintenanceTasks.firstKey();
+                        long now = System.nanoTime();
+                        if (ts <= now) {
+                            task = maintenanceTasks.pollFirstEntry().getValue();
+                        }
                     }
-                    long ts = maintenanceTasks.firstKey();
-                    long now = System.nanoTime();
-                    if (ts > now) {
-                        Thread.sleep(500);
-                        continue;
-                    }
-                    task = maintenanceTasks.pollFirstEntry().getValue();
                 }
-                task.run();
+                if (task != null) {
+                    task.run();
+                } else {
+                    Thread.sleep(500);
+                }
             } catch (Throwable e) {
                 LOG.error("Error in maintenance worker be:" + getId(), e);
             }
@@ -239,7 +238,6 @@ public class PseudoBackend {
         be.setBePort(beThriftPort);
         be.setBrpcPort(brpcPort);
         be.setHttpPort(httpPort);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
         this.heatBeatClient = new HeartBeatClient();
         this.backendClient = new BeThriftClient();
         this.pBackendService = new PseudoPBackendService();

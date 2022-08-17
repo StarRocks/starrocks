@@ -25,6 +25,8 @@ import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 
 import java.io.File;
 import java.io.IOException;
@@ -226,14 +228,19 @@ public class PseudoCluster {
         ClientPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 
+        // statistics affects table read times counter, so disable it
+        Config.enable_statistic_collect = false;
         Config.plugin_dir = runDir + "/plugins";
         Map<String, String> feConfMap = Maps.newHashMap();
-
         feConfMap.put("tablet_create_timeout_second", "10");
         feConfMap.put("query_port", Integer.toString(queryPort));
         cluster.frontend.init(fakeJournal, runDir + "/fe", feConfMap);
         cluster.frontend.start(new String[0]);
 
+        System.out.println("start add console appender");
+        logAddConsoleAppender();
+
+        LOG.info("start create and start backends");
         cluster.backends = Maps.newConcurrentMap();
         long backendIdStart = 10001;
         int port = 12100;
@@ -245,7 +252,8 @@ public class PseudoCluster {
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
-            LOG.warn("add PseudoBackend {} {}", beId, host);
+            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
+            LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
         while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
@@ -254,6 +262,19 @@ public class PseudoCluster {
         }
         Thread.sleep(2000);
         return cluster;
+    }
+
+    private static void logAddConsoleAppender() {
+        PatternLayout layout =
+                PatternLayout.newBuilder().withPattern("%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n")
+                        .build();
+        ConsoleAppender ca = ConsoleAppender.newBuilder()
+                .setName("console")
+                .setLayout(layout)
+                .setTarget(ConsoleAppender.Target.SYSTEM_OUT)
+                .build();
+        ca.start();
+        ((org.apache.logging.log4j.core.Logger) LogManager.getRootLogger()).addAppender(ca);
     }
 
     public static synchronized PseudoCluster getOrCreateWithRandomPort(boolean fakeJournal, int numBackends) throws Exception {

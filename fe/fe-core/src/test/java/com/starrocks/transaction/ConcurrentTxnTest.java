@@ -188,7 +188,7 @@ public class ConcurrentTxnTest {
     }
 
     int runTime = 3;
-    int numDB = 20;
+    int numDB = 2;
     int numTable = 100;
     int numThread = 2;
     int runSeconds = 2;
