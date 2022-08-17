@@ -343,7 +343,10 @@ public class Tablet {
                     versionInfo());
         }
         cloneExecuted.incrementAndGet();
-        System.out.printf("\ntablet:%s clone src:%s before:%s after:%s\n", id, src.versionInfo(), oldInfo, versionInfo());
+        LOG.info("tablet:{} clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo, versionInfo());
+        // For easier debug reason, we also log it to stdout
+        System.out.printf("\ntablet:%s clone src:%s before:%s after:%s\n",
+                id, src.versionInfo(), oldInfo, versionInfo());
         return versionAndRowsets.size();
     }
 

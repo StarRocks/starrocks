@@ -50,6 +50,7 @@ public class DiskUsageSimTest {
         PseudoBackend backend2 = cluster.getBackend(10002);
         backend2.setInitialCapacity(20 * GB, 8 * GB, 6 * GB);
         // wait for the disk info to be reported
+        // TODO: sleep based on config when disk report interval is configurable
         Thread.sleep(10000);
         Assert.assertEquals(10 * GB,
                 systemInfoService.getBackend(10001).getTotalCapacityB());
@@ -82,6 +83,7 @@ public class DiskUsageSimTest {
         backend1.setInitialCapacity(10 * GB, 8 * GB, 2 * GB);
         // this will commit 2 transactions
         PseudoClusterUtils.triggerIncrementalCloneOnce(cluster, 10001);
+        // TODO: sleep based on config when disk report interval is configurable
         Thread.sleep(10000);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         System.out.println(systemInfoService.getBackend(10001).getDataUsedCapacityB());
