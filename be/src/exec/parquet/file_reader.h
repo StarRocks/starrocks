@@ -97,7 +97,7 @@ private:
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                          const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                          const tparquet::ColumnOrder* column_order, vectorized::ColumnPtr* min_column,
-                                         vectorized::ColumnPtr* max_column);
+                                         vectorized::ColumnPtr* max_column, bool* decode_ok);
     static bool _can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
                                        const tparquet::ColumnOrder* column_order);
     // statistics.min_value max_value
