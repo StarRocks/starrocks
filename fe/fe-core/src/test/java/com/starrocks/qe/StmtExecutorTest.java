@@ -45,6 +45,7 @@ import com.starrocks.thrift.TUniqueId;
 import java_cup.runtime.Symbol;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -100,6 +101,11 @@ public class StmtExecutorTest {
                 "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");");
+    }
+
+    @AfterClass
+    public static void stop() throws Exception {
+        PseudoCluster.getInstance().shutdown(true);
     }
 
     @Before

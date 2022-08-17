@@ -38,4 +38,5 @@ public abstract class Tablet extends MetaObject implements Writable {
     public String toString() {
         return "id=" + id;
     }
+
 }

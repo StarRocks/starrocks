@@ -833,14 +833,24 @@ public class PseudoBackend {
         report.setDone(true);
         // TODO: support error injection
         report.setStatus(new TStatus(TStatusCode.OK));
-        for (TPlanNode planNode : params.fragment.plan.nodes) {
-            if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
-                runOlapScan(report, planNode, params.params.per_node_scan_ranges.get(planNode.getNode_id()));
+        try {
+            for (TPlanNode planNode : params.fragment.plan.nodes) {
+                if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
+                    List<TScanRangeParams> scanRanges = params.params.per_node_scan_ranges.get(planNode.getNode_id());
+                    if (scanRanges == null) {
+                        continue;
+                    }
+                    runOlapScan(report, planNode, params.params.per_node_scan_ranges.get(planNode.getNode_id()));
+                }
             }
-        }
-        if (params.fragment.output_sink != null) {
-            TDataSink tDataSink = params.fragment.output_sink;
-            runSink(report, tDataSink);
+            if (params.fragment.output_sink != null) {
+                TDataSink tDataSink = params.fragment.output_sink;
+                runSink(report, tDataSink);
+            }
+        } catch (Throwable e) {
+            e.printStackTrace();
+            LOG.warn("error execPlanFragmentWithReport", e);
+            report.setStatus(status(TStatusCode.INTERNAL_ERROR, e.getMessage()));
         }
         try {
             TReportExecStatusResult ret = frontendService.reportExecStatus(report);
@@ -862,17 +872,27 @@ public class PseudoBackend {
         report.setDone(true);
         // TODO: support error injection
         report.setStatus(new TStatus(TStatusCode.OK));
-        for (TPlanNode planNode : commonParams.fragment.plan.nodes) {
-            if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
-                runOlapScan(report, planNode, uniqueParams.params.per_node_scan_ranges.get(planNode.getNode_id()));
+        try {
+            for (TPlanNode planNode : commonParams.fragment.plan.nodes) {
+                if (planNode.node_type == TPlanNodeType.OLAP_SCAN_NODE) {
+                    List<TScanRangeParams> scanRanges = uniqueParams.params.per_node_scan_ranges.get(planNode.getNode_id());
+                    if (scanRanges == null) {
+                        continue;
+                    }
+                    runOlapScan(report, planNode, scanRanges);
+                }
             }
-        }
-        if (uniqueParams.fragment.output_sink != null) {
-            TDataSink tDataSink = uniqueParams.fragment.output_sink;
-            runSink(report, tDataSink);
-        } else if (commonParams.fragment.output_sink != null) {
-            TDataSink tDataSink = commonParams.fragment.output_sink;
-            runSink(report, tDataSink);
+            if (uniqueParams.fragment.output_sink != null) {
+                TDataSink tDataSink = uniqueParams.fragment.output_sink;
+                runSink(report, tDataSink);
+            } else if (commonParams.fragment.output_sink != null) {
+                TDataSink tDataSink = commonParams.fragment.output_sink;
+                runSink(report, tDataSink);
+            }
+        } catch (Throwable e) {
+            e.printStackTrace();
+            LOG.warn("error execBatchPlanFragment", e);
+            report.setStatus(status(TStatusCode.INTERNAL_ERROR, e.getMessage()));
         }
         try {
             TReportExecStatusResult ret = frontendService.reportExecStatus(report);
