@@ -64,6 +64,11 @@ public class CreateResourceStmt extends DdlStmt {
         return resourceType;
     }
 
+    // only used for UT
+    public void setResourceType(ResourceType type) {
+        this.resourceType = type;
+    }
+
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);

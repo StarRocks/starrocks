@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.proc.BaseProcResult;
 import org.apache.commons.lang.StringUtils;
 
@@ -43,10 +44,12 @@ public class HiveResource extends Resource {
         Preconditions.checkState(properties != null, "properties can not be null");
 
         metastoreURIs = properties.get(HIVE_METASTORE_URIS);
-        if (StringUtils.isBlank(metastoreURIs)) {
-            throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
+        if (!FeConstants.runningUnitTest) {
+            if (StringUtils.isBlank(metastoreURIs)) {
+                throw new DdlException(HIVE_METASTORE_URIS + " must be set in properties");
+            }
+            validateMetastoreUris(metastoreURIs);
         }
-        validateMetastoreUris(metastoreURIs);
     }
 
     @Override
