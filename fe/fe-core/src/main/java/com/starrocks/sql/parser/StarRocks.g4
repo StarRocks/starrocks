@@ -640,29 +640,29 @@ deleteStatement
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
 createRoutineLoadStatement
     : CREATE ROUTINE LOAD (db=qualifiedName '.')? name=identifier ON table=qualifiedName
-    (loadProperties (',' loadProperties)*)?
-    jobProperties?
-    FROM source=identifier
-    dataSourceProperties?
+        (loadProperties (',' loadProperties)*)?
+        jobProperties?
+        FROM source=identifier
+        dataSourceProperties?
     ;
 
 loadProperties
-    :(COLUMNS TERMINATED BY string)|
-    (COLUMNS columnProperties)|
-    (WHERE expression)|
-    (partitionNames)
+    : (COLUMNS TERMINATED BY string)
+    | (COLUMNS columnProperties)
+    | (WHERE expression)
+    | (partitionNames)
     ;
 
 columnProperties
-    :'(' identifier (',' identifier)* (',' assignment)* ')'
+    : '(' identifier (',' identifier)* (',' assignment)* ')'
     ;
 
 jobProperties
-    :properties
+    : properties
     ;
 
 dataSourceProperties
-    :propertyList
+    : propertyList
     ;
 
 stopRoutineLoadStatement
