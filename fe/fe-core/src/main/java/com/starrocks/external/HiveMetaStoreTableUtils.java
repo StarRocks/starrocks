@@ -44,7 +44,7 @@ public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
     public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
     public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
-    public static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
