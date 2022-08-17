@@ -202,9 +202,6 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     _peak_buffer_size_counter->set(_buffer_limiter->size());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
-    if (_workgroup != nullptr) {
-        _workgroup->incr_period_ask_chunk_num(1);
-    }
 
     for (auto& chunk_source : _chunk_sources) {
         if (chunk_source != nullptr && chunk_source->has_output()) {
@@ -288,8 +285,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     }
     int32_t driver_id = CurrentThread::current().get_driver_id();
     if (_workgroup != nullptr) {
-        workgroup::ScanTask task = workgroup::ScanTask(
-                _workgroup, [wp = _query_ctx, this, state, chunk_source_index, driver_id](int worker_id) {
+        workgroup::ScanTask task =
+                workgroup::ScanTask(_workgroup.get(), [wp = _query_ctx, this, state, chunk_source_index, driver_id]() {
                     if (auto sp = wp.lock()) {
                         // Set driver_id here to share some driver-local contents.
                         // Current it's used by ExprContext's driver-local state
@@ -298,27 +295,24 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
                         auto& chunk_source = _chunk_sources[chunk_source_index];
-                        size_t num_read_chunks = 0;
                         int64_t prev_cpu_time = chunk_source->get_cpu_time_spent();
                         int64_t prev_scan_rows = chunk_source->get_scan_rows();
                         int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
                         // Read chunk
                         Status status = chunk_source->buffer_next_batch_chunks_blocking_for_workgroup(
-                                _buffer_size, state, &num_read_chunks, worker_id, _workgroup);
+                                _buffer_size, state, _workgroup.get());
                         if (!status.ok() && !status.is_end_of_file()) {
                             _set_scan_status(status);
                         }
 
                         int64_t delta_cpu_time = chunk_source->get_cpu_time_spent() - prev_cpu_time;
-                        _workgroup->increment_real_runtime_ns(delta_cpu_time);
-                        _workgroup->incr_period_scaned_chunk_num(num_read_chunks);
-
                         _finish_chunk_source_task(state, chunk_source_index, delta_cpu_time,
                                                   chunk_source->get_scan_rows() - prev_scan_rows,
                                                   chunk_source->get_scan_bytes() - prev_scan_bytes);
                     }
                 });
+        task.priority = vectorized::OlapScanNode::compute_priority(_submit_task_counter->value());
         if (dynamic_cast<ConnectorScanOperator*>(this) != nullptr) {
             offer_task_success = ExecEnv::GetInstance()->hdfs_scan_executor()->submit(std::move(task));
         } else {

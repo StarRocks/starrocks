@@ -49,6 +49,11 @@ public class WorkGroupMgr implements Writable {
     private GlobalStateMgr globalStateMgr;
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
+
+    // Record the current realtime resource group.
+    // There can be only one realtime resource group.
+    private WorkGroup rtResourceGroup = null;
+
     private Map<Long, WorkGroupClassifier> classifierMap = new HashMap<>();
     private List<TWorkGroupOp> workGroupOps = new ArrayList<>();
     private Map<Long, Map<Long, TWorkGroup>> activeWorkGroupsPerBe = new HashMap<>();
@@ -89,15 +94,19 @@ public class WorkGroupMgr implements Writable {
                     return;
                 }
             }
+
+            if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME && rtResourceGroup != null) {
+                throw new DdlException(
+                        String.format("There can be only one realtime RESOURCE_GROUP (%s)", rtResourceGroup.getName()));
+            }
+
             wg.setId(globalStateMgr.getCurrentState().getNextId());
+            wg.setVersion(wg.getId());
             for (WorkGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setWorkgroupId(wg.getId());
                 classifier.setId(globalStateMgr.getCurrentState().getNextId());
-                classifierMap.put(classifier.getId(), classifier);
             }
-            workGroupMap.put(wg.getName(), wg);
-            id2WorkGroupMap.put(wg.getId(), wg);
-            wg.setVersion(wg.getId());
+            addWorkGroupInternal(wg);
             WorkGroupOpEntry workGroupOp = new WorkGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
             globalStateMgr.getCurrentState().getEditLog().logWorkGroupOp(workGroupOp);
             workGroupOps.add(workGroupOp.toThrift());
@@ -277,10 +286,10 @@ public class WorkGroupMgr implements Writable {
                 if (concurrentLimit != null) {
                     wg.setConcurrencyLimit(concurrentLimit);
                 }
+
+                // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getWorkGroupType();
-                if (workGroupType != null) {
-                    wg.setWorkGroupType(workGroupType);
-                }
+                Preconditions.checkState(workGroupType == null);
             } else if (cmd instanceof AlterWorkGroupStmt.DropClassifiers) {
                 Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
                 Iterator<WorkGroupClassifier> classifierIterator = wg.getClassifiers().iterator();
@@ -363,6 +372,9 @@ public class WorkGroupMgr implements Writable {
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
+        if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME) {
+            rtResourceGroup = null;
+        }
     }
 
     private void addWorkGroupInternal(WorkGroup wg) {
@@ -370,6 +382,9 @@ public class WorkGroupMgr implements Writable {
         id2WorkGroupMap.put(wg.getId(), wg);
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
+        }
+        if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME) {
+            rtResourceGroup = wg;
         }
     }
 

@@ -152,8 +152,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .set_max_queue_size(1000)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&hdfs_scan_worker_thread_pool));
-    _hdfs_scan_executor =
-            new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool), workgroup::TypeHdfsScanExecutor);
+    _hdfs_scan_executor = new workgroup::ScanExecutor(std::move(hdfs_scan_worker_thread_pool));
     _hdfs_scan_executor->initialize(hdfs_num_io_threads);
 
     _udf_call_pool = new PriorityThreadPool("udf", config::udf_thread_pool_size, config::udf_thread_pool_size);
@@ -226,8 +225,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                                 .set_max_queue_size(1000)
                                 .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                                 .build(&scan_worker_thread_pool));
-        _scan_executor =
-                new workgroup::ScanExecutor(std::move(scan_worker_thread_pool), workgroup::TypeOlapScanExecutor);
+        _scan_executor = new workgroup::ScanExecutor(std::move(scan_worker_thread_pool));
         _scan_executor->initialize(num_io_threads);
 
         Status status = _load_path_mgr->init();

@@ -44,8 +44,7 @@ public:
 
     virtual Status buffer_next_batch_chunks_blocking(size_t chunk_size, RuntimeState* state) = 0;
     virtual Status buffer_next_batch_chunks_blocking_for_workgroup(size_t chunk_size, RuntimeState* state,
-                                                                   size_t* num_read_chunks, int worker_id,
-                                                                   workgroup::WorkGroupPtr running_wg) = 0;
+                                                                   workgroup::WorkGroup* running_wg) = 0;
 
     // Counters of scan
     int64_t get_cpu_time_spent() { return _cpu_time_spent_ns; }
