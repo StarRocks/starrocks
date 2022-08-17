@@ -1340,33 +1340,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (db != null) {
                 db.readLock();
                 try {
-                    List<Table> tables = db.getTables();
-                    tables.forEach(table -> {
+                    List<Table> allTables = db.getTables();
+                    allTables.forEach(table -> {
                         TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
                         tableMetaInfo.setTable_schema(dbName);
                         tableMetaInfo.setTable_name(table.getName());
-                        // MYSQL,
-                        // OLAP, (done)
-                        // OLAP_EXTERNAL, (done)
-                        // SCHEMA,
-                        // INLINE_VIEW,
-                        // VIEW,
-                        // BROKER,
-                        // ELASTICSEARCH,
-                        // HIVE,
-                        // ICEBERG,
-                        // HUDI,
-                        // JDBC,
-                        // MATERIALIZED_VIEW,
-                        // LAKE (done)
-                        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) { 
+                        
+                        if (table.isOlapOrLakeTable() || 
+                                table.getType() == TableType.OLAP_EXTERNAL ||
+                                table.getType() == TableType.MATERIALIZED_VIEW) {
+                            // OLAP (done)
+                            // OLAP_EXTERNAL (done)
+                            // MATERIALIZED_VIEW (done)
+                            // LAKE (done)
                             tableMetaInfo = genNormalTableMetaInfo(table, tableMetaInfo);
-                        } else if (table.getType() == TableType.MATERIALIZED_VIEW) {
-                            // TODO(cjs): other table type
-                            tableMetaInfo = genDefaultMetaInfo(tableMetaInfo);
                         } else {
+                            // SCHEMA (use default)
+                            // INLINE_VIEW (use default)
+                            // VIEW (use default)
+                            // BROKER (use default)                           
                             tableMetaInfo = genDefaultMetaInfo(tableMetaInfo);
                         }
+                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableMetaInfo);
                     });
                 } finally {
@@ -1403,9 +1398,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 idx++;
             }
         } catch (NotImplementedException e) {
+            // This exception will be throwed except partition type is range
             partitionKeySb.append("NULL");
         }
-        tableMetaInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) ? "PRIMARY" : "NULL");
+        tableMetaInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) ? distributeKey : "NULL");
         tableMetaInfo.setPartition_key(partitionKeySb.toString());
         tableMetaInfo.setDistribute_bucket(distributeNum);
         tableMetaInfo.setDistribute_type("HASH");
