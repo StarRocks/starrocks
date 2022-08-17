@@ -19,17 +19,17 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.*;
 
-public class RemoteScanMinMaxConjunctsRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(RemoteScanMinMaxConjunctsRule.class);
+public class PushDownMinMaxConjunctsRule extends TransformationRule {
+    private static final Logger LOG = LogManager.getLogger(PushDownMinMaxConjunctsRule.class);
 
-    public static final RemoteScanMinMaxConjunctsRule HIVE_SCAN =
-            new RemoteScanMinMaxConjunctsRule(OperatorType.LOGICAL_HIVE_SCAN);
-    public static final RemoteScanMinMaxConjunctsRule HUDI_SCAN =
-            new RemoteScanMinMaxConjunctsRule(OperatorType.LOGICAL_HUDI_SCAN);
-    public static final RemoteScanMinMaxConjunctsRule ICEBERG_SCAN =
-            new RemoteScanMinMaxConjunctsRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final PushDownMinMaxConjunctsRule HIVE_SCAN =
+            new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final PushDownMinMaxConjunctsRule HUDI_SCAN =
+            new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final PushDownMinMaxConjunctsRule ICEBERG_SCAN =
+            new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_ICEBERG_SCAN);
 
-    public RemoteScanMinMaxConjunctsRule(OperatorType logicalOperatorType) {
+    public PushDownMinMaxConjunctsRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(logicalOperatorType));
     }
 

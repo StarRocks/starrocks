@@ -18,8 +18,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
-
-    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private ScanOperatorPredicates predicates;
 
     public PhysicalIcebergScanOperator(Table table,
                                        Map<ColumnRefOperator, Column> columnRefMap,
@@ -63,15 +62,9 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
             return false;
         }
 
-        PhysicalHiveScanOperator that = (PhysicalHiveScanOperator) o;
-        ScanOperatorPredicates targetPredicts = ((PhysicalHiveScanOperator) o).getScanOperatorPredicates();
-        return Objects.equal(table, that.table) &&
-                Objects.equal(predicates.getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
-                Objects.equal(predicates.getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
-                Objects.equal(predicates.getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
-                Objects.equal(predicates.getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
-                Objects.equal(predicates.getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
-                Objects.equal(predicates.getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
+        PhysicalIcebergScanOperator that = (PhysicalIcebergScanOperator) o;
+        ScanOperatorPredicates targetPredicts = ((PhysicalIcebergScanOperator) o).getScanOperatorPredicates();
+        return Objects.equal(table, that.table) && predicates.equals(targetPredicts);
     }
 
     @Override

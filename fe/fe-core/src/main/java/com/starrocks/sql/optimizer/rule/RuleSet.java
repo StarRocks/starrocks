@@ -107,7 +107,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRu
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAnchorRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.RemoteScanMinMaxConjunctsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownMinMaxConjunctsRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
@@ -247,9 +247,9 @@ public class RuleSet {
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
                 new MergeTwoFiltersRule(),
                 new PushDownPredicateCTEConsumeRule(),
-                RemoteScanMinMaxConjunctsRule.HIVE_SCAN,
-                RemoteScanMinMaxConjunctsRule.HUDI_SCAN,
-                RemoteScanMinMaxConjunctsRule.ICEBERG_SCAN
+                PushDownMinMaxConjunctsRule.HIVE_SCAN,
+                PushDownMinMaxConjunctsRule.HUDI_SCAN,
+                PushDownMinMaxConjunctsRule.ICEBERG_SCAN
         ));
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_SUBQUERY, ImmutableList.of(
