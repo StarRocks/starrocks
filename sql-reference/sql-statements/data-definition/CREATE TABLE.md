@@ -106,8 +106,8 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 注意：
 
 1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT,SMALLINT, INT, BIGINT`。
-2. 如果用在建表时 REPLACE_IF_NOT_NULL 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-该类型只对聚合模型(key_desc 的 type 为 AGGREGATE KEY)有用，其它模型不能指这个。
+2. 如果用在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
+该类型只对聚合模型有用(`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
 **NULL | NOT NULL**：是否允许为 NULL: 默认为 NULL, PRIMARY KEY的key列默认为NOT NULL, NULL 值在导入数据中用 \N 来表示。
 
@@ -225,7 +225,7 @@ PARTITION BY RANGE (k1, k2, ...)
 
 1. 分区名称仅支持字母开头，字母、数字和下划线组成。
 2. 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
-3. 分区为左闭右开区间，首个分区的左边界为做最小值。
+3. 分区为左闭右开区间，首个分区的左边界为最小值。
 4. NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。
 5. 可以指定一列或多列作为分区列。如果分区值缺省，则会默认填充最小值。
 
