@@ -475,6 +475,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int http_backlog_num = 1024;
 
+    @ConfField
+    public static int http_max_initial_line_length = 4096;
+
+    @ConfField
+    public static int http_max_header_size = 8192;
+
+    @ConfField
+    public static int http_max_chunk_size = 8192;
+
     /**
      * Cluster name will be shown as the title of web page
      */
