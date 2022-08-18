@@ -28,12 +28,14 @@ import java.util.stream.Collectors;
 
 public class PartitionColPredicateEvaluator {
     private List<Long> candidatePartitions;
+
     private List<Range<PartitionKey>> candidateRanges;
-    int candidateNum = 0;
 
-    private static int IN_OPERANDS_LIMIT = 50;
+    private int candidateNum = 0;
 
-    Column partitionColumn;
+    private final static int IN_OPERANDS_LIMIT = 50;
+
+    private Column partitionColumn;
 
     public PartitionColPredicateEvaluator(RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
         this.candidatePartitions = candidatePartitions;
@@ -134,7 +136,7 @@ public class PartitionColPredicateEvaluator {
         @Override
         public BitSet visitInPredicate(InPredicateOperator predicate, Void context) {
             List<ConstantOperator> constList = predicate.getChildren().stream()
-                    .skip(1).map(e -> (ConstantOperator) e)
+                    .skip(1).map(ConstantOperator.class::cast)
                     .filter(e -> !e.isNull()).sorted().collect(Collectors.toList());
             BitSet res = new BitSet();
             boolean encounterEx = false;
