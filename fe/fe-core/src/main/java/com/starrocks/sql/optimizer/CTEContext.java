@@ -118,7 +118,7 @@ public class CTEContext {
     }
 
     public boolean needOptimizeCTE() {
-        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || produces.size() > 0;
+        return consumeNums.values().stream().reduce(Integer::max).orElse(0) > 0 || !produces.isEmpty();
     }
 
     public boolean needPushPredicate() {

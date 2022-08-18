@@ -101,6 +101,12 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (groupExpression.isUnused()) {
             return;
         }
+
+        if (!checkCTEPropertyValid(groupExpression, context.getRequiredProperty())) {
+            // prune CTE invalid plan
+            return;
+        }
+
         // Init costs and get required properties for children
         initRequiredProperties();
 
@@ -157,10 +163,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // Successfully optimize all child group
             if (curChildIndex == groupExpression.getInputs().size()) {
-                if (!checkCTEPropertyValid(groupExpression, context.getRequiredProperty())) {
-                    break;
-                }
-
                 // before we compute the property, here need to make sure that the plan is legal
                 ChildOutputPropertyGuarantor childOutputPropertyGuarantor = new ChildOutputPropertyGuarantor(context,
                         groupExpression,
@@ -399,8 +401,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             // and shuffle join two types outputProperty.
             groupExpression.setOutputPropertySatisfyRequiredProperty(outputProperty, requiredProperty);
         }
-        this.groupExpression.getGroup().setBestExpression(groupExpression,
-                curTotalCost, requiredProperty);
+        this.groupExpression.getGroup().setBestExpression(groupExpression, curTotalCost, requiredProperty);
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
             // record the output/input properties when child group could satisfy this group expression required property
             groupExpression.addValidOutputInputProperties(requiredProperty, inputProperties);
