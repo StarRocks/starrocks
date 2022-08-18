@@ -33,6 +33,7 @@
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_element_expr.h"
 #include "exprs/vectorized/array_expr.h"
+#include "exprs/vectorized/array_map_expr.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/case_expr.h"
 #include "exprs/vectorized/cast_expr.h"
@@ -49,7 +50,6 @@
 #include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/placeholder_ref.h"
-#include "exprs/vectorized/transform_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type.h"
@@ -294,8 +294,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
             *expr = pool->add(vectorized::VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "transform") {
-            *expr = pool->add(new vectorized::TransformExpr(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_map") {
+            *expr = pool->add(new vectorized::ArrayMapExpr(texpr_node));
         } else {
             *expr = pool->add(new vectorized::VectorizedFunctionCallExpr(texpr_node));
         }

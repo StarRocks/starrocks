@@ -61,7 +61,7 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP) && functionCallExpr.getChildren().size() > 1) {
-            functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(1).getChild(1).getType()));
+            functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(1).getType()));
         }
     }
 

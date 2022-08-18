@@ -1341,11 +1341,24 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.fn = fn;
     }
 
+    // only the first one can be lambda functions.
     public boolean hasLambdaFunction() {
-        if (children.size() < 2) {
-            return false;
+        int pos = -1, num = 0;
+        for (int i = 0; i < children.size(); ++i) {
+            if (children.get(i) instanceof LambdaFunction) {
+                num++;
+                pos = i;
+            }
         }
-        return children.get(children.size()-1) instanceof LambdaFunction;
+        if (num == 1 && pos == 0) {
+            return true;
+        } else if (num > 1) {
+            Preconditions.checkState(false, "A high-order function can have one lambda function.");
+        } else if (pos > 0) {
+            Preconditions.checkState(false,
+                    "Lambda functions can only be the first argument of any high-order function.");
+        }
+        return false;
     }
 
     public boolean isSelfMonotonic() {
