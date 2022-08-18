@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"

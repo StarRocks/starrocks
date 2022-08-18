@@ -7,12 +7,12 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -63,7 +63,7 @@ private:
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partitions; // Partial sorters
     std::vector<std::unique_ptr<vectorized::SimpleChunkSortCursor>> _partial_cursors;
     vectorized::MergeCursorsCascade _merger;
-    ChunkSlice _current_chunk;
+    vectorized::ChunkSlice _current_chunk;
     int64_t _required_rows = 0;
     bool _merger_inited = false;
 };

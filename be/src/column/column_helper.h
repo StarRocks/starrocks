@@ -384,4 +384,16 @@ public:
     static NullColumnPtr one_size_null_column;
 };
 
+// Hold a slice of chunk
+struct ChunkSlice {
+    ChunkUniquePtr chunk;
+    size_t offset = 0;
+
+    bool empty() const;
+    size_t rows() const;
+    size_t skip(size_t skip_rows);
+    vectorized::ChunkPtr cutoff(size_t required_rows);
+    void reset(vectorized::ChunkUniquePtr input);
+};
+
 } // namespace starrocks::vectorized
