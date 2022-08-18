@@ -8,8 +8,8 @@ import java.util.UUID;
 
 // OptimizerTraceInfo is used to record some important info during query optimization
 public class OptimizerTraceInfo {
-    private UUID queryId;
-    private Map<String, Integer> rulesAppliedTimes = new HashMap<>();
+    private final UUID queryId;
+    private final Map<String, Integer> rulesAppliedTimes = new HashMap<>();
 
     public OptimizerTraceInfo(UUID queryId) {
         this.queryId = queryId;
