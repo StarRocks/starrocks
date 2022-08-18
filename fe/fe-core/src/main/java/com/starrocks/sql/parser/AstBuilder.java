@@ -1191,7 +1191,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         }
         if (!Config.enable_experimental_mv) {
-            throw new ParsingException("The experimental mv is disabled");
+            throw new IllegalArgumentException("The experimental mv is disabled, " +
+                    "you can set FE config enable_experimental_mv=true to enable it.");
         }
         // process partition
         ExpressionPartitionDesc expressionPartitionDesc = null;
