@@ -36,7 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -740,7 +740,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             visitProjectionBefore(optExpression, context);
             context.needEncode = true;
 
-            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
 
             DecodeContext mergeContext = new DecodeContext(context.globalDictCache,
