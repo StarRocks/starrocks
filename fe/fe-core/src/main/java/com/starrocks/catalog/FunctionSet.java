@@ -369,7 +369,9 @@ public class FunctionSet {
     public static final String HLL_CARDINALITY = "hll_cardinality";
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";
-    public static final String TRANSFORM = "transform";
+
+    // high-order functions related lambda functions
+    public static final String ARRAY_MAP = "array_map";
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);

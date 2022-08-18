@@ -103,7 +103,7 @@ public class ExpressionAnalyzer {
     private boolean isHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             // expand this in the future.
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP)) {
                 return true;
             }
         }
