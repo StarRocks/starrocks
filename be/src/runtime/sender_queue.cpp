@@ -390,7 +390,7 @@ void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
 
 DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders,
                                                           int32_t degree_of_parallism)
-        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders), _chunk_queue_states(degree_of_parallism), _short_circuit_driver_sequences(degree_of_parallism) {
+        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders), _chunk_queue_states(degree_of_parallism) {
     for (int i = 0; i < degree_of_parallism; i++) {
         _chunk_queues.emplace_back();
     }
@@ -664,7 +664,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         wait_timer.stop();
 
         for (auto iter = chunks.begin(); iter != chunks.end();) {
-            if (_is_pipeline_level_shuffle && _short_circuit_driver_sequences[iter->driver_sequence]) {
+            if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {
                 total_chunk_bytes -= iter->chunk_bytes;
                 chunks.erase(iter++);
                 continue;
@@ -693,10 +693,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 
 void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_sequence) {
     std::lock_guard<Mutex> l(_lock);
-    _short_circuit_driver_sequences[driver_sequence] = true;
+    auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
+    chunk_queue_state.is_short_circuited = true;
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
-        auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
         ChunkItem item;
         while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
