@@ -8,7 +8,7 @@
 
 ### 选择数据模型
 
-StarRocks 数据模型目前分为三类：AGGREGATE KEY，UNIQUE KEY，以及 DUPLICATE KEY。三种模型中数据都是依据 KEY 进行排序。
+StarRocks 数据模型目前分为四类：AGGREGATE KEY，UNIQUE KEY，DUPLICATE KEY，以及 PRIMARY KEY。四种模型中数据都是依据 KEY 进行排序。
 
 * **AGGREGATE KEY 模型**
 
@@ -60,6 +60,27 @@ StarRocks 数据模型目前分为三类：AGGREGATE KEY，UNIQUE KEY，以及 D
     )
     DUPLICATE KEY(visitorid, sessionid)
     DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10;
+    ```
+
+* **PRIMARY KEY 模型**
+
+    PRIMARY KEY 模型保证同一个主键下仅存在一条记录。相对于更新模型，主键模型在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持实时和频繁更新等场景的同时，提供高效查询。
+
+    ```sql
+    CREATE TABLE orders (
+        dt date NOT NULL,
+        order_id bigint NOT NULL,
+        user_id int NOT NULL,
+        merchant_id int NOT NULL,
+        good_id int NOT NULL,
+        good_name string NOT NULL,
+        price int NOT NULL,
+        cnt int NOT NULL,
+        revenue int NOT NULL,
+        state tinyint NOT NULL
+    )
+    PRIMARY KEY (dt, order_id)
+    DISTRIBUTED BY HASH(order_id) BUCKETS 4
     ```
 
 ### 使用内存表
