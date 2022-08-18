@@ -684,4 +684,42 @@ public class InsertPlanTest extends PlanTestBase {
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testInsertSelectWithConstant() throws Exception {
+        String explainString = getInsertExecPlan("insert into tarray select 1,null,null from tarray");
+        System.out.printf("%s\n", explainString);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:7: v1 | 8: v2 | 9: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
+                "  |  <slot 8> : NULL\n" +
+                "  |  <slot 9> : NULL"));
+    }
+
+    @Test
+    public void testInsertAggLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        InsertPlanner.enableSingleReplicationShuffle = true;
+        {
+            // KesType is AGG_KEYS
+            String sql = "explain insert into baseall select * from baseall limit 1";
+            String plan = getInsertExecPlan(sql);
+            assertContains(plan, "STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED");
+
+            InsertPlanner.enableSingleReplicationShuffle = false;
+            FeConstants.runningUnitTest = false;
+        }
+    }
+>>>>>>> 9b1a4672b ([BugFix] Insert plan required gather when select limit (#10080))
 }
