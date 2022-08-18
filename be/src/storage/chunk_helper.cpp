@@ -388,4 +388,29 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
     original_chunk.swap_chunk(reordered_chunk);
 }
 
+size_t ChunkSlice::skip(size_t skip_rows) {
+    size_t real_skipped = std::min(rows(), skip_rows);
+    offset += real_skipped;
+    if (empty()) {
+        chunk.reset();
+        offset = 0;
+    }
+
+    return real_skipped;
+}
+
+// Cutoff required rows from this chunk
+vectorized::ChunkPtr ChunkSlice::cutoff(size_t required_rows) {
+    DCHECK(!empty());
+    size_t cut_rows = std::min(rows(), required_rows);
+    auto res = chunk->clone_empty(cut_rows);
+    res->append(*chunk, offset, cut_rows);
+    offset += cut_rows;
+    if (empty()) {
+        chunk.reset();
+        offset = 0;
+    }
+    return res;
+}
+
 } // namespace starrocks

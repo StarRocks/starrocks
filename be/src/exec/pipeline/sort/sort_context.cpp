@@ -37,34 +37,30 @@ bool SortContext::is_output_finished() const {
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
     _init_merger();
 
-    if (_required_rows <= 0) {
-        return nullptr;
-    }
-    vectorized::ChunkUniquePtr chunk = _merger.try_get_next();
-    if (!chunk) {
-        return nullptr;
-    } else if (_required_rows < chunk->num_rows()) {
-        chunk->set_num_rows(_required_rows);
-        _required_rows = 0;
-    } else {
-        _required_rows -= chunk->num_rows();
-    }
+    while (_required_rows > 0 && !_merger.is_eos()) {
+        if (_current_chunk.empty()) {
+            auto chunk = _merger.try_get_next();
+            if (!chunk) {
+                return nullptr;
+            }
+            _current_chunk.reset(std::move(chunk));
+        }
 
-    SortedRun& run = _merged_runs.front();
-    size_t rows_before = run.num_rows();
-    ChunkPtr res = run.steal_chunk(required_rows, _offset);
-    size_t rows_after = run.num_rows();
-    size_t fetched_rows = res == nullptr ? 0 : res->num_rows();
-    size_t skipped_rows = rows_before - rows_after - fetched_rows;
-    _offset -= skipped_rows;
-    if (res != nullptr) {
-        RETURN_IF_ERROR(res->downgrade());
-    }
+        // Skip some rows before return it
+        if (_offset > 0) {
+            _offset -= _current_chunk.skip(_offset);
+            if (_current_chunk.empty()) {
+                continue;
+            }
+        }
 
-    if (run.empty()) {
-        _merged_runs.pop_front();
+        // Return required rows and cutoff the big chunk
+        size_t required_rows = std::min<size_t>(_required_rows, _state->chunk_size());
+        ChunkPtr res = _current_chunk.cutoff(required_rows);
+        _required_rows -= res->num_rows();
+        return res;
     }
-    return res;
+    return nullptr;
 }
 
 Status SortContext::_init_merger() {
@@ -73,9 +69,9 @@ Status SortContext::_init_merger() {
     }
 
     // Keep all the data if topn type is RANK or DENSE_RANK
-    int64_t require_rows = total_rows;
+    _required_rows = _total_rows;
     if (_topn_type == TTopNType::ROW_NUMBER) {
-        require_rows = ((_limit < 0) ? total_rows : std::min(_limit + _offset, total_rows));
+        _required_rows = ((_limit < 0) ? _total_rows.load() : std::min<int64_t>(_limit + _offset, _total_rows));
     }
 
     std::vector<SortedRuns> partial_sorted_runs;
@@ -104,6 +100,7 @@ Status SortContext::_init_merger() {
     }
 
     RETURN_IF_ERROR(_merger.init(_sort_desc, std::move(_partial_cursors)));
+    CHECK(_merger.is_data_ready()) << "data must be ready";
     _merger_inited = true;
 
     return Status::OK();

@@ -69,4 +69,16 @@ public:
     static void reorder_chunk(const std::vector<SlotDescriptor*>& slots, vectorized::Chunk* chunk);
 };
 
+// Hold a slice of chunk
+struct ChunkSlice {
+    vectorized::ChunkUniquePtr chunk;
+    size_t offset;
+
+    bool empty() const { return !chunk || offset == chunk->num_rows(); }
+    size_t rows() const { return chunk->num_rows() - offset; }
+    size_t skip(size_t skip_rows);
+    vectorized::ChunkPtr cutoff(size_t required_rows);
+    void reset(vectorized::ChunkUniquePtr input) { chunk = std::move(input); }
+};
+
 } // namespace starrocks
