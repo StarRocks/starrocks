@@ -43,5 +43,7 @@ public class AnalyzeUpdateTest {
         analyzeSuccess("update tprimary set v2 = v2 + 1 where pk = 1");
         analyzeSuccess("update tprimary set v1 = 'aaa', v2 = v2 + 1 where pk = 1");
         analyzeSuccess("update tprimary set v2 = v2 + 1 where v1 = 'aaa'");
+
+        analyzeSuccess("update tprimary set v3 = [231,4321,42] where pk = 1");
     }
 }
