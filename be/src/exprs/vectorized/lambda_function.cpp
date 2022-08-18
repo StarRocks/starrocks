@@ -13,6 +13,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     for (int i = 0; i < argument_num; ++i) {
         get_child(i)->get_slot_ids(&arguments_ids);
     }
+
     DCHECK(argument_num == arguments_ids.size());
 
     // get slot ids from the lambda expression
@@ -45,6 +46,12 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
 
 ColumnPtr LambdaFunction::evaluate(ExprContext* context, Chunk* ptr) {
     return get_child(argument_num)->evaluate(context, ptr);
+}
+
+void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    arguments_ids.clear();
+    captured_slot_ids.clear();
+    argument_num=0;
 }
 
 } // namespace starrocks::vectorized

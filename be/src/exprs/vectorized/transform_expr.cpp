@@ -29,10 +29,14 @@ ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
     if (column->is_constant() && column->size() == 1 && column->is_null(0)) {
         return column;
     }
+    // no optimization for const columns.
+    child_col = ColumnHelper::unfold_const_column(_children[0]->type(),child_col->size(),child_col);
+
     if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col); nullable != nullptr) {
         column = nullable->data_column();
         null_map = nullable->null_column();
     }
+    DCHECK(column->is_array());
     auto array_col = std::dynamic_pointer_cast<ArrayColumn>(column);
     if (child_col->only_null() || array_col->elements_column()->size() == 0) { // all elements are null
         column = ColumnHelper::create_column(_children[1]->get_child(1)->type(), _children[1]->is_nullable());
