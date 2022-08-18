@@ -200,24 +200,20 @@ public class AnalyzeManager implements Writable {
                 continue;
             }
 
-            db.getTables().stream().map(Table::getId).forEach(tables::add);
+            for (Table table : db.getTables()) {
+                /*
+                 * If the meta contains statistical information, but the data is empty,
+                 * it means that the table has been truncate or insert overwrite, and it is set to empty,
+                 * so it is treated as a table that has been deleted here.
+                 */
+                if (!StatisticUtils.isEmptyTable(table)) {
+                    tables.add(table.getId());
+                }
+            }
         }
 
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
-
-        for (BasicStatsMeta basicStatsMeta : basicStatsMetaMap.values()) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(basicStatsMeta.getDbId());
-            Table table = db.getTable(basicStatsMeta.getTableId());
-            /*
-             * If the meta contains statistical information, but the data is empty,
-             * it means that the table has been truncate or insert overwrite, and it is set to empty,
-             * so it is treated as a table that has been deleted here.
-             */
-            if (StatisticUtils.isEmptyTable(table)) {
-                tableIdHasDeleted.add(table.getId());
-            }
-        }
 
         dropBasicStatsMetaAndData(tableIdHasDeleted);
         dropHistogramStatsMetaAndData(tableIdHasDeleted);
