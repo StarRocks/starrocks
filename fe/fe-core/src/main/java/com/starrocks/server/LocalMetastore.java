@@ -106,7 +106,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -3127,7 +3126,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
-        if (refreshSchemeDesc.getType() == RefreshType.ASYNC) {
+        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.ASYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
             MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
@@ -3139,7 +3138,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setTimeUnit(
                         asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
             }
-        } else if (refreshSchemeDesc.getType() == RefreshType.SYNC) {
+        } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
         } else {
@@ -3270,30 +3269,38 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
                                                Map<String, String> optHints) throws DdlException {
-        if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.SYNC) {
+        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        if (refreshType != MaterializedView.RefreshType.SYNC) {
             // create task
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
             MaterializedView.AsyncRefreshContext asyncRefreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
-            if (asyncRefreshContext.getTimeUnit() != null) {
-                long startTime = asyncRefreshContext.getStartTime();
-                TaskSchedule taskSchedule = new TaskSchedule(startTime,
-                        asyncRefreshContext.getStep(),
-                        TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
-                task.setSchedule(taskSchedule);
-                task.setType(Constants.TaskType.PERIODICAL);
-            } else {
-                task.setType(Constants.TaskType.EVENT_TRIGGERED);
+
+            // mapping refresh type to task type
+            if (refreshType == MaterializedView.RefreshType.MANUAL) {
+                task.setType(Constants.TaskType.MANUAL);
+            } else if (refreshType == MaterializedView.RefreshType.ASYNC) {
+                if (asyncRefreshContext.getTimeUnit() == null) {
+                    task.setType(Constants.TaskType.EVENT_TRIGGERED);
+                } else {
+                    long startTime = asyncRefreshContext.getStartTime();
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime,
+                            asyncRefreshContext.getStep(),
+                            TimeUtils.convertUnitIdentifierToTimeUnit(asyncRefreshContext.getTimeUnit()));
+                    task.setSchedule(taskSchedule);
+                    task.setType(Constants.TaskType.PERIODICAL);
+                }
             }
+
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
                 taskProperties.putAll(optHints);
             }
+
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             taskManager.createTask(task, false);
-            // for async type, run task
-            if (materializedView.getRefreshScheme().getType() == MaterializedView.RefreshType.ASYNC &&
-                    task.getType() != Constants.TaskType.PERIODICAL) {
+            // for event triggered type, run task
+            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
                 taskManager.executeTask(task.getName());
             }
         }
@@ -3318,10 +3325,12 @@ public class LocalMetastore implements ConnectorMetadata {
         if (table instanceof MaterializedView) {
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
             Set<Long> baseTableIds = ((MaterializedView) table).getBaseTableIds();
-            for (Long baseTableId : baseTableIds) {
-                OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
-                if (baseTable != null) {
-                    baseTable.removeRelatedMaterializedView(table.getId());
+            if (baseTableIds != null) {
+                for (Long baseTableId : baseTableIds) {
+                    OlapTable baseTable = ((OlapTable) db.getTable(baseTableId));
+                    if (baseTable != null) {
+                        baseTable.removeRelatedMaterializedView(table.getId());
+                    }
                 }
             }
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
