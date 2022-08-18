@@ -17,7 +17,7 @@ SchemaScanner::ColumnDesc SchemaTablesMetaScanner::_s_table_tables_meta_columns[
         {"PARTITION_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DISTRIBUTE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRUBTE_BUCKET", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DISTRIBUTE_BUCKET", TYPE_VARCHAR, sizeof(StringValue), false},
         {"SORT_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
 };

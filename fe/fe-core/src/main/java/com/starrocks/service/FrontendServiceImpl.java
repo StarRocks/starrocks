@@ -21,6 +21,7 @@
 
 package com.starrocks.service;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -40,6 +41,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
@@ -1388,25 +1390,40 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
-        int idx = 0;
-        try {
-            for (Column column : partitionInfo.getPartitionColumns()) {
-                if (idx != 0) {
-                    partitionKeySb.append(", ");
+        if (partitionInfo.getType().equals(PartitionType.RANGE)) {
+            int idx = 0;
+            try {
+                for (Column column : partitionInfo.getPartitionColumns()) {
+                    if (idx != 0) {
+                        partitionKeySb.append(", ");
+                    }
+                    partitionKeySb.append("`").append(column.getName()).append("`");
+                    idx++;
                 }
-                partitionKeySb.append("`").append(column.getName()).append("`");
-                idx++;
-            }
-        } catch (NotImplementedException e) {
-            // This exception will be throwed except partition type is range
+            } catch (NotImplementedException e) {
+                partitionKeySb.append("NULL");
+                LOG.warn("The partition of type range seems not implement getPartitionColumns");
+            }            
+        } else {
             partitionKeySb.append("NULL");
         }
-        tableMetaInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) ? distributeKey : "NULL");
+
+        // keys
+        StringBuilder keysSb = new StringBuilder();
+        List<String> keysColumnNames = Lists.newArrayList();
+        for (Column column : olapTable.getBaseSchema()) {
+            if (column.isKey()) {
+                keysColumnNames.add("`" + column.getName() + "`");
+            }
+        }
+        keysSb.append(Joiner.on(", ").join(keysColumnNames));
+
+        tableMetaInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? "NULL" : keysSb.toString());
         tableMetaInfo.setPartition_key(partitionKeySb.toString());
         tableMetaInfo.setDistribute_bucket(distributeNum);
         tableMetaInfo.setDistribute_type("HASH");
         tableMetaInfo.setDistribute_key(distributeKey);
-        tableMetaInfo.setSort_key(olapTable.getKeysType().toSql().split(" ")[0]);
+        tableMetaInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : "NULL");
 
         Map<String, String> properties = olapTable.getTableProperty().getProperties();
         Map<String, String> showProperties = new HashMap<>();
@@ -1422,6 +1439,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         showProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
         tableMetaInfo.setProperties(showProperties.toString());
         return tableMetaInfo;
+    }
+
+    private boolean isSortKey(KeysType kType) {
+        if (kType.equals(KeysType.PRIMARY_KEYS) || kType.equals(KeysType.UNIQUE_KEYS)) {
+            return false;
+        }
+        return true;
     }
 
     private TTableMetaInfo genDefaultMetaInfo(TTableMetaInfo tableMetaInfo) {

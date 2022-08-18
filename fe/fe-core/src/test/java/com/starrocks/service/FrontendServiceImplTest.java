@@ -14,16 +14,13 @@ import org.junit.Test;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTablesMetaRequest;
@@ -48,29 +45,71 @@ public class FrontendServiceImplTest {
 
         Database db = new Database(1, "test_db");
         
-        List<Column> columns = new ArrayList<>();
-        columns.add(new Column("c1", Type.ARRAY_BOOLEAN));
-        columns.add(new Column("c2", Type.ARRAY_BOOLEAN));
+        List<Column> partitionsColumns = new ArrayList<>();
+        partitionsColumns.add(new Column("p_c1", Type.ARRAY_BOOLEAN));
+        partitionsColumns.add(new Column("p_c2", Type.ARRAY_BOOLEAN));
 
-        // OlapTable
-        RangePartitionInfo partitionInfo = new RangePartitionInfo(columns);
-        HashDistributionInfo distributionInfo = new HashDistributionInfo(10, columns);
-        OlapTable table = new OlapTable(1, "test_table", columns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+        List<Column> dColumns = new ArrayList<>();
+        dColumns.add(new Column("d_c1", Type.ARRAY_BOOLEAN));
+        dColumns.add(new Column("d_c2", Type.ARRAY_BOOLEAN));
+
+        List<Column> keyColumns = new ArrayList<>();
+        Column keyC1 = new Column("key_c1", Type.ARRAY_BOOLEAN);
+        keyC1.setIsKey(true);
+        Column keyC2 = new Column("key_c2", Type.ARRAY_BOOLEAN);
+        keyC2.setIsKey(true);
+        keyColumns.add(keyC1);
+        keyColumns.add(keyC2);
+
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, "test_type");
         TableProperty tProperties = new TableProperty(properties);
-        table.setTableProperty(tProperties);
-        table.setColocateGroup("test_group");
-        // View
-        View view = new View(2, "test_view", columns); 
 
-        db.createTable(table);
+
+        // OlapTable
+        RangePartitionInfo partitionInfo = new RangePartitionInfo(partitionsColumns);
+        HashDistributionInfo distributionInfo = new HashDistributionInfo(10, dColumns);
+
+        // PK
+        OlapTable tablePk = new OlapTable(1, "test_table_pk", keyColumns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+        tablePk.setTableProperty(tProperties);
+        tablePk.setColocateGroup("test_group");
+
+        // AGG
+        OlapTable tableAGG = new OlapTable(2, "test_table_agg", keyColumns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        tableAGG.setTableProperty(tProperties);
+        tableAGG.setColocateGroup("test_group");
+        
+        // DUP
+        OlapTable tableDUP = new OlapTable(3, "test_table_dup", keyColumns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
+        tableDUP.setTableProperty(tProperties);
+        tableDUP.setColocateGroup("test_group");
+
+        // UNI
+        OlapTable tableUNI = new OlapTable(4, "test_table_uni", keyColumns, KeysType.UNIQUE_KEYS, partitionInfo, distributionInfo);
+        tableUNI.setTableProperty(tProperties);
+        tableUNI.setColocateGroup("test_group");
+
+        // View
+        View view = new View(2, "test_view", keyColumns); 
+
+        db.createTable(tablePk);
+        db.createTable(tableAGG);
+        db.createTable(tableDUP);
+        db.createTable(tableUNI);
+
         db.createTable(view);
 
         new MockUp<GlobalStateMgr>() {
             @Mock
             public Database getDb(String name) {
                 return db;
+            }
+        };
+        new MockUp<OlapTable>() {
+            @Mock
+            public List<Column> getBaseSchema() {
+                return keyColumns;
             }
         };
         new Expectations(){
@@ -84,14 +123,24 @@ public class FrontendServiceImplTest {
         TGetTablesMetaRequest req = new TGetTablesMetaRequest();
         TGetTablesMetaResponse response = impl.getTablesMeta(req);
         response.tables_meta_infos.forEach(info -> {
-            if (info.getTable_name().equals("test_table")) {
-                Assert.assertEquals("`c1`, `c2`", info.getPrimary_key());
-                Assert.assertEquals("`c1`, `c2`", info.getPartition_key());
+            if (info.getTable_name().equals("test_table_pk") || 
+                info.getTable_name().equals("test_table_uni")) {
+                Assert.assertEquals("`key_c1`, `key_c2`", info.getPrimary_key());
+                Assert.assertEquals("NULL", info.getSort_key());
+                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", info.getProperties());
+                Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
+                Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
                 Assert.assertEquals("10", info.getDistribute_bucket());
                 Assert.assertEquals("HASH", info.getDistribute_type());
-                Assert.assertEquals("`c1`, `c2`", info.getDistribute_key());
-                Assert.assertEquals("PRIMARY", info.getSort_key());
+            } else if (info.getTable_name().equals("test_table_agg") || 
+                    info.getTable_name().equals("test_table_dup") ) {
+                Assert.assertEquals("`key_c1`, `key_c2`", info.getSort_key());
+                Assert.assertEquals("NULL", info.getPrimary_key());
                 Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", info.getProperties());
+                Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
+                Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
+                Assert.assertEquals("10", info.getDistribute_bucket());
+                Assert.assertEquals("HASH", info.getDistribute_type());
             }
         });
         
