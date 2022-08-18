@@ -311,6 +311,7 @@ public class ExternalOlapTable extends OlapTable {
             throw new DdlException("database " + dbId + " does not exist");
         }
         db.writeLock();
+        long start = System.currentTimeMillis();
 
         try {
             lastExternalMeta = meta;
@@ -402,6 +403,7 @@ public class ExternalOlapTable extends OlapTable {
                     LOG.error("invalid partition type: {}", partitionType);
                     return;
             }
+            long endOfPartitionBuild = System.currentTimeMillis();
 
             indexIdToMeta.clear();
             indexNameToId.clear();
@@ -437,8 +439,10 @@ public class ExternalOlapTable extends OlapTable {
                 // TODO(wulei)
                 // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
             }
+            long endOfIndexMetaBuild = System.currentTimeMillis();
 
             rebuildFullSchema();
+            long endOfSchemaRebuild = System.currentTimeMillis();
 
             idToPartition.clear();
             nameToPartition.clear();
@@ -495,6 +499,7 @@ public class ExternalOlapTable extends OlapTable {
                 }
                 addPartition(partition);
             }
+            long endOfTabletMetaBuild = System.currentTimeMillis();
 
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
@@ -518,6 +523,12 @@ public class ExternalOlapTable extends OlapTable {
                     backend.setBackendState(BackendState.values()[backendMeta.getState()]);
                 }
             }
+            LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
+                            "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
+                            "tablet meta build cost: {}ms, total cost: {}ms",
+                    endOfPartitionBuild - start, endOfIndexMetaBuild - endOfPartitionBuild,
+                    endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
+                    System.currentTimeMillis() - start);
         } finally {
             db.writeUnlock();
         }
