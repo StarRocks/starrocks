@@ -2,12 +2,12 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.RefreshType;
+import com.starrocks.catalog.MaterializedView;
 
 public class SyncRefreshSchemeDesc extends RefreshSchemeDesc {
 
     public SyncRefreshSchemeDesc() {
-        super(RefreshType.SYNC);
+        super(MaterializedView.RefreshType.SYNC);
     }
 
 }

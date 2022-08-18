@@ -270,7 +270,7 @@ public class TimeUtils {
         }
     }
 
-    public static long convertTimeUnitValuetoSecond(long value, TimeUnit unit) {
+    public static long convertTimeUnitValueToSecond(long value, TimeUnit unit) {
         switch (unit) {
             case DAYS:
                 return value * 60 * 60 * 24;

@@ -26,7 +26,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.RefreshType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -66,11 +65,10 @@ public class MaterializedViewAnalyzer {
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
-            YEAR,
-            MONTH,
             DAY,
             HOUR,
-            MINUTE
+            MINUTE,
+            SECOND
         }
 
         @Override
@@ -409,7 +407,7 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Same materialized view name %s", newMvName);
                 }
             } else if (refreshSchemeDesc != null) {
-                if (refreshSchemeDesc.getType().equals(RefreshType.SYNC)) {
+                if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
                     throw new SemanticException("Unsupported change to SYNC refresh type");
                 }
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
