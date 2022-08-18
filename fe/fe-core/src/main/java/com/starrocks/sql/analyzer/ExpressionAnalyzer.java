@@ -100,18 +100,30 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
+    private boolean isHighOrderFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            // expand this in the future.
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         if (expression.hasLambdaFunction()) {
+            Preconditions.checkState(isHighOrderFunction(expression),
+                    "Lambda Functions can only be used in supported high-order functions.");
             // the last child is lambdaFunction
             int childSize = expression.getChildren().size();
             for (int i = 0; i < childSize - 1; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
                 if (expr instanceof NullLiteral) {
-                    expr.setType(Type.ARRAY_INT);
+                    expr.setType(Type.ARRAY_INT); // Since Type.NULL cannot be pushed to to BE, hack it here.
                 }
                 Preconditions.checkArgument(expr.getType().isArrayType(),
-                        "Lambda input: " + expr.toString() + " should be arrays.");
+                        "Lambda input should be arrays.");
                 Type itemType = ((ArrayType) expr.getType()).getItemType();
                 if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
                     itemType = Type.INT;
@@ -265,6 +277,8 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitLambdaArguments(LambdaArguments node, Scope scope) {
+            Preconditions.checkArgument(scope.getLambdaInputs().size() > 0,
+                    "Lambda Functions can only be used in high-order functions.");
             // lambda arguments should be unique and less than input arrays.
             List<String> names = node.getNames();
             Set<String> set = new HashSet<>();
@@ -272,7 +286,6 @@ public class ExpressionAnalyzer {
                 Preconditions.checkArgument(!set.contains(name), "Lambda argument: " + name + " is duplicated.");
                 set.add(name);
             }
-
             Preconditions.checkArgument(scope.getLambdaInputs().size() >= names.size(),
                     "Lambda arguments shouldn't be more than lambda input arrays.");
             // bind argument names with its type

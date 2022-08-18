@@ -87,6 +87,7 @@ set(EXEC_FILES
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
         ./exprs/vectorized/json_functions_test.cpp
+        ./exprs/vectorized/lambda_function_expr_test.cpp
         ./exprs/vectorized/like_test.cpp
         ./exprs/vectorized/math_functions_test.cpp
         ./exprs/vectorized/null_if_expr_test.cpp

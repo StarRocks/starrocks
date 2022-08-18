@@ -133,7 +133,9 @@ public:
         return dst_column;
     }
     static ColumnPtr duplicate_column(ColumnPtr src, MutableColumnPtr desc, UInt32Column::Ptr offsets) {
-        for (int i = 0; i < src->size(); ++i) {
+        auto desc_size = offsets->size()-1;
+        DCHECK(src->size() >= desc_size) << "The size of the source column is less when duplicating it.";
+        for (int i = 0; i < offsets->size() - 1; ++i) {
             desc->append_value_multiple_times(*src, i, offsets->get_data()[i + 1] - offsets->get_data()[i]);
         }
         return desc;
