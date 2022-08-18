@@ -92,7 +92,7 @@ mysql> select page_id, count(distinct visit_users) from page_uv group by page_id
 
 ## Bitmap 全局字典
 
-目前，基于 Bitmap 类型的去重机制有一定限制，既 Bitmap 需要使用整数型类型作为输入。如用户期望将其他数据类型作为 Bitmap 的输入，则需要构建全局字典，将其他类型数据（如字符串类型）通过全局字典映射成为整数类型。构建全局字典有以下几种方案：
+目前，基于 Bitmap 类型的去重机制有一定限制，即 Bitmap 需要使用整数型类型作为输入。如用户期望将其他数据类型作为 Bitmap 的输入，则需要构建全局字典，将其他类型数据（如字符串类型）通过全局字典映射成为整数类型。构建全局字典有以下几种方案：
 
 ### 基于 Hive 表的全局字典
 
