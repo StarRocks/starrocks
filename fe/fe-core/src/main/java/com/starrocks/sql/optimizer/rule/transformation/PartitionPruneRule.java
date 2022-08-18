@@ -118,24 +118,18 @@ public class PartitionPruneRule extends TransformationRule {
 
     private boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
                                        PartitionInfo partitionInfo) {
-
-        if (candidatePartitions.size() == 0) {
-            return false;
+        boolean probeResult = true;
+        if (candidatePartitions.isEmpty()) {
+            probeResult = false;
+        } else if (partitionInfo.getType() != PartitionType.RANGE) {
+            probeResult = false;
+        } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
+            probeResult = false;
+        } else if (olapScanOperator.getPredicate() == null) {
+            probeResult = false;
         }
 
-        if (partitionInfo.getType() != PartitionType.RANGE) {
-            return false;
-        }
-
-        if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
-            return false;
-        }
-
-        if (olapScanOperator.getPredicate() == null) {
-            return false;
-        }
-
-        return true;
+        return probeResult;
     }
 
 }

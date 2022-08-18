@@ -80,35 +80,35 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("emptyPartitionSqlList")
-    public void testEmptyPartitionSql(String sql) throws Exception {
+    void testEmptyPartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("0:EMPTYSET"));
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("onePartitionSqlList")
-    public void testOnePartitionSql(String sql) throws Exception {
+    void testOnePartitionSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=1/4"));
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("twoPartitionsSqlList")
-    public void testTwoPartitionsSql(String sql) throws Exception {
+    void testTwoPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=2/4"));
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("threePartitionsSqlList")
-    public void testThreePartitionsSql(String sql) throws Exception {
+    void testThreePartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=3/4"));
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("fourPartitionsSqlList")
-    public void testFourPartitionsSql(String sql) throws Exception {
+    void testFourPartitionsSql(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertTrue(plan, plan.contains("partitions=4/4"));
     }
@@ -269,6 +269,7 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from tbl_int where k1 is not null");
         sqlList.add("select * from tbl_int where k1 < 200 or floor(k1) < 10");
+        sqlList.add("select * from tbl_int where k1 < 200 or k1 < k1 + 1");
         sqlList.add("select * from tbl_int where k1 != 5 and k1 != 6");
         sqlList.add("select * from tbl_int where k1 not in (5,15,115,225)");
         sqlList.add("select * from tbl_int where not (k1 > 5 and k1 < 15)");
