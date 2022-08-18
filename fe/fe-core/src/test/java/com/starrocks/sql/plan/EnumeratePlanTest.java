@@ -77,7 +77,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    p_partkey limit 100;\n" +
                 "\n";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(1920, planCount);
+        Assert.assertEquals(768, planCount);
     }
 
     @Test
@@ -117,7 +117,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    revenue desc ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(378, planCount);
+        Assert.assertEquals(88, planCount);
     }
 
     @Test
@@ -165,7 +165,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(1048, planCount);
+        Assert.assertEquals(136, planCount);
     }
 
     @Test
@@ -208,7 +208,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(1048, planCount);
+        Assert.assertEquals(136, planCount);
     }
 
     @Test
@@ -291,7 +291,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    o_totalprice desc,\n" +
                 "    o_orderdate limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(26, planCount);
+        Assert.assertEquals(22, planCount);
     }
 
     @Test
@@ -339,7 +339,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    s_name ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(66, planCount);
+        Assert.assertEquals(28, planCount);
     }
 
     @Test

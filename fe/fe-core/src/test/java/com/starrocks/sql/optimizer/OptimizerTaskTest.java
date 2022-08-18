@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.spark_project.guava.collect.Maps;
@@ -78,6 +79,7 @@ public class OptimizerTaskTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setMaxTransformReorderJoins(8);
         ctx.getSessionVariable().setEnableReplicationJoin(false);
+        ctx.getSessionVariable().setJoinImplementationMode("hash");
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {{
@@ -98,6 +100,11 @@ public class OptimizerTaskTest {
         column4 = columnRefFactory.create("t4", ScalarType.INT, true);
         column5 = columnRefFactory.create("t5", ScalarType.INT, true);
         column6 = columnRefFactory.create("t6", ScalarType.INT, true);
+    }
+
+    @After
+    public void tearDown() {
+        ctx.getSessionVariable().setJoinImplementationMode("auto");
     }
 
     @Test
@@ -133,8 +140,8 @@ public class OptimizerTaskTest {
         optimizer.optimize(ctx, logicOperatorTree, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
         Memo memo = optimizer.getContext().getMemo();
-        assertEquals(memo.getGroups().size(), 3);
-        assertEquals(memo.getGroupExpressions().size(), 8);
+        assertEquals(3, memo.getGroups().size());
+        assertEquals(8, memo.getGroupExpressions().size());
 
         assertEquals(memo.getGroups().get(0).getLogicalExpressions().size(), 1);
         assertEquals(memo.getGroups().get(0).getPhysicalExpressions().size(), 1);
@@ -157,7 +164,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(2).getLogicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.LOGICAL_JOIN);
         assertEquals(memo.getGroups().get(2).getPhysicalExpressions().
-                get(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
+                get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
 
         MemoStatusChecker checker = new MemoStatusChecker(memo, 2, new ColumnRefSet(Lists.newArrayList(column1)));
         checker.checkStatus();
@@ -219,13 +226,13 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(1).getPhysicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
 
-        assertEquals(memo.getGroups().get(2).getLogicalExpressions().size(), 2);
-        assertEquals(memo.getGroups().get(2).getPhysicalExpressions().size(), 2);
+        assertEquals(2, memo.getGroups().get(2).getLogicalExpressions().size());
+        assertEquals(2, memo.getGroups().get(2).getPhysicalExpressions().size());
 
         assertEquals(memo.getGroups().get(2).getLogicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.LOGICAL_JOIN);
         assertEquals(memo.getGroups().get(2).getPhysicalExpressions().
-                get(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
+                get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
 
         assertEquals(memo.getGroups().get(3).getLogicalExpressions().size(), 1);
         assertEquals(memo.getGroups().get(3).getPhysicalExpressions().size(), 1);
@@ -238,7 +245,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(4).getLogicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.LOGICAL_JOIN);
         assertEquals(memo.getGroups().get(4).getPhysicalExpressions().
-                get(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
+                get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
     }
 
     @Test
@@ -551,8 +558,8 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(),
                 new ColumnRefSet(Lists.newArrayList(column1)),
                 columnRefFactory);
-        assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
-        assertEquals(physicalTree.inputAt(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
+        assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
+        assertEquals(physicalTree.inputAt(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
         assertEquals(physicalTree.inputAt(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
     }
 
