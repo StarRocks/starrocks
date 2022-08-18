@@ -290,6 +290,9 @@ public:
     // implementation source code (e.g., env_posix.cc)
     virtual Status appendv(const Slice* data, size_t cnt) = 0;
 
+    // Compatible with native writev which has return written bytes size
+    virtual Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) = 0;
+
     // Pre-allocates 'size' bytes for the file in the underlying filesystem.
     // size bytes are added to the current pre-allocated size or to the current
     // offset, whichever is bigger. In no case is the file truncated by this

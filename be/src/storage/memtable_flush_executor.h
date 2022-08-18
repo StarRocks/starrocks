@@ -34,6 +34,7 @@ namespace starrocks {
 
 class DataDir;
 class ExecEnv;
+class SegmentPB;
 
 namespace vectorized {
 class MemTable;
@@ -62,7 +63,8 @@ public:
     explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
             : _flush_token(std::move(flush_pool_token)), _status() {}
 
-    Status submit(std::unique_ptr<vectorized::MemTable> mem_table);
+    Status submit(std::unique_ptr<vectorized::MemTable> mem_table, bool eos = false,
+                  std::function<void(std::unique_ptr<SegmentPB>, bool)> cb = nullptr);
 
     // error has happpens, so we cancel this token
     // And remove all tasks in the queue.
@@ -88,7 +90,7 @@ public:
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(vectorized::MemTable* mem_table);
+    void _flush_memtable(vectorized::MemTable* memtable, SegmentPB* segment);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
@@ -124,6 +126,7 @@ public:
 
 private:
     std::unique_ptr<ThreadPool> _flush_pool;
+    std::unique_ptr<ThreadPool> _sync_pool;
 };
 
 } // namespace starrocks

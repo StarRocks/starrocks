@@ -34,7 +34,9 @@ public:
         return Status::OK();
     }
 
-    Status flush_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
+    Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override {
+        return Status::NotSupported("");
+    }
 
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
         return Status::NotSupported("");

@@ -50,7 +50,14 @@ public:
     void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
+    void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+        response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+    }
+
     void cancel() override;
+
+    void cancel(int64_t tablet_id) override { return; }
 
     MemTracker* mem_tracker() { return _mem_tracker; }
 

@@ -184,6 +184,12 @@ public:
         return Status::OK();
     }
 
+    Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) override {
+        RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, bytes_written));
+        _filesize += *bytes_written;
+        return Status::OK();
+    }
+
     Status pre_allocate(uint64_t size) override {
         uint64_t offset = std::max(_filesize, _pre_allocated_size);
         int ret;

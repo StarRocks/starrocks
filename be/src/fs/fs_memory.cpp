@@ -54,6 +54,10 @@ public:
         return Status::OK();
     }
 
+    Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) override {
+        return Status::NotSupported("memory file appendv with bytes_written");
+    }
+
     Status pre_allocate(uint64_t size) override {
         if (_closed) return Status::IOError(fmt::format("{} has been closed", _path));
         _inode->data.reserve(size);

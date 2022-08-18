@@ -47,7 +47,7 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib64/libbenchmark.a ]]; then
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
-PARALLEL=$[$(nproc)/4+1]
+PARALLEL=$[$(nproc)+1]
 
 # Check args
 usage() {

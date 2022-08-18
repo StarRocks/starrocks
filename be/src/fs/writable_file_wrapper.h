@@ -22,6 +22,10 @@ public:
 
     Status appendv(const Slice* data, size_t cnt) override { return _file->appendv(data, cnt); }
 
+    Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) override {
+        return Status::NotSupported("WritableFileWrapper appendv with bytes_written");
+    }
+
     Status pre_allocate(uint64_t size) override { return _file->pre_allocate(size); }
 
     Status close() override { return _file->close(); }

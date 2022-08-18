@@ -230,6 +230,10 @@ public:
         return Status::OK();
     }
 
+    Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) override {
+        return Status::NotSupported("broker file appendv with bytes_written");
+    }
+
     Status pre_allocate(uint64_t size) override { return Status::NotSupported("BrokerWritableFile::pre_allocate"); }
 
     Status close() override {

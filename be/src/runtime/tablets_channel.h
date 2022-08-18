@@ -28,6 +28,8 @@ class OlapTableSchemaParam;
 class PTabletWriterOpenRequest;
 class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
+class PTabletWriterAddSegmentRequest;
+class PTabletWriterAddSegmentResult;
 
 class TabletsChannel {
 public:
@@ -40,7 +42,12 @@ public:
     virtual void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                            PTabletWriterAddBatchResult* response) = 0;
 
+    virtual void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                             PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) = 0;
+
     virtual void cancel() = 0;
+
+    virtual void cancel(int64_t tablet_id) = 0;
 };
 
 struct TabletsChannelKey {

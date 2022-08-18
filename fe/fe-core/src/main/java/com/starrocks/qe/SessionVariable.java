@@ -224,6 +224,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
     public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
+    public static final String ENABLE_REPLICATED_STORAGE = "enable_replicated_storage";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -548,6 +549,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
+
+    @VariableMgr.VarAttr(name = ENABLE_REPLICATED_STORAGE)
+    private boolean enableReplicatedStorage = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
@@ -1092,6 +1096,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
+    public boolean getEnableReplicatedStorage() {
+        return enableReplicatedStorage;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1132,6 +1140,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (loadCompressionType != null) {
             tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
+
+        tResult.setEnable_replicated_storage(enableReplicatedStorage);
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
         final int global_runtime_filter_wait_timeout = 20;

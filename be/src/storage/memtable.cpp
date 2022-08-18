@@ -218,7 +218,7 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-Status MemTable::flush() {
+Status MemTable::flush(SegmentPB* seg_info) {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
@@ -233,7 +233,7 @@ Status MemTable::flush() {
         if (_deletes) {
             RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);

@@ -122,6 +122,10 @@ public:
 
     Status appendv(const Slice* data, size_t cnt) override;
 
+    Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) override {
+        return Status::NotSupported("HDFS file appendv with bytes_written");
+    }
+
     Status close() override;
 
     Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate"); }

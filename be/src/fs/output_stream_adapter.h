@@ -24,6 +24,10 @@ public:
         return Status::OK();
     }
 
+    Status appendv(const Slice* data, size_t cnt, size_t* bytes_written) override {
+        return Status::NotSupported("OutputStreamAdapter appendv with bytes_written");
+    }
+
     Status pre_allocate(uint64_t size) override { return Status::NotSupported("OutputStreamAdapter::pre_allocate"); }
 
     Status close() override { return _os->close(); }
