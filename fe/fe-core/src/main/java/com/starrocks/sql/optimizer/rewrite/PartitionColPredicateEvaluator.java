@@ -27,13 +27,14 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class PartitionColPredicateEvaluator {
+
+    private static final int IN_OPERANDS_LIMIT = 50;
+
     private List<Long> candidatePartitions;
 
     private List<Range<PartitionKey>> candidateRanges;
 
     private int candidateNum = 0;
-
-    private final static int IN_OPERANDS_LIMIT = 50;
 
     private Column partitionColumn;
 
