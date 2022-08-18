@@ -152,8 +152,14 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     }
     vectorized::FilterPtr filter;
     if (chunk && !chunk->is_empty()) {
+        size_t rows = chunk->num_rows();
         RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
         DCHECK(!!filter);
+
+        // The filter has not been assigned if no rows matched
+        if (chunk->num_rows() == 0) {
+            filter->assign(rows, 0);
+        }
     }
 
     if (_is_left_join()) {

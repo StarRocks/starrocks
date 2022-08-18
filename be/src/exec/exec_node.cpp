@@ -637,14 +637,12 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
             continue;
         } else if (0 == true_count) {
             // all not hit, return
-            filter->assign(chunk->num_rows(), 0);
             chunk->set_num_rows(0);
             return Status::OK();
         } else {
             bool all_zero = false;
             vectorized::ColumnHelper::merge_two_filters(column, raw_filter, &all_zero);
             if (all_zero) {
-                filter->assign(chunk->num_rows(), 0);
                 chunk->set_num_rows(0);
                 return Status::OK();
             }
