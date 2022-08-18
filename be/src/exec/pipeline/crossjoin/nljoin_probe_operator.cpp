@@ -240,7 +240,12 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
         // TODO: specialize for null column and const column
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
-            dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
+            if (src_col->is_nullable() && !slot->is_nullable()) {
+                auto src_data = down_cast<vectorized::NullableColumn*>(src_col.get())->data_column();
+                dst_col->append_value_multiple_times(*src_data, _probe_row_current, cur_build_chunk_rows);
+            } else {
+                dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
+            }
         } else {
             ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
             dst_col->append(*src_col);
@@ -258,7 +263,12 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
             DCHECK_LT(probe_row_index, src_col->size());
-            dst_col->append(*src_col, probe_row_index, probe_rows);
+            if (src_col->is_nullable() && !slot->is_nullable()) {
+                auto src_data = down_cast<vectorized::NullableColumn*>(src_col.get())->data_column();
+                dst_col->append(*src_data, probe_row_index, probe_rows);
+            } else {
+                dst_col->append(*src_col, probe_row_index, probe_rows);
+            }
         } else {
             dst_col->append_nulls(probe_rows);
         }
