@@ -1,28 +1,10 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/AdminSetReplicaStatusStmt.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+package com.starrocks.sql.ast;
 
-package com.starrocks.analysis;
-
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Replica.ReplicaStatus;
-import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Map;
 
@@ -39,7 +21,7 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     public static final String BACKEND_ID = "backend_id";
     public static final String STATUS = "status";
 
-    private Map<String, String> properties;
+    private final Map<String, String> properties;
     private long tabletId = -1;
     private long backendId = -1;
     private ReplicaStatus status;
