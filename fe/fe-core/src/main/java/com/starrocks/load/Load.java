@@ -901,18 +901,6 @@ public class Load {
         }
     }
 
-    public static void replayClearRollupInfo(ReplicaPersistInfo info, GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDb(info.getDbId());
-        db.writeLock();
-        try {
-            OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
-            Partition partition = olapTable.getPartition(info.getPartitionId());
-            MaterializedIndex index = partition.getIndex(info.getIndexId());
-        } finally {
-            db.writeUnlock();
-        }
-    }
-
     public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
         // load jobs
         int jobSize = dis.readInt();
