@@ -932,8 +932,8 @@ public class LeaderImpl {
                     indexMeta.setPartition_id(partition.getId());
                     indexMeta.setIndex_state(index.getState().toThrift());
                     indexMeta.setRow_count(index.getRowCount());
-                    indexMeta.setRollup_index_id(index.getRollupIndexId());
-                    indexMeta.setRollup_finished_version(index.getRollupFinishedVersion());
+                    indexMeta.setRollup_index_id(-1L);
+                    indexMeta.setRollup_finished_version(-1L);
                     TSchemaMeta schemaMeta = new TSchemaMeta();
                     MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(index.getId());
                     schemaMeta.setSchema_version(materializedIndexMeta.getSchemaVersion());
