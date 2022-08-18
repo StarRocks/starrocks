@@ -1,7 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "exprs/vectorized/transform_expr.h"
-
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -10,6 +8,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"
+#include "exprs/vectorized/array_map_expr.h"
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "gutil/strings/substitute.h"
@@ -17,12 +16,12 @@
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
-TransformExpr::TransformExpr(const TExprNode& node) : Expr(node, false) {}
+ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions does not change the offsets of the current array and the null map.
-ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
-    ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[0], ptr);
+ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
+    ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[1], ptr);
     NullColumnPtr null_map = nullptr;
     ColumnPtr column = child_col;
     // the column is a null literal.
@@ -30,7 +29,7 @@ ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
         return column;
     }
     // no optimization for const columns.
-    child_col = ColumnHelper::unfold_const_column(_children[0]->type(),child_col->size(),child_col);
+    child_col = ColumnHelper::unfold_const_column(_children[1]->type(),child_col->size(),child_col);
 
     if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col); nullable != nullptr) {
         column = nullable->data_column();
@@ -39,20 +38,20 @@ ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
     DCHECK(column->is_array());
     auto array_col = std::dynamic_pointer_cast<ArrayColumn>(column);
     if (child_col->only_null() || array_col->elements_column()->size() == 0) { // all elements are null
-        column = ColumnHelper::create_column(_children[1]->get_child(1)->type(), _children[1]->is_nullable());
+        column = ColumnHelper::create_column(_children[0]->get_child(0)->type(), _children[0]->is_nullable());
     } else {
         // construct a new chunk to evaluate the lambda expression.
         auto _cur_chunk = std::make_shared<vectorized::Chunk>();
-        // put all arguments into the new chunk, only 1 at present.
+        // put all arguments into the new chunk
         vector<SlotId> arguments_ids;
-        auto lambda_func = dynamic_cast<LambdaFunction*>(_children[1]);
+        auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
         for (int i = 0; i < argument_num; ++i) {
             _cur_chunk->append_column(array_col->elements_column(), arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunks aligning with the first array's offsets
         vector<SlotId> slot_ids;
-        _children[1]->get_slot_ids(&slot_ids);
+        _children[0]->get_slot_ids(&slot_ids);
         for (auto id : slot_ids) {
             DCHECK(id > 0);
             auto captured = ptr->get_column_by_slot_id(id);
@@ -60,7 +59,7 @@ ColumnPtr TransformExpr::evaluate(ExprContext* context, Chunk* ptr) {
             _cur_chunk->append_column(
                     ColumnHelper::duplicate_column(captured, std::move(aligned_col), array_col->offsets_column()), id);
         }
-        column = EVALUATE_NULL_IF_ERROR(context, _children[1], _cur_chunk.get());
+        column = EVALUATE_NULL_IF_ERROR(context, _children[0], _cur_chunk.get());
     }
     DCHECK(column != nullptr);
     // the elements of the new array should be nullable and not const.

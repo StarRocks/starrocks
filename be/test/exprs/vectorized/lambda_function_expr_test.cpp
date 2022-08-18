@@ -9,12 +9,12 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_expr.h"
+#include "exprs/vectorized/array_map_expr.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/function_call_expr.h"
 #include "exprs/vectorized/is_null_predicate.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
-#include "exprs/vectorized/transform_expr.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -240,30 +240,30 @@ private:
 };
 
 // just consider one level, not nested
-// transform(array<type>, lambdaFunction(x<type>, lambdaExpr))
-TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
+// array_map(lambdaFunction(x<type>, lambdaExpr),array<type>)
+TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
     auto cur_chunk = std::make_shared<vectorized::Chunk>();
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 0; i < _array_expr.size(); ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "transform";
-            TransformExpr transform_expr(expr_node);
-            transform_expr.clear_children();
-            transform_expr.add_child(_array_expr[i]);
-            transform_expr.add_child(_lambda_func[j]);
-            ExprContext exprContext(&transform_expr);
+            expr_node.fn.name.function_name = "array_map";
+            ArrayMapExpr array_map_expr(expr_node);
+            array_map_expr.clear_children();
+            array_map_expr.add_child(_lambda_func[j]);
+            array_map_expr.add_child(_array_expr[i]);
+            ExprContext exprContext(&array_map_expr);
             exprContext._is_clone = true;
-            WARN_IF_ERROR(transform_expr.prepare(nullptr, &exprContext), "");
-            WARN_IF_ERROR(transform_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
+            WARN_IF_ERROR(array_map_expr.prepare(nullptr, &exprContext), "");
+            WARN_IF_ERROR(array_map_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
                           "");
 
-            ColumnPtr result = transform_expr.evaluate(&exprContext, cur_chunk.get());
+            ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
-            if (i == 0) { // transform(NULL, x->xxx)
+            if (i == 0) { // array_map(x->xxx,nullR)
                 EXPECT_EQ(1, result->size());
                 ASSERT_TRUE(result->is_null(0));
-            } else if (i == 1 && j == 0) { // transform(array<int>, x -> x)
+            } else if (i == 1 && j == 0) { // array_map(x -> x, array<int>)
                                            // [1,4]
                                            // [null,null]
                                            // [null,12]
@@ -277,7 +277,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 ASSERT_TRUE(result->get(1).get_array()[1].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
                 EXPECT_EQ(12, result->get(2).get_array()[1].get_int32());
-            } else if (i == 1 && j == 1) { // transform(array<int>, x -> x is null)
+            } else if (i == 1 && j == 1) { // array_map(x -> x is null, array<int>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(0, result->get(0).get_array()[0].get_int8());
                 EXPECT_EQ(0, result->get(0).get_array()[1].get_int8());
@@ -285,7 +285,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 EXPECT_EQ(1, result->get(1).get_array()[1].get_int8());
                 EXPECT_EQ(1, result->get(2).get_array()[0].get_int8());
                 EXPECT_EQ(0, result->get(2).get_array()[1].get_int8());
-            } else if (i == 1 && j == 2) {
+            } else if (i == 1 && j == 2) { // // array_map(x -> x+a, array<int>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(2, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(5, result->get(0).get_array()[1].get_int32());
@@ -293,16 +293,16 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 ASSERT_TRUE(result->get(1).get_array()[1].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
                 EXPECT_EQ(13, result->get(2).get_array()[1].get_int32());
-            } else if (i == 2 && (j == 0 || j == 2)) { // transform([null], x->x || x->x+a)
+            } else if (i == 2 && (j == 0 || j == 2)) { // array_map( x->x || x->x+a, [null])
                 EXPECT_EQ(1, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
-            } else if (i == 2 && j == 1) { // transform([null], x -> x is null)
+            } else if (i == 2 && j == 1) { // array_map(x -> x is null,[null])
                 EXPECT_EQ(1, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
-            } else if (i == 3) { // transform([], x->xxx)
+            } else if (i == 3) { // array_map(x->xxx,[])
                 EXPECT_EQ(1, result->size());
                 ASSERT_TRUE(result->get(0).get_array().empty());
-            } else if (i == 4 && (j == 0 || j == 2)) { // transform(array<special>,  x->x || x->x+a)
+            } else if (i == 4 && (j == 0 || j == 2)) { // array_map(x->x || x->x+a, array<special>)
                                                        // [null]
                                                        // []
                                                        // NULL
@@ -310,12 +310,12 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
-            } else if (i == 4 && j == 1) { // transform(array<special>, x->x is null)
+            } else if (i == 4 && j == 1) { // array_map(x->x is null, array<special>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->is_null(2));
-            } else if (i == 5 && j == 0) { // transform(array<const[1,4]...>, x->x)
+            } else if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(4, result->get(0).get_array()[1].get_int32());
@@ -323,7 +323,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 EXPECT_EQ(4, result->get(1).get_array()[1].get_int32());
                 EXPECT_EQ(1, result->get(2).get_array()[0].get_int32());
                 EXPECT_EQ(4, result->get(2).get_array()[1].get_int32());
-            } else if (i == 5 && j == 1) { // transform(array<const[1,4]...>, x->x is null)
+            } else if (i == 5 && j == 1) { // array_map(x->x is null, array<const[1,4]...>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(0, result->get(0).get_array()[0].get_int8());
                 EXPECT_EQ(0, result->get(0).get_array()[1].get_int8());
@@ -331,7 +331,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 EXPECT_EQ(0, result->get(1).get_array()[1].get_int8());
                 EXPECT_EQ(0, result->get(2).get_array()[0].get_int8());
                 EXPECT_EQ(0, result->get(2).get_array()[1].get_int8());
-            } else if (i == 5 && j == 2) { // // transform(array<const[1,4]...>, x->x + a)
+            } else if (i == 5 && j == 2) { // // array_map( x->x + a, array<const[1,4]...>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(2, result->get(0).get_array()[0].get_int32());
                 EXPECT_EQ(5, result->get(0).get_array()[1].get_int32());
@@ -339,24 +339,24 @@ TEST_F(VectorizedLambdaFunctionExprTest, transformLambdaTest) {
                 EXPECT_EQ(5, result->get(1).get_array()[1].get_int32());
                 EXPECT_EQ(2, result->get(2).get_array()[0].get_int32());
                 EXPECT_EQ(5, result->get(2).get_array()[1].get_int32());
-            } else if (i == 6) { // transform(array<const(null...)>, x -> x || x->x is null || x -> x+a)
+            } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
                 EXPECT_EQ(3, result->size());
                 ASSERT_TRUE(result->is_null(0));
                 ASSERT_TRUE(result->is_null(1));
                 ASSERT_TRUE(result->is_null(2));
-            } else if (i == 7 && (j == 0 || j == 2)) { // transform(array<const([null]...)>, x -> x || x-> x+a)
+            } else if (i == 7 && (j == 0 || j == 2)) { // array_map(x -> x || x-> x+a,array<const([null]...)>)
                 EXPECT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(1).get_array()[0].is_null());
                 ASSERT_TRUE(result->get(2).get_array()[0].is_null());
 
-            } else if (i == 7 && j == 1) { // transform(array<const([null]...)>, x -> x is null)
+            } else if (i == 7 && j == 1) { // array_map(x -> x is null, array<const([null]...)>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int8());
                 EXPECT_EQ(1, result->get(1).get_array()[0].get_int8());
                 EXPECT_EQ(1, result->get(2).get_array()[0].get_int8());
 
-            } else if (i == 8) { // transform(array<const([]...)>, x -> x || x -> x is null || x -> x+a)
+            } else if (i == 8) { // array_map(x -> x || x -> x is null || x -> x+a, array<const([]...)>)
                 EXPECT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array().empty());
                 ASSERT_TRUE(result->get(1).get_array().empty());

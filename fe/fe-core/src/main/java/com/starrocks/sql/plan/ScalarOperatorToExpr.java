@@ -476,10 +476,12 @@ public class ScalarOperatorToExpr {
             return result;
         }
 
+        // reverse (x,y) -> x op y to x op y <- (x,y), i.e., putting the lambda expression at the first
         @Override
         public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
             // lambda arguments
             List<Expr> arguments = Lists.newArrayList();
+            List<Expr> newArguments = Lists.newArrayList();
             for (ColumnRefOperator ref : operator.getRefColumns()) {
                 SlotRef slot = new SlotRef(new SlotDescriptor(
                         new SlotId(ref.getId()), ref.getName(), ref.getType(), ref.isNullable()));
@@ -489,8 +491,9 @@ public class ScalarOperatorToExpr {
             // lambda expression
             final ScalarOperator lambdaOp = operator.getLambdaExpr();
             final Expr lambdaExpr = buildExpr.build(lambdaOp, context);
-            arguments.add(lambdaExpr);
-            Expr result = new LambdaFunction(arguments);
+            newArguments.add(lambdaExpr);
+            newArguments.addAll(arguments);
+            Expr result = new LambdaFunction(newArguments);
             result.setType(Type.FUNCTION);
             return result;
         }

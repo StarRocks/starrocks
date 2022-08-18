@@ -15,7 +15,7 @@
 
 namespace starrocks::vectorized {
 
-// LambdaFunction has various children such as arg_0, arg_1,...,lambda expression.
+// LambdaFunction has various children such as lambda expression, arg_0, arg_1,....
 
 class LambdaFunction final : public Expr {
 public:
@@ -45,6 +45,5 @@ public:
 private:
     std::vector<SlotId> captured_slot_ids;
     std::vector<SlotId> arguments_ids;
-    int argument_num; // also the argument ID of the lambda expression.
 };
 } // namespace starrocks::vectorized

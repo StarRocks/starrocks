@@ -110,28 +110,32 @@ public class ExpressionAnalyzer {
         return false;
     }
 
+    // only high-order functions can use lambda functions.
+    void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
+        Preconditions.checkState(isHighOrderFunction(expression),
+                "Lambda Functions can only be used in supported high-order functions.");
+        // the first child is lambdaFunction
+        int childSize = expression.getChildren().size();
+        for (int i = 1; i < childSize; ++i) {
+            Expr expr = expression.getChild(i);
+            bottomUpAnalyze(visitor, expr, scope);
+            if (expr instanceof NullLiteral) {
+                expr.setType(Type.ARRAY_INT); // Since Type.NULL cannot be pushed to to BE, hack it here.
+            }
+            Preconditions.checkArgument(expr.getType().isArrayType(),
+                    "Lambda inputs should be arrays.");
+            Type itemType = ((ArrayType) expr.getType()).getItemType();
+            if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
+                itemType = Type.INT;
+            }
+            scope.putLambdaArgument(new PlaceHolderExpr(visitor.getLambdaID(), expr.isNullable(), itemType));
+        }
+        // visit LambdaFunction
+        visitor.visit(expression.getChild(0), scope);
+    }
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         if (expression.hasLambdaFunction()) {
-            Preconditions.checkState(isHighOrderFunction(expression),
-                    "Lambda Functions can only be used in supported high-order functions.");
-            // the last child is lambdaFunction
-            int childSize = expression.getChildren().size();
-            for (int i = 0; i < childSize - 1; ++i) {
-                Expr expr = expression.getChild(i);
-                bottomUpAnalyze(visitor, expr, scope);
-                if (expr instanceof NullLiteral) {
-                    expr.setType(Type.ARRAY_INT); // Since Type.NULL cannot be pushed to to BE, hack it here.
-                }
-                Preconditions.checkArgument(expr.getType().isArrayType(),
-                        "Lambda input should be arrays.");
-                Type itemType = ((ArrayType) expr.getType()).getItemType();
-                if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
-                    itemType = Type.INT;
-                }
-                scope.putLambdaArgument(new PlaceHolderExpr(visitor.getLambdaID(), expr.isNullable(), itemType));
-            }
-            // visit LambdaFunction
-            visitor.visit(expression.getChild(childSize - 1), scope);
+            analyzeHighOrderFunction(visitor, expression, scope);
         } else {
             for (Expr expr : expression.getChildren()) {
                 bottomUpAnalyze(visitor, expr, scope);
