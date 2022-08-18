@@ -21,9 +21,9 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;

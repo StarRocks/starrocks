@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.analysis.SetOperationStmt.Qualifier;
 import com.starrocks.analysis.SetOperationStmt.Operation;
 import com.starrocks.analysis.SetOperationStmt.SetOperand;
