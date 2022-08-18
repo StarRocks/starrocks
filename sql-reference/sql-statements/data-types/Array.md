@@ -201,7 +201,7 @@ StarRocks 中的数组类型，与 ORC 或 Parquet 格式中的 List 结构相�
 
 ### 通过 Stream Load 或 Routine Load 导入 CSV 格式数组
 
-您可以使用 [Stream Load](../loading/StreamLoad.md) 或 [Routine Load](../loading/RoutineLoad.md) 方式导入 CSV 文本文件或 Kafka 中的 CSV 格式数据，默认采用逗号分隔。
+您可以使用 [Stream Load](/loading/StreamLoad.md) 或 [Routine Load](/loading/RoutineLoad.md) 方式导入 CSV 文本文件或 Kafka 中的 CSV 格式数据，默认采用逗号分隔。
 
 ## 访问数组中的元素
 
