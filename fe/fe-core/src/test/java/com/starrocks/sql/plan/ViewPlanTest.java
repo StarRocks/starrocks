@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

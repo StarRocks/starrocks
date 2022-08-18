@@ -19,17 +19,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.starrocks.common.UserException;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.TableName;
 
 // DROP TABLE
 public class DropTableStmt extends DdlStmt {
-    private boolean ifExists;
+    private final boolean ifExists;
     private final TableName tableName;
     private final boolean isView;
-    private boolean forceDrop;
+    private final boolean forceDrop;
 
     public DropTableStmt(boolean ifExists, TableName tableName, boolean forceDrop) {
         this.ifExists = ifExists;
@@ -71,33 +71,6 @@ public class DropTableStmt extends DdlStmt {
 
     public boolean isForceDrop() {
         return this.forceDrop;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        if (isView()) {
-            stringBuilder.append("DROP VIEW ");
-        } else {
-            stringBuilder.append("DROP TABLE ");
-        }
-        if (isSetIfExists()) {
-            stringBuilder.append("IF EXISTS ");
-        }
-        stringBuilder.append(tableName.toSql());
-        if (isForceDrop()) {
-            stringBuilder.append(" FORCE");
-        }
-        return stringBuilder.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

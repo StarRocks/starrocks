@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TruncateTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;

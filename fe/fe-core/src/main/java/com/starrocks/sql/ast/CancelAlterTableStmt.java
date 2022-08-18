@@ -19,9 +19,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowAlterStmt.AlterType;
+import com.starrocks.analysis.CancelStmt;
+import com.starrocks.analysis.TableName;
+import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -39,9 +41,9 @@ import java.util.stream.Collectors;
  */
 public class CancelAlterTableStmt extends CancelStmt {
 
-    private AlterType alterType;
+    private final AlterType alterType;
 
-    private TableName dbTableName;
+    private final TableName dbTableName;
 
     public AlterType getAlterType() {
         return alterType;
@@ -63,7 +65,7 @@ public class CancelAlterTableStmt extends CancelStmt {
         return dbTableName.getTbl();
     }
 
-    private List<Long> alterJobIdList;
+    private final List<Long> alterJobIdList;
 
     public CancelAlterTableStmt(AlterType alterType, TableName dbTableName) {
         this(alterType, dbTableName, null);
@@ -80,21 +82,6 @@ public class CancelAlterTableStmt extends CancelStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        dbTableName.analyze(analyzer);
-
-        // check access
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), dbTableName.getDb(),
-                dbTableName.getTbl(),
-                PrivPredicate.ALTER)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "CANCEL ALTER TABLE",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    dbTableName.getTbl());
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCancelAlterTableStatement(this, context);
     }
@@ -102,20 +89,6 @@ public class CancelAlterTableStmt extends CancelStmt {
     @Override
     public boolean isSupportNewPlanner() {
         return true;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("CANCEL ALTER " + this.alterType);
-        stringBuilder.append(" FROM " + dbTableName.toSql());
-        if (!CollectionUtils.isEmpty(alterJobIdList)) {
-            stringBuilder.append(" (")
-                    .append(String
-                            .join(",", alterJobIdList.stream().map(String::valueOf).collect(Collectors.toList())));
-            stringBuilder.append(")");
-        }
-        return stringBuilder.toString();
     }
 
     @Override

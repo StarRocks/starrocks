@@ -19,13 +19,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.InsertStmt;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
 
@@ -41,17 +42,6 @@ public class CreateTableAsSelectStmt extends StatementBase {
     private final QueryStatement queryStatement;
     private final InsertStmt insertStmt;
 
-    // This constructor is meaningless,
-    // but currently cannot be deleted because CUP generates a code that calls this function.
-    public CreateTableAsSelectStmt(CreateTableStmt createTableStmt,
-                                   List<String> columnNames,
-                                   QueryStmt queryStmt) {
-        this.createTableStmt = createTableStmt;
-        this.columnNames = columnNames;
-        this.queryStatement = null;
-        this.insertStmt = null;
-    }
-
     public CreateTableAsSelectStmt(CreateTableStmt createTableStmt,
                                    List<String> columnNames,
                                    QueryStatement queryStatement) {
@@ -59,11 +49,6 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.columnNames = columnNames;
         this.queryStatement = queryStatement;
         this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        throw new AnalysisException("old planner does not support CTAS statement");
     }
 
     public void createTable(ConnectContext session) throws AnalysisException {
@@ -77,16 +62,6 @@ public class CreateTableAsSelectStmt extends StatementBase {
     public void dropTable(ConnectContext session) throws AnalysisException {
         try {
             session.getGlobalStateMgr().dropTable(new DropTableStmt(true, createTableStmt.getDbTbl(), true));
-        } catch (DdlException e) {
-            throw new AnalysisException(e.getMessage());
-        }
-    }
-
-    public void createTable(Analyzer analyzer) throws AnalysisException {
-        // TODO(zc): Support create table later.
-        // Create table
-        try {
-            analyzer.getCatalog().createTable(createTableStmt);
         } catch (DdlException e) {
             throw new AnalysisException(e.getMessage());
         }

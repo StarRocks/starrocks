@@ -19,9 +19,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -71,7 +73,7 @@ public class DescribeStmt extends ShowStmt {
     // empty col num equals to DESC_OLAP_TABLE_ALL_META_DATA.size()
     public static final List<String> EMPTY_ROW = initEmptyRow();
 
-    private TableName dbTableName;
+    private final TableName dbTableName;
     private ProcNodeInterface node;
 
     List<List<String>> totalRows;
@@ -82,7 +84,7 @@ public class DescribeStmt extends ShowStmt {
 
     public DescribeStmt(TableName dbTableName, boolean isAllTables) {
         this.dbTableName = dbTableName;
-        this.totalRows = new LinkedList<List<String>>();
+        this.totalRows = new LinkedList<>();
         this.isAllTables = isAllTables;
     }
 
@@ -162,16 +164,6 @@ public class DescribeStmt extends ShowStmt {
                 return DESC_MYSQL_TABLE_ALL_META_DATA;
             }
         }
-    }
-
-    @Override
-    public String toSql() {
-        return "DESCRIBE `" + dbTableName + "`" + (isAllTables ? " ALL" : "");
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     private static List<String> initEmptyRow() {

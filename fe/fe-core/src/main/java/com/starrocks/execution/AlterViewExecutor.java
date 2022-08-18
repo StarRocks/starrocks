@@ -2,7 +2,7 @@
 
 package com.starrocks.execution;
 
-import com.starrocks.analysis.AlterViewStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;

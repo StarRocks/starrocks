@@ -27,7 +27,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AddRollupClause;
 import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;

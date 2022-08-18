@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.qe.ConnectContext;

@@ -19,10 +19,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.proc.ProcNodeInterface;
@@ -30,9 +34,6 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,19 +46,27 @@ import java.util.List;
  */
 public class ShowAlterStmt extends ShowStmt {
 
-    public static enum AlterType {
+    public enum AlterType {
         COLUMN, ROLLUP, MATERIALIZED_VIEW
     }
 
-    private AlterType type;
+    private final AlterType type;
     private String dbName;
-    private Expr whereClause;
+    private final Expr whereClause;
     private HashMap<String, Expr> filterMap;
-    private List<OrderByElement> orderByElements;
+    private final List<OrderByElement> orderByElements;
     private ArrayList<OrderByPair> orderByPairs;
-    private LimitElement limitElement;
-
+    private final LimitElement limitElement;
     private ProcNodeInterface node;
+
+    public ShowAlterStmt(AlterType type, String dbName, Expr whereClause, List<OrderByElement> orderByElements,
+                         LimitElement limitElement) {
+        this.type = type;
+        this.dbName = dbName;
+        this.whereClause = whereClause;
+        this.orderByElements = orderByElements;
+        this.limitElement = limitElement;
+    }
 
     public AlterType getType() {
         return type;
@@ -105,43 +114,6 @@ public class ShowAlterStmt extends ShowStmt {
 
     public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
         this.orderByPairs = orderByPairs;
-    }
-
-    public ShowAlterStmt(AlterType type, String dbName, Expr whereClause, List<OrderByElement> orderByElements,
-                         LimitElement limitElement) {
-        this.type = type;
-        this.dbName = dbName;
-        this.whereClause = whereClause;
-        this.orderByElements = orderByElements;
-        this.limitElement = limitElement;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) {}
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW ALTER TABLE ").append(type.name()).append(" ");
-        if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("FROM `").append(dbName).append("`");
-        }
-        if (whereClause != null) {
-            sb.append(" WHERE ").append(whereClause.toSql());
-        }
-        // Order By clause
-        if (orderByElements != null) {
-            sb.append(" ORDER BY ");
-            for (int i = 0; i < orderByElements.size(); ++i) {
-                sb.append(orderByElements.get(i).toSql());
-                sb.append((i + 1 != orderByElements.size()) ? ", " : "");
-            }
-        }
-
-        if (limitElement != null) {
-            sb.append(limitElement.toSql());
-        }
-        return sb.toString();
     }
 
     @Override

@@ -4,8 +4,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 
 public class TruncateTableAnalyzer {

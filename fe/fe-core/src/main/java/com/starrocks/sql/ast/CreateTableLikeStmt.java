@@ -19,11 +19,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.starrocks.sql.ast.AstVisitor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.TableName;
 
 public class CreateTableLikeStmt extends DdlStmt {
 
@@ -66,9 +65,6 @@ public class CreateTableLikeStmt extends DdlStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) {}
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableLikeStatement(this, context);
     }
@@ -76,15 +72,5 @@ public class CreateTableLikeStmt extends DdlStmt {
     @Override
     public boolean isSupportNewPlanner() {
         return true;
-    }
-
-    @Override
-    public String toSql() {
-        return String.format("CREATE TABLE %s LIKE %s", tableName.toSql(), existedTableName.toSql());
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 }

@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

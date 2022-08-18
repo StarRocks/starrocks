@@ -30,7 +30,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
-import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;

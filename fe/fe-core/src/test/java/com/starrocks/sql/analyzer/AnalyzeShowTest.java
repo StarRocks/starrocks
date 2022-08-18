@@ -4,10 +4,10 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;

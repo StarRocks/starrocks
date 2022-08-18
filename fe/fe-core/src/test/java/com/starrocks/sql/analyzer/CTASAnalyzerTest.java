@@ -2,7 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;

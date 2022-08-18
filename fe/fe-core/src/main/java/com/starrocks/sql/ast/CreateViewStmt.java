@@ -19,25 +19,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.analysis.ColWithComment;
+import com.starrocks.analysis.TableName;
 
 import java.util.List;
 
 public class CreateViewStmt extends BaseViewStmt {
-
     private final boolean ifNotExists;
     private final String comment;
-
-    public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
-                          String comment, QueryStmt queryStmt) {
-        super(tableName, cols, queryStmt);
-        this.ifNotExists = ifNotExists;
-        this.comment = Strings.nullToEmpty(comment);
-    }
 
     public CreateViewStmt(boolean ifNotExists, TableName tableName, List<ColWithComment> cols,
                           String comment, QueryStatement queryStmt) {

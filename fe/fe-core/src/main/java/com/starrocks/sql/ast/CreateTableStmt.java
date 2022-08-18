@@ -19,16 +19,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.AlterClause;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.DistributionDesc;
+import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.PartitionDesc;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.common.util.PrintableMap;
-import com.starrocks.sql.ast.AstVisitor;
-import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;
 import java.io.IOException;
@@ -88,12 +93,6 @@ public class CreateTableStmt extends DdlStmt {
 
     // for backup. set to -1 for normal use
     private int tableSignature;
-
-    public CreateTableStmt(String charsetName) {
-        // for persist
-        tableName = new TableName();
-        columnDefs = Lists.newArrayList();
-    }
 
     public CreateTableStmt(boolean ifNotExists,
                            boolean isExternal,
@@ -185,8 +184,6 @@ public class CreateTableStmt extends DdlStmt {
         this.tableSignature = -1;
         this.rollupAlterClauseList = rollupAlterClauseList == null ? new ArrayList<>() : rollupAlterClauseList;
     }
-
-
 
     public void addColumnDef(ColumnDef columnDef) {
         columnDefs.add(columnDef);
@@ -314,90 +311,6 @@ public class CreateTableStmt extends DdlStmt {
 
     public static CreateTableStmt read(DataInput in) throws IOException {
         throw new RuntimeException("CreateTableStmt serialization is not supported anymore.");
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("CREATE ");
-        if (isExternal) {
-            sb.append("EXTERNAL ");
-        }
-        sb.append("TABLE ");
-        sb.append(tableName.toSql()).append(" (\n");
-        int idx = 0;
-        for (ColumnDef columnDef : columnDefs) {
-            if (idx != 0) {
-                sb.append(",\n");
-            }
-            sb.append("  ").append(columnDef.toSql());
-            idx++;
-        }
-        if (CollectionUtils.isNotEmpty(indexDefs)) {
-            sb.append(",\n");
-            for (IndexDef indexDef : indexDefs) {
-                sb.append("  ").append(indexDef.toSql());
-            }
-        }
-        sb.append("\n)");
-        if (engineName != null) {
-            sb.append(" ENGINE = ").append(engineName);
-        }
-        sb.append("\n");
-        if (charsetName != null) {
-            sb.append(" CHARSET = ").append(charsetName);
-        }
-        if (keysDesc != null) {
-            sb.append("\n").append(keysDesc.toSql());
-        }
-
-        if (partitionDesc != null) {
-            sb.append("\n").append(partitionDesc.toSql());
-        }
-
-        if (distributionDesc != null) {
-            sb.append("\n").append(distributionDesc.toSql());
-        }
-
-        if (rollupAlterClauseList != null && rollupAlterClauseList.size() != 0) {
-            sb.append("\n rollup(");
-            StringBuilder opsSb = new StringBuilder();
-            for (int i = 0; i < rollupAlterClauseList.size(); i++) {
-                opsSb.append(rollupAlterClauseList.get(i).toSql());
-                if (i != rollupAlterClauseList.size() - 1) {
-                    opsSb.append(",");
-                }
-            }
-            sb.append(opsSb.toString().replace("ADD ROLLUP", "")).append(")");
-        }
-
-        // properties may contains password and other sensitive information,
-        // so do not print properties.
-        // This toSql() method is only used for log, user can see detail info by using show create table stmt,
-        // which is implemented in GlobalStateMgr.getDdlStmt()
-        if (properties != null && !properties.isEmpty()) {
-            sb.append("\nPROPERTIES (");
-            sb.append(new PrintableMap<String, String>(properties, " = ", true, true, true));
-            sb.append(")");
-        }
-
-        if (extProperties != null && !extProperties.isEmpty()) {
-            sb.append("\n").append(engineName.toUpperCase()).append(" PROPERTIES (");
-            sb.append(new PrintableMap<String, String>(extProperties, " = ", true, true, true));
-            sb.append(")");
-        }
-
-        if (!Strings.isNullOrEmpty(comment)) {
-            sb.append("\nCOMMENT \"").append(comment).append("\"");
-        }
-
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

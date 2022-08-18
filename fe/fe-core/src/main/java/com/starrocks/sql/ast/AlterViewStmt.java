@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/RecoverTableStmt.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/AlterViewStmt.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,51 +19,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
-import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.analysis.ColWithComment;
+import com.starrocks.analysis.TableName;
 
-public class RecoverTableStmt extends DdlStmt {
-    private TableName dbTblName;
+import java.util.List;
 
-    public RecoverTableStmt(TableName dbTblName) {
-        this.dbTblName = dbTblName;
+// Alter view statement
+public class AlterViewStmt extends BaseViewStmt {
+    public AlterViewStmt(TableName tbl, List<ColWithComment> cols, QueryStatement queryStatement) {
+        super(tbl, cols, queryStatement);
     }
 
-    public String getDbName() {
-        return dbTblName.getDb();
+    public TableName getTbl() {
+        return tableName;
     }
-
-    public String getTableName() {
-        return dbTblName.getTbl();
-    }
-
-    public TableName getTableNameObject() {
-        return dbTblName;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) {}
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRecoverTableStatement(this, context);
+        return visitor.visitAlterViewStatement(this, context);
     }
 
     @Override
     public boolean isSupportNewPlanner() {
         return true;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("RECOVER TABLE ");
-        if (!Strings.isNullOrEmpty(getDbName())) {
-            sb.append(getDbName()).append(".");
-        }
-        sb.append(getTableName());
-        return sb.toString();
     }
 }

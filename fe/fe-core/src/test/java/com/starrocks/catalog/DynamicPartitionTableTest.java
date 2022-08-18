@@ -21,7 +21,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;

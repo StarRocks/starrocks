@@ -19,10 +19,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ColWithComment;
+import com.starrocks.analysis.DdlStmt;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
@@ -34,29 +37,11 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 
 public class BaseViewStmt extends DdlStmt {
-    private static final Logger LOG = LogManager.getLogger(BaseViewStmt.class);
-
     protected final TableName tableName;
     protected final List<ColWithComment> cols;
-    protected QueryStmt viewDefStmt;
-
-    // Set during analyze
     protected List<Column> finalCols;
-
-    protected String originalViewDef;
     protected String inlineViewDef;
-
-    protected QueryStmt cloneStmt;
-
     protected QueryStatement queryStatement;
-
-    public BaseViewStmt(TableName tableName, List<ColWithComment> cols, QueryStmt queryStmt) {
-        Preconditions.checkNotNull(queryStmt);
-        this.tableName = tableName;
-        this.cols = cols;
-        this.viewDefStmt = queryStmt;
-        finalCols = Lists.newArrayList();
-    }
 
     public BaseViewStmt(TableName tableName, List<ColWithComment> cols, QueryStatement queryStmt) {
         Preconditions.checkNotNull(queryStmt);
@@ -100,15 +85,6 @@ public class BaseViewStmt extends DdlStmt {
 
     public List<ColWithComment> getCols() {
         return cols;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        if (viewDefStmt.hasOutFileClause()) {
-            throw new AnalysisException("Not support OUTFILE clause in CREATE VIEW statement");
-        }
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

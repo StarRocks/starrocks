@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

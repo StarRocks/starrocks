@@ -26,7 +26,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateViewStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;

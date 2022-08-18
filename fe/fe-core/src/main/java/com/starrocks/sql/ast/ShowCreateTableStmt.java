@@ -19,8 +19,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table.TableType;
@@ -65,8 +67,8 @@ public class ShowCreateTableStmt extends ShowStmt {
                     .addColumn(new Column("Create Materialized View", ScalarType.createVarchar(30)))
                     .build();
 
-    private TableName tbl;
-    private CreateTableType type;
+    private final TableName tbl;
+    private final CreateTableType type;
 
     public ShowCreateTableStmt(TableName tbl, CreateTableType type) {
         this.tbl = tbl;
@@ -97,19 +99,6 @@ public class ShowCreateTableStmt extends ShowStmt {
         return MATERIALIZED_VIEW_META_DATA;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
-    public String toSql() {
-        return "SHOW CREATE " + type.getValue() + " " + tbl;
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
 
     @Override
     public ShowResultSetMetaData getMetaData() {

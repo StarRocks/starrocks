@@ -3,7 +3,7 @@
 package com.starrocks.execution;
 
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TruncateTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;

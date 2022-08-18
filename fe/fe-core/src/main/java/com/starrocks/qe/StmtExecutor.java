@@ -27,7 +27,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;

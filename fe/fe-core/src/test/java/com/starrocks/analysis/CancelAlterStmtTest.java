@@ -21,7 +21,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.analysis.ShowAlterStmt.AlterType;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import org.junit.Assert;

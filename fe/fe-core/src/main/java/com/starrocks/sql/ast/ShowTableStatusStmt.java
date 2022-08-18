@@ -19,8 +19,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
+import com.starrocks.analysis.SelectList;
+import com.starrocks.analysis.SelectListItem;
+import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.PrimitiveType;
@@ -58,7 +65,7 @@ public class ShowTableStatusStmt extends ShowStmt {
                     .build();
 
     private String db;
-    private String wild;
+    private final String wild;
     private Expr where;
 
     public ShowTableStatusStmt(String db, String wild, Expr where) {

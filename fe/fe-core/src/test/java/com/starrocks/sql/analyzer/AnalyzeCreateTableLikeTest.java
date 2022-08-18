@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
