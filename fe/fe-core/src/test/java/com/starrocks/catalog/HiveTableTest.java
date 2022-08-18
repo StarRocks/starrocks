@@ -135,6 +135,9 @@ public class HiveTableTest {
 
     @Test
     public void testHiveColumnConvert() {
-        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("BINARY", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("BINARY", Type.VARCHAR));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("UNIONTYPE", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("MAP", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("STRUCT", Type.UNKNOWN_TYPE));
     }
 }

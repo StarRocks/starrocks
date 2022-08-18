@@ -164,7 +164,7 @@ public class HiveMetaStoreTableUtils {
                 return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
                         ((ArrayType) type).getItemType());
             default:
-                // for BINARY and other types, we transfer it to UNKNOWN_TYPE
+                // for UNION and other types, we transfer it to UNKNOWN_TYPE
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
     }
