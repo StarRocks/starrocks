@@ -268,9 +268,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     std::vector<std::pair<Status, int64_t>> pair_vec;
     for (auto& tablet : to_flush_tablet) {
         Status st;
-        token->submit_func([&]() {
-            st = std::move(tablet->data_dir()->get_meta()->flush());
-        });
+        token->submit_func([&]() { st = std::move(tablet->data_dir()->get_meta()->flush()); });
         pair_vec.push_back(std::make_pair(st, tablet->tablet_id()));
     }
 
@@ -297,9 +295,7 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     auto token = _thread_pool_flush->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
         Status st;
-        token->submit_func([&]() {
-            st = std::move(dir->get_meta()->flush());
-        });
+        token->submit_func([&]() { st = std::move(dir->get_meta()->flush()); });
         pair_vec.push_back(std::make_pair(st, dir->path()));
     }
 
