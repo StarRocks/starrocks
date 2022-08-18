@@ -129,7 +129,6 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
         QUERY59	7,468	2,392	3.12
         QUERY39-2	646	348	1.86
         QUERY39-1	893	593	1.51
-
         QUERY11	57,774	52,200	1.11
         QUERY04	94,417	86,726	1.09
         QUERY74	34,964	34,936	1.00

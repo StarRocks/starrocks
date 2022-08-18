@@ -829,16 +829,16 @@ public class Explain {
 
         if (optExpression.getStatistics().getColumnStatistics().values().stream()
                 .allMatch(ColumnStatistic::isUnknown)) {
-            buildOperatorProperty(sb, "Estimates: {cost: " + optExpression.getCost() +
-                    ", row: " + (long) optExpression.getStatistics().getOutputRowCount() +
-                    ", cpu: ?, memory: ?, network: ?}", step);
+            buildOperatorProperty(sb, "Estimates: {" +
+                    "row: " + (long) optExpression.getStatistics().getOutputRowCount() +
+                    ", cpu: ?, memory: ?, network: ?, cost: " + optExpression.getCost() + "}", step);
         } else {
             buildOperatorProperty(sb, "Estimates: {" +
-                    "cost: " + String.format("%.2f", optExpression.getCost()) +
-                    ", row: " + (long) optExpression.getStatistics().getOutputRowCount() +
+                    "row: " + (long) optExpression.getStatistics().getOutputRowCount() +
                     ", cpu: " + String.format("%.2f", cost.getCpuCost()) +
                     ", memory: " + String.format("%.2f", cost.getMemoryCost()) +
                     ", network: " + String.format("%.2f", cost.getNetworkCost()) +
+                    ", cost: " + String.format("%.2f", optExpression.getCost()) +
                     "}", step);
         }
     }
