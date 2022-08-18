@@ -73,6 +73,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
+    return _location_provider->txn_vlog_location(tablet_id, version);
+}
+
 std::string TabletManager::segment_location(int64_t tablet_id, std::string_view segment_name) const {
     return _location_provider->segment_location(tablet_id, segment_name);
 }
@@ -343,6 +347,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id) {
     return get_txn_log(txn_log_location(tablet_id, txn_id));
+}
+
+StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t version) {
+    return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
 Status TabletManager::put_txn_log(TxnLogPtr log) {
@@ -631,6 +639,21 @@ void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_s
         auto st = delete_txn_log(tablet_id, txn_id);
         LOG_IF(WARNING, !st.ok() && !st.is_not_found())
                 << "Fail to delete " << txn_log_location(tablet_id, txn_id) << ": " << st;
+    }
+}
+
+Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version) {
+    auto txn_log_path = txn_log_location(tablet_id, txn_id);
+    auto txn_vlog_path = txn_vlog_location(tablet_id, log_version);
+    // TODO: use rename() API if supported by the underlying filesystem.
+    auto st = fs::copy_file(txn_log_path, txn_vlog_path);
+    if (st.is_not_found()) {
+        return fs::path_exist(txn_vlog_path) ? Status::OK() : st;
+    } else if (!st.ok()) {
+        return st;
+    } else {
+        (void)fs::delete_file(txn_log_path);
+        return Status::OK();
     }
 }
 
