@@ -302,7 +302,7 @@ TEST(VersionGraphTest, max_continuous_version) {
     EXPECT_EQ(graph.max_continuous_version(), 6);
     graph.add_version_to_graph(Version(7, 7));
     EXPECT_EQ(graph.max_continuous_version(), 7);
-    
+
     // The following case may be happened in schema change
     // 1. Schema change first remove the existing rowset
     // 2. Add new version rowset into new tablet
@@ -313,7 +313,6 @@ TEST(VersionGraphTest, max_continuous_version) {
     EXPECT_EQ(graph.max_continuous_version(), 7);
     graph.add_version_to_graph(Version(0, 10));
     EXPECT_EQ(graph.max_continuous_version(), 10);
-
 }
 
 } // namespace starrocks::vectorized
