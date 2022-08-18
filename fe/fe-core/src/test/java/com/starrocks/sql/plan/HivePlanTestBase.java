@@ -6,7 +6,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.FeConstants;
-import com.starrocks.external.hive.MockHiveRepository;
 import org.junit.BeforeClass;
 
 import java.util.Map;
@@ -147,6 +146,17 @@ public class HivePlanTestBase extends PlanTestBase {
                 "    \"database\" = \"tpch_100g\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE EXTERNAL TABLE IF NOT EXISTS t1  ( c1  INTEGER,\n" +
+                "                            c2       STRING,\n" +
+                "                            c3    STRING," +
+                "                            par_col   STRING)\n" +
+                "\n" +
+                "    ENGINE=hive\n" +
+                "properties (\n" +
+                "    \"resource\" = \"hive0\",\n" +
+                "    \"table\" = \"t1\",\n" +
+                "    \"database\" = \"partitioned_db\"\n" +
+                ");");
     }
 
     private static void mockHiveResource() throws Exception {
