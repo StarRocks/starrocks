@@ -351,8 +351,8 @@ public class DatabaseTransactionMgr {
      * 5. persistent transactionState
      * 6. update nextVersion because of the failure of persistent transaction resulting in error version
      */
-    public void commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                  TxnCommitAttachment txnCommitAttachment)
+    public VisibleStateWaiter commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -374,13 +374,14 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
             throw new TransactionCommitFailedException(transactionState.getReason());
         }
+        VisibleStateWaiter waiter = new VisibleStateWaiter(transactionState);
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
-            return;
+            return waiter;
         }
         if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             LOG.debug("transaction is already committed: {}", transactionId);
-            return;
+            return waiter;
         }
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
         if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
@@ -463,6 +464,7 @@ public class DatabaseTransactionMgr {
             updateCatalogAfterCommittedSpan.end();
         }
         LOG.info("transaction:[{}] successfully committed", transactionState);
+        return waiter;
     }
 
     /**
@@ -575,7 +577,7 @@ public class DatabaseTransactionMgr {
         LOG.info("transaction:[{}] successfully prepare", transactionState);
     }
 
-    public void commitPreparedTransaction(long transactionId)
+    public VisibleStateWaiter commitPreparedTransaction(long transactionId)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -597,13 +599,14 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
             throw new TransactionCommitFailedException(transactionState.getReason());
         }
+        VisibleStateWaiter waiter = new VisibleStateWaiter(transactionState);
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
-            return;
+            return waiter;
         }
         if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             LOG.debug("transaction is already committed: {}", transactionId);
-            return;
+            return waiter;
         }
 
         Span txnSpan = transactionState.getTxnSpan();
@@ -658,38 +661,7 @@ public class DatabaseTransactionMgr {
             updateCatalogAfterCommittedSpan.end();
         }
         LOG.info("transaction:[{}] successfully committed", transactionState);
-    }
-
-    public boolean waitTransactionVisible(Database db, long transactionId, long timeoutMillis)
-            throws TransactionCommitFailedException {
-        TransactionState transactionState = null;
-        readLock();
-        try {
-            transactionState = unprotectedGetTransactionState(transactionId);
-        } finally {
-            readUnlock();
-        }
-
-        switch (transactionState.getTransactionStatus()) {
-            case COMMITTED:
-            case VISIBLE:
-                break;
-            default:
-                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getOriginName(), transactionId);
-                throw new TransactionCommitFailedException("transaction commit failed");
-        }
-
-        long currentTimeMillis = System.currentTimeMillis();
-        long timeoutTimeMillis = currentTimeMillis + timeoutMillis;
-        while (currentTimeMillis < timeoutTimeMillis && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-            try {
-                transactionState.waitTransactionVisible(timeoutMillis);
-            } catch (InterruptedException e) {
-                LOG.info("thread interrupted while waiting for transaction {} to be visible", transactionId);
-            }
-            currentTimeMillis = System.currentTimeMillis();
-        }
-        return transactionState.getTransactionStatus() == TransactionStatus.VISIBLE;
+        return waiter;
     }
 
     public void deleteTransaction(TransactionState transactionState) {
