@@ -4401,8 +4401,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
-                throw new DdlException("Table[" + tableName + "] is not OLAP table");
+            if (!table.isNativeTable()) {
+                throw new DdlException("Table[" + tableName + "] is not OLAP table or LAKE table");
             }
 
             OlapTable olapTable = (OlapTable) table;
