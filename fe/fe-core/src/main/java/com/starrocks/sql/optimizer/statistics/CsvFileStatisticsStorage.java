@@ -36,7 +36,7 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class CsvFileStatisticsStorage implements StatisticStorage {
     private static final Logger LOG = LogManager.getLogger(CsvFileStatisticsStorage.class);
 
-    private Map<Pair<String, String>, StatisticsEntry> columnStatisticMap = Maps.newHashMap();
+    private final Map<Pair<String, String>, StatisticsEntry> columnStatisticMap = Maps.newHashMap();
 
     private String path;
 
@@ -140,18 +140,12 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         }
 
         return builder.setMinValue(minValue).
-
                 setMaxValue(maxValue).
-
                 setDistinctValuesCount(Double.parseDouble(statisticsEntry.distinctCount)).
-
                 setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) /
                         Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).
-
                 setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) /
-                        Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).
-
-                build();
+                        Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).build();
     }
 
     @Override
@@ -163,7 +157,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         return Maps.newHashMap();
     }
 
-    private class StatisticsEntry {
+    private static class StatisticsEntry {
         public String tableId;
         public String columnName;
         public String dbId;
