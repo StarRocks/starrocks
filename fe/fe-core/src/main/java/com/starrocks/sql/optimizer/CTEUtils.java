@@ -97,11 +97,11 @@ public class CTEUtils {
         collectForceCteStatistics(memo.getRootGroup(), context);
     }
 
-    public static void collectForceCteStatistics(Group root, OptimizerContext context) {
+    private static void collectForceCteStatistics(Group root, OptimizerContext context) {
         GroupExpression expression = root.getFirstLogicalExpression();
 
         for (Group group : expression.getInputs()) {
-            collectCteProduce(group, context);
+            collectForceCteStatistics(group, context);
         }
 
         if (OperatorType.LOGICAL_CTE_PRODUCE.equals(expression.getOp().getOpType())) {
