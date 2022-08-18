@@ -1367,15 +1367,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
         Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
 
-        // The statistics of producer and children is theoretically equal
+        // The statistics of producer and children are equal theoretically, but statistics of children
+        // plan maybe more accurate in actually
         if (!produceStatisticsOp.isPresent() && context.getChildrenStatistics().isEmpty()) {
             Preconditions.checkState(false, "Impossible cte statistics");
-        } else if (!produceStatisticsOp.isPresent()) {
-            // None produce statistics, may in logical phase,
+        }
+
+        if (!context.getChildrenStatistics().isEmpty()) {
+            //  use the statistics of children first
             context.setStatistics(context.getChildStatistics(0));
             return visitOperator(node, context);
         }
 
+        // None children, may force CTE, use the statistics of producer
+        Preconditions.checkState(produceStatisticsOp.isPresent());
         Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {
