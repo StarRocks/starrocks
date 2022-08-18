@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.RefreshType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -49,7 +49,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh sync";
         AlterMaterializedViewStatement alterMvStmt =
                 (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), RefreshType.SYNC);
+        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), MaterializedView.RefreshType.SYNC);
     }
 
     @Test
@@ -57,7 +57,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 refresh manual";
         AlterMaterializedViewStatement alterMvStmt =
                 (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), RefreshType.MANUAL);
+        Assert.assertEquals(alterMvStmt.getRefreshSchemeDesc().getType(), MaterializedView.RefreshType.MANUAL);
     }
 
     @Test
@@ -67,7 +67,7 @@ public class AlterMaterializedViewTest {
                 (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         final RefreshSchemeDesc asyncRefreshSchemeDesc = alterMvStmt.getRefreshSchemeDesc();
         assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
-        Assert.assertEquals(asyncRefreshSchemeDesc.getType(), RefreshType.ASYNC);
+        Assert.assertEquals(asyncRefreshSchemeDesc.getType(), MaterializedView.RefreshType.ASYNC);
         assertNotNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime());
         assertEquals(((IntLiteral) ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral()
                 .getValue()).getValue(), 1);

@@ -127,7 +127,7 @@ public class TaskManager {
             }
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
                             executeTask(task.getName()), initialDelay,
-                    TimeUtils.convertTimeUnitValuetoSecond(taskSchedule.getPeriod(),
+                    TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
                             taskSchedule.getTimeUnit()), TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
         }
@@ -200,8 +200,9 @@ public class TaskManager {
                     }
                     // this operation should only run in master
                     ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                                    executeTask(task.getName()), initialDelay, schedule.getPeriod(),
-                            schedule.getTimeUnit());
+                                    executeTask(task.getName()), initialDelay,
+                            TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit()),
+                            TimeUnit.SECONDS);
                     periodFutureMap.put(task.getId(), future);
                 }
             }

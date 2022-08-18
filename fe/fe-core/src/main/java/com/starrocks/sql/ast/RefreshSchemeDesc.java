@@ -3,17 +3,17 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.catalog.RefreshType;
+import com.starrocks.catalog.MaterializedView;
 
 public class RefreshSchemeDesc implements ParseNode {
 
-    protected RefreshType type;
+    protected MaterializedView.RefreshType type;
 
-    public RefreshSchemeDesc(RefreshType type) {
+    public RefreshSchemeDesc(MaterializedView.RefreshType type) {
         this.type = type;
     }
 
-    public RefreshType getType() {
+    public MaterializedView.RefreshType getType() {
         return type;
     }
 
