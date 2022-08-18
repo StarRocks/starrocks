@@ -76,7 +76,24 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
 
         sql = "set @var = (select sum(v1) from test.t0 group by v2)";
-        analyzeSuccess(sql);
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        Assert.assertTrue(setStmt.getSetVars().get(0).getExpression().getType().isIntegerType());
+
+        sql = "set @var1 = 1, @var2 = 2";
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        Assert.assertEquals(2, setStmt.getSetVars().size());
+
+        sql = "set @var = bitmap_empty()";
+        analyzeFail(sql, "Can't set variable with type BITMAP");
+
+        sql = "set @var = (select bitmap_empty())";
+        analyzeFail(sql, "Can't set variable with type BITMAP");
+
+        sql = "set @var = hll_empty()";
+        analyzeFail(sql, "Can't set variable with type HLL");
+
+        sql = "set @var = percentile_empty()";
+        analyzeFail(sql, "Can't set variable with type PERCENTILE");
     }
 
     @Test

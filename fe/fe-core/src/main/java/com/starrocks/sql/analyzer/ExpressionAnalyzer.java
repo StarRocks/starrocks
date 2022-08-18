@@ -841,6 +841,7 @@ public class ExpressionAnalyzer {
             try {
                 if (node.getSetType().equals(SetType.USER)) {
                     UserVariable userVariable = session.getUserVariables(node.getName());
+                    //If referring to an uninitialized variable, its value is NULL and a string type.
                     if (userVariable == null) {
                         node.setType(Type.STRING);
                         node.setIsNull();

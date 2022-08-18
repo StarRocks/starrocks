@@ -107,5 +107,5 @@ struct TStatisticData {
 // Result data for user variable
 struct TVariableData {
     1: optional bool isNull
-    2: optional string result
+    2: optional binary result
 }

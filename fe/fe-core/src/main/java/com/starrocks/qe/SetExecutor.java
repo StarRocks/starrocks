@@ -23,7 +23,6 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SetNamesVar;
@@ -32,14 +31,15 @@ import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetTransaction;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
@@ -51,6 +51,7 @@ import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 // Set executor
@@ -119,11 +120,11 @@ public class SetExecutor {
 
     private void deriveExpressionResult(UserVariable userVariable) {
         ConnectContext context = StatisticUtils.buildConnectContext();
-        Expr expr = userVariable.getExpression();
-        StatementBase parsedStmt = ((Subquery) expr).getQueryStatement();
 
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.VARIABLE);
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        QueryStatement queryStatement = ((Subquery) userVariable.getExpression()).getQueryStatement();
+        ExecPlan execPlan = StatementPlanner.plan(queryStatement,
+                ConnectContext.get(), true, TResultSinkType.VARIABLE);
+        StmtExecutor executor = new StmtExecutor(context, queryStatement);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());
@@ -138,8 +139,13 @@ public class SetExecutor {
                     if (result.get(0).isIsNull()) {
                         resultExpr = new NullLiteral();
                     } else {
+                        Type userVariableType = userVariable.getExpression().getType();
+                        //JSON type will be stored as string type
+                        if (userVariableType.isJsonType()) {
+                            userVariableType = Type.VARCHAR;
+                        }
                         resultExpr = LiteralExpr.create(
-                                result.get(0).result, execPlan.getOutputExprs().get(0).getType());
+                                StandardCharsets.UTF_8.decode(result.get(0).result).toString(), userVariableType);
                     }
                 }
                 userVariable.setResolvedExpression(resultExpr);
