@@ -158,6 +158,9 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
     size_t rowsets_compaction_score = 0;
     // add the base rowset to input_rowsets
     Rowset* base_rowset = *_compaction_context->rowset_levels[2].begin();
+    if (base_rowset == nullptr) {
+        return;
+    }
     rowsets->push_back(base_rowset->shared_from_this());
     rowsets_compaction_score += base_rowset->rowset_meta()->get_compaction_score();
     input_rows_num += base_rowset->num_rows();
@@ -183,7 +186,7 @@ std::shared_ptr<CompactionTask> BaseAndCumulativeCompactionPolicy::_create_base_
     std::vector<RowsetSharedPtr> input_rowsets;
     _pick_base_rowsets(&input_rowsets);
     if (input_rowsets.size() <= 1) {
-        LOG(INFO) << "no suitable version for compaction. size:" << input_rowsets.size();
+        LOG(INFO) << "no suitable version for compaction. tablet_id: :" << _compaction_context->tablet->tablet_id();
         return nullptr;
     }
 
