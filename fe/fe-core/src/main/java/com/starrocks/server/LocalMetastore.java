@@ -4183,9 +4183,21 @@ public class LocalMetastore implements ConnectorMetadata {
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
                     truncateEntireTable);
             editLog.logTruncateTable(info);
+
+            // refresh mv
+            Set<Long> relatedMvs = olapTable.getRelatedMaterializedViews();
+            for (long mvId : relatedMvs) {
+                MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                if (materializedView.isLoadTriggeredRefresh()) {
+                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(),
+                            Constants.TaskRunPriority.NORMAL.value());
+                }
+            }
         } catch (DdlException e) {
             deleteUselessTabletAndShard(tabletIdSet, copiedTbl);
             throw e;
+        } catch (MetaNotFoundException e) {
+            LOG.warn("Table related materialized view can not be found", e);
         } finally {
             db.writeUnlock();
         }
