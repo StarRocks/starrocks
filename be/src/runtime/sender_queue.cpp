@@ -390,9 +390,11 @@ void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
 
 DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders,
                                                           int32_t degree_of_parallism)
-        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders) {
+        : SenderQueue(parent_recvr),
+          _num_remaining_senders(num_senders),
+          _short_circuit_driver_sequences(degree_of_parallism) {
     for (int i = 0; i < degree_of_parallism; i++) {
-        _chunk_queues.emplace_back(std::move(ChunkQueue()));
+        _chunk_queues.emplace_back();
     }
     if (parent_recvr->_is_merging) {
         _producer_token = std::make_unique<ChunkQueue::producer_token_t>(_chunk_queues[0]);
@@ -647,21 +649,18 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        {
-            // remove the short-circuited chunks
-            ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-            std::lock_guard<Mutex> l(_lock);
-            wait_timer.stop();
+        // remove the short-circuited chunks
+        ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
+        std::lock_guard<Mutex> l(_lock);
+        wait_timer.stop();
 
-            for (auto iter = chunks.begin(); iter != chunks.end();) {
-                if (_is_pipeline_level_shuffle && _short_circuit_driver_sequences.find(iter->driver_sequence) !=
-                                                          _short_circuit_driver_sequences.end()) {
-                    total_chunk_bytes -= iter->chunk_bytes;
-                    chunks.erase(iter++);
-                    continue;
-                }
-                iter++;
+        for (auto iter = chunks.begin(); iter != chunks.end();) {
+            if (_is_pipeline_level_shuffle && _short_circuit_driver_sequences[iter->driver_sequence]) {
+                total_chunk_bytes -= iter->chunk_bytes;
+                chunks.erase(iter++);
+                continue;
             }
+            iter++;
         }
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
@@ -682,10 +681,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 }
 
 void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_sequence) {
-    {
-        std::lock_guard<Mutex> l(_lock);
-        _short_circuit_driver_sequences.insert(driver_sequence);
-    }
+    std::lock_guard<Mutex> l(_lock);
+    _short_circuit_driver_sequences[driver_sequence] = true;
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
         ChunkItem item;

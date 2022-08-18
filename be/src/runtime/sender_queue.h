@@ -219,7 +219,7 @@ private:
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
 
-    std::unordered_set<int32_t> _short_circuit_driver_sequences;
+    std::vector<bool> _short_circuit_driver_sequences;
 };
 
 } // namespace starrocks
