@@ -454,6 +454,21 @@ public class SubqueryTest extends PlanTestBase {
                     "     avgRowSize=2.0\n" +
                     "     numNodes=0");
         }
+        {
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+            String sql = "select l.id_decimal from test_all_type l \n" +
+                    "where l.id_decimal > (\n" +
+                    "    select r.id_decimal from test_all_type_not_null r\n" +
+                    "    where l.t1a = r.t1a\n" +
+                    ");";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "args: DECIMAL64; result: DECIMAL64(10,2); args nullable: false; result nullable: true");
+            assertContains(plan, "  7:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  10 <-> [10: id_decimal, DECIMAL64(10,2), true]\n" +
+                    "  |  21 <-> [23: anyValue, DECIMAL64(10,2), true]");
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
     }
 
     @Test
