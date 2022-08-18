@@ -205,6 +205,17 @@ private:
     // _producer_token is used to ensure that the order of dequeueing is the same as enqueueing
     // it is only used when the order needs to be guaranteed
     std::unique_ptr<ChunkQueue::producer_token_t> _producer_token;
+
+    struct ChunkQueueState {
+        // Record whether the queue is in the unplug state.
+        // In the unplug state, has_output will return true directly if there is a chunk in the queue.
+        // Otherwise, it will try to batch enough chunks to reduce the scheduling overhead.
+        bool unpluging = false;
+        // Record the number of blocked closure in the queue
+        std::atomic_int32_t blocked_closure_num = 0;
+    };
+    std::vector<ChunkQueueState> _chunk_queue_states;
+
     std::atomic<size_t> _total_chunks{0};
     bool _is_pipeline_level_shuffle = false;
 
@@ -220,6 +231,8 @@ private:
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
 
     std::vector<bool> _short_circuit_driver_sequences;
+
+    static constexpr size_t kUnplugBufferThreshold = 16;
 };
 
 } // namespace starrocks

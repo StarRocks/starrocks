@@ -390,12 +390,11 @@ void DataStreamRecvr::NonPipelineSenderQueue::clean_buffer_queues() {
 
 DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders,
                                                           int32_t degree_of_parallism)
-        : SenderQueue(parent_recvr),
-          _num_remaining_senders(num_senders),
-          _short_circuit_driver_sequences(degree_of_parallism) {
+        : SenderQueue(parent_recvr), _num_remaining_senders(num_senders), _chunk_queue_states(degree_of_parallism), _short_circuit_driver_sequences(degree_of_parallism) {
     for (int i = 0; i < degree_of_parallism; i++) {
         _chunk_queues.emplace_back();
     }
+
     if (parent_recvr->_is_merging) {
         _producer_token = std::make_unique<ChunkQueue::producer_token_t>(_chunk_queues[0]);
     }
@@ -407,9 +406,11 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
     }
     size_t index = _is_pipeline_level_shuffle ? driver_sequence : 0;
     auto& chunk_queue = _chunk_queues[index];
+    auto& chunk_queue_state = _chunk_queue_states[index];
 
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
+        chunk_queue_state.unpluging = false;
         VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
@@ -424,6 +425,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
 #endif
         _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
         closure->Run();
+        chunk_queue_state.blocked_closure_num--;
     }
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
@@ -445,6 +447,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
         return false;
     }
     auto& chunk_queue = _chunk_queues[0];
+    auto& chunk_queue_state = _chunk_queue_states[0];
     ChunkItem item;
     if (!chunk_queue.try_dequeue(item)) {
         return false;
@@ -456,6 +459,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
     if (closure != nullptr) {
         _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
         closure->Run();
+        chunk_queue_state.blocked_closure_num--;
     }
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
@@ -496,13 +500,16 @@ void DataStreamRecvr::PipelineSenderQueue::close() {
 
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
     std::lock_guard<Mutex> l(_lock);
-    for (auto& chunk_queue : _chunk_queues) {
+    for (size_t i = 0; i < _chunk_queues.size(); i++) {
+        auto& chunk_queue = _chunk_queues[i];
+        auto& chunk_queue_state = _chunk_queue_states[i];
         ChunkItem item;
         while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
                     _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
+                    chunk_queue_state.blocked_closure_num--;
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
@@ -640,7 +647,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             // so chunks of unprocessed_sequence can be flushed to ready queue
             for (auto& item : unprocessed_chunk_queue) {
                 size_t chunk_bytes = item.chunk_bytes;
+                auto* closure = item.closure;
                 _chunk_queues[0].enqueue(*_producer_token, std::move(item));
+                _chunk_queue_states[0].blocked_closure_num += closure != nullptr;
                 _total_chunks++;
                 _recvr->_num_buffered_bytes += chunk_bytes;
             }
@@ -671,7 +680,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         for (auto& chunk : chunks) {
             int index = _is_pipeline_level_shuffle ? chunk.driver_sequence : 0;
             size_t chunk_bytes = chunk.chunk_bytes;
+            auto* closure = chunk.closure;
             _chunk_queues[index].enqueue(std::move(chunk));
+            _chunk_queue_states[index].blocked_closure_num += closure != nullptr;
             _total_chunks++;
             _recvr->_num_buffered_bytes += chunk_bytes;
         }
@@ -685,12 +696,14 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
     _short_circuit_driver_sequences[driver_sequence] = true;
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
+        auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
         ChunkItem item;
         while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
                     _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
                     item.closure->Run();
+                    chunk_queue_state.blocked_closure_num--;
                 }
                 --_total_chunks;
                 _recvr->_num_buffered_bytes -= item.chunk_bytes;
@@ -706,7 +719,36 @@ bool DataStreamRecvr::PipelineSenderQueue::has_output(const int32_t driver_seque
 
     size_t index = _is_pipeline_level_shuffle ? driver_sequence : 0;
     size_t chunk_num = _chunk_queues[index].size_approx();
-    return chunk_num > 0;
+    auto& chunk_queue_state = _chunk_queue_states[index];
+    // introduce an unplug mechanism similar to scan operator to reduce scheduling overhead
+
+    // 1. in the unplug state, return true if there is a chunk, otherwise return false and exit the unplug state
+    if (chunk_queue_state.unpluging) {
+        if (chunk_num > 0) {
+            return true;
+        }
+        chunk_queue_state.unpluging = false;
+        return false;
+    }
+    // 2. if this queue is not in the unplug state, try to batch as much chunk as possible before returning
+    // @TODO need an adaptive strategy to determin this threshold
+    if (chunk_num >= kUnplugBufferThreshold) {
+        COUNTER_UPDATE(_recvr->_buffer_unplug_counter, 1);
+        chunk_queue_state.unpluging = true;
+        return true;
+    }
+
+    bool is_buffer_full = _recvr->_num_buffered_bytes > _recvr->_total_buffer_limit;
+    // 3. if buffer is full and this queue has chunks, return true to release the buffer capacity ASAP
+    if (is_buffer_full && chunk_num > 0) {
+        return true;
+    }
+    // 4. if there is no new data, return true if this queue has chunks
+    if (_num_remaining_senders == 0) {
+        return chunk_num > 0;
+    }
+    // 5. if this queue has blocked closures, return true to release the closure ASAP to trigger the next transmit requests
+    return chunk_queue_state.blocked_closure_num > 0;
 }
 
 bool DataStreamRecvr::PipelineSenderQueue::is_finished() const {
