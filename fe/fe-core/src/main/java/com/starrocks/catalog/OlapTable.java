@@ -1954,11 +1954,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @Override
     public Map<String, String> getProperties() {
-        // partition properties should inherit table properties
-        Short replicationNum = getDefaultReplicationNum();
-        Map<String, String> properties = Maps.newConcurrentMap();
+        Map<String, String> properties = Maps.newHashMap();
 
-        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, replicationNum.toString());
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
         properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
 
         Map<String, String> tableProperty = getTableProperty().getProperties();

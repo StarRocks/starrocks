@@ -137,17 +137,18 @@ public class LakeTable extends OlapTable {
     @Override
     public Map<String, String> getProperties() {
         Map<String, String> properties = super.getProperties();
-        StorageInfo storageInfo = tableProperty.getStorageInfo();
-        if (storageInfo != null) {
-            // enable_storage_cache
-            properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
-                    String.valueOf(storageInfo.isEnableStorageCache()));
+        if (tableProperty != null) {
+            StorageInfo storageInfo = tableProperty.getStorageInfo();
+            if (storageInfo != null) {
+                // enable_storage_cache
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
+                        String.valueOf(storageInfo.isEnableStorageCache()));
 
-            // storage_cache_ttl
-            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
-                    String.valueOf(storageInfo.getStorageCacheTtlS()));
+                // storage_cache_ttl
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
+                        String.valueOf(storageInfo.getStorageCacheTtlS()));
+            }
         }
-
         return properties;
     }
 }

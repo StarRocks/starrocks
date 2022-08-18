@@ -878,6 +878,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         // partition properties is prior to clause properties
         // clause properties is prior to table properties
+        // partition properties should inherit table properties
         Map<String, String> properties = Maps.newHashMap();
         properties = olapTable.getProperties();
         Map<String, String> clauseProperties = addPartitionClause.getProperties();
