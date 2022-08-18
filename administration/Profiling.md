@@ -8,7 +8,7 @@
 
 ### 选择数据模型
 
-StarRocks 数据模型目前分为四类：AGGREGATE KEY，UNIQUE KEY，DUPLICATE KEY，以及 PRIMARY KEY。四种模型中数据都是依据 KEY 进行排序。
+StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (AGGREGATE KEY)，更新模型 (UNIQUE KEY)，以及明细模型 (DUPLICATE KEY)。四种模型中数据都是依据 KEY 进行排序。
 
 * **AGGREGATE KEY 模型**
 
