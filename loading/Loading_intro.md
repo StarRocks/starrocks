@@ -34,7 +34,10 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 ### 异步导入
 
-异步导入是指您创建导入作业以后，StarRocks 直接返回作业创建结果。如果导入作业创建成功，StarRocks 会异步执行导入作业。但作业创建成功并不代表数据导入已经成功。您需要通过语句或命令来查看导入作业的状态，并且根据导入作业的状态来判断数据导入是否成功。如果导入作业创建失败，可以根据失败信息，判断是否需要重试。
+异步导入是指您创建导入作业以后，StarRocks 直接返回作业创建结果。
+
+- 如果导入作业创建成功，StarRocks 会异步执行导入作业。但作业创建成功并不代表数据导入已经成功。您需要通过语句或命令来查看导入作业的状态，并且根据导入作业的状态来判断数据导入是否成功。
+- 如果导入作业创建失败，可以根据失败信息，判断是否需要重试。
 
 支持异步模式的导入方式有 Broker Load、Routine Load 和 Spark Load。
 
@@ -78,12 +81,12 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 | 导入方式           | 协议  | 业务场景                                                     | 数据量（单作业）     | 数据源                                       | 数据格式              | 同步模式 |
 | ------------------ | ----- | ------------------------------------------------------------ | -------------------- | -------------------------------------------- | --------------------- | -------- |
-| Stream Load        | HTTP  | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内           | - 本地文件<br> - 程序                            | - CSV<br> - JSON          | 同步     |
-| Broker Load        | MySQL | 通过独立的 Broker 程序从外部云存储系统导入数据。             | 数十到数百 GB        | - HDFS<br> - Amazon S3<br> - 阿里云 OSS<br> - 腾讯云 COS | - CSV<br> - ORC<br> - Parquet | 异步     |
-| Routine Load       | MySQL | 从 Apache Kafka® 实时地导入数据流。                          | 微批导入 MB 到 GB 级 | Kafka                                        | - CSV<br> - JSON          | 异步     |
-| Spark Load         | MySQL | - 通过 Apache Spark™ 集群初次从云存储系统迁移导入大量数据。 - 需要做全局数据字典来精确去重。 | 数十 GB 到 TB级别    | - HDFS<br> - Hive                                | - CSV<br> - Parquet       | 异步     |
-| INSERT INTO SELECT | MySQL | - 外表导入。<br> - StarRocks 数据表之间的数据导入。              | 跟内存相关           | - StarRocks 表<br> - 外部表                      | StarRocks 表          | 同步     |
-| INSERT INTO VALUES | MySQL | - 单条批量小数据量插入。<br> - 通过 JDBC 等接口导入。            | 简单测试用           | - 程序<br> - ETL 工具                            | SQL                   | 同步     |
+| Stream Load        | HTTP  | 通过 HTTP 协议导入本地文件、或通过程序导入数据流。           | 10 GB 以内           |<ul><li>本地文件</li><li>流式数据</li></ul>                           |<ul><li>CSV</li><li>JSON</li></ul>          | 同步     |
+| Broker Load        | MySQL | 通过独立的 Broker 程序从外部云存储系统导入数据。             | 数十到数百 GB        |<ul><li>HDFS</li><li>Amazon S3</li><li>阿里云 OSS</li><li>腾讯云 COS</li></ul> |<ul><li>CSV</li><li>ORC</li><li>Parquet</li></ul> | 异步     |
+| Routine Load       | MySQL | 从 Apache Kafka® 实时地导入数据流。                          | 微批导入 MB 到 GB 级 | Kafka                                        |<ul><li>CSV</li><li>JSON</li></ul>          | 异步     |
+| Spark Load         | MySQL | <ul><li>通过 Apache Spark™ 集群初次从云存储系统迁移导入大量数据。</li><li>需要做全局数据字典来精确去重。</li></ul> | 数十 GB 到 TB级别    | <ul><li>HDFS</li><li>Hive</li></ul>                                |<ul><li>CSV</li><li>Parquet</li></ul>       | 异步     |
+| INSERT INTO SELECT | MySQL |<ul><li>外表导入。</li><li>StarRocks 数据表之间的数据导入。</li></ul>              | 跟内存相关           |<ul><li>StarRocks 表</li><li>外部表</li></ul>                      | StarRocks 表          | 同步     |
+| INSERT INTO VALUES | MySQL |<ul><li>单条批量小数据量插入。</li><li>通过 JDBC 等接口导入。</li></ul>            | 简单测试用           |<ul><li>程序</li><li>ETL 工具</li></ul>                            | SQL                   | 同步     |
 
 您可以根据业务场景、数据量、数据源、数据格式和导入频次等来选择合适的导入方式。另外，在选择导入方式时，可以注意以下几点：
 
@@ -103,9 +106,9 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 您可以通过设置参数来限制单个导入作业的内存使用，以防止导入作业占用过多内存而导致发生 OOM 异常，特别是在导入并发较高的情况下。同时，您也需要注意避免设置过小的内存使用上限，因为内存使用上限过小，导入过程中可能会因为内存使用量达到上限而频繁地将内存中的数据刷出到磁盘，进而可能影响导入效率。建议您根据具体的业务场景要求，合理地设置内存使用上限。
 
-不同的导入方式限制内存的方式略有不同，具体可参考各导入方式的详细介绍文档。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
+不同的导入方式限制内存的方式略有不同，具体请参见 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md)、[Routine Load](/loading/RoutineLoad.md)、[Spark Load](/loading/SparkLoad.md) 和 [INSERT INTO](/loading/InsertInto.md)。需要注意的是，一个导入作业通常都会分布在多个 BE 上执行，这些内存参数限制的是一个导入作业在单个 BE 上的内存使用，而不是在整个集群上的内存使用总和。
 
-您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“系统配置”章节。
+您还可以通过设置一些参数来限制在单个 BE 上运行的所有导入作业的总的内存使用上限。可参考本文“[系统配置](/loading/Loading_intro.md#系统配置)”章节。
 
 ## 系统配置
 
