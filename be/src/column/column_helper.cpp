@@ -96,11 +96,7 @@ void ColumnHelper::merge_two_filters(Column::Filter* __restrict filter, const ui
 }
 
 void ColumnHelper::or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected) {
-    uint8_t* data = filter->data();
-    size_t num_rows = filter->size();
-    for (size_t i = 0; i < num_rows; i++) {
-        data[i] |= selected[i];
-    }
+    or_two_filters(filter->size(), filter->data(), selected);
 }
 
 void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const uint8_t* __restrict selected) {
