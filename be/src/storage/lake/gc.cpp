@@ -81,7 +81,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     auto iter_st = fs->iterate_dir(std::string(root_location), [&](std::string_view name) {
         if (is_tablet_metadata(name)) {
             tablet_metadatas.emplace_back(name);
-        } else if (is_txn_log(name)) {
+        } else if (is_txn_log(name) || is_txn_vlog(name)) {
             txn_logs.emplace_back(name);
         } else if (is_segment(name)) {
             segments.emplace(name);

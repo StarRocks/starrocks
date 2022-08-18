@@ -3,13 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.PartitionNames;
@@ -23,6 +16,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
@@ -150,6 +150,7 @@ public class AdminStmtAnalyzer {
             }
             return null;
         }
+
         @Override
         public Void visitAdminRepairTableStatement(AdminRepairTableStmt adminRepairTableStmt, ConnectContext session) {
             String dbName = adminRepairTableStmt.getDbName();
@@ -193,6 +194,7 @@ public class AdminStmtAnalyzer {
             }
             return null;
         }
+
         @Override
         public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext session) {
             Map<String, String> properties = statement.getProperties();
@@ -210,6 +212,7 @@ public class AdminStmtAnalyzer {
             }
             return null;
         }
+
         private boolean analyzeWhere(AdminShowReplicaStatusStmt adminShowReplicaStatusStmt) {
             Expr where = adminShowReplicaStatusStmt.getWhere();
             Replica.ReplicaStatus statusFilter = null;

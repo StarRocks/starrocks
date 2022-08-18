@@ -20,7 +20,7 @@ public class CollectCTEProduceRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) input.getOp();
-        context.getCteContext().addCTEProduce(produce.getCteId(), input);
+        context.getCteContext().addCTEProduce(produce.getCteId());
         return Collections.emptyList();
     }
 }

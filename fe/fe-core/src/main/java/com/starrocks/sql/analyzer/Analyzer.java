@@ -1,14 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
@@ -52,6 +44,14 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowConfigStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;

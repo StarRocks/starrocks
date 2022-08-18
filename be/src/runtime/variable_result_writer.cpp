@@ -78,7 +78,7 @@ Status VariableResultWriter::append_chunk(vectorized::Chunk* chunk) {
         return status;
     }
 
-    LOG(WARNING) << "Append user variable result to sink failed.";
+    LOG(WARNING) << "Append user variable result to sink failed, status : " << status.to_string();
     return status;
 }
 

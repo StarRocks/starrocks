@@ -52,6 +52,12 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         types = Lists.newArrayList();
     }
 
+    // used for UT
+    public PartitionKey(List<LiteralExpr> keyValue, List<PrimitiveType> keyType) {
+        keys = keyValue;
+        types = keyType;
+    }
+
     // Factory methods
     public static PartitionKey createInfinityPartitionKey(List<Column> columns, boolean isMax)
             throws AnalysisException {

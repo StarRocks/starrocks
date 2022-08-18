@@ -1,19 +1,27 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.external.hive;
+package com.starrocks.sql.plan;
 
 import com.clearspring.analytics.util.Lists;
+import com.clearspring.analytics.util.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.external.hive.HiveColumnStats;
+import com.starrocks.external.hive.HivePartition;
+import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.external.hive.HiveTableStats;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.spark.sql.sources.In;
 
 import java.util.List;
 import java.util.Map;
@@ -32,6 +40,7 @@ public class MockHiveRepository extends HiveRepository {
 
     static {
         mockTPCHTable();
+        mockPartitionTable();
     }
 
     private static class HiveTableInfo {
@@ -48,6 +57,7 @@ public class MockHiveRepository extends HiveRepository {
 
         public HiveTableInfo(Table table, List<PartitionKey> partitionKeyList, List<HivePartition> partitionList,
                              HiveTableStats tableStats, Map<String, HiveColumnStats> columnStatsMap) {
+            Preconditions.checkState(partitionKeyList.size() == partitionList.size());
             this.table = table;
             this.partitionKeyList = partitionKeyList;
             this.partitionList = partitionList;
@@ -85,7 +95,17 @@ public class MockHiveRepository extends HiveRepository {
 
     @Override
     public List<HivePartition> getPartitions(HiveMetaStoreTableInfo hmsTable, List<PartitionKey> partitionKeys) {
-        return mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).get(hmsTable.getTable()).partitionList;
+        List<PartitionKey> partitionKeyList = mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
+                get(hmsTable.getTable()).partitionKeyList;
+        List<HivePartition> partitionList = mockTableMap.get(hmsTable.getResourceName()).get(hmsTable.getDb()).
+                get(hmsTable.getTable()).partitionList;
+
+        List<HivePartition> result = Lists.newArrayList();
+        for (PartitionKey pk : partitionKeys) {
+            int index = partitionKeyList.indexOf(pk);
+            result.add(partitionList.get(index));
+        }
+        return result;
     }
 
     @Override
@@ -334,5 +354,36 @@ public class MockHiveRepository extends HiveRepository {
                 new HiveTableStats(600037902, 45585436421L), lineitemStats));
 
         mockTableMap.put(resourceName, mockDbTables);
+    }
+
+    public static void mockPartitionTable() {
+        String resourceName = "hive0";
+        String dbName = "partitioned_db";
+
+        mockTableMap.putIfAbsent(resourceName, Maps.newHashMap());
+        Map<String, Map<String, HiveTableInfo>> mockDbTables = mockTableMap.get(resourceName);
+        mockDbTables.putIfAbsent(dbName, Maps.newHashMap());
+        Map<String, HiveTableInfo> mockTables = mockDbTables.get(dbName);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c1", "int", null));
+        cols.add(new FieldSchema("c2", "string", null));
+        cols.add(new FieldSchema("c3", "string", null));
+        StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
+                Lists.newArrayList(), Maps.newHashMap());
+        Table t1 = new Table("t1", "partitioned_db", null, 0, 0, 0,  sd,
+                ImmutableList.of(new FieldSchema("par_col", "string", null)), Maps.newHashMap(),
+                null, null, "EXTERNAL_TABLE");
+
+        List<PartitionKey> partitionKeyList = Lists.newArrayList();
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(0)), ImmutableList.of(PrimitiveType.INT)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(1)), ImmutableList.of(PrimitiveType.INT)));
+        partitionKeyList.add(new PartitionKey(ImmutableList.of(new IntLiteral(2)), ImmutableList.of(PrimitiveType.INT)));
+
+        List<HivePartition> partitionList = Lists.newArrayList();
+        partitionKeyList.forEach(key -> partitionList.add(new HivePartition(null, ImmutableList.of(), null)));
+
+        mockTables.put(t1.getTableName(), new HiveTableInfo(t1, partitionKeyList, partitionList,
+                new HiveTableStats(100, 1149)));
     }
 }

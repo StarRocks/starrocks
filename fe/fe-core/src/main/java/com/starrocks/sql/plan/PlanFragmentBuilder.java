@@ -636,9 +636,14 @@ public class PlanFragmentBuilder {
             // set predicate
             List<ScalarOperator> noEvalPartitionConjuncts = predicates.getNoEvalPartitionConjuncts();
             List<ScalarOperator> nonPartitionConjuncts = predicates.getNonPartitionConjuncts();
+            List<ScalarOperator> partitionConjuncts = predicates.getPartitionConjuncts();
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
 
+            for (ScalarOperator partitionConjunct : partitionConjuncts) {
+                scanNodePredicates.getPartitionConjuncts().
+                        add(ScalarOperatorToExpr.buildExecExpression(partitionConjunct, formatterContext));
+            }
             for (ScalarOperator noEvalPartitionConjunct : noEvalPartitionConjuncts) {
                 scanNodePredicates.getNoEvalPartitionConjuncts().
                         add(ScalarOperatorToExpr.buildExecExpression(noEvalPartitionConjunct, formatterContext));

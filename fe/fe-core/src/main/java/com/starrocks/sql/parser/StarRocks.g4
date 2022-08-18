@@ -83,15 +83,14 @@ statement
     | showRoutineLoadStatement                                                              #showRoutineLoad
 
     // Admin Statement
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
-    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
-    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
-    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
-            (WHERE where=expression)?                                                       #adminShowReplicaStatus
-    | ADMIN REPAIR TABLE qualifiedName partitionNames?                                      #adminRepairTable
-    | ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?                               #adminCancelRepairTable
-    | ADMIN CHECK tabletList properties                                                     #adminCheckTablets
+    | adminSetConfigStatement                                                               #adminSetConfig
+    | adminSetReplicaStatusStatement                                                        #adminSetReplicaStatus
+    | adminShowConfigStatement                                                              #adminShowConfig
+    | adminShowReplicaDistributionStatement                                                 #adminShowReplicaDistribution
+    | adminShowReplicaStatusStatement                                                       #adminShowReplicaStatus
+    | adminRepairTableStatement                                                             #adminRepairTable
+    | adminCancelRepairTableStatement                                                       #adminCancelRepairTable
+    | adminCheckTabletsStatement                                                            #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -435,6 +434,38 @@ refreshMaterializedViewStatement
 
 cancelRefreshMaterializedViewStatement
     : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
+// ------------------------------------------- Admin Statement ---------------------------------------------------------
+
+adminSetConfigStatement
+    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    ;
+adminSetReplicaStatusStatement
+    : ADMIN SET REPLICA STATUS properties
+    ;
+adminShowConfigStatement
+    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowReplicaDistributionStatement
+    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
+    ;
+
+adminShowReplicaStatusStatement
+    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+adminRepairTableStatement
+    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCancelRepairTableStatement
+    : ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCheckTabletsStatement
+    : ADMIN CHECK tabletList properties
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------

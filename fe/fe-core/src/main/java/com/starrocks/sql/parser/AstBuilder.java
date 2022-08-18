@@ -15,14 +15,6 @@ import com.starrocks.analysis.AddFollowerClause;
 import com.starrocks.analysis.AddObserverClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AddRollupClause;
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
@@ -209,6 +201,14 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowConfigStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
@@ -633,6 +633,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new ShowWarningStmt();
     }
+
     @Override
     public ParseNode visitAddPartitionClause(StarRocksParser.AddPartitionClauseContext context) {
         boolean temporary = context.TEMPORARY() != null;
@@ -1191,7 +1192,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         }
         if (!Config.enable_experimental_mv) {
-            throw new ParsingException("The experimental mv is disabled");
+            throw new IllegalArgumentException("The experimental mv is disabled, " +
+                    "you can set FE config enable_experimental_mv=true to enable it.");
         }
         // process partition
         ExpressionPartitionDesc expressionPartitionDesc = null;
@@ -1285,7 +1287,101 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CancelRefreshMaterializedViewStatement(mvName);
     }
 
-    // ------------------------------------------- Cluster Management Statement -----------------------------------------
+    // ------------------------------------------- Admin Statement -----------------------------------------------------
+
+    @Override
+    public ParseNode visitAdminSetConfigStatement(StarRocksParser.AdminSetConfigStatementContext context) {
+        Map<String, String> configs = new HashMap<>();
+        Property property = (Property) visitProperty(context.property());
+        String configKey = property.getKey();
+        String configValue = property.getValue();
+        configs.put(configKey, configValue);
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
+    }
+
+    @Override
+    public ParseNode visitAdminSetReplicaStatusStatement(StarRocksParser.AdminSetReplicaStatusStatementContext context) {
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.properties().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AdminSetReplicaStatusStmt(properties);
+    }
+
+    @Override
+    public ParseNode visitAdminShowConfigStatement(StarRocksParser.AdminShowConfigStatementContext context) {
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue());
+        }
+        return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaDistributionStatement(
+            StarRocksParser.AdminShowReplicaDistributionStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+
+    @Override
+    public ParseNode visitAdminShowReplicaStatusStatement(StarRocksParser.AdminShowReplicaStatusStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        Expr where = context.where != null ? (Expr) visit(context.where) : null;
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
+    }
+
+    @Override
+    public ParseNode visitAdminRepairTableStatement(StarRocksParser.AdminRepairTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+
+    @Override
+    public ParseNode visitAdminCancelRepairTableStatement(StarRocksParser.AdminCancelRepairTableStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+        return new AdminCancelRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
+    }
+
+    @Override
+    public ParseNode visitAdminCheckTabletsStatement(StarRocksParser.AdminCheckTabletsStatementContext context) {
+        // tablet_ids and properties
+        List<Long> tabletIds = Lists.newArrayList();
+        if (context.tabletList() != null) {
+            tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
+                    .map(Long::parseLong).collect(toList());
+        }
+        Map<String, String> properties = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new AdminCheckTabletsStmt(tabletIds, properties);
+    }
+    // ------------------------------------------- Cluster Management Statement ----------------------------------------
 
     @Override
     public ParseNode visitAlterSystemStatement(StarRocksParser.AlterSystemStatementContext context) {
@@ -1354,16 +1450,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitTableRenameClause(StarRocksParser.TableRenameClauseContext context) {
         Identifier identifier = (Identifier) visit(context.identifier());
         return new TableRenameClause(identifier.getValue());
-    }
-
-    @Override
-    public ParseNode visitAdminSetReplicaStatus(StarRocksParser.AdminSetReplicaStatusContext context) {
-        Map<String, String> properties = new HashMap<>();
-        List<Property> propertyList = visit(context.properties().property(), Property.class);
-        for (Property property : propertyList) {
-            properties.put(property.getKey(), property.getValue());
-        }
-        return new AdminSetReplicaStatusStmt(properties);
     }
 
     @Override
@@ -2717,16 +2803,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAdminSetConfig(StarRocksParser.AdminSetConfigContext context) {
-        Map<String, String> configs = new HashMap<>();
-        Property property = (Property) visitProperty(context.property());
-        String configKey = property.getKey();
-        String configValue = property.getValue();
-        configs.put(configKey, configValue);
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, configs);
-    }
-
-    @Override
     public ParseNode visitSetStatement(StarRocksParser.SetStatementContext context) {
         List<SetVar> propertyList = visit(context.setVar(), SetVar.class);
         return new SetStmt(propertyList);
@@ -2805,74 +2881,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    @Override
-    public ParseNode visitAdminShowConfig(StarRocksParser.AdminShowConfigContext context) {
-        if (context.pattern != null) {
-            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, stringLiteral.getValue());
-        }
-        return new AdminShowConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, null);
-    }
-
-    @Override
-    public ParseNode visitAdminShowReplicaDistribution(StarRocksParser.AdminShowReplicaDistributionContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
-        }
-        return new AdminShowReplicaDistributionStmt(new TableRef(targetTableName, null, partitionNames));
-    }
-
-    @Override
-    public ParseNode visitAdminShowReplicaStatus(StarRocksParser.AdminShowReplicaStatusContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
-        }
-        return new AdminShowReplicaStatusStmt(new TableRef(targetTableName, null, partitionNames), where);
-    }
-    @Override
-    public ParseNode visitAdminRepairTable(StarRocksParser.AdminRepairTableContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
-        }
-        return new AdminRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
-    }
-    @Override
-    public ParseNode visitAdminCancelRepairTable(StarRocksParser.AdminCancelRepairTableContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
-        }
-        return new AdminCancelRepairTableStmt(new TableRef(targetTableName, null, partitionNames));
-    }
-    @Override
-    public ParseNode visitAdminCheckTablets(StarRocksParser.AdminCheckTabletsContext context) {
-        // tablet_ids and properties
-        List<Long> tabletIds = Lists.newArrayList();
-        if (context.tabletList() != null) {
-            tabletIds = context.tabletList().INTEGER_VALUE().stream().map(ParseTree::getText)
-                    .map(Long::parseLong).collect(toList());
-        }
-        Map<String, String> properties = new HashMap<>();
-        if (context.properties() != null) {
-            List<Property> propertyList = visit(context.properties().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
-            }
-        }
-        return new AdminCheckTabletsStmt(tabletIds, properties);
-    }
     @Override
     public ParseNode visitTruncateTableStatement(StarRocksParser.TruncateTableStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());

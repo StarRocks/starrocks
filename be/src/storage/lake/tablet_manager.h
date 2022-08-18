@@ -72,6 +72,8 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
+
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
@@ -79,6 +81,9 @@ public:
     Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
 
     Status delete_segment(int64_t tablet_id, std::string_view segment_name);
+
+    // Transform a txn log into versioned txn log(i.e., rename `txn_{tablet_id}_{txn_id}` to `vtxn_{tablet_id}_{log_version}`)
+    Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
 
     void prune_metacache();
 
@@ -94,6 +99,8 @@ public:
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+    std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
 

@@ -318,8 +318,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CLEAR_ROLLUP_INFO: {
-                    ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.getLoadInstance().replayClearRollupInfo(info, globalStateMgr);
+                    // Nothing to do
                     break;
                 }
                 case OperationType.OP_RENAME_ROLLUP: {

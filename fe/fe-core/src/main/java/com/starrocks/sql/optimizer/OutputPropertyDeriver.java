@@ -6,7 +6,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
-import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -54,28 +53,22 @@ import java.util.stream.Collectors;
 // The output property of the node is calculated according to the attributes of the child node and itself.
 // Currently join node enforces a valid property for the child node that cannot meet the requirements.
 public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertySet, ExpressionContext> {
-    private PhysicalPropertySet requirements;
-    // children output property
-    private List<PhysicalPropertySet> childrenOutputProperties;
+    private final GroupExpression groupExpression;
 
-    private PhysicalPropertySet getOutputProperty(
-            PhysicalPropertySet requirements,
-            GroupExpression groupExpression,
-            List<PhysicalPropertySet> childrenOutputProperties) {
+    private final PhysicalPropertySet requirements;
+    // children output property
+    private final List<PhysicalPropertySet> childrenOutputProperties;
+
+    public OutputPropertyDeriver(GroupExpression groupExpression, PhysicalPropertySet requirements,
+                                 List<PhysicalPropertySet> childrenOutputProperties) {
+        this.groupExpression = groupExpression;
         this.requirements = requirements;
         // children best group expression
         this.childrenOutputProperties = childrenOutputProperties;
-
-        return groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
     }
 
-    public Pair<PhysicalPropertySet, Double> getOutputPropertyWithCost(
-            PhysicalPropertySet requirements,
-            GroupExpression groupExpression,
-            List<PhysicalPropertySet> childrenOutputProperties,
-            double curTotalCost) {
-        PhysicalPropertySet outputProperty = getOutputProperty(requirements, groupExpression, childrenOutputProperties);
-        return Pair.create(outputProperty, curTotalCost);
+    public PhysicalPropertySet getOutputProperty() {
+        return groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
     }
 
     @NotNull
@@ -164,7 +157,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        return childrenOutputProperties.get(0);
+        return mergeCTEProperty(childrenOutputProperties.get(0));
     }
 
     private PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {

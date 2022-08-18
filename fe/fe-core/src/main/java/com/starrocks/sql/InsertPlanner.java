@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -331,6 +332,13 @@ public class InsertPlanner {
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
                                                           List<ColumnRefOperator> outputColumns) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+        if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
+            DistributionProperty distributionProperty =
+                    new DistributionProperty(new GatherDistributionSpec(queryRelation.getLimit().getLimit()));
+            return new PhysicalPropertySet(distributionProperty);
+        }
+
         if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
             return new PhysicalPropertySet();
         }

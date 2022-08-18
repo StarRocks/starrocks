@@ -4,14 +4,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
@@ -170,17 +162,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitSetStatement(SetStmt stmt, C context) {
         return visitStatement(stmt, context);
     }
 
-    public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitStatement(statement, context);
@@ -198,26 +183,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
     public R visitBaseViewStatement(BaseViewStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -487,7 +452,7 @@ public abstract class AstVisitor<R, C> {
     public R visitCreateFunction(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-    
+
     public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -498,6 +463,40 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowBackupStmt(ShowBackupStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    // ------------------------------------------- Admin Statement -----------------------------------------------------
+
+    public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

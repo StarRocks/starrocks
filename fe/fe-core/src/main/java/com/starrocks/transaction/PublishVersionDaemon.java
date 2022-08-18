@@ -308,6 +308,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
         for (MaterializedIndex index : indexes) {
+            if (!index.visibleForTransaction(txnId)) {
+                LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()), txnId);
+                continue;
+            }
             for (Tablet tablet : index.getTablets()) {
                 Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {

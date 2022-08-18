@@ -1,8 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.LiteralExpr;
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
@@ -60,13 +61,8 @@ public class UpdateAnalyzer {
                 if (col.isKey()) {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
-                if (assign.getExpr() instanceof LiteralExpr) {
-                    // TypeManager.addCastExpr can check if the literal can be cast to the column type
-                    item = new SelectListItem(TypeManager.addCastExpr(assign.getExpr(), col.getType()), col.getName());
-                } else {
-                    // There are still cases that this expr cannot cast to the column type, that's a known issue
-                    item = new SelectListItem(new CastExpr(col.getType(), assign.getExpr()), col.getName());
-                }
+
+                item = new SelectListItem(assign.getExpr(), col.getName());
             } else {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             }
@@ -82,5 +78,16 @@ public class UpdateAnalyzer {
 
         updateStmt.setTable(table);
         updateStmt.setQueryStatement(queryStatement);
+
+
+        List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
+        Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());
+        List<Expr> castOutputExpressions = Lists.newArrayList();
+        for (int i = 0; i < table.getBaseSchema().size(); ++i) {
+            Expr e = outputExpression.get(i);
+            Column c = table.getBaseSchema().get(i);
+            castOutputExpressions.add(TypeManager.addCastExpr(e, c.getType()));
+        }
+        ((SelectRelation) queryStatement.getQueryRelation()).setOutputExpr(castOutputExpressions);
     }
 }
