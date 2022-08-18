@@ -877,8 +877,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         // partition properties is prior to clause properties
         // clause properties is prior to table properties
-        Map<String, String> properties = Maps.newHashMap();
-        properties = getOrSetDefaultProperties(olapTable, properties);
+        // partition properties should inherit table properties
+        Map<String, String> properties = olapTable.getProperties();
         Map<String, String> clauseProperties = addPartitionClause.getProperties();
         if (clauseProperties != null && !clauseProperties.isEmpty()) {
             properties.putAll(clauseProperties);
@@ -1290,26 +1290,6 @@ public class LocalMetastore implements ConnectorMetadata {
             cleanTabletIdSetForAll(tabletIdSetForAll, olapTable.isLakeTable());
             throw e;
         }
-    }
-
-    public Map<String, String> getOrSetDefaultProperties(OlapTable olapTable, Map<String, String> sourceProperties) {
-        // partition properties should inherit table properties
-        Short replicationNum = olapTable.getDefaultReplicationNum();
-        if (sourceProperties == null) {
-            sourceProperties = Maps.newConcurrentMap();
-        }
-        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-            sourceProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, replicationNum.toString());
-        }
-        if (!sourceProperties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
-            sourceProperties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, olapTable.isInMemory().toString());
-        }
-        Map<String, String> tableProperty = olapTable.getTableProperty().getProperties();
-        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-            sourceProperties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
-        }
-        return sourceProperties;
     }
 
     public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
