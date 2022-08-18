@@ -77,6 +77,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -115,6 +116,7 @@ public class OlapTableSink extends DataSink {
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
         tSink.setIs_lake_table(dstTable.isLakeTable());
+        tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
@@ -343,9 +345,12 @@ public class OlapTableSink extends DataSink {
                                             + tablet.getId() + ", backends: " +
                                             Joiner.on(",").join(localTablet.getBackends()));
                         }
+                        // replicas[0] will be the primary replica
+                        List<Long> replicas = Lists.newArrayList(bePathsMap.keySet());
+                        Collections.shuffle(replicas);
                         locationParam
                                 .addToTablets(
-                                        new TTabletLocation(tablet.getId(), Lists.newArrayList(bePathsMap.keySet())));
+                                        new TTabletLocation(tablet.getId(), replicas));
                         allBePathsMap.putAll(bePathsMap);
                     }
                 }

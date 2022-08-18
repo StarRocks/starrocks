@@ -210,6 +210,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
+	./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
