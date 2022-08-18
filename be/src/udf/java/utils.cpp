@@ -36,7 +36,7 @@ PromiseStatusPtr call_hdfs_scan_function_in_pthread(std::function<Status()> func
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
         ExecEnv::GetInstance()->connector_scan_executor_without_workgroup()->submit(
-                workgroup::ScanTask([promise = ms.get(), func](int) { promise->set_value(func()); }));
+                workgroup::ScanTask([promise = ms.get(), func]() { promise->set_value(func()); }));
     } else {
         ms->set_value(func());
     }
