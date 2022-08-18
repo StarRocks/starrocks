@@ -17,6 +17,7 @@ CompactionManager::CompactionManager() : _next_task_id(0) {
     DCHECK(st.ok());
 }
 
+<<<<<<< HEAD
 void CompactionManager::init_max_task_num() {
     if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
         _max_task_num = static_cast<int32_t>(
@@ -30,6 +31,14 @@ void CompactionManager::init_max_task_num() {
     if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < _max_task_num) {
         _max_task_num = config::max_compaction_concurrency;
     }
+=======
+CompactionManager::~CompactionManager() {
+    _update_candidate_pool->wait();
+}
+
+void CompactionManager::init_max_task_num(int32_t num) {
+    _max_task_num = num;
+>>>>>>> 5898190f0 ([BugFix] Manual compaction request timeout (#10100))
 }
 
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
