@@ -1445,7 +1445,9 @@ public class Coordinator {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
                             dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
-                            dest.setPipeline_driver_sequence(driverSeq);
+                            if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                dest.setPipeline_driver_sequence(driverSeq);
+                            }
                             break;
                         }
                     }
@@ -1516,7 +1518,9 @@ public class Coordinator {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
                                 dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
-                                dest.setPipeline_driver_sequence(driverSeq);
+                                if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                    dest.setPipeline_driver_sequence(driverSeq);
+                                }
                                 break;
                             }
                         }
@@ -1768,7 +1772,12 @@ public class Coordinator {
                             FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
                             params.instanceExecParams.add(instanceParam);
 
-                            if (!assignScanRangesPerDriverSeq) {
+                            // The assignPerDriverSeq strategy assigns buckets to each driver sequence to avoid local shuffle.
+                            // If a fragment instance is assigned only one bucket, assignPerDriverSeq strategy will set pipeline_dop to one.
+                            // Therefore, in this scenario, do not use assignPerDriverSeq strategy, in order to use a bigger pipeline_dop
+                            // and insert local shuffle to improve the degree of parallelism.
+                            boolean assignPerDriverSeq = assignScanRangesPerDriverSeq && scanRangeParams.size() > 1;
+                            if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
@@ -1984,12 +1993,17 @@ public class Coordinator {
                 Maps.newHashMap();
         for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> bucketSeqAndScanRanges : bucketSeqToScanRange.entrySet()) {
             TNetworkAddress address = bucketSeqToAddress.get(bucketSeqAndScanRanges.getKey());
-
-            if (!addressToScanRanges.containsKey(address)) {
-                addressToScanRanges.put(address, Lists.newArrayList());
-            }
-            addressToScanRanges.get(address).add(bucketSeqAndScanRanges);
+            addressToScanRanges
+                    .computeIfAbsent(address, (k) -> Lists.newArrayList())
+                    .add(bucketSeqAndScanRanges);
         }
+
+        // The assignPerDriverSeq strategy assigns buckets to each driver sequence to avoid local shuffle.
+        // If a fragment instance is assigned only one bucket, assignPerDriverSeq strategy will set pipeline_dop to one.
+        // Therefore, in this scenario, do not use assignPerDriverSeq strategy, in order to use a bigger pipeline_dop
+        // and insert local shuffle to improve the degree of parallelism.
+        boolean assignPerDriverSeq =
+                enablePipeline && addressToScanRanges.values().stream().allMatch(scanRanges -> scanRanges.size() > 1);
 
         for (Map.Entry<TNetworkAddress, List<Map.Entry<Integer, Map<Integer,
                 List<TScanRangeParams>>>>> addressScanRange : addressToScanRanges.entrySet()) {
@@ -2017,16 +2031,23 @@ public class Coordinator {
                 }
                 List<List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>>> scanRangesPerDriverSeq =
                         ListUtil.splitBySize(scanRangePerInstance, expectedDop);
-                instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+
+                if (assignPerDriverSeq) {
+                    instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+                }
 
                 for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                     final int finalDriverSeq = driverSeq;
                     scanRangesPerDriverSeq.get(finalDriverSeq).forEach(bucketSeqAndScanRanges -> {
-                        instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                        if (assignPerDriverSeq) {
+                            instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                        } else {
+                            instanceParam.addBucketSeq(bucketSeqAndScanRanges.getKey());
+                        }
 
                         bucketSeqAndScanRanges.getValue().forEach((scanId, scanRanges) -> {
                             List<TScanRangeParams> destScanRanges;
-                            if (!enablePipeline) {
+                            if (!assignPerDriverSeq) {
                                 destScanRanges = instanceParam.perNodeScanRanges
                                         .computeIfAbsent(scanId, k -> new ArrayList<>());
                             } else {
@@ -2388,6 +2409,7 @@ public class Coordinator {
     // FragmentExecParams
     static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
+        static final int ABSENT_DRIVER_SEQUENCE = -1;
 
         TUniqueId instanceId;
         TNetworkAddress host;
@@ -2406,6 +2428,10 @@ public class Coordinator {
 
         public void addBucketSeqAndDriverSeq(int bucketSeq, int driverSeq) {
             this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, driverSeq);
+        }
+
+        public void addBucketSeq(int bucketSeq) {
+            this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, ABSENT_DRIVER_SEQUENCE);
         }
 
         public FInstanceExecParam(TUniqueId id, TNetworkAddress host,
