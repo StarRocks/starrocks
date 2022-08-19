@@ -1596,22 +1596,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateRoutineLoadStatement(StarRocksParser.CreateRoutineLoadStatementContext context) {
-        String database = null;
-        if (context.db != null) {
-            database = context.db.getText();
-        }
-        String name = null;
-        if (context.name != null) {
-            name = context.name.getText();
-        }
-        String tableName = null;
-        if (context.table != null) {
-            tableName = context.table.getText();
-        }
+        String database = database = context.db.getText();
+        String name = context.name.getText();
+        String tableName = context.table.getText();
 
         List<ParseNode> loadPropertyList = new ArrayList<>();
-        List<StarRocksParser.LoadPropertiesContext> list = context.loadProperties();
-        for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : list) {
+        List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
+        for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : loadPropertiesContexts) {
             if (loadPropertiesContext.string() != null) {
                 String literal = ((StringLiteral) visit(loadPropertiesContext.string())).getValue();
                 loadPropertyList.add(new ColumnSeparator(literal));

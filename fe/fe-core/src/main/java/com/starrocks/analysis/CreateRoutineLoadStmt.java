@@ -25,11 +25,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -302,6 +299,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
+    /**
+     * @deprecated Use CreateRoutineLoadAnalyzer.analyze instead.
+     */
     @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
@@ -346,6 +346,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
+    /**
+     * @deprecated Use CreateRoutineLoadAnalyzer.analyze has check db and table
+     */
     @Deprecated
     public void checkDBTable(Analyzer analyzer) throws AnalysisException {
         labelName.analyze(analyzer);

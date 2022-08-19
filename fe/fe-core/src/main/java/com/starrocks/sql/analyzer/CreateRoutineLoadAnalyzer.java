@@ -7,8 +7,17 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class CreateRoutineLoadAnalyzer {
+
+    private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadAnalyzer.class);
+
+    private CreateRoutineLoadAnalyzer() {
+        throw new IllegalStateException("creating an instance is illegal");
+    }
+
     public static void analyze(CreateRoutineLoadStmt statement, ConnectContext context) {
         String db = statement.getDBName();
         if (Strings.isNullOrEmpty(db)) {
@@ -27,7 +36,8 @@ public class CreateRoutineLoadAnalyzer {
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
         } catch (UserException e) {
-            throw new RuntimeException(e);
+            LOG.error(e);
+            throw new SemanticException(e.getMessage());
         }
     }
 }

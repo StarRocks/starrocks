@@ -430,6 +430,7 @@ public class Analyzer {
             return null;
         }
 
+        @Override
         public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
             CreateRoutineLoadAnalyzer.analyze(statement, session);
             return null;
