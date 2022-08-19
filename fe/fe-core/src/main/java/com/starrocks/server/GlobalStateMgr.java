@@ -34,9 +34,6 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -55,7 +52,6 @@ import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.PartitionRenameClause;
-import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReplacePartitionClause;
@@ -211,8 +207,12 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
@@ -925,7 +925,6 @@ public class GlobalStateMgr {
 
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
-        canRead.set(false);
 
         // setup for journal
         try {
@@ -984,7 +983,6 @@ public class GlobalStateMgr {
 
             MetricRepo.init();
 
-            canRead.set(true);
             isReady.set(true);
 
             String msg = "leaer finished to replay journal, can write now.";

@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;

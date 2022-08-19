@@ -1,31 +1,11 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ShowDataStmt.java
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+package com.starrocks.sql.ast;
 
-package com.starrocks.analysis;
-
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -48,15 +28,14 @@ public class ShowDataStmt extends ShowStmt {
                     .build();
 
     private String dbName;
-    private String tableName;
-
-    List<List<String>> totalRows;
+    private final String tableName;
+    private final List<List<String>> totalRows;
 
     public ShowDataStmt(String dbName, String tableName) {
         this.dbName = dbName;
         this.tableName = tableName;
 
-        this.totalRows = new LinkedList<List<String>>();
+        this.totalRows = new LinkedList<>();
     }
 
     public String getDbName() {
@@ -75,7 +54,7 @@ public class ShowDataStmt extends ShowStmt {
         return this.tableName != null;
     }
 
-    public List<List<String>> getResultRows() throws AnalysisException {
+    public List<List<String>> getResultRows() {
         return totalRows;
     }
 
@@ -86,27 +65,6 @@ public class ShowDataStmt extends ShowStmt {
         } else {
             return SHOW_TABLE_DATA_META_DATA;
         }
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder builder = new StringBuilder();
-        builder.append("SHOW DATA");
-        if (dbName == null) {
-            return builder.toString();
-        }
-
-        builder.append(" FROM `").append(dbName).append("`");
-        if (tableName == null) {
-            return builder.toString();
-        }
-        builder.append(".`").append(tableName).append("`");
-        return builder.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

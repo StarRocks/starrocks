@@ -22,7 +22,7 @@
 package com.starrocks.catalog;
 
 import avro.shaded.com.google.common.collect.Lists;
-import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.analysis.CreateTableLikeStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.DdlException;

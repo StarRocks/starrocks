@@ -648,7 +648,7 @@ public class ExportJob implements Writable {
         for (String exportedFile : exportedFiles) {
             try {
                 if (!brokerDesc.hasBroker()) {
-                    HdfsUtil.deletePath(exportTempPath, brokerDesc);
+                    HdfsUtil.deletePath(exportedFile, brokerDesc);
                 } else {
                     BrokerUtil.deletePath(exportedFile, brokerDesc);
                 }
