@@ -69,5 +69,4 @@ public:
     static void reorder_chunk(const std::vector<SlotDescriptor*>& slots, vectorized::Chunk* chunk);
 };
 
-
 } // namespace starrocks
