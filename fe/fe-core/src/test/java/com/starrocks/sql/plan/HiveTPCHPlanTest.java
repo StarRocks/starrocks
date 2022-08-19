@@ -61,7 +61,10 @@ public class HiveTPCHPlanTest extends HivePlanTestBase {
 
     @Test
     public void testTPCH8() {
+        int oldValue = connectContext.getSessionVariable().getMaxTransformReorderJoins();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
         runFileUnitTest("external/hive/tpch/q8");
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(oldValue);
     }
 
     @Test
