@@ -312,6 +312,7 @@ public class StarOSAgent {
 
     public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
+
         Set<Long> backendIds = Sets.newHashSet();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             for (ReplicaInfo replicaInfo : replicas) {
@@ -335,7 +336,6 @@ public class StarOSAgent {
                     workerToBackend.put(workerId, backendId);
                     backendIds.add(backendId);
                 } else {
-                    LOG.info("backendId is {}", workerToBackend.get(workerId));
                     backendIds.add(workerToBackend.get(workerId));
                 }
             }
