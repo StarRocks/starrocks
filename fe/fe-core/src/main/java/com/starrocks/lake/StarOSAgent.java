@@ -312,6 +312,8 @@ public class StarOSAgent {
 
     public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
+        // for debug
+        LOG.info("replicas in getBackendIdsByShard() is {}", replicas);
 
         Set<Long> backendIds = Sets.newHashSet();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -326,6 +328,9 @@ public class StarOSAgent {
                     long backendId = GlobalStateMgr.getCurrentSystemInfo()
                             .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
 
+                    // for debug
+                    LOG.info("backendId in getBackendIdsByShard is {}", backendId);
+
                     if (backendId == -1L) {
                         LOG.warn("backendId for {} is -1", workerAddr);
                         continue;
@@ -336,6 +341,9 @@ public class StarOSAgent {
                     workerToBackend.put(workerId, backendId);
                     backendIds.add(backendId);
                 } else {
+                    // for debug
+                    LOG.info("enter else in getBackendIdsByShard");
+                    LOG.info("backendId is {}", workerToBackend.get(workerId));
                     backendIds.add(workerToBackend.get(workerId));
                 }
             }

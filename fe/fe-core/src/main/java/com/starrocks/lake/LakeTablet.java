@@ -82,7 +82,11 @@ public class LakeTablet extends Tablet {
     @Override
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
+        // for debug
+        LOG.info("localBeId is {}", localBeId);
         for (long backendId : getBackendIds()) {
+            // for debug
+            LOG.info("enter for in getQueryableReplicas");
             Replica replica = new Replica(-1, backendId, -1, null);
             allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {
