@@ -586,7 +586,8 @@ public class CTEPlanTest extends PlanTestBase {
                 "     x2 as (select * from t0),\n" +
                 "     x3 as (select * from t0),\n" +
                 "     x4 as (select * from t0),\n" +
-                "     x5 as (select * from t0)\n" +
+                "     x5 as (select * from t0),\n" +
+                "     x6 as (select * from t0)\n" +
                 "select * from x1 union all\n" +
                 "select * from x1 union all\n" +
                 "select * from x1 union all\n" +
@@ -600,10 +601,13 @@ public class CTEPlanTest extends PlanTestBase {
                 "select * from x4 union all\n" +
                 "select * from x4 union all\n" +
                 "select * from x5 union all\n" +
-                "select * from x5;";
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x6 union all\n" +
+                "select * from x6;";
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setCboCTEMaxLimit(10);
         System.out.println(plan);
-        Assert.assertEquals(4, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+        Assert.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
     }
 }
