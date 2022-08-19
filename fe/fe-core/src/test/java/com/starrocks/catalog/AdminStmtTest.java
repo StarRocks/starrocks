@@ -23,7 +23,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.Replica.ReplicaStatus;

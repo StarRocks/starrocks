@@ -46,6 +46,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
