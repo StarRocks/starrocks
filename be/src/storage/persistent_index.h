@@ -247,7 +247,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, std::set<size_t>& key_sizes);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, std::set<size_t>& check_l1_key_sizes);
 
     // batch erase(delete)
     // |n|: size of key/value array
