@@ -160,7 +160,7 @@ public:
     virtual Status load_wals(size_t n, const Slice* keys, const IndexValue* values) = 0;
 
     // load snapshot
-    virtual bool load_snapshot(phmap::BinaryInputArchive& ar_in) = 0;
+    virtual bool load_snapshot(phmap::BinaryInputArchive& ar) = 0;
 
     // load according meta
     virtual Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) = 0;
@@ -168,7 +168,7 @@ public:
     // get dump total size of hashmaps of shards
     virtual size_t dump_bound() = 0;
 
-    virtual bool dump(phmap::BinaryOutputArchive& ar_out) = 0;
+    virtual bool dump(phmap::BinaryOutputArchive& ar) = 0;
 
     // get all key-values pair references by shard, the result will remain valid until next modification
     // |nshard|: number of shard
@@ -180,7 +180,8 @@ public:
     virtual std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                                  bool without_null) const = 0;
 
-    virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer) const = 0;
+    virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
+                                            size_t npage_hint, size_t nbucket) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
@@ -192,6 +193,14 @@ public:
     virtual size_t memory_usage() = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
+
+    static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t kv_pair_size, const size_t size,
+                                                                const size_t usage_percent);
+
+    static size_t estimate_nbucket(size_t key_size, size_t size, size_t nshard, size_t npage);
+
+    static std::tuple<size_t, size_t> estimate_slice_nshard_and_npage(const size_t total_key_size, const size_t size,
+                                                                      const size_t usage_percent);
 };
 
 class ShardByLengthMutableIndex {
@@ -213,41 +222,40 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    Status get(size_t n, const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found);
+    Status get(size_t n, const Slice* keys, IndexValue* values, size_t* num_found,
+               std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
     // batch upsert and get old value
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
-    // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                  size_t* num_found);
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, size_t* num_found,
+                  std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
     // batch upsert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found(or already exist) to this argument
-    Status upsert(size_t n, const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found);
+    Status upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
+                  std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
     // batch insert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
-    Status insert(size_t n, const Slice* keys, const IndexValue* values);
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, std::set<size_t>& key_sizes);
 
     // batch erase(delete)
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values for updates, or set to NullValue if not exists
-    // |not_found|: information of keys not found, which need to be further checked in next level
     // |num_found|: add the number of keys found to this argument
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeysInfo* not_found, size_t* num_found);
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, size_t* num_found,
+                 std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
     // batch replace
     // |keys|: key array as raw buffer
@@ -259,14 +267,14 @@ public:
     Status append_wal(size_t n, const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
-    bool load_snapshot(phmap::BinaryInputArchive& ar_in);
+    bool load_snapshot(phmap::BinaryInputArchive& ar_in, const std::set<uint32_t>& dumped_shard_idxes);
 
     // load according meta
     Status load(const MutableIndexMetaPB& meta);
 
     size_t dump_bound();
 
-    bool dump(phmap::BinaryOutputArchive& ar_out);
+    bool dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes);
 
     Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type);
 
@@ -309,9 +317,9 @@ private:
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;
     std::vector<std::unique_ptr<MutableIndex>> _shards;
-    std::vector<size_t> _sizes;
     // <key size, <shard offset, shard size>>
     std::map<uint32_t, std::pair<uint32_t, uint32_t>> _shard_info_by_key_size;
+    std::set<std::pair<size_t, size_t>> _flushed_shard_idxes;
 };
 
 class ImmutableIndex {
