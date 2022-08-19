@@ -872,6 +872,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboMaxReorderNodeUseExhaustive = maxReorderNodeUseExhaustive;
     }
 
+    public int getMaxTransformReorderJoins() {
+        return this.cboMaxReorderNodeUseExhaustive;
+    }
+
     public long getBroadcastRowCountLimit() {
         return broadcastRowCountLimit;
     }
