@@ -264,7 +264,7 @@ public:
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes);
 
     Status append_wal(size_t n, const Slice* keys, const IndexValue* values);
-    Status append_wal(size_t n, const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
+    Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
     bool load_snapshot(phmap::BinaryInputArchive& ar_in, const std::set<uint32_t>& dumped_shard_idxes);
@@ -317,6 +317,7 @@ private:
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;
     std::vector<std::unique_ptr<MutableIndex>> _shards;
+    // TODO: confirm whether can be just one shard in a offset, which means shard size always be 1, it can simplify the manager of various shards.
     // <key size, <shard offset, shard size>>
     std::map<uint32_t, std::pair<uint32_t, uint32_t>> _shard_info_by_key_size;
     std::set<std::pair<size_t, size_t>> _flushed_shard_idxes;

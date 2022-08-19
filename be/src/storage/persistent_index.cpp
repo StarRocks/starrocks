@@ -1616,7 +1616,7 @@ Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const 
     return Status::OK();
 }
 
-Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const IndexValue* values,
+Status ShardByLengthMutableIndex::append_wal(const Slice* keys, const IndexValue* values,
                                              const std::vector<size_t>& idxes) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
@@ -1628,13 +1628,13 @@ Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const 
     } else {
         DCHECK(_fixed_key_size == 0);
         auto* fkeys = reinterpret_cast<const Slice*>(keys);
-        for (size_t i = 0; i < n; ++i) {
-            auto key_size_idx = fkeys[i].size;
+        for (const auto idx : idxes) {
+            auto key_size_idx = fkeys[idx].size;
             if (key_size_idx > kSliceMaxFixLength) {
                 key_size_idx = 0;
             }
             auto [shard_offset, shard_size] = _shard_info_by_key_size[key_size_idx];
-            auto idxes_by_shard = split_keys_by_shard(shard_size, keys, std::vector<size_t>{i});
+            auto idxes_by_shard = split_keys_by_shard(shard_size, keys, std::vector<size_t>{idx});
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->append_wal(keys, values, idxes_by_shard[i], _index_file,
                                                                       &_page_size));
@@ -2697,7 +2697,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
     _dump_snapshot |= _can_dump_directly();
     if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(replace_idxes.size(), keys, values, replace_idxes));
+        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
     }
     return Status::OK();
 }
@@ -2719,7 +2719,7 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
     _dump_snapshot |= _can_dump_directly();
     if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(replace_idxes.size(), keys, values, replace_idxes));
+        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
     }
     return Status::OK();
 }
