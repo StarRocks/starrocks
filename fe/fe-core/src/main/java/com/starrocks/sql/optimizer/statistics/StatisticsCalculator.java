@@ -1376,7 +1376,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (!context.getChildrenStatistics().isEmpty()) {
             //  use the statistics of children first
             context.setStatistics(context.getChildStatistics(0));
-            return visitOperator(node, context);
+            Projection projection = node.getProjection();
+            if (projection != null) {
+                Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
+                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
+                for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
+                    ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
+                    statisticsBuilder.addColumnStatistic(columnRefOperator,
+                            ExpressionStatisticCalculator.calculate(mapOperator, context.getStatistics()));
+                }
+                context.setStatistics(statisticsBuilder.build());
+            }
+            return null;
         }
 
         // None children, may force CTE, use the statistics of producer
