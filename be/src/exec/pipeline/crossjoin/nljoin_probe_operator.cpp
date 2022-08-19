@@ -61,9 +61,16 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
     }
 }
 
+bool NLJoinProbeOperator::_skip_probe() const {
+    // Empty build tbale could skip probe unless it's LEFT JOIN
+    return is_ready() && !_is_left_join() && _cross_join_context->is_build_chunk_empty();
+}
+
 void NLJoinProbeOperator::_check_post_probe() const {
+    bool skip_probe = _skip_probe();
     bool output_finished = _is_curr_probe_chunk_finished() && _output_accumulator.empty();
-    if (_input_finished && output_finished) {
+
+    if ((_input_finished && output_finished) || skip_probe) {
         switch (_join_stage) {
         case Probe: {
             if (!_is_right_join() || !_cross_join_context->finish_probe(_driver_sequence, _self_build_match_flag)) {
@@ -97,12 +104,15 @@ bool NLJoinProbeOperator::need_input() const {
     if (!is_ready()) {
         return false;
     }
+    if (_skip_probe()) {
+        return false;
+    }
 
     return _is_curr_probe_chunk_finished();
 }
 
 bool NLJoinProbeOperator::is_finished() const {
-    return _input_finished && !has_output();
+    return (_input_finished || _skip_probe()) && !has_output();
 }
 
 Status NLJoinProbeOperator::set_finishing(RuntimeState* state) {
@@ -141,9 +151,28 @@ vectorized::Chunk* NLJoinProbeOperator::_move_build_chunk_index(int index) {
     return _curr_build_chunk;
 }
 
-// Init columns for the new chunk from _probe_chunk and _curr_build_chunk
 ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
-    return ChunkHelper::new_chunk(_col_types, state->chunk_size());
+    ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+
+    for (size_t i = 0; i < _col_types.size(); i++) {
+        SlotDescriptor* slot = _col_types[i];
+        bool is_probe = i < _probe_column_count;
+        bool nullable = _col_types[i]->is_nullable();
+        if ((is_probe && _is_right_join()) || (!is_probe && _is_left_join())) {
+            nullable = true;
+        }
+        if (is_probe && _probe_chunk) {
+            nullable |= _probe_chunk->get_column_by_slot_id(slot->id())->is_nullable();
+        }
+        if (!is_probe && _curr_build_chunk) {
+            nullable |= _curr_build_chunk->get_column_by_slot_id(slot->id())->is_nullable();
+        }
+        ColumnPtr new_col = vectorized::ColumnHelper::create_column(slot->type(), nullable);
+        chunk->append_column(new_col, slot->id());
+    }
+
+    chunk->reserve(state->chunk_size());
+    return chunk;
 }
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
@@ -213,20 +242,22 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
 // The chunk either consists two conditions:
 // 1. Multiple probe rows and multiple build single-chunk
 // 2. One probe rows and one build chunk
-void NLJoinProbeOperator::_permute_chunk(RuntimeState* state, ChunkPtr chunk) {
+ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
     // TODO: optimize the loop order for small build chunk
+    ChunkPtr chunk = _init_output_chunk(state);
     _probe_row_start = _probe_row_current;
     for (; _probe_row_current < _probe_chunk->num_rows(); ++_probe_row_current) {
         while (_curr_build_chunk_index < _num_build_chunks()) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(_curr_build_chunk_index + 1);
             if (chunk->num_rows() >= state->chunk_size()) {
-                return;
+                return chunk;
             }
         }
         _probe_row_matched = false;
         _move_build_chunk_index(0);
     }
+    return chunk;
 }
 
 // Permute one probe row with current build chunk
@@ -240,20 +271,10 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
         // TODO: specialize for null column and const column
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
-            if (src_col->is_nullable() && !slot->is_nullable()) {
-                auto src_data = down_cast<vectorized::NullableColumn*>(src_col.get())->data_column();
-                dst_col->append_value_multiple_times(*src_data, _probe_row_current, cur_build_chunk_rows);
-            } else {
-                dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
-            }
+            dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
         } else {
             ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
-            if (src_col->is_nullable() && !slot->is_nullable()) {
-                auto src_data = down_cast<vectorized::NullableColumn*>(src_col.get())->data_column();
-                dst_col->append(*src_data);
-            } else {
-                dst_col->append(*src_col);
-            }
+            dst_col->append(*src_col);
         }
     }
 }
@@ -268,12 +289,7 @@ void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
             DCHECK_LT(probe_row_index, src_col->size());
-            if (src_col->is_nullable() && !slot->is_nullable()) {
-                auto src_data = down_cast<vectorized::NullableColumn*>(src_col.get())->data_column();
-                dst_col->append(*src_data, probe_row_index, probe_rows);
-            } else {
-                dst_col->append(*src_col, probe_row_index, probe_rows);
-            }
+            dst_col->append(*src_col, probe_row_index, probe_rows);
         } else {
             dst_col->append_nulls(probe_rows);
         }
@@ -346,8 +362,8 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         return chunk;
     }
     while (_probe_chunk && _probe_row_current < _probe_chunk->num_rows()) {
-        ChunkPtr chunk = _init_output_chunk(state);
-        _permute_chunk(state, chunk);
+        ChunkPtr chunk = _permute_chunk(state);
+        DCHECK(chunk);
         RETURN_IF_ERROR(_probe(state, chunk));
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
 
