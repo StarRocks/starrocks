@@ -320,7 +320,7 @@ public class CostModel {
             Statistics cteStatistics = context.getChildStatistics(0);
             double ratio = ConnectContext.get().getSessionVariable().getCboCTERuseRatio();
             return CostEstimate.of(cteStatistics.getComputeSize() * node.getConsumeNum() * 0.5,
-                    cteStatistics.getComputeSize() * 2 * ratio, 0);
+                    cteStatistics.getComputeSize() * (1 + ratio), 0);
         }
 
         @Override

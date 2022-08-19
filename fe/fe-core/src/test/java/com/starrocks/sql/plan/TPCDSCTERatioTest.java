@@ -18,7 +18,6 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
     private static final Map<String, Long> rowCountMap = ImmutableMap.<String, Long>builder()
@@ -78,7 +77,7 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCDSStatisticStorage());
         setTPCDSTableStats(rowCountMap);
         FeConstants.runningUnitTest = true;
-        connectContext.getSessionVariable().setCboCTERuseRatio(1);
+        connectContext.getSessionVariable().setCboCTERuseRatio(1.2);
     }
 
     @After
@@ -89,16 +88,6 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     public void setRatio(double ratio) {
         connectContext.getSessionVariable().setCboCTERuseRatio(ratio);
-    }
-
-    public boolean checkCTE(String sql) {
-        String plan;
-        try {
-            plan = getFragmentPlan(sql);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-        return plan.contains("MultiCastDataSinks");
     }
 
     public void testCTE(String sql) throws Exception {
@@ -124,29 +113,30 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
     }
 
     /*
-        query	FORCE CTE	NONE CTE	FROCE/NONE
-        QUERY95	34,681	9,384	3.70
-        QUERY59	7,468	2,392	3.12
-        QUERY39-2	646	348	1.86
-        QUERY39-1	893	593	1.51
-        QUERY11	57,774	52,200	1.11
-        QUERY04	94,417	86,726	1.09
-        QUERY74	34,964	34,936	1.00
-        QUERY31	3,560	3,653	0.97
-        QUERY02	4,088	4,205	0.97
-        QUERY30	1,117	1,291	0.87
-        QUERY75	16,970	19,781	0.86
-        QUERY01	1,351	1,586	0.85
-        QUERY81	1,281	2,081	0.62
-        QUERY64	18,377	31,747	0.58
-        QUERY23-1	76,103	136,791	0.56
-        QUERY23-2	75,989	138,349	0.55
-        QUERY14-2	19,626	36,485	0.54
-        QUERY14-1	21,884	54,389	0.40
-        QUERY24-2	4,844	15,153	0.32
-        QUERY24-1	4,894	15,355	0.32
-        QUERY57	4,294	16,763	0.26
-        QUERY47	6,143	28,724	0.21
+        Performance test
+        query	  FORCE CTE(ms)	  NONE CTE(ms)	FORCE/NONE
+        QUERY95	     34,681	        9,384	       3.70
+        QUERY59	     7,468	        2,392	       3.12
+        QUERY39-2    646	        348	           1.86
+        QUERY39-1    893	        593	           1.51
+        QUERY11	     57,774	        52,200	       1.11
+        QUERY04	     94,417	        86,726	       1.09
+        QUERY74	     34,964	        34,936	       1.00
+        QUERY31	     3,560	        3,653	       0.97
+        QUERY02	     4,088	        4,205	       0.97
+        QUERY30	     1,117	        1,291	       0.87
+        QUERY75	     16,970	        19,781	       0.86
+        QUERY01	     1,351	        1,586	       0.85
+        QUERY81	     1,281	        2,081	       0.62
+        QUERY64	     18,377	        31,747	       0.58
+        QUERY23-1    76,103	        136,791	       0.56
+        QUERY23-2    75,989	        138,349	       0.55
+        QUERY14-2    19,626	        36,485	       0.54
+        QUERY14-1    21,884	        54,389	       0.40
+        QUERY24-2    4,844	        15,153	       0.32
+        QUERY24-1    4,894	        15,355	       0.32
+        QUERY57	     4,294	        16,763	       0.26
+        QUERY47	     6,143	        28,724	       0.21
      */
 
     @Test
@@ -168,16 +158,9 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
             expect.add(cte.getExplainString(StatementBase.ExplainLevel.NORMAL).contains("MultiCastDataSinks"));
             actual.add(inline.getExplainString(StatementBase.ExplainLevel.NORMAL).contains("MultiCastDataSinks"));
         }
-        print(expect, actual);
-    }
 
-    @Test
-    public void testRatio1() {
-        connectContext.getSessionVariable().setCboCTERuseRatio(5);
-        List<Boolean> expect = CTE_SQL.stream().map(c -> true).collect(Collectors.toList());
-        List<Boolean> actual = CTE_SQL.stream().map(this::checkCTE).collect(Collectors.toList());
+        System.out.println();
         print(expect, actual);
-        Assert.assertEquals(expect, actual);
     }
 
     @Test
@@ -267,12 +250,13 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     @Test
     public void testRatioQ64() throws Exception {
+//        System.out.println(logicalPlan(Q64));
         testCTE(Q64);
     }
 
     @Test
     public void testRatioQ74() throws Exception {
-        testCTE(Q74);
+        testInline(Q74);
     }
 
     @Test
@@ -287,6 +271,6 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     @Test
     public void testRatioQ95() throws Exception {
-        testCTE(Q95);
+        testInline(Q95);
     }
 }
