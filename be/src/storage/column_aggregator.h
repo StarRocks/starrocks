@@ -94,6 +94,7 @@ public:
         int end = start + aggregate_loops[nums - 1];
         int size = end - start;
         if (need_deep_copy() && end == _source_column->size()) {
+            // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
             ColumnPtr column = _source_column->clone_empty();
             column->append(*_source_column, start, size);
             aggregate_batch_impl(0, size, column);
@@ -184,6 +185,7 @@ public:
             int end = start + implicit_cast<int>(aggregate_loops[nums - 1]);
             int size = end - start;
             if (_child->need_deep_copy() && end == _child->_source_column->size()) {
+                // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
                 ColumnPtr column = _child->_source_column->clone_empty();
                 column->append(*_child->_source_column, start, size);
                 _child->aggregate_batch_impl(0, size, column);
@@ -209,6 +211,7 @@ public:
             int size = end - start;
 
             if (_child->need_deep_copy() && end == _child->_source_column->size()) {
+                // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
                 ColumnPtr column = _child->_source_column->clone_empty();
                 column->append(*_child->_source_column, start, size);
                 for (int j = 0; j < size; ++j) {
