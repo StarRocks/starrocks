@@ -62,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -269,8 +270,19 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private boolean publishTable(Database db, TransactionState txnState, TableCommitInfo tableCommitInfo) {
         boolean finished = true;
+        long txnId = txnState.getTransactionId();
         for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-            if (publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState)) {
+            boolean ok = false;
+            try {
+                ok = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
+            } catch (Throwable e) {
+                LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+                        txnId, e.getMessage());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug(e);
+                }
+            }
+            if (ok) {
                 partitionCommitInfo.setVersionTime(System.currentTimeMillis());
             } else {
                 partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
@@ -282,7 +294,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
-                                     @NotNull TransactionState txnState) {
+                                     @NotNull TransactionState txnState) throws ExecutionException, InterruptedException {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
@@ -338,11 +350,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return publishNormalTablets(normalTablets, txnId, txnVersion) && publishShadowTablets(shadowTablets, txnId, txnVersion);
     }
 
-    private boolean publishNormalTablets(@Nullable List<Tablet> tablets, long txnId, long version) {
+    private boolean publishNormalTablets(@Nullable List<Tablet> tablets, long txnId, long version)
+            throws ExecutionException, InterruptedException {
         if (tablets == null || tablets.isEmpty()) {
             return true;
         }
-        boolean finished = true;
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
             Long beId = Utils.chooseBackend((LakeTablet) tablet);
@@ -361,13 +373,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             Backend backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
                 LOG.warn("Backend {} has been dropped", entry.getKey());
-                finished = false;
-                continue;
+                return false;
             }
             if (!backend.isAlive()) {
                 LOG.warn("Backend {} not alive", backend.getHost());
-                finished = false;
-                continue;
+                return false;
             }
 
             PublishVersionRequest request = new PublishVersionRequest();
@@ -376,37 +386,27 @@ public class PublishVersionDaemon extends LeaderDaemon {
             request.tabletIds = entry.getValue();
             request.txnIds = txnIds;
 
-            try {
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<PublishVersionResponse> future = lakeService.publishVersion(request, new EmptyRpcCallback<>());
-                responseList.add(future);
-                backendList.add(backend);
-            } catch (Throwable e) {
-                LOG.warn(e);
-                finished = false;
-            }
+            LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<PublishVersionResponse> future = lakeService.publishVersion(request, new EmptyRpcCallback<>());
+            responseList.add(future);
+            backendList.add(backend);
         }
 
         for (int i = 0; i < responseList.size(); i++) {
-            try {
-                PublishVersionResponse response = responseList.get(i).get();
-                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    LOG.warn("Fail to publish tablet {} on BE {}", response.failedTablets, backendList.get(i).getHost());
-                    finished = false;
-                }
-            } catch (Exception e) {
-                finished = false;
-                LOG.warn(e);
+            PublishVersionResponse response = responseList.get(i).get();
+            if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                LOG.warn("Fail to publish tablet {} on BE {}", response.failedTablets, backendList.get(i).getHost());
+                return false;
             }
         }
-        return finished;
+        return true;
     }
 
-    private boolean publishShadowTablets(@Nullable List<Tablet> tablets, long txnId, long version) {
+    private boolean publishShadowTablets(@Nullable List<Tablet> tablets, long txnId, long version)
+            throws ExecutionException, InterruptedException {
         if (tablets == null || tablets.isEmpty()) {
             return true;
         }
-        boolean finished = true;
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
             Long beId = Utils.chooseBackend((LakeTablet) tablet);
@@ -423,13 +423,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
             Backend backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
                 LOG.warn("Backend {} has been dropped", entry.getKey());
-                finished = false;
-                continue;
+                return false;
             }
             if (!backend.isAlive()) {
                 LOG.warn("Backend {} not alive", backend.getHost());
-                finished = false;
-                continue;
+                return false;
             }
 
             PublishLogVersionRequest request = new PublishLogVersionRequest();
@@ -437,31 +435,21 @@ public class PublishVersionDaemon extends LeaderDaemon {
             request.txnId = txnId;
             request.version = version;
 
-            try {
-                LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<PublishLogVersionResponse> future = lakeService.publish_log_version(request, new EmptyRpcCallback<>());
-                responseList.add(future);
-                backendList.add(backend);
-            } catch (Throwable e) {
-                LOG.warn(e);
-                finished = false;
-            }
+            LakeServiceAsync lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+            Future<PublishLogVersionResponse> future = lakeService.publishLogVersion(request, new EmptyRpcCallback<>());
+            responseList.add(future);
+            backendList.add(backend);
         }
 
         for (int i = 0; i < responseList.size(); i++) {
-            try {
-                PublishLogVersionResponse response = responseList.get(i).get();
-                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    LOG.warn("Fail to publish log of shadow tablet {} on BE {}", response.failedTablets,
-                            backendList.get(i).getHost());
-                    finished = false;
-                }
-            } catch (Exception e) {
-                finished = false;
-                LOG.warn(e);
+            PublishLogVersionResponse response = responseList.get(i).get();
+            if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                LOG.warn("Fail to publish log of shadow tablet {} on BE {}", response.failedTablets,
+                        backendList.get(i).getHost());
+                return false;
             }
         }
-        return finished;
+        return true;
     }
 
     /**

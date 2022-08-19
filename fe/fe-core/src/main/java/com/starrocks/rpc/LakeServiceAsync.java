@@ -38,6 +38,6 @@ public interface LakeServiceAsync extends LakeService {
 
     Future<DropTableResponse> dropTable(DropTableRequest request, RpcCallback<DropTableResponse> callback);
 
-    Future<PublishLogVersionResponse> publish_log_version(PublishLogVersionRequest request,
-                                                          RpcCallback<PublishLogVersionResponse> callback);
+    Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request,
+                                                        RpcCallback<PublishLogVersionResponse> callback);
 }

@@ -43,6 +43,6 @@ public interface LakeService {
     DropTableResponse dropTable(DropTableRequest request);
 
     @BrpcMeta(serviceName = "LakeService", methodName = "publish_log_version")
-    PublishLogVersionResponse publish_log_version(PublishLogVersionRequest request);
+    PublishLogVersionResponse publishLogVersion(PublishLogVersionRequest request);
 }
 
