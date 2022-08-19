@@ -7,7 +7,7 @@ Bitmap 索引是一种特殊的数据库索引技术，其使用 bitmap 进行�
 ## 注意事项
 
 - Bitmap 索引适用于满足以下条件的列：
-  - 基数较低，值大量重复，例如 ENUM 类型的列。如列基数较高，推荐使用 [Bloom filter 索引。](/using_starrocks/Bloomfilter_index.md)
+  - 基数较低，值大量重复，例如 ENUM 类型的列。如列基数较高，推荐使用 [Bloomfilter 索引](/using_starrocks/Bloomfilter_index.md)。
   - 可使用等值条件查询或者可转化为等值条件查询。
 - 主键模型和明细模型中所有列都可以创建 bitmap 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 bitmap 索引。
 - 不支持为 FLOAT、DOUBLE、BOOLEAN 和 DECIMAL 类型的列创建 bitmap 索引。
@@ -66,7 +66,7 @@ SHOW KEY[S] FROM [db_name.]table_name [FROM db_name];
 
 ## 删除索引
 
-删除指定表的某个 bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP%20INDEX.md)。
+删除指定表的某个 bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](/sql-reference/sql-statements/data-definition/DROP%20INDEX.md)。
 
 ```SQL
 DROP INDEX index_name ON [db_name.]table_name;
@@ -74,10 +74,10 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 ## 适用场景
 
-- **单个非前缀索引列查询**：如果一个查询条件命中前缀索引列，StarRocks 即可使用[前缀索引](../table_design/Sort_key.md)提高查询效率，快速返回查询结果。但是前缀索引的长度有限，如果想要提高一个非前缀索引列的查询效率，即可以为这一列创建 bitmap 索引。
+- **单个非前缀索引列查询**：如果一个查询条件命中前缀索引列，StarRocks 即可使用[前缀索引](/table_design/Sort_key.md)提高查询效率，快速返回查询结果。但是前缀索引的长度有限，如果想要提高一个非前缀索引列的查询效率，即可以为这一列创建 bitmap 索引。
 - **多个非前缀索引列查询**：bitmap 索引使用位运算，速度较快，所以在多列查询的场景中，可以通过为每列创建 bitmap 索引来提高查询速度。需要注意的是创建 bitmap 索引会消耗额外的存储空间。
 
-> 说明：如要了解一个查询是否命中了 bitmap 索引，可查看该查询的 Profile。关于如何查看 Profile，参见[分析查询](../administration/Query_planning.md)。
+> 说明：如要了解一个查询是否命中了 bitmap 索引，可查看该查询的 Profile。关于如何查看 Profile，参见[分析查询](/administration/Query_planning.md)。
 
 ### **单个非前缀索引列查询**
 
