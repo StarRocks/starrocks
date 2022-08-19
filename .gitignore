@@ -70,3 +70,4 @@ be/tags
 !.github
 build/
 cmake-build-debug/
+CMakeLists.txt
