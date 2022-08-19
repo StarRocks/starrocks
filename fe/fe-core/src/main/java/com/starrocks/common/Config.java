@@ -1094,6 +1094,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"max_clone_task_timeout_sec"})
     public static long tablet_sched_max_clone_task_timeout_sec = 2 * 60 * 60L; // 2h
 
+    @ConfField(mutable = true)
+    public static int tablet_sched_max_migration_task_sent_once = 1000;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
