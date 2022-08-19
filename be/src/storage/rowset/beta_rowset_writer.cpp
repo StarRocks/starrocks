@@ -178,20 +178,20 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
             //std::vector<std::string> files;
             //Status st = _context.env->get_children(_context.rowset_path_prefix, &files);
             //if (!st.ok()) {
-            //	LOG(WARNING) << "list dir failed: " << _context.rowset_path_prefix << " "
-            //				 << st.to_string();
+            //    LOG(WARNING) << "list dir failed: " << _context.rowset_path_prefix << " "
+            //                 << st.to_string();
             //}
             //string prefix = _context.rowset_id.to_string();
             //for (auto& f : files) {
-            //	if (strncmp(f.c_str(), prefix.c_str(), prefix.size()) == 0) {
-            //		string path = _context.rowset_path_prefix + "/" + f;
-            //		// Even if an error is encountered, these files that have not been cleaned up
-            //		// will be cleaned up by the GC background. So here we only print the error
-            //		// message when we encounter an error.
-            //		Status st = _context.env->delete_file(path);
-            //		LOG_IF(WARNING, !st.ok())
-            //				<< "Fail to delete file=" << path << ", " << st.to_string();
-            //	}
+            //    if (strncmp(f.c_str(), prefix.c_str(), prefix.size()) == 0) {
+            //        string path = _context.rowset_path_prefix + "/" + f;
+            //        // Even if an error is encountered, these files that have not been cleaned up
+            //        // will be cleaned up by the GC background. So here we only print the error
+            //        // message when we encounter an error.
+            //        Status st = _context.env->delete_file(path);
+            //        LOG_IF(WARNING, !st.ok())
+            //                << "Fail to delete file=" << path << ", " << st.to_string();
+            //    }
             //}
         } else {
             for (int i = 0; i < _num_segment; ++i) {
@@ -329,7 +329,8 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         RETURN_IF_ERROR(flush_del_file(deletes));
         return _flush_chunk(upserts);
     } else {
-        return flush_chunk(upserts);
+        /// There is impossible that both upserts and deletes are empty when flush memtable
+        __builtin_unreachable();
     }
 }
 
