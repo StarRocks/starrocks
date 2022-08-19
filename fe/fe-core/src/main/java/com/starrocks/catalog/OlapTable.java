@@ -1798,6 +1798,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
         }
     }

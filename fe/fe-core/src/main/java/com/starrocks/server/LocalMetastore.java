@@ -3421,7 +3421,11 @@ public class LocalMetastore implements ConnectorMetadata {
     private void disableMaterializedView(Database db, OlapTable olapTable) {
         for (long mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId);
-            mv.setActive(false);
+            if (mv != null) {
+                mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+            }
         }
     }
 
