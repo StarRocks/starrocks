@@ -8,6 +8,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -108,12 +109,23 @@ public class PreAggregateTurnOnRule {
             // default false
             scan.setPreAggregation(false);
 
+            long selectedIndex = scan.getSelectedIndexId();
+            OlapTable olapTable = ((OlapTable) scan.getTable());
+            MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(selectedIndex);
+            if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
+                scan.setPreAggregation(true);
+                scan.setTurnOffReason("");
+                return null;
+            }
+            /*
             // Duplicate table
             if (!((OlapTable) scan.getTable()).getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
                 return null;
             }
+
+             */
 
             if (context.notPreAggregationJoin) {
                 scan.setTurnOffReason("Has can not pre-aggregation Join");
