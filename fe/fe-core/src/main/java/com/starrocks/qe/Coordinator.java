@@ -1994,7 +1994,7 @@ public class Coordinator {
         for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> bucketSeqAndScanRanges : bucketSeqToScanRange.entrySet()) {
             TNetworkAddress address = bucketSeqToAddress.get(bucketSeqAndScanRanges.getKey());
             addressToScanRanges
-                    .computeIfAbsent(address, (k) -> Lists.newArrayList())
+                    .computeIfAbsent(address, k -> Lists.newArrayList())
                     .add(bucketSeqAndScanRanges);
         }
 
