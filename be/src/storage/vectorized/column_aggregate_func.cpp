@@ -271,15 +271,8 @@ public:
     void reset() override { this->data().reset(); }
 
     void aggregate_impl(int row, const ColumnPtr& src) override {
-        if (row == src->size() - 1) {
-            // copy the last row to prevent to be overwritten or reset by get_next in aggregate iterator.
-            this->data().column = src->clone_empty();
-            this->data().column->append(*src, row, 1);
-            this->data().row = 0;
-        } else {
-            this->data().column = src;
-            this->data().row = row;
-        }
+        this->data().column = src;
+        this->data().row = row;
     }
 
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
@@ -292,6 +285,8 @@ public:
             col->append_default();
         }
     }
+
+    bool need_deep_copy() const override { return true; }
 };
 
 class ReplaceNullableColumnAggregator final : public ValueColumnAggregatorBase {
