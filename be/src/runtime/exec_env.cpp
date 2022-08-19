@@ -589,10 +589,6 @@ void ExecEnv::destroy(ExecEnv* env) {
     env->_destroy();
 }
 
-void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {
-    _storage_engine = storage_engine;
-}
-
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     if (pipeline_dop > 0) {
         return pipeline_dop;

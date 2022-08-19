@@ -86,7 +86,7 @@ void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorke
             status_code = TStatusCode::RUNTIME_ERROR;
         } else {
             EngineStorageMigrationTask engine_task(clone_req.tablet_id, clone_req.schema_hash, dest_store);
-            Status res = ExecEnv::GetInstance()->storage_engine()->execute_task(&engine_task);
+            Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "storage migrate failed. status:" << res << ", signature:" << agent_task_req->signature;
@@ -109,7 +109,7 @@ void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorke
     } else {
         EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
                                     &error_msgs, &tablet_infos, &status);
-        Status res = ExecEnv::GetInstance()->storage_engine()->execute_task(&engine_task);
+        Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
             status_code = TStatusCode::RUNTIME_ERROR;
             LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req->signature;
@@ -439,7 +439,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
                                        int timeout_s, const std::vector<Version>* missed_versions,
                                        const std::vector<int64_t>* missing_version_ranges, std::string* snapshot_path,
                                        int32_t* snapshot_format) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot will stop.");
     }
@@ -492,7 +492,7 @@ Status EngineCloneTask::_make_snapshot(const std::string& ip, int port, TTableId
 }
 
 Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const std::string& snapshot_path) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot will stop.");
     }
@@ -507,7 +507,7 @@ Status EngineCloneTask::_release_snapshot(const std::string& ip, int port, const
 
 Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& remote_url_prefix,
                                         const std::string& local_path) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The download will stop.");
     }
@@ -564,7 +564,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
     // Avoid of data is not complete, we copy the header file at last.
     // The header file's name is end of .hdr.
     for (int i = 0; i < file_name_list.size() - 1; ++i) {
-        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
             return Status::InternalError("Process is going to quit. The download will stop.");
         }
@@ -648,7 +648,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
 Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, int64_t committed_version,
                                       bool incremental_clone) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone will stop.");
     }
@@ -702,7 +702,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
         // link files from clone dir, if file exists, skip it
         for (const string& clone_file : clone_files) {
-            bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+            bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
             if (bg_worker_stopped) {
                 return Status::InternalError("Process is going to quit. The clone will stop.");
             }
@@ -749,7 +749,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
 Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta& cloned_tablet_meta,
                                                 int64_t committed_version) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone should will stop.");
     }
@@ -780,14 +780,14 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(ExecEnv::GetInstance()->storage_engine()->tablet_meta_mem_tracker(),
-                                           rowsets_to_clone, versions_to_delete);
+    Status st = tablet->revise_tablet_meta(StorageEngine::instance()->tablet_meta_mem_tracker(), rowsets_to_clone,
+                                           versions_to_delete);
     LOG(INFO) << "finish to incremental clone. [tablet=" << tablet->full_name() << " status=" << st << "]";
     return st;
 }
 
 Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The clone will stop.");
     }
@@ -856,8 +856,8 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     }
 
     // clone_data to tablet
-    Status st = tablet->revise_tablet_meta(ExecEnv::GetInstance()->storage_engine()->tablet_meta_mem_tracker(),
-                                           rowsets_to_clone, versions_to_delete);
+    Status st = tablet->revise_tablet_meta(StorageEngine::instance()->tablet_meta_mem_tracker(), rowsets_to_clone,
+                                           versions_to_delete);
     LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
     // in previous step, copy all files from CLONE_DIR to tablet dir
     // but some rowset is useless, so that remove them here
@@ -877,7 +877,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
 }
 
 Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string& clone_dir) {
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     if (bg_worker_stopped) {
         return Status::InternalError("Process is going to quit. The snapshot will stop.");
     }
