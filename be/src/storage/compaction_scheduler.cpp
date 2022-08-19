@@ -165,39 +165,32 @@ bool CompactionScheduler::_check_precondition(const CompactionCandidate& candida
     return true;
 }
 
-bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidate, bool* need_reschedule,
+bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidate,
                                              std::shared_ptr<CompactionTask>* compaction_task) {
     DCHECK(compaction_task);
-    // when the following conditions fail, should not reschedule the candidate tablet
-    *need_reschedule = false;
-    bool precondition_ok = _check_precondition(candidate);
-    if (!precondition_ok) {
-        return false;
-    }
 
     // when the following conditions fail, should reschedule the candidate tablet
-    *need_reschedule = true;
     // create a new compaction task
     const TabletSharedPtr& tablet = candidate.tablet;
     std::shared_ptr<CompactionTask> tmp_task = tablet->get_compaction(candidate.type, true);
-    if (tmp_task) {
-        DataDir* data_dir = tablet->data_dir();
-        if (data_dir->capacity_limit_reached(tmp_task->input_rowsets_size())) {
-            LOG(WARNING) << "skip tablet:" << tablet->tablet_id()
-                         << " because data dir reaches capacity limit. input rowsets size:"
-                         << tmp_task->input_rowsets_size();
-            return false;
-        }
-        bool can_do = _can_do_compaction_task(tablet.get(), tmp_task.get());
-        if (can_do) {
-            *compaction_task = std::move(tmp_task);
-        }
-        *need_reschedule = !can_do;
-        return can_do;
-    } else {
+    if (UNLIKELY(tmp_task == nullptr)) {
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because creating compaction task failed.";
         return false;
     }
+
+    DataDir* data_dir = tablet->data_dir();
+    if (data_dir->capacity_limit_reached(tmp_task->input_rowsets_size())) {
+        LOG(WARNING) << "skip tablet:" << tablet->tablet_id()
+                     << " because data dir reaches capacity limit. input rowsets size:"
+                     << tmp_task->input_rowsets_size();
+        return false;
+    }
+
+    bool can_do = _can_do_compaction_task(tablet.get(), tmp_task.get());
+    if (can_do) {
+        *compaction_task = std::move(tmp_task);
+    }
+    return can_do;
 }
 
 std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_task() const {
@@ -206,45 +199,42 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
     // tmp_tablets save the tmp picked candidates tablets
     std::vector<CompactionCandidate> tmp_candidates;
     CompactionCandidate compaction_candidate;
-    bool found = false;
     std::shared_ptr<CompactionTask> compaction_task;
+
     while (true) {
         if (!_can_schedule_next()) {
             VLOG(2) << "_can_schedule_next is false. skip";
-            break;
+            return nullptr;
         }
         compaction_candidate = StorageEngine::instance()->compaction_manager()->pick_candidate();
         VLOG(2) << "get candidate:" << compaction_candidate.to_string();
         if (!compaction_candidate.is_valid()) {
             // means there no candidate tablet, break
             LOG(INFO) << "do not get a qualified candidate";
-            break;
+            return nullptr;
         }
 
         int64_t tablet_id = compaction_candidate.tablet->tablet_id();
         CompactionType compaction_type = compaction_candidate.type;
         VLOG(2) << "try tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type);
-        bool need_reschedule = true;
-        found = _can_do_compaction(compaction_candidate, &need_reschedule, &compaction_task);
-        if (need_reschedule) {
-            tmp_candidates.emplace_back(std::move(compaction_candidate));
-        } else {
-            DCHECK(found);
+
+        if (!_check_precondition(compaction_candidate)) {
+            LOG(INFO) << "check compaction precondition failed, candidate info: " << compaction_candidate.to_string();
+            return nullptr;
         }
-        if (found) {
+
+        if (_can_do_compaction(compaction_candidate, &compaction_task)) {
             VLOG(2) << "get a qualified tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type)
                     << ", compaction task:" << compaction_task->get_task_info();
             break;
         }
+
+        // reschedule task if the compaction cannot be done.
+        tmp_candidates.emplace_back(std::move(compaction_candidate));
     }
     VLOG(2) << "tmp tablets size:" << tmp_candidates.size();
     StorageEngine::instance()->compaction_manager()->insert_candidates(std::move(tmp_candidates));
-    if (found) {
-        return compaction_task;
-    } else {
-        VLOG(2) << "no qualified tablet.";
-        return nullptr;
-    }
+    return compaction_task;
 }
 
 } // namespace starrocks
