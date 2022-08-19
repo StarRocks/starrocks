@@ -1330,13 +1330,16 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 pos = i;
             }
         }
-        if (num == 1 && pos == 0) {
+        if (num == 1 && pos == 0 && children.size() > 1) {
             return true;
         } else if (num > 1) {
             Preconditions.checkState(false, "A high-order function can have one lambda function.");
         } else if (pos > 0) {
             Preconditions.checkState(false,
                     "Lambda functions can only be the first argument of any high-order function.");
+        } else if (children.size() == 1) {
+            Preconditions.checkState(false,
+                    "Lambda functions can only be used in high-order functions.");
         }
         return false;
     }
