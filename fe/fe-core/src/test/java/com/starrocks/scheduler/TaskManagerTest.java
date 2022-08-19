@@ -14,7 +14,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
-import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -28,7 +27,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -36,14 +34,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.spark_project.guava.collect.MinMaxPriorityQueue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
@@ -251,14 +247,13 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void periodicalTaskRegularTest(@Mocked RowBatch rowBatch) throws DdlException {
+    public void periodicalTaskRegularTest() throws DdlException {
         new MockUp<Coordinator>() {
             @Mock
             public void exec() throws Exception {}
         };
 
         LocalDateTime now = LocalDateTime.now();
-
         Task task = new Task("test_periodical");
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName("test");
@@ -282,6 +277,15 @@ public class TaskManagerTest {
             LOG.info(taskRunStatus);
         }
 
+        int retryCount = 0, maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if(allHistory.size() == 2) {
+                break;
+            }
+            retryCount++;
+            LOG.info("periodicalTaskRegularTest is waiting for JobState retryCount:" + retryCount);
+        }
         Assert.assertEquals(2, allHistory.size());
     }
 
