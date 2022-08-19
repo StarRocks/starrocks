@@ -291,19 +291,13 @@ public class ExpressionAnalyzer {
                 Preconditions.checkArgument(!set.contains(name), "Lambda argument: " + name + " is duplicated.");
                 set.add(name);
             }
-            Preconditions.checkArgument(scope.getLambdaInputs().size() >= names.size(),
-                    "Lambda arguments shouldn't be more than lambda input arrays.");
+            Preconditions.checkArgument(scope.getLambdaInputs().size() == names.size(),
+                    "Lambda arguments should equal to lambda input arrays.");
             // bind argument names with its type
             for (int i = 0; i < names.size(); ++i) {
                 scope.getLambdaInputs().get(i).setName(names.get(i));
             }
             List<PlaceHolderExpr> inputs = scope.getLambdaInputs();
-            // remove unnecessary inputs, then inputs and argument names are the same number.
-            if (inputs.size() > names.size()) {
-                for (int i = names.size(); i < inputs.size(); ++i) {
-                    inputs.remove(i);
-                }
-            }
             node.putArguments(inputs);
             return null;
         }
