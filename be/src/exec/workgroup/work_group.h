@@ -50,7 +50,7 @@ public:
     void set_in_queue(Q* in_queue) { _in_queue = in_queue; }
 
     int64_t cpu_limit() const;
-    bool is_rt_wg() const;
+    bool is_sq_wg() const;
 
     int64_t vruntime_ns() const { return _vruntime_ns; }
     int64_t runtime_ns() const { return _vruntime_ns * cpu_limit(); }
@@ -97,7 +97,7 @@ public:
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
-    bool is_rt_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
+    bool is_sq_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
 
     WorkGroupDriverSchedEntity* driver_sched_entity() { return &_driver_sched_entity; }
     const WorkGroupDriverSchedEntity* driver_sched_entity() const { return &_driver_sched_entity; }
@@ -208,9 +208,9 @@ public:
     std::vector<TWorkGroup> list_workgroups();
     std::vector<TWorkGroup> list_all_workgroups();
 
-    void incr_num_running_rt_drivers() { _num_running_rt_drivers++; }
-    void decr_num_running_rt_drivers() { _num_running_rt_drivers--; }
-    bool is_rt_wg_running() const { return _num_running_rt_drivers > 0; }
+    void incr_num_running_sq_drivers() { _num_running_sq_drivers++; }
+    void decr_num_running_sq_drivers() { _num_running_sq_drivers--; }
+    bool is_sq_wg_running() const { return _num_running_sq_drivers > 0; }
     size_t normal_workgroup_cpu_hard_limit() const;
 
     void update_metrics();
@@ -234,7 +234,7 @@ private:
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
 
-    std::atomic<size_t> _num_running_rt_drivers = 0;
+    std::atomic<size_t> _num_running_sq_drivers = 0;
     std::atomic<size_t> _sum_cpu_limit = 0;
     std::atomic<size_t> _rt_cpu_limit = 0;
 
