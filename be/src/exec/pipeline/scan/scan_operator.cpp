@@ -436,7 +436,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     const auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(scan_operator.get());
     scan_operator->set_degree_of_parallelism(morsel_queue_factory->size());
-    scan_operator->set_need_local_shuffle(morsel_queue_factory->is_shared());
+    scan_operator->set_need_local_shuffle(morsel_queue_factory->need_local_shuffle());
 
     ops.emplace_back(std::move(scan_operator));
 
