@@ -160,6 +160,7 @@ public abstract class Type implements Cloneable {
                     .add(DECIMAL64)
                     .add(DECIMAL128)
                     .add(JSON)
+                    .add(FUNCTION)
                     .add(UNKNOWN_TYPE)
                     .build();
 
