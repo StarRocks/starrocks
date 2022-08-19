@@ -103,7 +103,7 @@ SHOW ROUTINE LOAD FOR [database.][job_name];
 
 ~~~sql
 MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
+MySQL [load_test] > SHOW ROUTINE LOAD\G
 
 *************************** 1. row ***************************
 
@@ -147,7 +147,7 @@ ReasonOfStateChanged:
 
 ~~~sql
 MySQL [load_test] > USE load_test;
-MySQL [load_test] > SHOW ROUTINE LOAD TASK WHERE Jobname="routine_wiki_edit_1589191587"\G;
+MySQL [load_test] > SHOW ROUTINE LOAD TASK WHERE Jobname="routine_wiki_edit_1589191587"\G
 *************************** 1. row ***************************
               TaskId: 645da10b-0a5c-4e90-84f0-03b33ec58b68
                TxnId: 2776810
@@ -185,7 +185,7 @@ PAUSE ROUTINE LOAD FOR [job_name];
 ~~~sql
 MySQL [load_test] > PAUSE ROUTINE LOAD FOR routine_wiki_edit_1589191587;
 Query OK, 0 rows affected (0.01 sec)
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
+MySQL [load_test] > SHOW ROUTINE LOAD\G
 *************************** 1. row ***************************
                   Id: 14093
                 Name: routine_wiki_edit_1589191587
@@ -225,7 +225,7 @@ RESUME ROUTINE LOAD FOR [job_name];
 ~~~sql
 MySQL [load_test] > RESUME ROUTINE LOAD FOR routine_wiki_edit_1589191587;
 Query OK, 0 rows affected (0.01 sec)
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
+MySQL [load_test] > SHOW ROUTINE LOAD\G
 *************************** 1. row ***************************
                   Id: 14093
                 Name: routine_wiki_edit_1589191587
@@ -249,7 +249,7 @@ ReasonOfStateChanged:
 ~~~
 
 ~~~sql
-MySQL [load_test] > SHOW ROUTINE LOAD\G;
+MySQL [load_test] > SHOW ROUTINE LOAD\G
 *************************** 1. row ***************************
                   Id: 14093
                 Name: routine_wiki_edit_1589191587
@@ -310,7 +310,7 @@ STOP ROUTINE LOAD FOR [job_name];
 ~~~sql
 MySQL [load_test] > STOP ROUTINE LOAD FOR routine_wiki_edit_1589191587;
 Query OK, 0 rows affected (0.01 sec)
-MySQL [load_test] > SHOW ALL ROUTINE LOAD\G;
+MySQL [load_test] > SHOW ALL ROUTINE LOAD\G
 *************************** 1. row ***************************
                   Id: 14093
                 Name: routine_wiki_edit_1589191587
