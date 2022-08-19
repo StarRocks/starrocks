@@ -22,7 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Multimap;
-import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;

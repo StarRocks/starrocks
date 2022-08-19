@@ -2,23 +2,19 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.collections.map.HashedMap;
-import org.apache.commons.lang3.StringUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
