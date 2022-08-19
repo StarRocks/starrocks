@@ -175,7 +175,11 @@ public class Utils {
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            itemType = new ArrayType(convertToArrayType(matcher.group(1)));
+            if (convertToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
+                itemType = Type.UNKNOWN_TYPE;
+            } else {
+                itemType = new ArrayType(convertToArrayType(matcher.group(1)));
+            }
         } else {
             itemType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         }
