@@ -69,6 +69,7 @@ public class ProfileManager {
     private class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public String profileContent;
+        public String simpleProfileContent;
     }
 
     // only protect profileDeque; profileMap is concurrent, no need to protect
@@ -101,6 +102,7 @@ public class ProfileManager {
             element.infoStrings.put(header, summaryProfile.getInfoString(header));
         }
         element.profileContent = profile.toString();
+        element.simpleProfileContent = profile.toSimpleString();
         return element;
     }
 
@@ -153,8 +155,11 @@ public class ProfileManager {
         }
         return result;
     }
-
     public String getProfile(String queryID) {
+        return getProfile(queryID, false);
+    }
+
+    public String getProfile(String queryID, boolean simple) {
         readLock.lock();
         try {
             ProfileElement element = profileMap.get(queryID);
@@ -162,9 +167,10 @@ public class ProfileManager {
                 return null;
             }
 
-            return element.profileContent;
+            return simple ? element.simpleProfileContent : element.profileContent;
         } finally {
             readLock.unlock();
         }
     }
 }
+
