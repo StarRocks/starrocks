@@ -7,7 +7,7 @@ Bitmap 索引是一种特殊的数据库索引技术，其使用 bitmap 进行�
 ## 注意事项
 
 - Bitmap 索引适用于满足以下条件的列：
-  - 基数较低，值大量重复，例如 ENUM 类型的列。如列基数较高，推荐使用 [Bloom filter 索引。](/using_starrocks/Bloomfilter_index.md)
+  - 基数较低，值大量重复，例如 ENUM 类型的列。如列基数较高，推荐使用 [Bloomfilter 索引](/using_starrocks/Bloomfilter_index.md)。
   - 可使用等值条件查询或者可转化为等值条件查询。
 - 主键模型和明细模型中所有列都可以创建 bitmap 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 bitmap 索引。
 - 不支持为 FLOAT、DOUBLE、BOOLEAN 和 DECIMAL 类型的列创建 bitmap 索引。

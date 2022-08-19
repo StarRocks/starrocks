@@ -54,9 +54,9 @@
 
 - year、month、day 函数支持 DATE 数据类型。
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - Tablet 过多导致 CPU 占用率过高的问题。
 - 导致出现"fail to prepare tablet reader"报错提示的问题。

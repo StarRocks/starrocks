@@ -4,9 +4,9 @@
 
 发布日期：2022年8月6日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 使用 Broker Load 导入数据时，如果 Broker 进程压力大，可能导致内部心跳处理时出现问题，从而导致导入数据丢失。[#8282](https://github.com/StarRocks/starrocks/issues/8282)
 - 使用 Broker Load 导入数据时，如果使用 `COLUMNS FROM PATH AS` 参数指定的列在 StarRocks 的表中不存在，会导致 BE 停止服务。[#5346](https://github.com/StarRocks/starrocks/issues/5346)
@@ -17,9 +17,9 @@
 
 发布日期：2022年7月15日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 反复切换 Leader FE 节点可能会导致所有导入作业挂起，无法进行导入。[#7350](https://github.com/StarRocks/starrocks/issues/7350)
 - 导入的数据有倾斜时，某些列占用内存比较大，可能会导致 MemTable 的内存估算超过 4GB，从而导致 BE 停止工作。[#7161](https://github.com/StarRocks/starrocks/issues/7161)
@@ -30,9 +30,9 @@
 
 发布日期：2022年6月13日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 在进行表压缩 (Compaction) 时，如果某列的任意一个值重复出现的次数超过 0x40000000，会导致 Compaction 卡住。[#6513](https://github.com/StarRocks/starrocks/issues/6513)
 - BDB JE v7.3.8 版本引入了一些问题，导致 FE 启动后磁盘 I/O 很高、磁盘使用率持续异常增长、且没有恢复迹象，回退到 BDB JE v7.3.7 版本后 FE 恢复正常。[#6634] (<https://github.com/StarRocks/starrocks/issues/6634>)
@@ -41,9 +41,9 @@
 
 发布日期：2022年5月25日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 某些图形化界面工具会自动设置 `set_sql_limit` 变量，导致 SQL 语句 ORDER BY LIMIT 被忽略，从而导致返回的数据行数不正确。[#5966](https://github.com/StarRocks/starrocks/issues/5966)
 - 当一个 Colocation Group 中包含的表比较多、导入频率又比较高时，可能会导致该 Colocation Group 无法保持 `stable` 状态，从而导致 JOIN 语句无法使用 Colocate Join。现优化为导入数据时稍微多等一会，这样可以尽量保证导入的 Tablet 副本的完整性。
@@ -57,9 +57,9 @@
 
 升级建议：本次修复了一些跟数据存储或数据查询正确性相关的关键 Bug，建议您及时升级。
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 【Critical Bug】通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
 - 【Critical Bug】在数据写入中的一些特殊阶段，如果 Tablet 进行并完成迁移，数据会继续写入至原先 Tablet 对应的磁盘，导致数据丢失，进而导致查询错误。[#5160](https://github.com/StarRocks/starrocks/issues/5160)
@@ -73,9 +73,9 @@
 
 发布日期： 2022年4月18日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 在删列、新增分区、并克隆 Tablet 后，新旧 Tablet 的列 Unique ID 可能会不对应，由于系统使用共享的 Tablet Schema，可能导致 BE 停止服务。[#4514](https://github.com/StarRocks/starrocks/issues/4514)
 - 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
@@ -86,7 +86,7 @@
 
 发布日期： 2022年3月14日
 
-### Bug 修复
+### 问题修复
 
 - 修复 BE 假死导致查询出错的问题。
 - 修复对单 tablet 的表在做聚合操作时因无法得到合理的执行计划而导致查询失败的问题。[#3854](https://github.com/StarRocks/starrocks/issues/3854)
@@ -100,7 +100,7 @@
 
 - 优化 FE 内存占用。通过设置参数 `label_keep_max_num`，控制一定时间内导入任务保留的最大数量，以避免在高频作业导入时，FE 内存占用过多而出现 Full GC。
 
-### Bug 修复
+### 问题修复
 
 - 修复 ColumnDecoder 异常，导致 BE 节点无响应的问题。
 - 修复在导入 JSON 格式数据中设置了 jsonpaths 后不能自动识别 __op 字段的问题。
@@ -118,7 +118,7 @@
 - 优化高并发查询场景下，StarRocks CBO优化器采集统计信息时的锁竞争问题。 [#2901](https://github.com/StarRocks/starrocks/pull/2901)
 - 优化CBO的统计信息工作，UNION算子等。
 
-### Bug 修复
+### 问题修复
 
 - 修复副本的全局字典不一致而引起查询的问题。 [#2700](https://github.com/StarRocks/starrocks/pull/2700)[#2765](https://github.com/StarRocks/starrocks/pull/2765)
 - 修复数据导入至StarRocks前设置参数`exec_mem_limit`不生效的问题。 [#2693](https://github.com/StarRocks/starrocks/pull/2693)
@@ -158,7 +158,7 @@
   - 解决大内存释放长时间卡住执行线程的问题
   - 进程优雅退出机制，支持内存泄漏检查[#1093](https://github.com/StarRocks/starrocks/pull/1093)
 
-### Bug 修复
+### 问题修复
 
 - 修复Hive外表大量获取元数据超时的问题
 - 修复物化视图创建报错信息不明确的问题

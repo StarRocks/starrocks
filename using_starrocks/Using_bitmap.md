@@ -1,4 +1,4 @@
-# 使用 Bitmap 精确去重
+# 使用 Bitmap 实现精确去重
 
 本小节介绍如何通过 Bitmap 在 StarRocks 中精确去重。
 

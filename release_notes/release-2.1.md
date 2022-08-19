@@ -8,9 +8,9 @@
 
 增加`bdbje_cleaner_threads`和`bdbje_replay_cost_percent`两个参数，以加速清理 BDB JE 中的元数据。[#8371](https://github.com/StarRocks/starrocks/pull/8371)
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 一些查询会被转发到 Leader FE 节点上，从而可能导致通过 `/api/query_detail` 接口获得的 SQL 语句执行信息不正确，比如 SHOW FRONTENDS 语句。[#9185](https://github.com/StarRocks/starrocks/issues/9185)
 - 停止 BE 后，当前进程未完全退出，导致重启 BE 失败。[#9175](https://github.com/StarRocks/starrocks/pull/9267)
@@ -21,9 +21,9 @@
 
 发布日期：2022年7月9日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 主键模型 (Primary Key) 表在高频导入时，会卡住无法继续进行。[#7763](https://github.com/StarRocks/starrocks/issues/7763)
 - 在低基数优化中，对聚合表达式的顺序处理有误，导致 `count distinct` 函数返回的一些结果错误。[#7659](https://github.com/StarRocks/starrocks/issues/7659)
@@ -34,9 +34,9 @@
 
 发布日期：2022年6月24日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 反复切换 Leader FE 节点可能会导致所有导入作业挂起，无法进行导入。[#7350](https://github.com/StarRocks/starrocks/issues/7350)
 - 使用 `DESC` 查看表结构时，类型为 DECIMAL(18,2) 的字段会展示为 DECIMAL64(18,2) 类型。[#7309](https://github.com/StarRocks/starrocks/pull/7309)
@@ -47,14 +47,14 @@
 
 发布日期：2022年6月9日
 
-### 提升改进
+### 功能优化
 
 - 优化表结构变更 (Schema Change) 等内部处理的并发控制，降低对 FE 元数据的压力，最终减少在高并发、大数据量导入场景下容易发生的导入积压、变慢的情况。[#6560](https://github.com/StarRocks/starrocks/pull/6560) [#6804](https://github.com/StarRocks/starrocks/pull/6804)
 - 优化高频导入的性能。[#6532](https://github.com/StarRocks/starrocks/pull/6532) [#6533](https://github.com/StarRocks/starrocks/pull/6533)
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 对 Routine Load 任务进行 ALTER 操作后，由于 ALTER 操作没有记录全量的 LOAD 语句信息，导致这个导入任务的元数据在做完 Checkpoint 后丢失。[#6936](https://github.com/StarRocks/starrocks/issues/6936)
 - 停止 Routine Load 任务可能导致死锁。[#6450](https://github.com/StarRocks/starrocks/issues/6450)
@@ -72,9 +72,9 @@
 
 对于 Frame 设置为 `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` 的窗口函数，如果计算中某个分区很大，系统会缓存这个分区的所有数据、然后再进行计算，导致消耗大量内存。现优化为这种情况下不再缓存分区的所有数据。[5829](https://github.com/StarRocks/starrocks/issues/5829)
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 往主键模型表导入数据时，系统内部保存的每个数据版本对应的创建时间如果不能保持严格增长（比如因为系统时间被往前调整过、或因为相关的未知 Bug），会导致处理出错，从而导致 BE 停止服务。[#6046](https://github.com/StarRocks/starrocks/issues/6046)
 
@@ -95,9 +95,9 @@
 
 发布日期：2022年5月10日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 在进行多个 DELETE 操作后，查询时，如果系统内部使用了低基数优化，则查询结果可能是错误的。[#5712](https://github.com/StarRocks/starrocks/issues/5712)
 - 在数据写入中的一些特殊阶段，如果 Tablet 进行并完成迁移，数据会继续写入至原先 Tablet 对应的磁盘，导致数据丢失，进而导致查询错误。[#5160](https://github.com/StarRocks/starrocks/issues/5160)
@@ -108,9 +108,9 @@
 
 发布日期： 2022年4月27日
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 原先 Decimal 乘法溢出，计算结果错误，修复后，Decimal 乘法溢出时返回 NULL。
 - 统计信息误差较大时，执行计划中 Colocate Join 的优先级可能低于 Broadcast Join，导致实际执行时 Colocate Join 未生效。[#4817](https://github.com/StarRocks/starrocks/pull/4817)
@@ -126,9 +126,9 @@
 
 - 新增 `UUID_NUMERIC` 函数，返回 LARGEINT 类型的值。相比于 `UUID` 函数，执行性能提升近 2 个数量级。
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 在删列、新增分区、并克隆 Tablet 后，新旧 Tablet 的列 Unique ID 可能会不对应，由于系统使用共享的 Tablet Schema，可能导致 BE 停止服务。[#4514](https://github.com/StarRocks/starrocks/issues/4514)
 - 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
@@ -139,7 +139,7 @@
 
 发布日期： 2022年3月19日
 
-### Bug 修复
+### 问题修复
 
 - 通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
 - 修复某些查询可能因为执行计划不合理而导致内存超限的问题。
@@ -150,7 +150,7 @@
 
 发布日期： 2022年3月14日
 
-### Bug 修复
+### 问题修复
 
 - 修复从 1.19 升级到 2.1 会因 `chunk_size` 不匹配导致 BE 崩溃的问题。[#3834](https://github.com/StarRocks/starrocks/issues/3834)
 - 修复在从 2.0 升级到 2.1 的过程中有导入时，可能导致导入任务失败的问题。[#3828](https://github.com/StarRocks/starrocks/issues/3828)
@@ -183,7 +183,7 @@
 - 支持导入带有多个分隔符的 CSV 文件。
 - flink-source-connector 支持 Flink 批量读取 StarRocks 数据，实现了直连并行读取 BE 节点、自动谓词下推等特性。相关文档，请参见 [Flink Connector](../unloading/Flink_connector.md)。
 
-### Bug 修复
+### 问题修复
 
 - 修复在导入 JSON 格式数据中设置了 jsonpaths 后不能自动识别 __op 字段的问题。
 - 修复 Broker Load 导入数据过程中因为源数据发生变化而导致 BE 节点挂掉的问题。
