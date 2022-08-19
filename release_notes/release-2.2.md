@@ -1,5 +1,21 @@
 # StarRocks version 2.2
 
+## 2.2.5
+
+发布日期： 2022 年 8 月 18 日
+
+### 功能优化
+
+- 优化 Pipeline 引擎开启后的系统性能。 [#9580](https://github.com/StarRocks/starrocks/pull/9580)
+- 优化索引元数据的内存统计准确度。[#9837](https://github.com/StarRocks/starrocks/pull/9837)
+
+### 问题修复
+
+修复了如下问题：
+
+- BE 在执行 Routine Load 时可能在 `get_partition_offset` 时卡住。 [#9937](https://github.com/StarRocks/starrocks/pull/9937)
+- 不同集群使用 Broker Load 导入相同的 HDFS 文件导致出错。 [#9507](https://github.com/StarRocks/starrocks/pull/9507)
+
 ## 2.2.4
 
 发布日期： 2022 年 8 月 3 日
