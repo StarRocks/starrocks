@@ -547,4 +547,83 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
     }
 }
 
+TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
+    // write 1 rowset when schema change
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1000);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(4);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(14);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("4.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("5.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("6.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+
+        lake::PublishLogVersionRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.set_txn_id(1000);
+        request.set_version(4);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    // schema change with 2 rowsets
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1001);
+        auto op_schema_change = txnlog.mutable_op_schema_change();
+        op_schema_change->set_alter_version(3);
+        auto rowset0 = op_schema_change->add_rowsets();
+        rowset0->set_overlapped(true);
+        rowset0->set_num_rows(2);
+        rowset0->set_data_size(12);
+        rowset0->add_segments("1.dat");
+        rowset0->add_segments("2.dat");
+        auto rowset1 = op_schema_change->add_rowsets();
+        rowset1->set_overlapped(false);
+        rowset1->set_num_rows(3);
+        rowset1->set_data_size(13);
+        rowset1->add_segments("3.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(5);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1001);
+        brpc::Controller cntl;
+        _lake_service.publish_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    _tablet_mgr->prune_metacache();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(5));
+    ASSERT_EQ(5, metadata->version());
+    ASSERT_EQ(3, metadata->rowsets().size());
+    const auto& rowset0 = metadata->rowsets(0);
+    ASSERT_TRUE(rowset0.overlapped());
+    ASSERT_EQ(2, rowset0.num_rows());
+    ASSERT_EQ(12, rowset0.data_size());
+    ASSERT_EQ(2, rowset0.segments_size());
+    const auto& rowset1 = metadata->rowsets(1);
+    ASSERT_FALSE(rowset1.overlapped());
+    ASSERT_EQ(3, rowset1.num_rows());
+    ASSERT_EQ(13, rowset1.data_size());
+    ASSERT_EQ(1, rowset1.segments_size());
+    const auto& rowset2 = metadata->rowsets(2);
+    ASSERT_FALSE(rowset2.overlapped());
+    ASSERT_EQ(4, rowset2.num_rows());
+    ASSERT_EQ(14, rowset2.data_size());
+    ASSERT_EQ(3, rowset2.segments_size());
+}
+
 } // namespace starrocks

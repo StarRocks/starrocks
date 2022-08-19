@@ -80,6 +80,8 @@ public:
 
     Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    Status delete_txn_vlog(int64_t tablet_id, int64_t version);
+
     Status delete_segment(int64_t tablet_id, std::string_view segment_name);
 
     // Transform a txn log into versioned txn log(i.e., rename `txn_{tablet_id}_{txn_id}` to `vtxn_{tablet_id}_{log_version}`)

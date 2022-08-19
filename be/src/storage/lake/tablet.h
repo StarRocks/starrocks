@@ -62,7 +62,11 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
+
     Status delete_txn_log(int64_t txn_id);
+
+    Status delete_txn_vlog(int64_t version);
 
     StatusOr<std::unique_ptr<TabletWriter>> new_writer();
 
@@ -79,9 +83,13 @@ public:
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
 
+    [[nodiscard]] std::string txn_vlog_location(int64_t version) const;
+
     [[nodiscard]] std::string segment_location(std::string_view segment_name) const;
 
     Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+
+    StatusOr<bool> has_delete_predicates(int64_t version);
 
 private:
     TabletManager* _mgr;
