@@ -1596,7 +1596,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateRoutineLoadStatement(StarRocksParser.CreateRoutineLoadStatementContext context) {
-        String database = database = context.db.getText();
+        String database = context.db.getText();
         String name = context.name.getText();
         String tableName = context.table.getText();
 
