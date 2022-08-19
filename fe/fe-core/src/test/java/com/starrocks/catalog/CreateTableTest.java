@@ -22,7 +22,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;

@@ -2,9 +2,9 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

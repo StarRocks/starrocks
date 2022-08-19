@@ -24,17 +24,8 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
-import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /*
  * CANCEL ALTER COLUMN|ROLLUP FROM db_name.table_name

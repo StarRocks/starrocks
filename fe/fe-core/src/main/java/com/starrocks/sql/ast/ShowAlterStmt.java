@@ -42,7 +42,8 @@ import java.util.List;
 /*
  * ShowAlterStmt: used to show process state of alter statement.
  * Syntax:
- *      SHOW ALTER TABLE [COLUMN | ROLLUP | MATERIALIZED_VIEW] [FROM dbName] [WHERE TableName="xxx"] [ORDER BY CreateTime DESC] [LIMIT [offset,]rows]
+ *      SHOW ALTER TABLE [COLUMN | ROLLUP | MATERIALIZED_VIEW] [FROM dbName] [WHERE TableName="xxx"]
+ *      [ORDER BY CreateTime DESC] [LIMIT [offset,]rows]
  */
 public class ShowAlterStmt extends ShowStmt {
 

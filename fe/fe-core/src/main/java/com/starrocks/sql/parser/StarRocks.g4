@@ -16,31 +16,33 @@ statement
     : queryStatement                                                                        #query
 
     // Database Statement
-    | alterDbQuotaStmt                                                                      #alterDbQuota
+    | useDatabaseStatement                                                                  #useDb
+    | useCatalogStatement                                                                   #useCatalog
+    | showDatabasesStatement                                                                #showDatabases
+    | alterDbQuotaStmtatement                                                               #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
     | createTableLikeStatement                                                              #createTableLike
+    | showCreateTableStatement                                                              #showCreateTable
     | dropTableStatement                                                                    #dropTable
     | recoverTableStatement                                                                 #recoverTable
     | truncateTableStatement                                                                #truncateTable
-    | alterTableStatement                                                                   #alterTable
-    | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showAlterStatement                                                                    #showAlter
     | showTableStatement                                                                    #showTables
-    | showCreateTableStatement                                                              #showCreateTable
     | descTableStatement                                                                    #descTable
     | showTableStatusStatement                                                              #showTableStatus
     | showColumnStatement                                                                   #showColumn
     | refreshTableStatement                                                                 #refreshTable
+    | alterTableStatement                                                                   #alterTable
+    | cancelAlterTableStatement                                                             #cancelAlterTable
+    | showAlterStatement                                                                    #showAlter
 
     // View Statement
     | createViewStatement                                                                   #createView
@@ -126,9 +128,6 @@ statement
     | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
-    | USE qualifiedName                                                                     #useDb
-    | USE CATALOG identifierOrString                                                        #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
@@ -145,6 +144,7 @@ statement
     | showTabletStatement                                                                   #showTablet
     | showDeleteStatement                                                                   #showDelete
     | showOpenTableStatement                                                                #showOpenTable
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -169,7 +169,16 @@ statement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
-alterDbQuotaStmt
+
+useDatabaseStatement
+    : USE qualifiedName
+    ;
+
+useCatalogStatement
+    : USE CATALOG identifierOrString
+    ;
+
+alterDbQuotaStmtatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -200,11 +209,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -884,6 +888,10 @@ setExprOrDefault
 showAuthenticationStatement
     : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
     | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

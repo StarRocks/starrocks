@@ -5,17 +5,11 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.sql.ast.CreateTableLikeStmt;
-import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
 import com.starrocks.analysis.DropPartitionClause;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.analysis.PartitionRenameClause;
 import com.starrocks.analysis.TableRenameClause;
-import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
@@ -24,7 +18,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 
 import java.util.List;
 
@@ -59,9 +59,11 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void createDb(String dbName) throws  DdlException, AlreadyExistsException {}
+    default void createDb(String dbName) throws DdlException, AlreadyExistsException {
+    }
 
-    default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {}
+    default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+    }
 
     default List<Long> getDbIds() {
         return Lists.newArrayList();
@@ -75,45 +77,61 @@ public interface ConnectorMetadata {
         return null;
     }
 
-    default void dropTable(DropTableStmt stmt) throws DdlException {}
+    default void dropTable(DropTableStmt stmt) throws DdlException {
+    }
 
-    default void alterTable(AlterTableStmt stmt) throws UserException {}
+    default void alterTable(AlterTableStmt stmt) throws UserException {
+    }
 
-    default void createTable(CreateTableStmt stmt) throws DdlException {}
+    default void createTable(CreateTableStmt stmt) throws DdlException {
+    }
 
-    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {}
+    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
+    }
 
-    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {}
+    default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
+    }
 
-    default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {}
+    default void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+    }
 
     default void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {}
+            throws DdlException, AnalysisException {
+    }
 
-    default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {}
+    default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+    }
 
-    default void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {}
+    default void renamePartition(Database db, Table table, PartitionRenameClause renameClause) throws DdlException {
+    }
 
     default void createMaterializedView(CreateMaterializedViewStmt stmt)
-            throws AnalysisException, DdlException {}
+            throws AnalysisException, DdlException {
+    }
 
-    default void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {}
+    default void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {
+    }
 
-    default void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {}
+    default void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
+    }
 
     default void alterMaterializedView(AlterMaterializedViewStatement stmt)
-            throws DdlException, MetaNotFoundException, AnalysisException {}
+            throws DdlException, MetaNotFoundException, AnalysisException {
+    }
 
     default void refreshMaterializedView(String dbName, String mvName, int priority)
-            throws DdlException, MetaNotFoundException {}
+            throws DdlException, MetaNotFoundException {
+    }
 
     default void cancelRefreshMaterializedView(String dbName, String mvName)
             throws DdlException, MetaNotFoundException {
     }
 
-    default void createView(CreateViewStmt stmt) throws DdlException {}
+    default void createView(CreateViewStmt stmt) throws DdlException {
+    }
 
-    default void alterView(AlterViewStmt stmt) throws DdlException, UserException {}
+    default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+    }
 
 }
 

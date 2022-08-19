@@ -25,10 +25,7 @@ import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table.TableType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW CREATE TABLE statement.
 public class ShowCreateTableStmt extends ShowStmt {

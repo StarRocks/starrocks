@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.FunctionArgsDef;
 import com.starrocks.analysis.FunctionName;
@@ -18,6 +17,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;

@@ -28,7 +28,7 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
 import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ColumnRenameClause;
