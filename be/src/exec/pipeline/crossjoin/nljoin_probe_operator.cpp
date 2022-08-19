@@ -248,7 +248,12 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
             }
         } else {
             ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
-            dst_col->append(*src_col);
+            if (src_col->is_nullable() && !slot->is_nullable()) {
+                auto src_data = down_cast<vectorized::NullableColumn*>(src_col.get())->data_column();
+                dst_col->append(*src_data);
+            } else {
+                dst_col->append(*src_col);
+            }
         }
     }
 }
