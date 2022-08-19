@@ -414,8 +414,14 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
-
-    *chunk = item.chunk_ptr.release();
+    if (item.chunk_ptr == nullptr) {
+        ChunkUniquePtr chunk_ptr = std::make_unique<vectorized::Chunk>();
+        faststring uncompressed_buffer;
+        RETURN_IF_ERROR(_deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer));
+        *chunk = chunk_ptr.release();
+    } else {
+        *chunk = item.chunk_ptr.release();
+    }
     auto* closure = item.closure;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     if (closure != nullptr) {
@@ -452,7 +458,7 @@ bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chu
     if (!chunk_queue.try_dequeue(item)) {
         return false;
     }
-    CHECK(item.chunk_ptr != nullptr);
+    DCHECK(item.chunk_ptr != nullptr);
     *chunk = item.chunk_ptr.release();
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
     auto* closure = item.closure;
@@ -566,6 +572,7 @@ DataStreamRecvr::PipelineSenderQueue::get_chunks_from_pass_through(int32_t sende
     return chunks;
 }
 
+template <bool need_deserialization>
 StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::PipelineSenderQueue::get_chunks_from_request(
         const PTransmitChunkParams& request, size_t& total_chunk_bytes) {
     ChunkList chunks;
@@ -574,9 +581,13 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
         auto& pchunk = request.chunks().Get(i);
         int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
         int64_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-        chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
+        if constexpr (need_deserialization) {
+            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+            RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
+            chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
+        } else {
+            chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, pchunk);
+        }
         total_chunk_bytes += chunk_bytes;
     }
     return chunks;
@@ -599,9 +610,14 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     size_t total_chunk_bytes = 0;
     _is_pipeline_level_shuffle = request.has_is_pipeline_level_shuffle() && request.is_pipeline_level_shuffle();
 
+    // NOTE: in the merge scenario, chunk is obtained through try_get_chunk and its return type is not Status.
+    // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
+    // we can change related interface's defination to do this later.
     ChunkList chunks;
-    ASSIGN_OR_RETURN(chunks, use_pass_through ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
-                                              : get_chunks_from_request(request, total_chunk_bytes));
+    ASSIGN_OR_RETURN(chunks, use_pass_through
+                                     ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
+                                     : (keep_order ? get_chunks_from_request<true>(request, total_chunk_bytes)
+                                                   : get_chunks_from_request<false>(request, total_chunk_bytes)));
     COUNTER_UPDATE(_recvr->_bytes_pass_through_counter, total_chunk_bytes);
 
     if (_is_cancelled) {
