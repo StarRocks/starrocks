@@ -345,7 +345,7 @@ PROPERTIES (
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocation Join](/using_starrocks/Colocation_join.md) 章节。
+详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
 
 ##### 设置动态分区
 
