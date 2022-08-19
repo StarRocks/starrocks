@@ -21,12 +21,12 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
