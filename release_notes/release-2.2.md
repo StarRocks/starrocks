@@ -11,7 +11,7 @@
 
 ### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 通过 Kerberos 认证使用 Broker Load 时无法使用多个 keytab 文件。[#8820](https://github.com/StarRocks/starrocks/pull/8820) [#8837](https://github.com/StarRocks/starrocks/pull/8837)
 - 执行 **stop_be.sh** 后立刻退出进程，Supervisor 重新拉起服务可能失败。[#9175](https://github.com/StarRocks/starrocks/pull/9175)
@@ -21,7 +21,7 @@
 
 发布日期： 2022 年 7 月 24 日
 
-### Bug 修复
+### 问题修复
 
 - 修复资源组删除过程中的错误。[#8036](https://github.com/StarRocks/starrocks/pull/8036)
 - 线程资源不足导致 Thrift server 退出。[#7974](https://github.com/StarRocks/starrocks/pull/7974)
@@ -37,9 +37,9 @@
 
 - 优化表结构变更 (Schema Change) 等内部处理的并发控制，降低对 FE 元数据的压力，减少在高并发、大数据量导入场景下容易发生导入积压和变慢的问题。[#6838](https://github.com/StarRocks/starrocks/pull/6838)
 
-### Bug 修复
+### 问题修复
 
-修复了如下 bug：
+修复了如下问题：
 
 - 执行 CTAS 时创建的新表副本数错误（ `replication_num` ）。[#7036](https://github.com/StarRocks/starrocks/pull/7036)
 - 执行 ALTER ROUTINE LOAD 后可能造成元数据丢失。 [#7068](https://github.com/StarRocks/starrocks/pull/7068)
@@ -63,9 +63,9 @@
 - 支持在主键模型表和更新模型表中使用 JSON 数据类型。 [#6544](https://github.com/StarRocks/starrocks/pull/6544)
 - 通过降低锁粒度和 BE 汇报 (report) 请求去重减少 FE 负荷，优化部署大量 BE 时的汇报性能并解决大规模集群中 Routine Load 任务卡住的问题。 [#6293](https://github.com/StarRocks/starrocks/pull/6293)
 
-### Bug 修复
+### 问题修复
 
-修复了如下 Bug：
+修复了如下问题：
 
 - 修复 SHOW FULL TABLES FROM DatabaseName 语句中转义字符解析报错的问题。 [#6559](https://github.com/StarRocks/starrocks/issues/6559)
 - FE 磁盘空间占用过快的问题（通过回滚 BDBJE 版本修复该bug）。[#6708](https://github.com/StarRocks/starrocks/pull/6708)
@@ -96,7 +96,7 @@
 - 正式发布 Pipeline 引擎，支持自适应调节查询的并行度，并且优化了 Pipeline 引擎的 Profile。提升了高并发场景下小查询的性能。
 - 导入 CSV 文件时，支持使用多个字符作为行分隔符。
 
-### Bug 修复
+### 问题修复
 
 - 修复主键模型的表导入数据和 COMMIT 时产生死锁的问题。[#4998](https://github.com/StarRocks/starrocks/pull/4998)
 - 解决 FE（包含 BDBJE）的一系列稳定性问题。[#4428](https://github.com/StarRocks/starrocks/pull/4428)、[#4666](https://github.com/StarRocks/starrocks/pull/4666)、[#2](https://github.com/StarRocks/bdb-je/pull/2)
