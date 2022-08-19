@@ -95,9 +95,9 @@ public class ResourceGroupMgr implements Writable {
                 }
             }
 
-            if (wg.getResourceGroupType() == TWorkGroupType.WG_REALTIME && rtResourceGroup != null) {
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY && rtResourceGroup != null) {
                 throw new DdlException(
-                        String.format("There can be only one realtime RESOURCE_GROUP (%s)", rtResourceGroup.getName()));
+                        String.format("There can be only one short_query RESOURCE_GROUP (%s)", rtResourceGroup.getName()));
             }
 
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
@@ -373,7 +373,7 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_REALTIME) {
+        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             rtResourceGroup = null;
         }
     }
@@ -384,7 +384,7 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
         }
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_REALTIME) {
+        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             rtResourceGroup = wg;
         }
     }

@@ -97,7 +97,7 @@ public:
     size_t mem_limit() const { return _memory_limit; }
     int64_t mem_limit_bytes() const { return _memory_limit_bytes; }
 
-    bool is_rt_wg() const { return _type == WorkGroupType::WG_REALTIME; }
+    bool is_rt_wg() const { return _type == WorkGroupType::WG_SHORT_QUERY; }
 
     WorkGroupDriverSchedEntity* driver_sched_entity() { return &_driver_sched_entity; }
     const WorkGroupDriverSchedEntity* driver_sched_entity() const { return &_driver_sched_entity; }
