@@ -418,6 +418,10 @@ public class ScalarType extends Type implements Cloneable {
             return DECIMALV2;
         }
 
+        if (t1.isFunctionType() || t2.isFunctionType()) {
+            return INVALID;
+        }
+
         PrimitiveType smallerType =
                 (t1.type.ordinal() < t2.type.ordinal() ? t1.type : t2.type);
         PrimitiveType largerType =
