@@ -3,6 +3,8 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
+import com.starrocks.analysis.Subquery;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -44,6 +46,54 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "set @\"var1\" = 1";
         analyzeSuccess(sql);
+
+        sql = "set @varvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv123 = 1";
+        analyzeFail(sql, "User variable name 'varvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv123' is illegal");
+
+        sql = "set @var = NULL";
+        analyzeSuccess(sql);
+
+        sql = "set @var = 1 + 2";
+        SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
+        UserVariable userVariable = (UserVariable) setStmt.getSetVars().get(0);
+        userVariable.analyze();
+        Assert.assertNotNull(userVariable.getResolvedExpression());
+        Assert.assertEquals("3", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = abs(1.2)";
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        userVariable = (UserVariable) setStmt.getSetVars().get(0);
+        userVariable.analyze();
+        Assert.assertTrue(userVariable.getExpression() instanceof Subquery);
+
+        sql = "set @var = (select 1)";
+        analyzeSuccess(sql);
+
+        sql = "set @var = (select v1 from test.t0)";
+        analyzeSuccess(sql);
+
+        sql = "set @var = (select sum(v1) from test.t0)";
+        analyzeSuccess(sql);
+
+        sql = "set @var = (select sum(v1) from test.t0 group by v2)";
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        Assert.assertTrue(setStmt.getSetVars().get(0).getExpression().getType().isIntegerType());
+
+        sql = "set @var1 = 1, @var2 = 2";
+        setStmt = (SetStmt) analyzeSuccess(sql);
+        Assert.assertEquals(2, setStmt.getSetVars().size());
+
+        sql = "set @var = bitmap_empty()";
+        analyzeFail(sql, "Can't set variable with type BITMAP");
+
+        sql = "set @var = (select bitmap_empty())";
+        analyzeFail(sql, "Can't set variable with type BITMAP");
+
+        sql = "set @var = hll_empty()";
+        analyzeFail(sql, "Can't set variable with type HLL");
+
+        sql = "set @var = percentile_empty()";
+        analyzeFail(sql, "Can't set variable with type PERCENTILE");
     }
 
     @Test
