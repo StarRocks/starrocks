@@ -77,7 +77,7 @@ set(EXPR_FILES
   table_function/java_udtf_function.cpp
   vectorized/java_function_call_expr.cpp
   vectorized/lambda_function.cpp
-        vectorized/array_map_expr.cpp
+  vectorized/array_map_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
