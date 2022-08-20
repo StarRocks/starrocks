@@ -49,9 +49,9 @@ public class ResourceGroupMgr implements Writable {
     private final GlobalStateMgr globalStateMgr;
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
 
-    // Record the current realtime resource group.
-    // There can be only one realtime resource group.
-    private ResourceGroup rtResourceGroup = null;
+    // Record the current short_query resource group.
+    // There can be only one short_query resource group.
+    private ResourceGroup shortQueryResourceGroup = null;
 
     private final Map<Long, ResourceGroup> id2ResourceGroupMap = new HashMap<>();
     private final Map<Long, ResourceGroupClassifier> classifierMap = new HashMap<>();
@@ -95,9 +95,10 @@ public class ResourceGroupMgr implements Writable {
                 }
             }
 
-            if (wg.getResourceGroupType() == TWorkGroupType.WG_REALTIME && rtResourceGroup != null) {
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY && shortQueryResourceGroup != null) {
                 throw new DdlException(
-                        String.format("There can be only one realtime RESOURCE_GROUP (%s)", rtResourceGroup.getName()));
+                        String.format("There can be only one short_query RESOURCE_GROUP (%s)",
+                                shortQueryResourceGroup.getName()));
             }
 
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
@@ -373,8 +374,8 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_REALTIME) {
-            rtResourceGroup = null;
+        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+            shortQueryResourceGroup = null;
         }
     }
 
@@ -384,8 +385,8 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
         }
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_REALTIME) {
-            rtResourceGroup = wg;
+        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+            shortQueryResourceGroup = wg;
         }
     }
 
