@@ -255,14 +255,13 @@ public class ExpressionAnalyzer {
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
             if (!Type.canCastTo(type1, compatibleType)) {
-                throw new SemanticException(
-                        "binary type " + type1.toSql() + " with type " + compatibleType.toSql() + " is invalid.");
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
             if (!Type.canCastTo(type2, compatibleType)) {
-                throw new SemanticException(
-                        "binary type " + type2.toSql() + " with type " + compatibleType.toSql() + " is invalid.");
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql()));
             }
 
             node.setType(Type.BOOLEAN);
