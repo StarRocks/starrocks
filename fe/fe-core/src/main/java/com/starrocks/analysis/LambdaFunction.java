@@ -30,7 +30,19 @@ public class LambdaFunction extends Expr {
 
     @Override
     protected String toSqlImpl() {
-        return String.format("%s -> %s", getChild(0).toSqlImpl(), getChild(1).toSqlImpl());
+        if (getChild(0) instanceof LambdaArguments) {
+            return String.format("%s -> %s", getChild(0).toSqlImpl(), getChild(1).toSqlImpl());
+        } else { // moved the lambda function to the first argument, and arguments are slots.
+            String names = getChild(1).toSqlImpl();
+            if (getChildren().size() > 2) {
+                names = "(" + getChild(1).toSqlImpl();
+                for (int i = 2; i < getChildren().size(); ++i) {
+                    names = names + ", " + getChild(i).toSqlImpl();
+                }
+                names = names + ")";
+            }
+            return String.format("%s -> %s", names, getChild(0).toSqlImpl());
+        }
     }
 
     @Override

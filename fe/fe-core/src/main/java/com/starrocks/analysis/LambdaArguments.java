@@ -42,7 +42,7 @@ public class LambdaArguments extends Expr {
     protected String toSqlImpl() {
         Preconditions.checkState(names.size() > 0);
         String name = names.get(0);
-        if (children.size() > 2) {
+        if (names.size() > 1) {
             name = "(" + names.stream().map(String::valueOf).collect(Collectors.joining(",")) + ")";
         }
         return String.format("%s", name);

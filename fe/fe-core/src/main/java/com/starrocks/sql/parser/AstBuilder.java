@@ -2932,8 +2932,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitLambdaFunction(StarRocksParser.LambdaFunctionContext context) {
         List<String> names = Lists.newLinkedList();
-        if (context.identifierLists() != null) {
-            final List<Identifier> identifierList = visit(context.identifierLists().identifier(), Identifier.class);
+        if (context.identifierList() != null) {
+            final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
             names = identifierList.stream().map(Identifier::getValue).collect(toList());
         } else {
             names.add(((Identifier) visit(context.identifier())).getValue());

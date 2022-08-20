@@ -20,19 +20,29 @@
 namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
+bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
+    if(array1->size() != array2->size()) {
+        return false;
+    }
+    auto data1 = array1->get_data();
+    auto data2 = array2->get_data();
+    return std::equal(data1.begin(), data1.end(), data2.begin());
+}
+
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions does not change the offsets of the current array and the null map.
-// for many valid arguments:
-// if one of them is a null literal, the result is null;
-// if one of them is only null, then results are null;
-// unfold const columns.
 ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
     std::vector<ColumnPtr> inputs;
-
     NullColumnPtr input_null_map = nullptr;
-    shared_ptr<ArrayColumn> input_array = nullptr;
+    std::shared_ptr<ArrayColumn> input_array = nullptr;
+    // for many valid arguments:
+    // if one of them is a null literal, the result is null;
+    // if one of them is only null, then results are null;
+    // unfold const columns.
+    // make sure all inputs have the same offsets.
+    // TODO(fzh): support several arrays with different offsets and set null for non-equal size of arrays.
     for (int i = 1; i < _children.size(); ++i) {
-        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[1], ptr);
+        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], ptr);
         // the column is a null literal.
         if (child_col->is_constant() && child_col->size() == 1 && child_col->is_null(0)) {
             return child_col;
@@ -56,11 +66,18 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
             }
         }
         DCHECK(column->is_array());
-        input_array = std::dynamic_pointer_cast<ArrayColumn>(column);
-        if (input_array->elements_column()->size() == 0) { // all elements are null
+        auto cur_array = std::dynamic_pointer_cast<ArrayColumn>(column);
+        if(input_array == nullptr) {
+            input_array =  cur_array;
+        } else {
+            if (!offsets_equal(cur_array->offsets_column(), input_array->offsets_column())) {
+                throw std::runtime_error("Input array element's size is not equal in array_map().");
+            }
+        }
+        if (cur_array->elements_column()->size() == 0) { // all elements are null
             return child_col;
         } else {
-            inputs.push_back(input_array);
+            inputs.push_back(cur_array->elements_column());
         }
     }
 
@@ -70,6 +87,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
     vector<SlotId> arguments_ids;
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
     int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+    DCHECK(argument_num == inputs.size());
     for (int i = 0; i < argument_num; ++i) {
         _cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
     }
