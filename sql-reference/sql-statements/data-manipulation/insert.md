@@ -11,7 +11,6 @@ INSERT INTO table_name
 [ PARTITION (p1, ...) ]
 [ WITH LABEL label]
 [ (column [, ...]) ]
-[ [ hint [, ...] ] ]
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
@@ -26,7 +25,6 @@ INSERT INTO table_name
 | expression  | 表达式，用以为对应列赋值。                                                  |
 | DEFAULT     | 为对应列赋予默认值。                                                          |
 | query       | 查询语句，查询的结果会导入至目标表中。查询语句支持任意 StarRocks 支持的 SQL 查询语法。 |
-| hint        | 指示符，用以指示 INSERT 语句执行行为。使用 `streaming` 或默认的非 `streaming` 方式均会使用同步方式完成 INSERT 语句执行，执行效率也相同。非 `streaming` 方式在执行完成后会返回一个 Label，您可以根据该 Label 通过 SHOW LOAD 语句查询导入的状态。 |
 
 ## 注意事项
 
