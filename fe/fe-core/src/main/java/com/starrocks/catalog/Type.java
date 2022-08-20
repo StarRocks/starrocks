@@ -542,6 +542,10 @@ public abstract class Type implements Cloneable {
         return !isInvalid();
     }
 
+    public boolean isUnknown() {
+        return isScalarType(PrimitiveType.UNKNOWN_TYPE);
+    }
+
     public boolean isNull() {
         return isScalarType(PrimitiveType.NULL_TYPE);
     }
