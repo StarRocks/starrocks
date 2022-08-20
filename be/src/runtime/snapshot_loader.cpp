@@ -245,7 +245,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             return Status::InternalError(ss.str());
         }
 
-        TabletSharedPtr tablet = _env->storage_engine()->tablet_manager()->get_tablet(local_tablet_id);
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(local_tablet_id);
         if (tablet == nullptr) {
             std::stringstream ss;
             ss << "failed to get local tablet: " << local_tablet_id;

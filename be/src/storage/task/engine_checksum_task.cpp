@@ -107,7 +107,7 @@ Status EngineChecksumTask::_compute_checksum() {
     auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
     st = reader.get_next(chunk.get());
 
-    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     while (st.ok() && !bg_worker_stopped) {
 #ifndef BE_TEST
         st = _mem_tracker->check_mem_limit("ConsistencyCheck");
@@ -123,7 +123,7 @@ Status EngineChecksumTask::_compute_checksum() {
         }
         chunk->reset();
         st = reader.get_next(chunk.get());
-        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     }
 
     if (bg_worker_stopped) {

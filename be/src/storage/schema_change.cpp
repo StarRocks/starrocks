@@ -711,7 +711,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
     }
 
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    StorageEngine* storage_engine = StorageEngine::instance();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!_heap.empty() && !bg_worker_stopped) {
         if (tmp_chunk->capacity_limit_reached() || nread >= config::vector_chunk_size) {
@@ -731,7 +731,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
             process_err();
             return false;
         }
-        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
     }
 
     if (bg_worker_stopped) {
@@ -821,7 +821,7 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
-        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
             return false;
         }
@@ -897,7 +897,7 @@ Status SchemaChangeDirectly::processV2(TabletReader* reader, RowsetWriter* new_r
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
-        bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+        bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
             return Status::InternalError("bg_worker_stopped");
         }
@@ -984,7 +984,7 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
     ChunkSorter chunk_sorter(_chunk_allocator);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    StorageEngine* storage_engine = StorageEngine::instance();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
 
     double total_bytes = 0;
@@ -1097,7 +1097,7 @@ Status SchemaChangeWithSorting::processV2(TabletReader* reader, RowsetWriter* ne
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    StorageEngine* storage_engine = StorageEngine::instance();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!bg_worker_stopped) {
 #ifndef BE_TEST

@@ -8,7 +8,7 @@
 namespace starrocks {
 
 CurrentThread::~CurrentThread() {
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    StorageEngine* storage_engine = StorageEngine::instance();
     if (UNLIKELY(storage_engine != nullptr && storage_engine->bg_worker_stopped())) {
         tls_is_thread_status_init = false;
         return;

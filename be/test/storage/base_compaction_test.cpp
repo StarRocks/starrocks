@@ -21,10 +21,15 @@
 
 namespace starrocks::vectorized {
 
-static StorageEngine* k_engine = nullptr;
-
 class BaseCompactionTest : public testing::Test {
 public:
+    ~BaseCompactionTest() {
+        if (_engine) {
+            _engine->stop();
+            delete _engine;
+            _engine = nullptr;
+        }
+    }
     void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -183,7 +188,7 @@ public:
 
         TabletSharedPtr tablet =
                 Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                                starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+                                                starrocks::StorageEngine::instance()->get_stores()[0]);
         tablet->init();
         tablet->calculate_cumulative_point();
 
@@ -204,13 +209,11 @@ public:
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
-        if (k_engine == nullptr) {
-            Status s = starrocks::StorageEngine::open(options, &k_engine);
+        if (_engine == nullptr) {
+            _origin_engine = StorageEngine::instance();
+            Status s = starrocks::StorageEngine::open(options, &_engine);
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
-
-        ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
-        exec_env->set_storage_engine(k_engine);
 
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
         ASSERT_OK(fs::create_directories(_schema_hash_path));
@@ -228,6 +231,8 @@ public:
     }
 
 protected:
+    StorageEngine* _engine = nullptr;
+    StorageEngine* _origin_engine = nullptr;
     std::unique_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;

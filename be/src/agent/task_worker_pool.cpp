@@ -328,7 +328,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
             create_status = worker_pool_this->_env->lake_tablet_manager()->create_tablet(create_tablet_req);
         } else {
-            create_status = worker_pool_this->_env->storage_engine()->create_tablet(create_tablet_req);
+            create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
         }
         if (!create_status.ok()) {
             LOG(WARNING) << "create table failed. status: " << create_status.to_string()
@@ -476,7 +476,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
         EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(),
                                           agent_task_req.alter_tablet_req_v2, signature, task_type, &error_msgs,
                                           process_name);
-        Status sc_status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+        Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
         if (!sc_status.ok()) {
             status = STARROCKS_ERROR;
         } else {
@@ -573,7 +573,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         ExecEnv::GetInstance()->load_mem_tracker());
-        worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+        StorageEngine::instance()->execute_task(&engine_task);
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -688,7 +688,7 @@ void* TaskWorkerPool::_delete_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         ExecEnv::GetInstance()->load_mem_tracker());
-        worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+        StorageEngine::instance()->execute_task(&engine_task);
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -832,11 +832,10 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
             // If it is not greater than zero, no need to execute
             // the following clear_transaction_task() function.
             if (!clear_transaction_task_req.partition_id.empty()) {
-                worker_pool_this->_env->storage_engine()->clear_transaction_task(
-                        clear_transaction_task_req.transaction_id, clear_transaction_task_req.partition_id);
+                StorageEngine::instance()->clear_transaction_task(clear_transaction_task_req.transaction_id,
+                                                                  clear_transaction_task_req.partition_id);
             } else {
-                worker_pool_this->_env->storage_engine()->clear_transaction_task(
-                        clear_transaction_task_req.transaction_id);
+                StorageEngine::instance()->clear_transaction_task(clear_transaction_task_req.transaction_id);
             }
             LOG(INFO) << "finish to clear transaction task. signature:" << agent_task_req->signature
                       << ", txn_id: " << clear_transaction_task_req.transaction_id;
@@ -1003,7 +1002,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
             }
 
             EngineStorageMigrationTask engine_task(tablet_id, schema_hash, stores[0]);
-            Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 LOG(WARNING) << "storage media migrate failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
@@ -1059,7 +1058,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         } else {
             EngineChecksumTask engine_task(mem_tracker, check_consistency_req.tablet_id,
                                            check_consistency_req.schema_hash, check_consistency_req.version, &checksum);
-            Status res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            Status res = StorageEngine::instance()->execute_task(&engine_task);
             if (!res.ok()) {
                 LOG(WARNING) << "check consistency failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
@@ -1140,7 +1139,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
             continue;
         }
         std::vector<DataDirInfo> data_dir_infos;
-        worker_pool_this->_env->storage_engine()->get_all_data_dir_info(&data_dir_infos, true /* update */);
+        StorageEngine::instance()->get_all_data_dir_info(&data_dir_infos, true /* update */);
 
         std::map<std::string, TDisk> disks;
         for (auto& root_path_info : data_dir_infos) {

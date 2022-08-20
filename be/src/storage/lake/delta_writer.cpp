@@ -133,7 +133,7 @@ Status DeltaWriterImpl::open() {
     ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
     RETURN_IF_ERROR(_tablet_writer->open());
     _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
-    _flush_token = ExecEnv::GetInstance()->storage_engine()->memtable_flush_executor()->create_flush_token();
+    _flush_token = StorageEngine::instance()->memtable_flush_executor()->create_flush_token();
     if (_flush_token == nullptr) {
         return Status::InternalError("fail to create flush token");
     }

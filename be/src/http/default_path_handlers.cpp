@@ -235,7 +235,7 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     (*output) << tmp << "</pre>";
 #endif
     (*output) << "<pre>";
-    string stats = ExecEnv::GetInstance()->storage_engine()->update_manager()->detail_memory_stats();
+    string stats = StorageEngine::instance()->update_manager()->detail_memory_stats();
     (*output) << stats << "</pre>";
 }
 
