@@ -40,7 +40,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
@@ -60,6 +59,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -203,12 +203,7 @@ public class LoadingTaskPlanner {
 
         // 4. finalize
         for (PlanFragment fragment : fragments) {
-            try {
-                fragment.finalize(analyzer, false);
-            } catch (NotImplementedException e) {
-                LOG.info("Fragment finalize failed.{}", e.getMessage());
-                throw new UserException("Fragment finalize failed.");
-            }
+            fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
         }
         Collections.reverse(fragments);
     }
@@ -271,12 +266,7 @@ public class LoadingTaskPlanner {
 
         // 4. finalize
         for (PlanFragment fragment : fragments) {
-            try {
-                fragment.finalize(analyzer, false);
-            } catch (NotImplementedException e) {
-                LOG.info("Fragment finalize failed.{}", e.getMessage());
-                throw new UserException("Fragment finalize failed.");
-            }
+            fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
         }
         Collections.reverse(fragments);
     }

@@ -246,7 +246,6 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.RevokeImpersonateStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetUserVar;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -268,6 +267,7 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentifier;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -2799,7 +2799,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.userVariable() != null) {
             VariableExpr variableDesc = (VariableExpr) visit(context.userVariable());
             Expr expr = (Expr) visit(context.expression());
-            return new SetUserVar(variableDesc.getName(), expr);
+            return new UserVariable(variableDesc.getName(), expr);
         } else if (context.systemVariable() != null) {
             VariableExpr variableDesc = (VariableExpr) visit(context.systemVariable());
             Expr expr = (Expr) visit(context.setExprOrDefault());

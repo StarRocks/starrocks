@@ -74,6 +74,7 @@ import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
@@ -365,7 +366,7 @@ public class ExportJob implements Writable {
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
                 rowDelimiter, brokerDesc, hdfsProperties));
         try {
-            fragment.finalize(analyzer, false);
+            fragment.finalize(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
             LOG.info("Fragment finalize failed. e=", e);
             throw new UserException("Fragment finalize failed");

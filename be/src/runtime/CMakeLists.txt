@@ -79,14 +79,15 @@ set(RUNTIME_FILES
     result_queue_mgr.cpp
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
-    file_result_writer.cpp
     mysql_result_writer.cpp
+    file_result_writer.cpp
+    statistic_result_writer.cpp
+    variable_result_writer.cpp
     memory/system_allocator.cpp
     memory/chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
-    statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
