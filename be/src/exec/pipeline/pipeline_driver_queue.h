@@ -168,7 +168,7 @@ private:
     workgroup::WorkGroupDriverSchedEntity* _take_next_wg();
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
-    // Apply hard bandwidth control to non-realtime workgroups, when there are queries of the realtime workgroup.
+    // Apply hard bandwidth control to non-short-query workgroups, when there are queries of the short-query workgroup.
     bool _throttled(const workgroup::WorkGroupDriverSchedEntity* wg_entity, int64_t unaccounted_runtime_ns = 0) const;
     // _update_bandwidth_control_period resets period_end_ns and period_usage_ns, when a new period comes.
     // It is invoked when taking a task to execute or an executed task is finished.
@@ -206,15 +206,15 @@ private:
     std::atomic<int64_t> _min_vruntime_ns = std::numeric_limits<int64_t>::max();
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
 
-    // Hard bandwidth control to non-realtime workgroups.
-    // - The control period is 100ms, and the total quota of non-realtime workgroups is 100ms*(vCPUs-rt_wg.cpu_limit).
-    // - The non-realtime workgroups cannot be executed in the current period, if their usage exceeds quota.
-    // - When a new period comes, penalize the non-realtime workgroups according to the previous bandwidth usage.
+    // Hard bandwidth control to non-short-query workgroups.
+    // - The control period is 100ms, and the total quota of non-short-query workgroups is 100ms*(vCPUs-rt_wg.cpu_limit).
+    // - The non-short-query workgroups cannot be executed in the current period, if their usage exceeds quota.
+    // - When a new period comes, penalize the non-short-query workgroups according to the previous bandwidth usage.
     //     - If usage <= quota, don't penalize it.
     //     - If quota < usage <= 2*quota, set the new usage to `usage-quota`.
     //     - Otherwise, set the new usage to quota to prevent them from being executed in the new period.
-    // Whether to apply the bandwidth control is decided by whether there are queries of the realtime workgroup.
-    // - If there are queries of the realtime workgroup, apply the control.
+    // Whether to apply the bandwidth control is decided by whether there are queries of the short-query workgroup.
+    // - If there are queries of the short-query workgroup, apply the control.
     // - Otherwise, don't apply the control.
     int64_t _bandwidth_control_period_end_ns = 0;
     std::atomic<int64_t> _bandwidth_usage_ns = 0;
