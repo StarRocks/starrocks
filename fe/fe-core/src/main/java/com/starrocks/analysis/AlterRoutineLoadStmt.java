@@ -92,6 +92,10 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         this.labelName = labelName;
     }
 
+    public LabelName getLabelName() {
+        return this.getLabelName();
+    }
+
     public Map<String, String> getAnalyzedJobProperties() {
         return analyzedJobProperties;
     }
