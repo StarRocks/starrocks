@@ -39,6 +39,7 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -277,6 +278,9 @@ public class ConnectContext {
 
     public void modifyUserVariable(SetVar setVar) {
         UserVariable userDefineVariable = (UserVariable) setVar;
+        if (userVariables.size() > 1024 && !userVariables.containsKey(setVar.getVariable())) {
+            throw new SemanticException("User variable exceeds the maximum limit of 1024");
+        }
         userVariables.put(setVar.getVariable(), userDefineVariable);
     }
 
