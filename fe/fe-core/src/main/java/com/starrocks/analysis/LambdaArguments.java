@@ -1,5 +1,6 @@
 package com.starrocks.analysis;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
@@ -15,10 +16,10 @@ public class LambdaArguments extends Expr {
     }
 
     List<String> names;
-    List<PlaceHolderExpr> arguments;
+    List<PlaceHolderExpr> arguments = Lists.newArrayList();
 
     public void putArguments(List<PlaceHolderExpr> arguments) {
-        this.arguments = arguments;
+        this.arguments.addAll(arguments);
     }
 
     public List<PlaceHolderExpr> getArguments() {

@@ -3,6 +3,7 @@
 #include "exprs/vectorized/lambda_function.h"
 
 #include <iostream>
+#include <string>
 namespace starrocks::vectorized {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false) {}
 
@@ -13,7 +14,6 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     for (int i = 1; i < child_num; ++i) {
         get_child(i)->get_slot_ids(&arguments_ids);
     }
-
     DCHECK(child_num - 1 == arguments_ids.size());
 
     // get slot ids from the lambda expression
@@ -44,21 +44,25 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     }
 
     // remove useless arguments and children
-    int i = 0;
-    for (auto it = _children.begin(); it != _children.end(); i++) {
+    DCHECK(_children.size() - 1 == arguments_ids.size());
+    auto it = _children.begin();
+    it++; // children[0] is the lambda expression.
+    for (int i = 0; it != _children.end(); i++) {
         if (!argument_mask[arguments_ids[i]]) {
-            _children.erase(it);
+            it = _children.erase(it);
         } else {
             it++;
         }
     }
     for (auto it = arguments_ids.begin(); it != arguments_ids.end();) {
         if (!argument_mask[*it]) {
-            arguments_ids.erase(it);
+            it = arguments_ids.erase(it);
         } else {
             it++;
         }
     }
+
+    DCHECK(_children.size() - 1 == arguments_ids.size());
     return Status::OK();
 }
 

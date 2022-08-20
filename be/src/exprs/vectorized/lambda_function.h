@@ -41,7 +41,6 @@ public:
 
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope);
 
-
 private:
     std::vector<SlotId> captured_slot_ids;
     std::vector<SlotId> arguments_ids;

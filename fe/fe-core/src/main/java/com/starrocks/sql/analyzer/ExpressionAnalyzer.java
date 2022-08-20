@@ -276,6 +276,7 @@ public class ExpressionAnalyzer {
             Scope lambdaScope = scope.getLambdaScope();
             ExpressionAnalyzer.analyzeExpression(node.getChild(1), this.analyzeState, lambdaScope, this.session);
             node.setType(Type.FUNCTION);
+            scope.clearLambdaArguments();
             return null;
         }
 

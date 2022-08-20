@@ -20,6 +20,5 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
-
 };
 } // namespace starrocks::vectorized

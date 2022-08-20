@@ -82,4 +82,22 @@ public class AnalyzeExprTest {
         statementBase = analyzeSuccess(sql);
         Assert.assertTrue(AST2SQL.toString(statementBase).contains("((((v1 * v1) / v1) % v1) + v1) - (v1 DIV v1)"));
     }
+
+    @Test
+    public void testLambdaFunction() {
+        analyzeSuccess("select array_map(x -> x,[])");
+        analyzeSuccess("select array_map(x -> x,[null])");
+        analyzeSuccess("select array_map(x -> x,[1])");
+        analyzeSuccess("select array_map(x -> x is null,null)");
+        analyzeSuccess("select array_map(x -> array_map(y-> array_map(z -> z + array_length(x),y),x), [[[1,23],[4,3,2]],[[3]]])");
+        analyzeSuccess("select array_map(x -> x is null,[null]),array_map(x -> x is null,null)");
+        analyzeSuccess("select array_map((x,y) -> x + y, [], [])");
+        analyzeSuccess("select array_map((x,y) -> x, [], [])");
+
+        analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
+        analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
+        analyzeFail("select array_map([1], x -> x)");
+        analyzeFail("select array_map(x -> z,[1])");
+        analyzeFail("select array_map(x -> x,[1],null)");
+    }
 }

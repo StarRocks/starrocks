@@ -21,7 +21,7 @@ namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
 bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
-    if(array1->size() != array2->size()) {
+    if (array1->size() != array2->size()) {
         return false;
     }
     auto data1 = array1->get_data();
@@ -67,8 +67,8 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
         }
         DCHECK(column->is_array());
         auto cur_array = std::dynamic_pointer_cast<ArrayColumn>(column);
-        if(input_array == nullptr) {
-            input_array =  cur_array;
+        if (input_array == nullptr) {
+            input_array = cur_array;
         } else {
             if (!offsets_equal(cur_array->offsets_column(), input_array->offsets_column())) {
                 throw std::runtime_error("Input array element's size is not equal in array_map().");
