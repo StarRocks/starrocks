@@ -50,15 +50,9 @@ public class WorkGroupMgr implements Writable {
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/WorkGroupMgr.java
-    // Record the current realtime resource group.
-    // There can be only one realtime resource group.
-    private WorkGroup rtResourceGroup = null;
-=======
     // Record the current short_query resource group.
-    // There can be only one short_query resource group.
-    private ResourceGroup shortQueryResourceGroup = null;
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/main/java/com/starrocks/catalog/ResourceGroupMgr.java
+    // There can be only one realtime resource group.
+    private WorkGroup shortQueryResourceGroup = null;
 
     private Map<Long, WorkGroupClassifier> classifierMap = new HashMap<>();
     private List<TWorkGroupOp> workGroupOps = new ArrayList<>();
@@ -101,11 +95,7 @@ public class WorkGroupMgr implements Writable {
                 }
             }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/WorkGroupMgr.java
-            if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME && rtResourceGroup != null) {
-=======
-            if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY && shortQueryResourceGroup != null) {
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/main/java/com/starrocks/catalog/ResourceGroupMgr.java
+            if (wg.getWorkGroupType() == TWorkGroupType.WG_SHORT_QUERY && shortQueryResourceGroup != null) {
                 throw new DdlException(
                         String.format("There can be only one short_query RESOURCE_GROUP (%s)",
                                 shortQueryResourceGroup.getName()));
@@ -383,13 +373,8 @@ public class WorkGroupMgr implements Writable {
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/WorkGroupMgr.java
-        if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME) {
-            rtResourceGroup = null;
-=======
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+        if (wg.getWorkGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = null;
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/main/java/com/starrocks/catalog/ResourceGroupMgr.java
         }
     }
 
@@ -399,13 +384,8 @@ public class WorkGroupMgr implements Writable {
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
         }
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/WorkGroupMgr.java
-        if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME) {
-            rtResourceGroup = wg;
-=======
         if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/main/java/com/starrocks/catalog/ResourceGroupMgr.java
         }
     }
 

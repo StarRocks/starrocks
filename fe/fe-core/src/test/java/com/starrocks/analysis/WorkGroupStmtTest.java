@@ -267,13 +267,8 @@ public class WorkGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'illegal-type'" +
                 ");";
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/analysis/WorkGroupStmtTest.java
-        Assert.assertThrows("Only support 'normal' and 'realtime' type",
-                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(illegalTypeSql));
-=======
         Assert.assertThrows("Only support 'normal' and 'short_query' type",
-                SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalTypeSql));
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/test/java/com/starrocks/analysis/ResourceGroupStmtTest.java
+                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(illegalTypeSql));
 
         String illegalDefaultTypeSql = "create resource group rg_unknown\n" +
                 "to\n" +
@@ -285,13 +280,8 @@ public class WorkGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'default'" +
                 ");";
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/analysis/WorkGroupStmtTest.java
-        Assert.assertThrows("Only support 'normal' and 'realtime' type",
-                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(illegalDefaultTypeSql));
-=======
         Assert.assertThrows("Only support 'normal' and 'short_query' type",
-                SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalDefaultTypeSql));
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/test/java/com/starrocks/analysis/ResourceGroupStmtTest.java
+                SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(illegalDefaultTypeSql));
     }
 
     @Test
@@ -640,15 +630,9 @@ public class WorkGroupStmtTest {
                 SemanticException.class, () -> starRocksAssert.executeWorkGroupDdlSql(alterRg1ToNormalTypeSql));
 
         // Create normal rg2 and fail to replace it with realtime rg2.
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/analysis/WorkGroupStmtTest.java
         starRocksAssert.executeWorkGroupDdlSql(createNormalRg2ReplaceSql);
-        Assert.assertThrows("There can be only one realtime RESOURCE_GROUP (rg1)",
-                DdlException.class, () -> starRocksAssert.executeWorkGroupDdlSql(createRtRg2ReplaceSql));
-=======
-        starRocksAssert.executeResourceGroupDdlSql(createNormalRg2ReplaceSql);
         Assert.assertThrows("There can be only one short_query RESOURCE_GROUP (rg1)",
-                DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createRtRg2ReplaceSql));
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/test/java/com/starrocks/analysis/ResourceGroupStmtTest.java
+                DdlException.class, () -> starRocksAssert.executeWorkGroupDdlSql(createRtRg2ReplaceSql));
 
         // Replace realtime rg1 with normal rg1, and create realtime rg2.
         starRocksAssert.executeWorkGroupDdlSql(createNormalRg1ReplaceSql);

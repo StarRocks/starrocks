@@ -190,17 +190,10 @@ public class WorkGroupAnalyzer {
             }
             if (key.equalsIgnoreCase(WorkGroup.WORKGROUP_TYPE)) {
                 try {
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/WorkGroupAnalyzer.java
                     workgroup.setWorkGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
                     if (workgroup.getWorkGroupType() != TWorkGroupType.WG_NORMAL &&
-                            workgroup.getWorkGroupType() != TWorkGroupType.WG_REALTIME) {
-                        throw new SemanticException("Only support 'normal' and 'realtime' type");
-=======
-                    resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
-                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
+                            workgroup.getWorkGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
                         throw new SemanticException("Only support 'normal' and 'short_query' type");
->>>>>>> 5c3306b4e ([Enhancement] rename realtime resource group to short_query (#10222)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/ResourceGroupAnalyzer.java
                     }
                 } catch (Exception ignored) {
                     throw new SemanticException("Only support 'normal' and 'short_query' type");
