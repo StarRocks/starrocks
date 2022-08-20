@@ -437,6 +437,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::TopNNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::CROSS_JOIN_NODE:
+    case TPlanNodeType::NESTLOOP_JOIN_NODE:
         *node = pool->add(new vectorized::CrossJoinNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::UNION_NODE:

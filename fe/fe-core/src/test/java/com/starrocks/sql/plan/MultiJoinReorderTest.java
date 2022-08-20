@@ -377,11 +377,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
                 "     rollup: t2\n" +
-                "     tabletRatio=3/3\n" +
-                "     tabletList=10024,10026,10028\n" +
-                "     cardinality=100000\n" +
-                "     avgRowSize=1.0\n" +
-                "     numNodes=0\n"));
+                "     tabletRatio=3/3\n"));
 
         // Right sub join tree (a)
         assertContains(planFragment, "  STREAM DATA SINK\n" +
