@@ -384,6 +384,13 @@ Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     return st.is_not_found() ? Status::OK() : st;
 }
 
+Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
+    auto location = txn_vlog_location(tablet_id, version);
+    erase_metacache(location);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
 Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
     erase_metacache(segment_name);
     auto st = fs::delete_file(segment_location(tablet_id, segment_name));
@@ -535,6 +542,27 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     return Status::OK();
 }
 
+static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change, TabletMetadata* metadata) {
+    if (op_schema_change.rowsets_size() == 0) {
+        return Status::OK();
+    }
+
+    for (const auto& rowset : op_schema_change.rowsets()) {
+        if (rowset.num_rows() > 0 || rowset.has_delete_predicate()) {
+            auto new_rowset = metadata->add_rowsets();
+            new_rowset->CopyFrom(rowset);
+            new_rowset->set_id(metadata->next_rowset_id());
+            if (new_rowset->num_rows() > 0) {
+                metadata->set_next_rowset_id(metadata->next_rowset_id() + new_rowset->segments_size());
+            } else {
+                // delete
+                metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     if (log.has_op_write()) {
         RETURN_IF_ERROR(apply_write_log(log.op_write(), metadata));
@@ -545,7 +573,7 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     }
 
     if (log.has_op_schema_change()) {
-        return Status::NotSupported("does not support apply schema change log yet");
+        RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change(), metadata));
     }
     return Status::OK();
 }
@@ -570,22 +598,52 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
     new_metadata->set_version(new_version);
 
     // Apply txn logs
+    int64_t alter_version = -1;
     for (int i = 0; i < txns_size; i++) {
-        auto txnid = txns[i];
-        auto txnlog = tablet->get_txn_log(txnid);
-        if (txnlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
+        auto txn_id = txns[i];
+        auto txn_log_st = tablet->get_txn_log(txn_id);
+        if (txn_log_st.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
             // txn log does not exist but the new version metadata has been generated, maybe
             // this is a duplicated publish version request.
             return Status::OK();
-        } else if (!txnlog.ok()) {
-            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txnid) << ": " << txnlog.status();
-            return txnlog.status();
+        } else if (!txn_log_st.ok()) {
+            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
+            return txn_log_st.status();
         }
 
-        auto st = apply_txn_log(**txnlog, new_metadata.get());
+        auto& txn_log = txn_log_st.value();
+        if (txn_log->has_op_schema_change()) {
+            alter_version = txn_log->op_schema_change().alter_version();
+        }
+
+        auto st = apply_txn_log(*txn_log, new_metadata.get());
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txnid) << ": " << st;
+            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
             return st;
+        }
+    }
+
+    // Apply vtxn logs for schema change
+    // Should firstly apply schema change txn log, then apply txn version logs,
+    // because the rowsets in txn log are older.
+    if (alter_version != -1 && alter_version + 1 < new_version) {
+        DCHECK(base_version == 1 && txns_size == 1);
+        for (int64_t v = alter_version + 1; v < new_version; ++v) {
+            auto txn_vlog = tablet->get_txn_vlog(v);
+            if (txn_vlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
+                // txn log does not exist but the new version metadata has been generated, maybe
+                // this is a duplicated publish version request.
+                return Status::OK();
+            } else if (!txn_vlog.ok()) {
+                LOG(WARNING) << "Fail to get " << tablet->txn_vlog_location(v) << ": " << txn_vlog.status();
+                return txn_vlog.status();
+            }
+
+            auto st = apply_txn_log(**txn_vlog, new_metadata.get());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to apply " << tablet->txn_vlog_location(v) << ": " << st;
+                return st;
+            }
         }
     }
 
@@ -600,6 +658,13 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         auto txn_id = txns[i];
         auto st = tablet->delete_txn_log(txn_id);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
+    }
+    // Delete vtxn logs
+    if (alter_version != -1 && alter_version + 1 < new_version) {
+        for (int64_t v = alter_version + 1; v < new_version; ++v) {
+            auto st = tablet->delete_txn_vlog(v);
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
+        }
     }
     return Status::OK();
 }
@@ -634,6 +699,14 @@ void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_s
             for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
                 auto st = delete_segment(tablet_id, segment);
                 LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+        }
+        if (txn_log->has_op_schema_change() && !txn_log->op_schema_change().linked_segment()) {
+            for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
+                for (const auto& segment : rowset.segments()) {
+                    auto st = delete_segment(tablet_id, segment);
+                    LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+                }
             }
         }
         auto st = delete_txn_log(tablet_id, txn_id);
