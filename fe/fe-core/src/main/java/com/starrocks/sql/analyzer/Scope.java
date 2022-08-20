@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotRef;
@@ -50,6 +50,10 @@ public class Scope {
 
     public void putLambdaArgument(PlaceHolderExpr expr) {
         lambdaInputs.add(expr);
+    }
+
+    public void clearLambdaArguments() {
+        lambdaInputs.clear();
     }
 
     public List<PlaceHolderExpr> getLambdaInputs() {

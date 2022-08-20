@@ -103,17 +103,16 @@ public:
         lambda_func = _objpool.add(new LambdaFunction(tlambda_func));
         ColumnRef* col3 = _objpool.add(new ColumnRef(slot_ref));
         ColumnRef* col4 = _objpool.add(new ColumnRef(slot_ref));
-        lambda_func->add_child(col3);
         expr_node.fn.name.function_name = "is_null_pred";
         auto* is_null = _objpool.add(VectorizedIsNullPredicateFactory::from_thrift(expr_node));
         is_null->add_child(col4);
         lambda_func->add_child(is_null);
+        lambda_func->add_child(col3);
         _lambda_func.push_back(lambda_func);
 
         // x -> x + a (captured columns)
         lambda_func = _objpool.add(new LambdaFunction(tlambda_func));
         ColumnRef* col5 = _objpool.add(new ColumnRef(slot_ref));
-        lambda_func->add_child(col5);
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.type = gen_type_desc(TPrimitiveType::INT);
         auto* add_expr = _objpool.add(VectorizedArithmeticExprFactory::from_thrift(expr_node));
@@ -123,6 +122,7 @@ public:
         add_expr->_children.push_back(col6);
         add_expr->_children.push_back(col7);
         lambda_func->add_child(add_expr);
+        lambda_func->add_child(col5);
         _lambda_func.push_back(lambda_func);
     }
 
@@ -260,7 +260,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test) {
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
-            if (i == 0) { // array_map(x->xxx,nullR)
+            if (i == 0) { // array_map(x->xxx,null)
                 EXPECT_EQ(1, result->size());
                 ASSERT_TRUE(result->is_null(0));
             } else if (i == 1 && j == 0) { // array_map(x -> x, array<int>)
