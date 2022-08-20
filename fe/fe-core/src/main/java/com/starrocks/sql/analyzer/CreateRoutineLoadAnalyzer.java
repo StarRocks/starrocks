@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.LabelName;
@@ -33,6 +34,8 @@ public class CreateRoutineLoadAnalyzer {
         if (Strings.isNullOrEmpty(statement.getTableName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR);
         }
+        Preconditions.checkArgument(context.getDatabase().equalsIgnoreCase(dbName),
+                "session's dbname not equal lable's dbname", context.getDatabase(), dbName);
         statement.setDBName(dbName);
         statement.setName(label.getLabelName());
         try {
