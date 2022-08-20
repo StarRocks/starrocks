@@ -68,7 +68,7 @@ TEST_F(ParquetSchemaTest, OnlyLeafType) {
     ASSERT_TRUE(st.ok());
 
     {
-        auto idx = desc.get_column_index("col1");
+        auto idx = desc.get_column_index("col1", false);
         ASSERT_EQ(0, idx);
         auto field = desc.get_stored_column_by_idx(0);
         ASSERT_STREQ("col1", field->name.c_str());
@@ -79,7 +79,7 @@ TEST_F(ParquetSchemaTest, OnlyLeafType) {
     }
 
     {
-        auto idx = desc.get_column_index("col2");
+        auto idx = desc.get_column_index("col2", false);
         ASSERT_EQ(1, idx);
         auto field = desc.get_stored_column_by_idx(1);
         ASSERT_STREQ("col2", field->name.c_str());
