@@ -922,11 +922,14 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
         ASSERT_EQ(version, _tablet->updates()->max_version());
         ASSERT_EQ(version, _tablet->updates()->version_history_count());
     }
-    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size()));
+    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size() + 1));
 
     // Ensure the persistent meta is correct.
     auto max_version = rowsets.size() + 1;
     auto tablet1 = load_same_tablet_from_store(_tablet_meta_mem_tracker.get(), _tablet);
+    // `enable_persistent_index` is not persistent in this case
+    // so we reset the `enable_persistent_index` after load
+    tablet1->set_enable_persistent_index(enable_persistent_index);
     EXPECT_EQ(max_version, tablet1->updates()->max_version());
     EXPECT_EQ(max_version, tablet1->updates()->version_history_count());
     for (int i = 2; i <= max_version; i++) {
