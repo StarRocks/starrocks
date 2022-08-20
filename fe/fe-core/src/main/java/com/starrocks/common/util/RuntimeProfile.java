@@ -683,7 +683,7 @@ public class RuntimeProfile {
                 updateMinMax = true;
             } else {
                 // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-                double diff = maxValue - minValue;
+                double diff = (double) (maxValue - minValue);
                 if (Counter.isAverageType(counter0.getType())) {
                     if (diff > 5000000L && diff > mergedValue / 5.0) {
                         updateMinMax = true;
