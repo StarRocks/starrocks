@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
@@ -424,7 +425,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
 
     std::unordered_set<std::string> known_column_names;
-    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType());
+    OrcChunkReader::build_column_name_set(&known_column_names, _scanner_params.hive_column_names, reader->getType(),
+                                          _scanner_params.case_sensitive);
     _scanner_ctx.set_columns_from_file(known_column_names);
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
@@ -438,8 +440,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     int src_slot_index = 0;
     bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
     for (const auto& it : _scanner_params.materialize_slots) {
-        const std::string& name = it->col_name();
-        if (known_column_names.find(name) == known_column_names.end()) continue;
+        auto col_name = OrcChunkReader::format_column_name(it->col_name(), _scanner_params.case_sensitive);
+        if (known_column_names.find(col_name) == known_column_names.end()) continue;
         if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
@@ -473,6 +475,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
     }
     _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
+    _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);
     if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
