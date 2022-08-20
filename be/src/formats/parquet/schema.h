@@ -68,7 +68,7 @@ public:
 
     std::string debug_string() const;
 
-    int get_column_index(const std::string& column) const;
+    int get_column_index(const std::string& column, bool case_sensitive) const;
     const ParquetField* get_stored_column_by_idx(int idx) const { return &_fields[idx]; }
 
     const ParquetField* resolve_by_name(const std::string& name) const {

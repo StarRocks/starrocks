@@ -1135,4 +1135,86 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
     }
 }
 
+/**
+ *
+File Version: 0.12 with ORC_CPP_ORIGINAL
+Rows: 1
+Compression: ZLIB
+Compression size: 65536
+Type: struct<Col_Upper_Int:int,Col_Upper_Char:string>
+
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 1 hasNull: false
+    Column 1: count: 1 hasNull: false min: 888 max: 888 sum: 888
+    Column 2: count: 1 hasNull: false min: nihao max: nihao sum: 5
+
+File Statistics:
+  Column 0: count: 1 hasNull: false
+  Column 1: count: 1 hasNull: false min: 888 max: 888 sum: 888
+  Column 2: count: 1 hasNull: false min: nihao max: nihao sum: 5
+
+Stripes:
+  Stripe: offset: 3 data: 36 rows: 1 tail: 63 index: 77
+    Stream: column 0 section ROW_INDEX start: 3 length 17
+    Stream: column 1 section ROW_INDEX start: 20 length 29
+    Stream: column 2 section ROW_INDEX start: 49 length 31
+    Stream: column 0 section PRESENT start: 80 length 5
+    Stream: column 1 section PRESENT start: 85 length 5
+    Stream: column 1 section DATA start: 90 length 7
+    Stream: column 2 section PRESENT start: 97 length 5
+    Stream: column 2 section LENGTH start: 102 length 6
+    Stream: column 2 section DATA start: 108 length 8
+    Encoding column 0: DIRECT
+    Encoding column 1: DIRECT_V2
+    Encoding column 2: DIRECT_V2
+
+File length: 375 bytes
+Padding length: 0 bytes
+Padding ratio: 0%
+
+[(888, 'nihao')]
+ */
+TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
+    SlotDesc slot_descs[] = {
+            {"col_upper_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"col_upper_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
+            {""},
+    };
+
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_upper_case.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 1);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        ColumnPtr int_col = result->get_column_by_slot_id(0);
+        int i = int_col->get(0).get_int32();
+        EXPECT_EQ(i, 888);
+
+        ColumnPtr char_col = result->get_column_by_slot_id(1);
+        Slice s = char_col->get(0).get_slice();
+        std::string res(s.data, s.size);
+        EXPECT_EQ(res, "nihao");
+
+    }
+}
+
 } // namespace starrocks::vectorized
