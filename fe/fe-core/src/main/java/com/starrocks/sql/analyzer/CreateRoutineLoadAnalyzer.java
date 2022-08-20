@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.LabelName;
@@ -16,6 +15,7 @@ import org.apache.logging.log4j.Logger;
 public class CreateRoutineLoadAnalyzer {
 
     private static final Logger LOG = LogManager.getLogger(CreateRoutineLoadAnalyzer.class);
+    private static final String NAME_TYPE = "ROUTINE LOAD NAME";
 
     private CreateRoutineLoadAnalyzer() {
         throw new IllegalStateException("creating an instance is illegal");
@@ -34,11 +34,10 @@ public class CreateRoutineLoadAnalyzer {
         if (Strings.isNullOrEmpty(statement.getTableName())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR);
         }
-        Preconditions.checkArgument(context.getDatabase().equalsIgnoreCase(dbName),
-                "session's dbname not equal lable's dbname", context.getDatabase(), dbName);
         statement.setDBName(dbName);
         statement.setName(label.getLabelName());
         try {
+            FeNameFormat.checkCommonName(NAME_TYPE, label.getLabelName());
             FeNameFormat.checkLabel(label.getLabelName());
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
