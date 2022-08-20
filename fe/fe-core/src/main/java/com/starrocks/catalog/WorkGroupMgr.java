@@ -50,9 +50,9 @@ public class WorkGroupMgr implements Writable {
     private Map<String, WorkGroup> workGroupMap = new HashMap<>();
     private Map<Long, WorkGroup> id2WorkGroupMap = new HashMap<>();
 
-    // Record the current realtime resource group.
+    // Record the current short_query resource group.
     // There can be only one realtime resource group.
-    private WorkGroup rtResourceGroup = null;
+    private WorkGroup shortQueryResourceGroup = null;
 
     private Map<Long, WorkGroupClassifier> classifierMap = new HashMap<>();
     private List<TWorkGroupOp> workGroupOps = new ArrayList<>();
@@ -95,9 +95,10 @@ public class WorkGroupMgr implements Writable {
                 }
             }
 
-            if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME && rtResourceGroup != null) {
+            if (wg.getWorkGroupType() == TWorkGroupType.WG_SHORT_QUERY && shortQueryResourceGroup != null) {
                 throw new DdlException(
-                        String.format("There can be only one realtime RESOURCE_GROUP (%s)", rtResourceGroup.getName()));
+                        String.format("There can be only one short_query RESOURCE_GROUP (%s)",
+                                shortQueryResourceGroup.getName()));
             }
 
             wg.setId(globalStateMgr.getCurrentState().getNextId());
@@ -372,8 +373,8 @@ public class WorkGroupMgr implements Writable {
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
-        if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME) {
-            rtResourceGroup = null;
+        if (wg.getWorkGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+            shortQueryResourceGroup = null;
         }
     }
 
@@ -383,8 +384,8 @@ public class WorkGroupMgr implements Writable {
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
         }
-        if (wg.getWorkGroupType() == TWorkGroupType.WG_REALTIME) {
-            rtResourceGroup = wg;
+        if (wg.getWorkGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+            shortQueryResourceGroup = wg;
         }
     }
 

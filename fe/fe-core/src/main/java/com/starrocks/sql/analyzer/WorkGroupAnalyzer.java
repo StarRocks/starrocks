@@ -192,11 +192,11 @@ public class WorkGroupAnalyzer {
                 try {
                     workgroup.setWorkGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
                     if (workgroup.getWorkGroupType() != TWorkGroupType.WG_NORMAL &&
-                            workgroup.getWorkGroupType() != TWorkGroupType.WG_REALTIME) {
-                        throw new SemanticException("Only support 'normal' and 'realtime' type");
+                            workgroup.getWorkGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
+                        throw new SemanticException("Only support 'normal' and 'short_query' type");
                     }
                 } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' and 'realtime' type");
+                    throw new SemanticException("Only support 'normal' and 'short_query' type");
                 }
                 continue;
             }
