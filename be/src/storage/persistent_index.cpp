@@ -1575,14 +1575,14 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                 status = Status::InternalError("different format version");
             } else {
                 status = load(index_meta);
+            }
+            if (status.ok()) {
                 LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id()
                           << " version:" << version.to_string() << " size: " << _size
                           << " l0_size: " << (_l0 ? _l0->size() : 0) << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
                           << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
                           << " memory: " << memory_usage() << " status: " << status.to_string()
                           << " time:" << timer.elapsed_time() / 1000000 << "ms";
-            }
-            if (status.ok()) {
                 return status;
             } else {
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet->tablet_id()
