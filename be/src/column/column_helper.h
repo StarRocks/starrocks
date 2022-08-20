@@ -40,6 +40,9 @@ public:
     static void merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);
 
+    // Like merge_filters but use OR operator to merge them
+    static void or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected);
+    static void or_two_filters(size_t count, uint8_t* __restrict filter, const uint8_t* __restrict selected);
     static size_t count_nulls(const ColumnPtr& col);
 
     /**

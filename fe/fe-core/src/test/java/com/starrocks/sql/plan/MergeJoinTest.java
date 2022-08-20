@@ -30,14 +30,6 @@ public class MergeJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testCorssJoinWithPredicate() throws Exception {
-        PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("merge");
-        String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
-        String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 1: v1 = 2");
-    }
-
-    @Test
     public void testJoinWithAutoMode() throws Exception {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";

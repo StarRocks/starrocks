@@ -489,7 +489,7 @@ private:
                             NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
                     (*chunk)->append_column(std::move(dest_column), slot->id());
                 } else {
-                    DCHECK_EQ(column->is_nullable(), to_nullable);
+                    // DCHECK_EQ(column->is_nullable(), to_nullable);
                     (*chunk)->append_column(std::move(column), slot->id());
                 }
             } else {
