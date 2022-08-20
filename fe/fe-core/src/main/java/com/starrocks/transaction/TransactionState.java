@@ -641,7 +641,7 @@ public class TransactionState implements Writable {
                 sb.append(", finish txn cost: ").append(finishTime - publishVersionFinishTime).append("ms");
             }
         }
-        if (finishTime > commitTime) {
+        if (finishTime > commitTime && commitTime > 0) {
             sb.append(", publish total cost: ").append(finishTime - commitTime).append("ms");
         }
         if (finishTime > prepareTime) {
