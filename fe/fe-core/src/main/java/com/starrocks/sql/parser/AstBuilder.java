@@ -1596,12 +1596,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateRoutineLoadStatement(StarRocksParser.CreateRoutineLoadStatementContext context) {
-        String database = context.db.getText();
+        QualifiedName dbName = null;
+        if (context.db != null) {
+            dbName = getQualifiedName(context.db);
+        }
+
+        QualifiedName tableName = null;
+        if (context.table != null) {
+            tableName = getQualifiedName(context.table);
+        }
+
         String name = context.name.getText();
-        String tableName = context.table.getText();
 
         List<ParseNode> loadPropertyList = new ArrayList<>();
         List<StarRocksParser.LoadPropertiesContext> loadPropertiesContexts = context.loadProperties();
+        Preconditions.checkNotNull(loadPropertiesContexts, "load properties is null");
         for (StarRocksParser.LoadPropertiesContext loadPropertiesContext : loadPropertiesContexts) {
             if (loadPropertiesContext.string() != null) {
                 String literal = ((StringLiteral) visit(loadPropertiesContext.string())).getValue();
@@ -1654,8 +1663,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 dataSourceProperties.put(property.getKey(), property.getValue());
             }
         }
-        return new CreateRoutineLoadStmt(new LabelName(database, name),
-                tableName, loadPropertyList, jobProperties, typeName, dataSourceProperties);
+        return new CreateRoutineLoadStmt(new LabelName(dbName == null ? null : dbName.toString(), name),
+                tableName == null ? null : tableName.toString(), loadPropertyList, jobProperties, typeName, dataSourceProperties);
     }
 
     @Override

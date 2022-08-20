@@ -89,6 +89,16 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testLoadPropertiesContexts() {
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1 PROPERTIES( \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"20\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Asia/Shanghai\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n" + "\"kafka_topic\" = \"topictest\"\n" + ");";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assert.assertNotNull(createRoutineLoadStmt.getRoutineLoadDesc());
+        Assert.assertEquals(0, createRoutineLoadStmt.getLoadPropertyList().size());
+    }
+
+    @Test
     public void testAnalyzeWithDuplicateProperty() throws UserException {
         String jobName = "job1";
         String dbName = "db1";
