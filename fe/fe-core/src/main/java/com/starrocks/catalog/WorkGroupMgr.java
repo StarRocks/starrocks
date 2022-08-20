@@ -384,7 +384,7 @@ public class WorkGroupMgr implements Writable {
         for (WorkGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
         }
-        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+        if (wg.getWorkGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
             shortQueryResourceGroup = wg;
         }
     }
