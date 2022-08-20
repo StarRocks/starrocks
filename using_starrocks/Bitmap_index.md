@@ -83,7 +83,7 @@ DROP INDEX index_name ON [db_name.]table_name;
 
 假设表`table1`中有一列名为`Platform`。如下图所示，该列的取值情况有 2 种：`Android`和`Ios`。`Platform`列不是前缀索引列，如果想要提高该列的查询效率即可为该列创建 bitmap 索引。
 
-![figure1](/assets/3.6.1-3.png)
+![figure1](/assets/3.6.1-2.png)
 
 执行如下命令为`Platform` 列创建 bitmap 索引。
 
@@ -94,9 +94,9 @@ CREATE INDEX index1 ON table1 (Platform) USING BITMAP COMMENT 'index1';
 执行命令后，bitmap 索引生成的过程如下：
 
 1. 构建字典：StarRocks 根据 `Platform` 列的取值构建一个字典，将 `Android` 和 `Ios` 分别映射为 INT 类型的编码值：`0` 和 `1`。
-2. 生成索引：StarRocks 根据字典的编码值生成 bitmap。因为`Android`出现在第 1 行、第 2 行和第 3 行，所以`Android`的 bitmap 是`0111`；`Ios`出现在第 4 行，所以`Ios`的 bitmap 是`1000`。
+2. 生成索引：StarRocks 根据字典的编码值生成 bitmap。因为`Android`出现在第 1 行、第 2 行和第 3 行，所以`Android`的 bitmap 是`1110`；`Ios`出现在第 4 行，所以`Ios`的 bitmap 是`0001`。
 
-如果执行一个 SQL 查询`select xxx from table where Platform = iOS`，那么 StarRocks 会先查找字典，得到`Ios`的编码值是`1`，然后再去查找 bitmap，得到`Ios`对应的 bitmap 是 `1000`，也就是说只有第 4 行数据符合查询条件。那么 StarRocks 就会跳过前 3 行，只读取第 4 行数据。
+如果执行一个 SQL 查询`select xxx from table where Platform = Ios`，那么 StarRocks 会先查找字典，得到`Ios`的编码值是`1`，然后再去查找 bitmap，得到`Ios`对应的 bitmap 是 `0001`，也就是说只有第 4 行数据符合查询条件。那么 StarRocks 就会跳过前 3 行，只读取第 4 行数据。
 
 ### **多个非前缀索引列查询**
 
@@ -107,7 +107,7 @@ CREATE INDEX index1 ON table1 (Platform) USING BITMAP COMMENT 'index1';
 
 这两列均不是前缀索引列，如果想要提高这两列的查询效率即可为每一列创建 bitmap 索引。
 
-![figure2](/assets/3.6.1-2.png)
+![figure2](/assets/3.6.1-3.png)
 
 执行如下命令为`Platform`列创建 bitmap 索引。
 
@@ -123,11 +123,11 @@ CREATE INDEX index2 ON table1 (Producer) USING BITMAP COMMENT 'index2';
 
 以上两个命令执行后，StarRocks 会为`Platform`和`Producer`列分别构建一个字典，然后再根据字典生成 bitmap。
 
-- `Platform`列：`Android`的 bitmap 为 `0111`；`Ios`的 bitmap 为 `1000`。
-- `Producer`列： `P1`的 bitmap 为 `0101`；`P2`的 bitmap 为`0010`；`P3`的 bitmap 为 `1000`。
+- `Platform`列：`Android`的 bitmap 为 `1110`；`Ios`的 bitmap 为 `0001`。
+- `Producer`列： `P1`的 bitmap 为 `1010`；`P2`的 bitmap 为`0100`；`P3`的 bitmap 为 `0001`。
 
 如果执行一个 SQL 查询 `select xxx from table where Platform = Android and Producer = P1`，那么：
 
-1. StarRocks 会同时查找`Platform` 和`Producer`的字典，得到`Android`的编码值为`0`，对应的 bitmap 为`0111`；`P1`的编码值为`0`，对应的 bitmap 为`0101`。
-2. 因为`Platform = Android`和`Producer = P1` 这两个查询条件是 and 关系，所以 StarRocks 会对两个 bitmap 进行位运算 `0111 & 0101`，得到最终结果`0101`。
-3. 根据最终结果，StarRocks 只读取第 1 行和第 3 行数据，不会读取所有数据
+1. StarRocks 会同时查找`Platform` 和`Producer`的字典，得到`Android`的编码值为`0`，对应的 bitmap 为`1110`；`P1`的编码值为`0`，对应的 bitmap 为`1010`。
+2. 因为`Platform = Android`和`Producer = P1` 这两个查询条件是 and 关系，所以 StarRocks 会对两个 bitmap 进行位运算 `1110 & 1010`，得到最终结果`1010`。
+3. 根据最终结果，StarRocks 只读取第 1 行和第 3 行数据，不会读取所有数据。
