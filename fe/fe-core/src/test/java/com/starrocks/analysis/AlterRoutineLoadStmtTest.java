@@ -94,6 +94,16 @@ public class AlterRoutineLoadStmtTest {
     }
 
     @Test
+    public void testLoadPropertiesContexts() {
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1 PROPERTIES( \"desired_concurrent_number\"=\"3\",\n" + "    \"max_batch_interval\" = \"20\",\n" + "    \"strict_mode\" = \"false\",\n" + "    \"timezone\" = \"Asia/Shanghai\"\n" + ")\n" + "FROM KAFKA\n" + "(\n" + "    \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n" + "\"kafka_topic\" = \"topictest\"\n" + ");";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        AlterRoutineLoadStmt alterRoutineLoadStmt = (AlterRoutineLoadStmt)stmts.get(0);
+        AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
+        Assert.assertNotNull(alterRoutineLoadStmt.getRoutineLoadDesc());
+        Assert.assertEquals(0, alterRoutineLoadStmt.getLoadPropertyList().size());
+    }
+
+    @Test
     public void testNormal() {
         {
             Map<String, String> jobProperties = Maps.newHashMap();
