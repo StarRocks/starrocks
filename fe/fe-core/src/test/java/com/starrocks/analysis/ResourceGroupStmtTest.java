@@ -267,7 +267,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'illegal-type'" +
                 ");";
-        Assert.assertThrows("Only support 'normal' and 'realtime' type",
+        Assert.assertThrows("Only support 'normal' and 'short_query' type",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalTypeSql));
 
         String illegalDefaultTypeSql = "create resource group rg_unknown\n" +
@@ -280,7 +280,7 @@ public class ResourceGroupStmtTest {
                 "    'concurrency_limit' = '11',\n" +
                 "    'type' = 'default'" +
                 ");";
-        Assert.assertThrows("Only support 'normal' and 'realtime' type",
+        Assert.assertThrows("Only support 'normal' and 'short_query' type",
                 SemanticException.class, () -> starRocksAssert.executeResourceGroupDdlSql(illegalDefaultTypeSql));
     }
 
@@ -578,7 +578,7 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
-    public void testRealtimeResourceGroup() throws Exception {
+    public void testShortQueryResourceGroup() throws Exception {
         String createRtRg1ReplaceSql = "create resource group if not exists or replace rg1\n" +
                 "to\n" +
                 "     (`db`='db1')\n" +
@@ -586,7 +586,7 @@ public class ResourceGroupStmtTest {
                 "    'cpu_core_limit' = '25',\n" +
                 "    'mem_limit' = '80%',\n" +
                 "    'concurrency_limit' = '10',\n" +
-                "    'type' = 'realtime'\n" +
+                "    'type' = 'short_query'\n" +
                 ");";
 
         String createNormalRg1ReplaceSql = "create resource group if not exists or replace rg1\n" +
@@ -606,7 +606,7 @@ public class ResourceGroupStmtTest {
                 "    'cpu_core_limit' = '25',\n" +
                 "    'mem_limit' = '80%',\n" +
                 "    'concurrency_limit' = '10',\n" +
-                "    'type' = 'realtime'\n" +
+                "    'type' = 'short_query'\n" +
                 ");";
 
         String createNormalRg2ReplaceSql = "create resource group if not exists or replace rg2\n" +
@@ -631,7 +631,7 @@ public class ResourceGroupStmtTest {
 
         // Create normal rg2 and fail to replace it with realtime rg2.
         starRocksAssert.executeResourceGroupDdlSql(createNormalRg2ReplaceSql);
-        Assert.assertThrows("There can be only one realtime RESOURCE_GROUP (rg1)",
+        Assert.assertThrows("There can be only one short_query RESOURCE_GROUP (rg1)",
                 DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(createRtRg2ReplaceSql));
 
         // Replace realtime rg1 with normal rg1, and create realtime rg2.
