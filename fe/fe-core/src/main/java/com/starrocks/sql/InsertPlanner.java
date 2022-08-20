@@ -58,6 +58,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,18 +110,11 @@ public class InsertPlanner {
                 columnRefFactory);
 
         //7. Build fragment exec plan
-        ExecPlan execPlan;
-        if ((queryRelation instanceof SelectRelation &&
-                queryRelation.hasLimit())
-                || insertStmt.getTargetTable() instanceof MysqlTable) {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        } else {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        }
+        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                || insertStmt.getTargetTable() instanceof MysqlTable);
+        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
 
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();

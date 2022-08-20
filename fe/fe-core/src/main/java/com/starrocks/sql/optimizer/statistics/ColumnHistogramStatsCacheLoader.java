@@ -97,7 +97,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
         return asyncLoad(key, executor);
     }
 
-    public List<TStatisticData> queryHistogramStatistics(long tableId, List<String> column) throws Exception {
+    public List<TStatisticData> queryHistogramStatistics(long tableId, List<String> column) {
         return statisticExecutor.queryHistogram(tableId, column);
     }
 

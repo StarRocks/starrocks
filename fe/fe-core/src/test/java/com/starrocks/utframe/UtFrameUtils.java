@@ -82,6 +82,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.ByteArrayInputStream;
@@ -507,7 +508,8 @@ public class UtFrameUtils {
 
         ExecPlan execPlan = new PlanFragmentBuilder()
                 .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                        TResultSinkType.MYSQL_PROTOCAL, true);
 
         OperatorStrings operatorPrinter = new OperatorStrings();
         return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
@@ -606,7 +608,7 @@ public class UtFrameUtils {
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        protected static void setUpImageVersion (){
+        protected static void setUpImageVersion() {
             MetaContext metaContext = new MetaContext();
             metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
             metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
