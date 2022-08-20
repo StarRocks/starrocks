@@ -149,6 +149,11 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+#if defined(ENABLE_STATUS_FAILED)
+    // read range of source code for inject errors.
+    starrocks::Status::access_directory_of_inject();
+#endif
+
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
     // Aggressive decommit is required so that unused pages in the TCMalloc page heap are
     // not backed by physical pages and do not contribute towards memory consumption.
