@@ -5,7 +5,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -104,34 +103,27 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         conjunctList.removeAll(leftPushDown);
         conjunctList.removeAll(rightPushDown);
 
-        ScalarOperator joinPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
+        ScalarOperator joinEqPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
         ScalarOperator postJoinPredicate = Utils.compoundAnd(conjunctList);
 
         OptExpression root;
-        if (joinPredicate == null) {
-            if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                LogicalJoinOperator crossJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(JoinOperator.CROSS_JOIN)
-                        .setOnPredicate(null)
-                        .setPredicate(Utils.compoundAnd(postJoinPredicate, join.getPredicate()))
-                        .build();
-                root = OptExpression.create(crossJoin, input.getInputs());
-            } else {
-                throw new SemanticException("No equal on predicate in " + join.getJoinType() + " is not supported");
-            }
+        if (joinEqPredicate == null) {
+            JoinOperator joinType =
+                    (join.getOnPredicate() == null || join.getJoinType().isCrossJoin() || conjunctList.isEmpty()) ?
+                            JoinOperator.CROSS_JOIN : join.getJoinType();
+            LogicalJoinOperator nestLoop = new LogicalJoinOperator.Builder().withOperator(join)
+                    .setJoinType(joinType)
+                    .setOnPredicate(postJoinPredicate)
+                    .build();
+            root = OptExpression.create(nestLoop, input.getInputs());
         } else {
-            LogicalJoinOperator newJoin;
-            if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(JoinOperator.INNER_JOIN)
-                        .setOnPredicate(Utils.compoundAnd(joinPredicate, postJoinPredicate))
-                        .build();
-            } else {
-                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(join.getJoinType())
-                        .setOnPredicate(Utils.compoundAnd(joinPredicate, postJoinPredicate))
-                        .build();
-            }
+            JoinOperator joinType = (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) ?
+                    JoinOperator.INNER_JOIN : join.getJoinType();
+            LogicalJoinOperator newJoin =
+                    new LogicalJoinOperator.Builder().withOperator(join)
+                            .setJoinType(joinType)
+                            .setOnPredicate(Utils.compoundAnd(joinEqPredicate, postJoinPredicate))
+                            .build();
             root = OptExpression.create(newJoin, input.getInputs());
         }
 

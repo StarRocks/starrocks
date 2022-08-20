@@ -763,24 +763,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
-            assertContains(unionPlan, "  4:OlapScanNode\n" +
-                    "     table: t1, rollup: t1\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 360000\n" +
+            assertContains(unionPlan, "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
-            assertContains(unionPlan, "  1:OlapScanNode\n" +
-                    "     table: t0, rollup: t0\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 360000\n" +
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)\n");
+            assertContains(unionPlan, "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
         }
@@ -890,13 +876,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    select * from cte union all\n" +
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
-                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                "     tabletList=10015,10017,10019\n" +
-                "     actualRows=0, avgRowSize=1.0\n" +
-                "     cardinality: 400000"));
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n"));
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +

@@ -62,7 +62,8 @@ enum TPlanNodeType {
   TABLE_FUNCTION_NODE,
   DECODE_NODE,
   JDBC_SCAN_NODE,
-  LAKE_SCAN_NODE
+  LAKE_SCAN_NODE,
+  NESTLOOP_JOIN_NODE
 }
 
 // phases of an execution node
@@ -489,6 +490,8 @@ struct TMergeJoinNode {
 struct TNestLoopJoinNode {
     1: optional TJoinOp join_op
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+    3: optional list<Exprs.TExpr> join_conjuncts
+    4: optional string sql_join_conjuncts
 }
 
 enum TAggregationOp {
@@ -943,7 +946,9 @@ struct TPlanNode {
 
   62: optional TCrossJoinNode cross_join_node;
 
-  63: optional TLakeScanNode lake_scan_node
+  63: optional TLakeScanNode lake_scan_node;
+  
+  64: optional TNestLoopJoinNode nestloop_join_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

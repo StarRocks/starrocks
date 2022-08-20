@@ -84,7 +84,7 @@ numNodes=0
 [sql]
 select t0.v1 from t0 where t0.v2 < (select t3.v11 from t3 where t3.v12 > 3)
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [2: v2 < 5: v11])
+CROSS JOIN (join-predicate [2: v2 < 5: v11] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
@@ -306,7 +306,7 @@ numNodes=0
 [sql]
 select v1 from t0 group by v1 having sum(v3) < (100 + 5) * (select max(v4) from t1);
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [4: sum < multiply(105, 8: max)])
+CROSS JOIN (join-predicate [4: sum < multiply(105, 8: max)] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
         AGGREGATE ([LOCAL] aggregate [{4: sum=sum(3: v3)}] group by [[1: v1]] having [null]
             SCAN (columns[1: v1, 3: v3] predicate[null])
@@ -320,8 +320,8 @@ CROSS JOIN (join-predicate [null] post-join-predicate [4: sum < multiply(105, 8:
 [sql]
 select v1 from t0,t1 where v1 between (select v4 from t1) and (select v4 from t1)
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 <= 11: v4])
-    CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 >= 7: v4])
+CROSS JOIN (join-predicate [1: v1 <= 11: v4] post-join-predicate [null])
+    CROSS JOIN (join-predicate [1: v1 >= 7: v4] post-join-predicate [null])
         CROSS JOIN (join-predicate [null] post-join-predicate [null])
             SCAN (columns[1: v1] predicate[null])
             EXCHANGE BROADCAST
@@ -349,7 +349,7 @@ INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
 [sql]
 select * from t0 where v3 > (select * from (values(2)) t);
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: column_0 as bigint(20))])
+CROSS JOIN (join-predicate [3: v3 > cast(4: column_0 as bigint(20))] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
@@ -359,7 +359,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [3: v3 > cast(4: column_0 
 [sql]
 select v3 from t0 group by v3 having sum(v2) > (select * from (values(2)) t);
 [result]
-CROSS JOIN (join-predicate [null] post-join-predicate [4: sum > cast(5: column_0 as bigint(20))])
+CROSS JOIN (join-predicate [4: sum > cast(5: column_0 as bigint(20))] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[3: v3]] having [null]
         EXCHANGE SHUFFLE[3]
             AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[3: v3]] having [null]

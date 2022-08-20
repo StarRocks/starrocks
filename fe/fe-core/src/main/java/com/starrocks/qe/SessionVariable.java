@@ -243,6 +243,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
+    public static final String JOIN_IMPLEMENTATION_MODE_V2 = "join_implementation_mode_v2";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
@@ -577,8 +578,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
-    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
-    private String joinImplementationMode = "hash"; // auto, merge, hash
+    @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
+    private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;

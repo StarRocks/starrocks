@@ -151,6 +151,12 @@ public class PruneShuffleColumnRule implements PhysicalOperatorTreeRewriteRule {
         }
 
         @Override
+        public OptExpression visitPhysicalNestLoopJoin(OptExpression optExpression, DistributionContext context) {
+            // NestLoopJoin right table does not support shuffle
+            return optExpression;
+        }
+
+        @Override
         public OptExpression visitPhysicalJoin(OptExpression optExpression, DistributionContext context) {
             DistributionContext lc = new DistributionContext();
             DistributionContext rc = new DistributionContext();

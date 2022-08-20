@@ -59,10 +59,7 @@ public:
 
     ~CrossJoinRightSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinRightSinkOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                            _cross_join_context);
-    }
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
     std::shared_ptr<CrossJoinContext> _cross_join_context;
