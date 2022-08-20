@@ -136,7 +136,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // convert
     while (true) {
-        if (UNLIKELY(ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped())) {
+        if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::InternalError("bg_worker_stopped");
         }
 #ifndef BE_TEST
@@ -202,7 +202,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // convert
     while (true) {
-        if (UNLIKELY(ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped())) {
+        if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::InternalError("bg_worker_stopped");
         }
 #ifndef BE_TEST
