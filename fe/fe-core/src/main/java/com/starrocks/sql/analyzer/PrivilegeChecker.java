@@ -981,7 +981,8 @@ public class PrivilegeChecker {
         @Override
         public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
             String db = statement.getDBName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+            String table = statement.getTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, db, table, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;
