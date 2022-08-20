@@ -43,8 +43,16 @@ StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
     return _mgr->get_txn_log(_id, txn_id);
 }
 
+StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
+    return _mgr->get_txn_vlog(_id, version);
+}
+
 Status Tablet::delete_txn_log(int64_t txn_id) {
     return _mgr->delete_txn_log(_id, txn_id);
+}
+
+Status Tablet::delete_txn_vlog(int64_t version) {
+    return _mgr->delete_txn_vlog(_id, version);
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
@@ -98,6 +106,10 @@ std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
 }
 
+std::string Tablet::txn_vlog_location(int64_t version) const {
+    return _mgr->txn_vlog_location(_id, version);
+}
+
 std::string Tablet::segment_location(std::string_view segment_name) const {
     return _mgr->segment_location(_id, segment_name);
 }
@@ -117,6 +129,16 @@ Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predi
     rowset->set_data_size(0);
     rowset->mutable_delete_predicate()->CopyFrom(delete_predicate);
     return put_txn_log(std::move(txn_log));
+}
+
+StatusOr<bool> Tablet::has_delete_predicates(int64_t version) {
+    ASSIGN_OR_RETURN(auto metadata, get_metadata(version));
+    for (const auto& rowset : metadata->rowsets()) {
+        if (rowset.has_delete_predicate()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace starrocks::lake
