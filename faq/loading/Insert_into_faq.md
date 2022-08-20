@@ -1,18 +1,24 @@
-# Insert Into常见问题
+# INSERT INTO 导入常见问题
 
-## 进行数据insert，SQL每插入一条大约耗时50~100ms之间，执行效率有没有什么可以优化的？
+本页列举了使用 INSERT INTO 语句导入数据时可能会遇到的常见问题及潜在解决方案。
 
-OLAP不建议使用insert单条写入，都是批量写入的。单条写入和批量写入，时间是一样的。
+## 使用 INSERT INTO 语句导入数据时，SQL 每插入一条大约耗时 50~100ms 之间，能否优化执行效率有？
 
-## insert into select 的时候报错index channel has intoleralbe failure
+因为 INSERT INTO 导入方式为批量写入，所以单条写入和批量写入的耗时相同。因此 OLAP 场景下不建议使用 INSERT INTO 语句单条写入数据。
 
-因为导入过程中存在了配置参数的超时判定，修改了流式导入RPC的超时时间即可解决。fe.conf，be.conf 配置中将下面这两个项改大些 (也可以在manager页面进项修改）
+## 使用 INSERT INTO SELECT 语句导入数据时，系统报错 “index channel has intoleralbe failure”。如何解决？
 
-```plain text
-streaming_load_rpc_max_alive_time_sec=2400
-tablet_writer_rpc_timeout_sec=1200
+该错误因流式导入 RPC 超时导致。您可以通过在配置文件中调节 RPC 超时相关参数解决。
+
+您需要在 BE 配置文件 **be.conf** 中修改以下两个系统配置项，并重启集群使修改生效。
+
+- `streaming_load_rpc_max_alive_time_sec`: 流式导入 RPC 的超时时间，默认为 1200，单位为秒。
+- `tablet_writer_rpc_timeout_sec`：TabletWriter 的超时时长，默认为 600，单位为秒。
+
+## 使用 INSERT INTO SELECT 语句导入大量数据时会执行失败 “execute timeout”。如何解决？
+
+该错误因 query 超时导致。您可以通过调节 Session 变量 `query_timeout`解决。该参数默认为 600，单位为秒。
+
+```sql
+set query_timeout =xx;
 ```
-
-## insert into select 操作数据量大的时候会执行失败 ：execute timeout
-
-set query_timeout =xx; 默认300s，单位是s改下这个参数
