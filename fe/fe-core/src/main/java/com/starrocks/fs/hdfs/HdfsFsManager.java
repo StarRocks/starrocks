@@ -851,7 +851,7 @@ public class HdfsFsManager {
         try {
             boolean isRenameSuccess = fileSystem.getDFSFileSystem().rename(srcfilePath, destfilePath);
             if (!isRenameSuccess) {
-                throw new UserException("failed to rename path from " + srcPath + "to " + destPath);
+                throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
             }
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath);
