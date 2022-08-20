@@ -288,7 +288,7 @@ Status JDBCScanner::_init_column_class_name() {
         auto column_ref = _pool.add(new ColumnRef(intermediate, i));
         // TODO: add check cast status
         Expr* cast_expr = vectorized::VectorizedCastExprFactory::from_type(intermediate, _slot_descs[i]->type(),
-                                                                           column_ref, &_pool);
+                                                                           column_ref, &_pool, true);
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
 
