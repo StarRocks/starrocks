@@ -682,7 +682,8 @@ public class HiveMetaClient {
         // block locations of the files in the given path in one operation.
         // The performance is better than getting status and block location one by one.
         try {
-            RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            // files in hdfs may have multiple directories, so we need to list all files in hdfs recursively here
+            RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
                 if (!isValidDataFile(locatedFileStatus)) {
