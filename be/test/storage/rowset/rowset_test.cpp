@@ -84,9 +84,6 @@ protected:
         Status s = starrocks::StorageEngine::open(options, &k_engine);
         ASSERT_TRUE(s.ok()) << s.to_string();
 
-        ExecEnv* exec_env = starrocks::ExecEnv::GetInstance();
-        exec_env->set_storage_engine(k_engine);
-
         const std::string rowset_dir = config::storage_root_path + "/data/rowset_test";
         ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
@@ -97,7 +94,6 @@ protected:
         k_engine->stop();
         delete k_engine;
         k_engine = nullptr;
-        starrocks::ExecEnv::GetInstance()->set_storage_engine(nullptr);
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
@@ -607,7 +603,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
 
     ASSERT_TRUE(tablet->rowset_commit(2, rowset).ok());
     EXPECT_EQ(rows_per_segment * 2, read_tablet_and_compare(tablet, partial_schema, 2, rows_per_segment * 2));
-    ASSERT_OK(starrocks::ExecEnv::GetInstance()->storage_engine()->update_manager()->on_rowset_finished(tablet.get(),
+    ASSERT_OK(starrocks::StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(),
                                                                                                         rowset.get()));
 }
 
