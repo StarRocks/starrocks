@@ -164,7 +164,10 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed->run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
+        // if pass_through is used, the chunk will be stored in chunk_ptr.
+        // otherwise, the chunk that has not been deserialized will be stored in pchunk and deserialized lazily during get_chunk
         ChunkUniquePtr chunk_ptr;
+        ChunkPB pchunk;
         // Time in nano of saving closure
         int64_t queue_enter_time = -1;
 
@@ -176,6 +179,10 @@ private:
                   driver_sequence(driver_sequence),
                   closure(closure),
                   chunk_ptr(std::move(chunk_ptr)) {}
+
+        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
+                  const ChunkPB& pchunk)
+                : chunk_bytes(chunk_bytes), driver_sequence(driver_sequence), closure(closure), pchunk(pchunk) {}
     };
 
     typedef std::list<ChunkItem> ChunkList;
@@ -184,6 +191,7 @@ private:
 
     StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
 
+    template <bool need_deserialization>
     StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes);
 
     Status try_to_build_chunk_meta(const PTransmitChunkParams& request);
