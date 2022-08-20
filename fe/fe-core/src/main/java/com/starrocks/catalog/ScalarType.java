@@ -379,6 +379,9 @@ public class ScalarType extends Type implements Cloneable {
         if (!t1.isValid() || !t2.isValid()) {
             return INVALID;
         }
+        if (t1.isUnknown() || t2.isUnknown()) {
+            return UNKNOWN_TYPE;
+        }
         if (t1.equals(t2)) {
             return t1;
         }
