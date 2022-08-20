@@ -27,10 +27,38 @@ namespace starrocks::vectorized {
 CrossJoinNode::CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs) {}
 
+static bool _support_join_type(TJoinOp::type join_type) {
+    // TODO: support all join types
+    switch (join_type) {
+    case TJoinOp::CROSS_JOIN:
+    case TJoinOp::INNER_JOIN:
+    case TJoinOp::LEFT_OUTER_JOIN:
+    case TJoinOp::RIGHT_OUTER_JOIN:
+    case TJoinOp::FULL_OUTER_JOIN:
+        return true;
+    default:
+        return false;
+    }
+}
+
 Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
+    }
+    if (tnode.__isset.nestloop_join_node) {
+        _join_op = tnode.nestloop_join_node.join_op;
+        if (!_support_join_type(_join_op)) {
+            std::string type_string = starrocks::to_string(_join_op);
+            return Status::NotSupported("nestloop join not supoort: " + type_string);
+        }
+
+        if (tnode.nestloop_join_node.__isset.join_conjuncts) {
+            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts));
+        }
+        if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
+            _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
+        }
     }
 
     for (const auto& desc : tnode.cross_join_node.build_runtime_filters) {
@@ -577,6 +605,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     using namespace pipeline;
 
     // step 0: construct pipeline end with cross join right operator.
+    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
     OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
     // define a runtime filter holder
@@ -586,8 +615,12 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // communication with CrossJoinLeft through shared_datas.
     auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
+    auto* left_source = down_cast<SourceOperatorFactory*>(left_ops[0].get());
+
+    // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
 
     CrossJoinContextParams context_params;
+    context_params.num_left_probers = left_source->degree_of_parallelism();
     context_params.num_right_sinkers = right_source->degree_of_parallelism();
     context_params.plan_node_id = _id;
     context_params.filters = conjunct_ctxs();
@@ -604,13 +637,11 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
 
-    // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
-    OpFactories left_ops = _children[0]->decompose_to_pipeline(context);
-
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            std::move(_conjunct_ctxs), std::move(cross_join_context));
+            _sql_join_conjuncts, std::move(_join_conjuncts), std::move(_conjunct_ctxs), std::move(cross_join_context),
+            _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));

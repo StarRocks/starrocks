@@ -112,7 +112,8 @@ const std::vector<SlotId>& Operator::filter_null_value_columns() const {
     return _factory->get_filter_null_value_columns();
 }
 
-Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk) {
+Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
+                                               vectorized::FilterPtr* filter) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
                                                 conjuncts.end());
@@ -132,10 +133,30 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         _conjuncts_input_counter->update(before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk));
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter));
         auto after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
-        _conjuncts_eval_counter->update(before - after);
+    }
+
+    return Status::OK();
+}
+
+Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
+                                vectorized::FilterPtr* filter) {
+    if (conjuncts.empty()) {
+        return Status::OK();
+    }
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
+    _init_conjuct_counters();
+    {
+        SCOPED_TIMER(_conjuncts_timer);
+        size_t before = chunk->num_rows();
+        _conjuncts_input_counter->update(before);
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(conjuncts, chunk, filter));
+        size_t after = chunk->num_rows();
+        _conjuncts_output_counter->update(after);
     }
 
     return Status::OK();
@@ -179,7 +200,6 @@ void Operator::_init_conjuct_counters() {
         _conjuncts_timer = ADD_TIMER(_common_metrics, "ConjunctsTime");
         _conjuncts_input_counter = ADD_COUNTER(_common_metrics, "ConjunctsInputRows", TUnit::UNIT);
         _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
-        _conjuncts_eval_counter = ADD_COUNTER(_common_metrics, "ConjunctsEvaluate", TUnit::UNIT);
     }
 }
 OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)

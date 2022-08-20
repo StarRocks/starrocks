@@ -81,6 +81,10 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // 2 For shuffle join
         List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
         List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
+        if (leftOnPredicateColumns.isEmpty() || rightOnPredicateColumns.isEmpty()) {
+            return null;
+        }
+
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
         requiredProperties.add(computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
                 rightOnPredicateColumns));

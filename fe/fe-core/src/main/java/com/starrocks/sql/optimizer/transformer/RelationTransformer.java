@@ -583,12 +583,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          */
         if (onPredicate.isConstant() && onPredicate.getType().isBoolean()
                 && !node.getJoinOp().isCrossJoin() && !node.getJoinOp().isInnerJoin()) {
-
-            List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicateWithoutRewrite);
-
             List<BinaryPredicateOperator> eqPredicate = JoinHelper.getEqualsPredicate(
                     new ColumnRefSet(leftPlan.getOutputColumn()),
-                    new ColumnRefSet(rightPlan.getOutputColumn()), conjuncts);
+                    new ColumnRefSet(rightPlan.getOutputColumn()),
+                    Utils.extractConjuncts(onPredicateWithoutRewrite));
 
             if (eqPredicate.size() > 0) {
                 onPredicate = Utils.compoundAnd(eqPredicate.get(0), onPredicate);

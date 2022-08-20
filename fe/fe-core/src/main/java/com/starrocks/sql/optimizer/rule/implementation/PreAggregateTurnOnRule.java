@@ -302,6 +302,11 @@ public class PreAggregateTurnOnRule {
             return visitPhysicalJoin(optExpression, context);
         }
 
+        @Override
+        public Void visitPhysicalNestLoopJoin(OptExpression optExpr, PreAggregationContext context) {
+            return visitPhysicalJoin(optExpr, context);
+        }
+
         public Void visitPhysicalJoin(OptExpression optExpression, PreAggregationContext context) {
             PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) optExpression.getOp();
             OptExpression leftChild = optExpression.getInputs().get(0);

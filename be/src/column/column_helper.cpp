@@ -95,6 +95,16 @@ void ColumnHelper::merge_two_filters(Column::Filter* __restrict filter, const ui
     }
 }
 
+void ColumnHelper::or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected) {
+    or_two_filters(filter->size(), filter->data(), selected);
+}
+
+void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const uint8_t* __restrict selected) {
+    for (size_t i = 0; i < count; i++) {
+        data[i] |= selected[i];
+    }
+}
+
 size_t ColumnHelper::count_nulls(const starrocks::vectorized::ColumnPtr& col) {
     if (!col->is_nullable()) {
         return 0;
