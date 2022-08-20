@@ -120,7 +120,6 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
-    public static ReentrantReadWriteLock GAUGE_ROUTINE_LOAD_LAGS_LOCK;
 
     private static final ScheduledThreadPoolExecutor metricTimer =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -132,7 +131,6 @@ public final class MetricRepo {
         }
 
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
-        GAUGE_ROUTINE_LOAD_LAGS_LOCK = new ReentrantReadWriteLock();
 
         // 1. gauge
         // load jobs
@@ -564,9 +562,7 @@ public final class MetricRepo {
             }
         }
 
-        GAUGE_ROUTINE_LOAD_LAGS_LOCK.writeLock().lock();
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
-        GAUGE_ROUTINE_LOAD_LAGS_LOCK.writeLock().unlock();
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
@@ -646,13 +642,8 @@ public final class MetricRepo {
     }
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
-        GAUGE_ROUTINE_LOAD_LAGS_LOCK.readLock().lock();
-        try {
-            for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
-                visitor.visit(metric);
-            }
-        } finally {
-            GAUGE_ROUTINE_LOAD_LAGS_LOCK.readLock().unlock();
+        for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
+            visitor.visit(metric);
         }
     }
 
