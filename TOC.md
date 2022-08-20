@@ -29,8 +29,8 @@
   + [导入过程中完成数据转换](/loading/Etl_in_loading.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [CloudCanal 数据导入](/loading/CloudCanal_loading.md)
-+ 数据提取
-  + [数据导出](/unloading/Export.md)
++ 数据导出
+  + [导出总览](/unloading/Export.md)
   + [Spark Connector](/unloading/Spark_connector.md)
   + [Flink Connector](/unloading/Flink_connector.md)
 + 使用StarRocks
