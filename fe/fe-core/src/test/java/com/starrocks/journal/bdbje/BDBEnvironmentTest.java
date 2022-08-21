@@ -127,11 +127,30 @@ public class BDBEnvironmentTest {
                 return;
             } catch (Exception e) {
                 // sleep 5 ~ 15 seconds
+<<<<<<< HEAD
                 int sleepSeconds = ThreadLocalRandom.current().nextInt(5, 15);
                 LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds, e);
                 Thread.sleep(sleepSeconds * 1000L);
             }
         }
+=======
+                int sleepSeconds = new Random().nextInt() % 10 + 5;
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
+                Thread.sleep(sleepSeconds * 1000L);
+            }
+        }
+
+    }
+    private void initClusterMasterFollowerNoRetry() throws Exception {
+        BDBEnvironment.RETRY_TIME = 3;
+        // give master time to update membership
+        // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
+        BDBEnvironment.SLEEP_INTERVAL_SEC = ThreadLocalRandom.current().nextInt(5, 15);;
+        // set timeout to a really long time so that ut can pass even when IO load is very high
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
+>>>>>>> d8a55b176 ([Bugfix] Retry when fail to start a local bdb cluster in UT (#10266))
 
     }
     private void initClusterMasterFollowerNoRetry() throws Exception {
