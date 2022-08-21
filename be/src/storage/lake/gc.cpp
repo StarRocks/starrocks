@@ -34,11 +34,23 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     }
 
     std::unordered_map<int64_t, std::vector<int64_t>> tablet_metadatas;
+    std::vector<string> txn_logs;
+    std::unordered_map<int64_t, std::unordered_set<int64_t>> locked_tablet_metadatas;
+
+    auto start_time =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
 
     auto iter_st = fs->iterate_dir(std::string(root_location), [&](std::string_view name) {
         if (is_tablet_metadata(name)) {
             auto [tablet_id, version] = parse_tablet_metadata_filename(name);
             tablet_metadatas[tablet_id].emplace_back(version);
+        }
+        if (is_tablet_metadata_lock(name)) {
+            auto [tablet_id, version, expire_time] = parse_tablet_metadata_lock_filename(name);
+            if (start_time < expire_time) {
+                locked_tablet_metadatas[tablet_id].insert(version);
+            }
         }
         return true;
     });
@@ -58,8 +70,15 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr) {
         }
         // TODO: batch delete
         // Keep the latest 10 versions.
+        // If the tablet metadata is locked, the correspoding version will be kept.
         std::sort(versions.begin(), versions.end());
         for (size_t i = 0, sz = versions.size() - max_versions; i < sz; i++) {
+            if (locked_tablet_metadatas.count(tablet_id)) {
+                const auto& locked_tablet_metadata = locked_tablet_metadatas[tablet_id];
+                if (locked_tablet_metadata.count(versions[i])) {
+                    continue;
+                }
+            }
             VLOG(5) << "Deleting " << tablet_metadata_filename(tablet_id, versions[i]);
             auto st = tablet_mgr->delete_tablet_metadata(tablet_id, versions[i]);
             LOG_IF(WARNING, !st.ok() && !st.is_not_found())

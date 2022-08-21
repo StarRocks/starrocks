@@ -353,4 +353,80 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
     }
 }
 
+void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* controller,
+                                           const ::starrocks::lake::LockTabletMetadataRequest* request,
+                                           ::starrocks::lake::LockTabletMetadataResponse* response,
+                                           ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet id");
+        return;
+    }
+    if (!request->has_expire_time()) {
+        cntl->SetFailed("missing expire time");
+        return;
+    }
+
+    auto tablet = _env->lake_tablet_manager()->get_tablet(request->tablet_id());
+    if (!tablet.ok()) {
+        LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
+        cntl->SetFailed("Fail to get tablet");
+        return;
+    }
+    auto st = tablet->put_tablet_metadata_lock(request->version(), request->expire_time());
+    if (!st.ok()) {
+        LOG(ERROR) << "Fail to lock tablet metadata, tablet id: " << request->tablet_id()
+                   << ", version: " << request->version();
+        cntl->SetFailed("Fail to lock tablet metadata");
+        return;
+    }
+
+    auto tablet_meta = tablet->get_metadata(request->version());
+    // If metadata has been deleted, the request should fail.
+    if (!tablet_meta.ok()) {
+        LOG(ERROR) << "Tablet metadata has been deleted, tablet id: " << request->tablet_id()
+                   << ", version: " << request->version();
+        cntl->SetFailed("Tablet metadata has been deleted");
+    }
+}
+
+void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* controller,
+                                             const ::starrocks::lake::UnlockTabletMetadataRequest* request,
+                                             ::starrocks::lake::UnlockTabletMetadataResponse* response,
+                                             ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+    if (!request->has_tablet_id()) {
+        cntl->SetFailed("missing tablet id");
+        return;
+    }
+    if (!request->has_expire_time()) {
+        cntl->SetFailed("missing expire time");
+        return;
+    }
+
+    auto tablet = _env->lake_tablet_manager()->get_tablet(request->tablet_id());
+    if (!tablet.ok()) {
+        LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
+        cntl->SetFailed("Fail to get tablet");
+        return;
+    }
+    auto st = tablet->delete_tablet_metadata_lock(request->version(), request->expire_time());
+    if (!st.ok()) {
+        LOG(ERROR) << "Fail to unlock tablet metadata, tablet id: " << request->tablet_id()
+                   << ", version: " << request->version();
+        cntl->SetFailed("Fail to unlock tablet metadata");
+    }
+}
+
 } // namespace starrocks

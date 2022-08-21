@@ -7,6 +7,7 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -624,6 +625,43 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     ASSERT_EQ(4, rowset2.num_rows());
     ASSERT_EQ(14, rowset2.data_size());
     ASSERT_EQ(3, rowset2.segments_size());
+}
+
+TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+    lake::LockTabletMetadataRequest lock_request;
+    lake::LockTabletMetadataResponse lock_response;
+
+    brpc::Controller cntl;
+    _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing version", cntl.ErrorText());
+
+    cntl.Reset();
+    lock_request.set_tablet_id(_tablet_id);
+    lock_request.set_version(1);
+    lock_request.set_expire_time(1);
+    _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    std::string tablet_metadata_lock_path =
+            std::string(kRootLocation) + "/" + starrocks::lake::tablet_metadata_lock_filename(_tablet_id, 1, 1);
+    ASSERT_OK(FileSystem::Default()->path_exists(tablet_metadata_lock_path));
+
+    cntl.Reset();
+    lake::UnlockTabletMetadataRequest unlock_request;
+    lake::UnlockTabletMetadataResponse unlock_response;
+    _lake_service.unlock_tablet_metadata(&cntl, &unlock_request, &unlock_response, nullptr);
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ("missing version", cntl.ErrorText());
+
+    cntl.Reset();
+    unlock_request.set_tablet_id(_tablet_id);
+    unlock_request.set_expire_time(1);
+    unlock_request.set_version(1);
+    _lake_service.unlock_tablet_metadata(&cntl, &unlock_request, &unlock_response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    auto st = FileSystem::Default()->path_exists(tablet_metadata_lock_path);
+    ASSERT_TRUE(st.is_not_found()) << st;
 }
 
 } // namespace starrocks
