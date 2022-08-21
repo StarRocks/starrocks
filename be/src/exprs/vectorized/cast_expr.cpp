@@ -1360,11 +1360,10 @@ private:
         }                                                                  \
     }
 
-Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
+Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node, bool allow_throw_exception) {
     PrimitiveType to_type = TypeDescriptor::from_thrift(node.type).type;
     PrimitiveType from_type = thrift_to_type(node.child_type);
 
-    bool allow_throw_exception = false;
     if (node.__isset.child_type_desc) {
         TypeDescriptor array_field_type_cast_to = TypeDescriptor::from_thrift(node.type);
         TypeDescriptor array_field_type_cast_from = TypeDescriptor::from_thrift(node.child_type_desc);
@@ -1389,7 +1388,7 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
             cast.slot_ref.slot_id = 0;
             cast.slot_ref.tuple_id = 0;
 
-            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast);
+            Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(cast, allow_throw_exception);
             if (cast_element_expr == nullptr) {
                 LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", array_field_type_cast_from.debug_string(),
                                                     array_field_type_cast_to.debug_string());
@@ -1513,14 +1512,14 @@ Expr* VectorizedCastExprFactory::from_thrift(const TExprNode& node) {
 }
 
 Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const TypeDescriptor& to, Expr* child,
-                                           ObjectPool* pool) {
+                                           ObjectPool* pool, bool allow_throw_exception) {
     Expr* expr = nullptr;
     if (!from.is_complex_type() && !to.is_complex_type()) {
         TExprNode node;
         node.type = to.to_thrift();
         node.child_type = to_thrift(from.type);
 
-        expr = from_thrift(node);
+        expr = from_thrift(node, allow_throw_exception);
     } else {
         const TypeDescriptor* from_type = &from;
         const TypeDescriptor* to_type = &to;
@@ -1540,7 +1539,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
         node.slot_ref.slot_id = 0;
         node.slot_ref.tuple_id = 0;
 
-        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(node);
+        Expr* cast_element_expr = from_thrift(node, allow_throw_exception);
         if (cast_element_expr == nullptr) {
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;
