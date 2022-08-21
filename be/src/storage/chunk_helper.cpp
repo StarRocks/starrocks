@@ -8,6 +8,7 @@
 #include "column/column_pool.h"
 #include "column/schema.h"
 #include "column/type_traits.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
 #include "storage/olap_type_infra.h"
@@ -414,7 +415,7 @@ void ChunkAccumulator::reset() {
     _tmp_chunk.reset();
 }
 
-void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
+Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
     size_t input_rows = chunk->num_rows();
     // TODO: optimize for zero-copy scenario
     // Cut the input chunk into pieces if larger than desired
@@ -423,11 +424,11 @@ void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
         int need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
-            _tmp_chunk->append(*chunk, start, need_rows);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
         } else {
             need_rows = std::min(_desired_size, remain_rows);
             _tmp_chunk = chunk->clone_empty(_desired_size);
-            _tmp_chunk->append(*chunk, start, need_rows);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
         }
 
         if (_tmp_chunk->num_rows() >= _desired_size) {
@@ -435,6 +436,7 @@ void ChunkAccumulator::push(vectorized::ChunkPtr chunk) {
         }
         start += need_rows;
     }
+    return Status::OK();
 }
 
 bool ChunkAccumulator::empty() const {
