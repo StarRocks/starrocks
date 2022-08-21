@@ -108,6 +108,21 @@ public class BDBEnvironmentTest {
 
 
     private void initClusterMasterFollower() throws Exception {
+        for (int i = 0; i != 3; ++ i) {
+            // might fail on high load, will sleep and retry
+            try {
+                initClusterMasterFollowerNoRetry();
+                return;
+            } catch (Exception e) {
+                // sleep 5 ~ 15 seconds
+                int sleepSeconds = new Random().nextInt() % 10 + 5;
+                LOG.warn("failed to initClusterMasterFollower! will sleep {} seconds and retry", sleepSeconds);
+                Thread.sleep(sleepSeconds * 1000L);
+            }
+        }
+
+    }
+    private void initClusterMasterFollowerNoRetry() throws Exception {
         BDBEnvironment.RETRY_TIME = 3;
         // give master time to update membership
         // otherwise may get error Conflicting node types: uses: SECONDARY Replica is configured as type: ELECTABLE
