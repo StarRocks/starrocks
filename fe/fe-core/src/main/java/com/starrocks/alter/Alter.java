@@ -533,8 +533,8 @@ public class Alter {
         String origTblName = origTable.getName();
         String newTblName = clause.getTblName();
         Table newTbl = db.getTable(newTblName);
-        if (newTbl == null || newTbl.getType() != TableType.OLAP) {
-            throw new DdlException("Table " + newTblName + " does not exist or is not OLAP table");
+        if (newTbl == null || !newTbl.isOlapOrLakeTable()) {
+            throw new DdlException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
         }
         OlapTable olapNewTbl = (OlapTable) newTbl;
 
