@@ -103,7 +103,7 @@ bool Status::in_directory_of_inject(const std::string& direct_name) {
         std::stringstream ss;
         for (int i = 1; i < fields.size(); ++i) {
             ss << "/" << fields[i];
-            if (dircetory_enable.find(ss.tr()) != dircetory_enable.end()) {
+            if (dircetory_enable.find(ss.str()) != dircetory_enable.end()) {
                 return true;
             }
         }
