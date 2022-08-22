@@ -16,6 +16,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
+import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -683,7 +684,12 @@ public class HiveMetaClient {
         // The performance is better than getting status and block location one by one.
         try {
             // files in hdfs may have multiple directories, so we need to list all files in hdfs recursively here
-            RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+            RemoteIterator<LocatedFileStatus> blockIterator = null;
+            if (ConnectContext.get().getSessionVariable().isRecursiveDirSearchEnabled()) {
+                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
+            } else {
+                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            }
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
                 if (!isValidDataFile(locatedFileStatus)) {
