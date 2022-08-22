@@ -45,9 +45,9 @@ CONF_String(priority_networks, "");
 //// tcmalloc gc parameter
 ////
 // Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "10737418240");
+CONF_mInt64(tc_use_memory_min, "0");
 // free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "20");
+CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
