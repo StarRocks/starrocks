@@ -137,10 +137,6 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     if (_opened) {
         return Status::OK();
     }
-    CHECK(_file == nullptr) << "File has already been opened";
-    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path));
-    _file = std::make_unique<RandomAccessFile>(
-            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
     _build_scanner_context();
     auto status = do_open(runtime_state);
     if (status.ok()) {
@@ -178,6 +174,14 @@ void HdfsScanner::enter_pending_queue() {
 
 uint64_t HdfsScanner::exit_pending_queue() {
     return _pending_queue_sw.reset();
+}
+
+Status HdfsScanner::open_random_access_file() {
+    CHECK(_file == nullptr) << "File has already been opened";
+    ASSIGN_OR_RETURN(_raw_file, _scanner_params.fs->new_random_access_file(_scanner_params.path))
+    _file = std::make_unique<RandomAccessFile>(
+            std::make_shared<CountedSeekableInputStream>(_raw_file->stream(), &_stats), _raw_file->filename());
+    return Status::OK();
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {

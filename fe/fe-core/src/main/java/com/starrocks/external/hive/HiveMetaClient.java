@@ -38,19 +38,16 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
-import org.apache.hudi.common.config.HoodieMetadataConfig;
-import org.apache.hudi.common.engine.HoodieEngineContext;
-import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.model.BaseFile;
+import org.apache.hudi.common.model.FileSlice;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieFileFormat;
+import org.apache.hudi.common.model.HoodieLogFile;
+import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
-import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
-import org.apache.hudi.common.table.view.FileSystemViewManager;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
-import org.apache.hudi.common.util.Option;
-import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -64,6 +61,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentHashMap;
@@ -321,30 +319,23 @@ public class HiveMetaClient {
     private List<HdfsFileDesc> getHudiFileDescs(StorageDescriptor sd, HoodieTableMetaClient metaClient,
                                                 String partName) throws Exception {
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-        FileSystem fileSystem = metaClient.getRawFs();
-        HoodieEngineContext engineContext = new HoodieLocalEngineContext(conf);
-        HoodieMetadataConfig metadataConfig = HoodieMetadataConfig.newBuilder().build();
-        HoodieTableFileSystemView fileSystemView = FileSystemViewManager.createInMemoryFileSystemView(engineContext,
-                metaClient, metadataConfig);
-        HoodieTimeline activeInstants = metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
-        Option<HoodieInstant> latestInstant = activeInstants.lastInstant();
-        String queryInstant = latestInstant.get().getTimestamp();
-        Iterator<HoodieBaseFile> hoodieBaseFileIterator = fileSystemView
-                .getLatestBaseFilesBeforeOrOn(partName, queryInstant).iterator();
-        while (hoodieBaseFileIterator.hasNext()) {
-            HoodieBaseFile baseFile = hoodieBaseFileIterator.next();
-
-            FileStatus fileStatus = HoodieInputFormatUtils.getFileStatus(baseFile);
-            BlockLocation[] blockLocations;
-            if (fileStatus instanceof LocatedFileStatus) {
-                blockLocations = ((LocatedFileStatus) fileStatus).getBlockLocations();
-            } else {
-                blockLocations = fileSystem.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
-            }
-            List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
-            fileDescs.add(new HdfsFileDesc(baseFile.getFileName(), "", fileStatus.getLen(),
-                    ImmutableList.copyOf(fileBlockDescs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
-                    getTextFileFormatDesc(sd)));
+        HoodieTimeline timeline = metaClient.getActiveTimeline().filterCompletedAndCompactionInstants();
+        String globPath = String.format("%s/%s/*", metaClient.getBasePath(), partName);
+        List<FileStatus> statuses = FSUtils.getGlobStatusExcludingMetaFolder(metaClient.getRawFs(), new Path(globPath));
+        HoodieTableFileSystemView fileSystemView = new HoodieTableFileSystemView(metaClient,
+                timeline, statuses.toArray(new FileStatus[0]));
+        String queryInstant = timeline.lastInstant().get().getTimestamp();
+        Iterator<FileSlice> hoodieFileSliceIterator = fileSystemView
+                .getLatestMergedFileSlicesBeforeOrOn(partName, queryInstant).iterator();
+        while (hoodieFileSliceIterator.hasNext()) {
+            FileSlice fileSlice = hoodieFileSliceIterator.next();
+            Optional<HoodieBaseFile> baseFile = fileSlice.getBaseFile().toJavaOptional();
+            String fileName = baseFile.map(BaseFile::getFileName).orElse("");
+            long fileLength = baseFile.map(BaseFile::getFileLen).orElse(-1L);
+            List<String> logs = fileSlice.getLogFiles().map(HoodieLogFile::getFileName).collect(Collectors.toList());
+            fileDescs.add(new HdfsFileDesc(fileName, "", fileLength,
+                    ImmutableList.of(), ImmutableList.copyOf(logs), HdfsFileFormat.isSplittable(sd.getInputFormat()),
+                    getTextFileFormatDesc(sd), metaClient.getTableType() == HoodieTableType.MERGE_ON_READ));
         }
         return fileDescs;
     }
@@ -692,7 +683,8 @@ public class HiveMetaClient {
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                        ImmutableList.copyOf(fileBlockDescs), isSplittable, getTextFileFormatDesc(sd)));
+                        ImmutableList.copyOf(fileBlockDescs), ImmutableList.of(),
+                        isSplittable, getTextFileFormatDesc(sd), false));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory

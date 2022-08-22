@@ -1161,4 +1161,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0");
     }
+
+    @Test
+    public void testExpressionWithCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                "   select * from t0" +
+                ") " +
+                "select sum(k2) from (" +
+                "   SELECT * " +
+                "   from x1 join[bucket] " +
+                "   (SELECT v1 + 1 as k1, v2 + 2 as k2, v3 + 3 as k3 from x1) as y1 on x1.v1 = y1.k1" +
+                ") d group by v3, k3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v1 = 10: expr\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+        assertContains(plan, "    BUCKET_SHUFFLE_HASH_PARTITIONED: 10: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 10> : 7: v1 + 1\n" +
+                "  |  <slot 11> : 8: v2 + 2\n" +
+                "  |  <slot 12> : 9: v3 + 3\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
 }

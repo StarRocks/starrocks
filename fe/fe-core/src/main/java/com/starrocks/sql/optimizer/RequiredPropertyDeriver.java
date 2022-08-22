@@ -264,7 +264,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
+        requiredProperties.add(Lists.newArrayList(requirementsFromParent));
         return null;
     }
 
@@ -294,9 +294,12 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
             CTEProperty thisCTE = new CTEProperty(node.getCteId());
             thisCTE.merge(requiredRight.getCteProperty());
-            PhysicalPropertySet copy = requiredRight.copy();
 
+            DistributionProperty requiredDistributionProp = requiredRight.getDistributionProperty();
+
+            PhysicalPropertySet copy = requiredRight.copy();
             copy.setCteProperty(thisCTE);
+            copy.setDistributionProperty(new DistributionProperty(requiredDistributionProp.getSpec(), true));
             requiredProperties.get(0).set(1, copy);
             return null;
         }
@@ -305,8 +308,9 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, Void context) {
             visitOperator(node, context);
             CTEProperty required = requiredProperties.get(0).get(0).getCteProperty();
+            Preconditions.checkState(!required.getCteIds().contains(node.getCteId()));
             PhysicalPropertySet copy = requiredProperties.get(0).get(0).copy();
-            copy.setCteProperty(required.removeCTE(node.getCteId()));
+            copy.setDistributionProperty(new DistributionProperty(copy.getDistributionProperty().getSpec(), true));
             requiredProperties.get(0).set(0, copy);
             return null;
         }
