@@ -802,10 +802,10 @@ CONF_Int16(jdbc_connection_pool_size, "8");
 CONF_Int32(internal_service_async_thread_num, "10");
 
 /*
- * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/probability_of_inject
+ * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
  * to inject error through return random status(except ok).
  */
-CONF_Int32(probability_of_inject, "100");
+CONF_Int32(cardinality_of_inject, "100");
 
 /*
  * Config range for inject erros,

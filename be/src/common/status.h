@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "common/compiler_util.h"
-#include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
 #include "util/slice.h"               // for Slice
@@ -30,9 +29,12 @@ public:
         }
     }
 
+#if defined(ENABLE_STATUS_FAILED)
+    static int32_t get_cardinality_of_inject();
     static inline std::unordered_map<std::string, bool> dircetory_enable;
     static void access_directory_of_inject();
     static bool in_directory_of_inject(const std::string&);
+#endif
 
     // Copy c'tor makes copy of error detail so Status can be returned by value
     Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
@@ -365,7 +367,7 @@ struct StatusInstance {
     do {                                                                                                  \
         uint32_t seed = starrocks::GetCurrentTimeNanos();                                                 \
         seed = ::rand_r(&seed);                                                                           \
-        uint32_t boundary_value = RAND_MAX / (1.0 * starrocks::config::probability_of_inject);            \
+        uint32_t boundary_value = RAND_MAX / (1.0 * starrocks::Status::get_cardinality_of_inject());      \
         /* Pre-condition of inject errors: probability and File scope*/                                   \
         if (seed <= boundary_value && starrocks::Status::in_directory_of_inject(__FILE__)) {              \
             RETURN_INJECT(seed);                                                                          \

@@ -6,6 +6,7 @@
 
 #include <fmt/format.h>
 
+#include "common/config.h"
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
@@ -84,6 +85,11 @@ Status::Status(const StatusPB& s) : _state(nullptr) {
 
 Status::Status(TStatusCode::type code, Slice msg, Slice ctx) : _state(assemble_state(code, msg, ctx)) {}
 
+#if defined(ENABLE_STATUS_FAILED)
+int32_t Status::get_cardinality_of_inject() {
+    return starrocks::config::cardinality_of_inject;
+}
+
 void Status::access_directory_of_inject() {
     std::string directs = starrocks::config::directory_of_inject;
     vector<string> fields = strings::Split(directs, ",");
@@ -114,6 +120,7 @@ bool Status::in_directory_of_inject(const std::string& direct_name) {
         return false;
     }
 }
+#endif
 
 void Status::to_thrift(TStatus* s) const {
     s->error_msgs.clear();
