@@ -462,7 +462,8 @@ public class SubqueryTest extends PlanTestBase {
                     "    where l.t1a = r.t1a\n" +
                     ");";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "args: DECIMAL64; result: DECIMAL64(10,2); args nullable: false; result nullable: true");
+            assertContains(plan,
+                    "args: DECIMAL64; result: DECIMAL64(10,2); args nullable: false; result nullable: true");
             assertContains(plan, "  7:Project\n" +
                     "  |  output columns:\n" +
                     "  |  10 <-> [10: id_decimal, DECIMAL64(10,2), true]\n" +
@@ -630,9 +631,9 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on t0.v1 = (select count(*) from t1 where t0.v2 = t1.v5) + t1.v6";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
-                    "  |  join op: CROSS JOIN\n" +
+                    "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other predicates: 1: v1 = 11: expr + 6: v6");
+                    "  |  other join predicates: 1: v1 = 11: expr + 6: v6");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -658,9 +659,9 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on (select count(*) from t0 where t0.v2 = t1.v5) + t0.v3 = t1.v5";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
-                    "  |  join op: CROSS JOIN\n" +
+                    "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other predicates: 11: expr + 3: v3 = 5: v5");
+                    "  |  other join predicates: 11: expr + 3: v3 = 5: v5");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
