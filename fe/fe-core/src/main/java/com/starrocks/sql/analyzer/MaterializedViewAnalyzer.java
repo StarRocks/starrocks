@@ -353,24 +353,7 @@ public class MaterializedViewAnalyzer {
         private void checkDistribution(CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
-            Map<String, String> properties = statement.getProperties();
             List<Column> mvColumnItems = statement.getMvColumnItems();
-
-            // For replication_num, we select the maximum value of all tables replication_num
-            int defaultReplicationNum = 1;
-            for (Table table : tableNameTableMap.values()) {
-                if (table instanceof OlapTable) {
-                    OlapTable olapTable = (OlapTable) table;
-                    Short replicationNum = olapTable.getDefaultReplicationNum();
-                    if (replicationNum > defaultReplicationNum) {
-                        defaultReplicationNum = replicationNum;
-                    }
-                }
-            }
-            if (properties == null) {
-                properties = Maps.newHashMap();
-            }
-            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(defaultReplicationNum));
 
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
