@@ -295,6 +295,9 @@ TEST_F(VecMathFunctionsTest, DecimalRoundUpToTest) {
     testRoundDecimal<TYPE_ROUND_UP_TO>({"0.1"}, {}, 10, 2, {38}, {}, {"0.10000000000000000000000000000000000000"}, {});
     testRoundDecimal<TYPE_ROUND_UP_TO>({"0.1"}, {}, 10, 2, {1000}, {}, {"0.10000000000000000000000000000000000000"},
                                        {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"13.14"}, {}, 10, 2, {-1}, {}, {"10"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"13.14"}, {}, 10, 2, {-2}, {}, {"0"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"13.14"}, {}, 10, 2, {-100}, {}, {"0"}, {});
 
     testRoundDecimal<TYPE_ROUND_UP_TO>({"12345.67899", "12345.67899", "12345.67899", "12345.67899", "12345.67899"}, {},
                                        15, 5, {2, 2, 2, 2, 2}, {},
@@ -326,6 +329,10 @@ TEST_F(VecMathFunctionsTest, DecimalRoundUpToByColTest) {
             {0, 1, 0, 0, 0, 0, 0}, 15, 5, {0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 1},
             {"123.00000", "INVALID", "123.46000", "123.45700", "123.45680", "123.45678", "INVALID"},
             {0, 1, 0, 0, 0, 0, 1});
+    testRoundDecimal<TYPE_ROUND_UP_TO>(
+            {"13.14", "13.14", "13.14", "13.14", "13.14", "13.14", "13.14", "13.14", "13.14"}, {}, 10, 2,
+            {-100, -3, -2, -1, 0, 1, 2, 3, 100}, {},
+            {"0.00", "0.00", "0.00", "10.00", "13.00", "13.10", "13.14", "13.14", "13.14"}, {});
 }
 
 TEST_F(VecMathFunctionsTest, DecimalTruncateTest) {
@@ -336,6 +343,9 @@ TEST_F(VecMathFunctionsTest, DecimalTruncateTest) {
     testRoundDecimal<TYPE_TRUNCATE>({"18450.76"}, {}, 10, 2, {5}, {}, {"18450.76000"}, {});
     testRoundDecimal<TYPE_TRUNCATE>({"0.1"}, {}, 10, 2, {38}, {}, {"0.10000000000000000000000000000000000000"}, {});
     testRoundDecimal<TYPE_TRUNCATE>({"0.1"}, {}, 10, 2, {1000}, {}, {"0.10000000000000000000000000000000000000"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"13.14"}, {}, 10, 2, {-1}, {}, {"10"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"13.14"}, {}, 10, 2, {-2}, {}, {"0"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"13.14"}, {}, 10, 2, {-100}, {}, {"0"}, {});
 
     testRoundDecimal<TYPE_TRUNCATE>({"12345.67899", "12345.67899", "12345.67899", "12345.67899", "12345.67899"}, {}, 15,
                                     5, {2, 2, 2, 2, 2}, {},
@@ -369,6 +379,9 @@ TEST_F(VecMathFunctionsTest, DecimalTruncateByColTest) {
     // truncate(v,d), v is const column
     testRoundDecimal<TYPE_TRUNCATE>({"12345.6789", "12345.6789", "12345.6789", "12345.6789"}, {}, 15, 5, {1, 2, 3, 4},
                                     {}, {"12345.60000", "12345.67000", "12345.67800", "12345.67890"}, {});
+    testRoundDecimal<TYPE_TRUNCATE>({"13.14", "13.14", "13.14", "13.14", "13.14", "13.14", "13.14", "13.14", "13.14"},
+                                    {}, 10, 2, {-100, -3, -2, -1, 0, 1, 2, 3, 100}, {},
+                                    {"0.00", "0.00", "0.00", "10.00", "13.00", "13.10", "13.14", "13.14", "13.14"}, {});
 }
 
 TEST_F(VecMathFunctionsTest, RoundUpToTest) {
