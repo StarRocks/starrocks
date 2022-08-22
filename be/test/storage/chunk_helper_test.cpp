@@ -274,7 +274,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
         chunk->get_column_by_index(0)->append_default(1025);
         input_rows += 1025;
 
-        accumulator.push(chunk);
+        accumulator.push(std::move(chunk));
         if (ChunkPtr output = accumulator.pull()) {
             output_rows += output->num_rows();
             EXPECT_EQ(kDesiredSize, output->num_rows());
@@ -285,7 +285,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
         chunk->get_column_by_index(0)->append_default(8888);
         input_rows += 8888;
-        accumulator.push(chunk);
+        accumulator.push(std::move(chunk));
     }
 
     accumulator.finalize();

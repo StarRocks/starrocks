@@ -80,7 +80,7 @@ public:
     ChunkAccumulator(size_t desired_size);
     void set_desired_size(size_t desired_size);
     void reset();
-    void push(vectorized::ChunkPtr chunk);
+    Status push(vectorized::ChunkPtr&& chunk);
     void finalize();
     bool empty() const;
     vectorized::ChunkPtr pull();
