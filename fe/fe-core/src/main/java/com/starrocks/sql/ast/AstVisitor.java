@@ -4,16 +4,6 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.AddColumnClause;
 import com.starrocks.analysis.AddColumnsClause;
 import com.starrocks.analysis.AddPartitionClause;
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminCheckTabletsStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.AlterViewStmt;
@@ -36,7 +26,6 @@ import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.ColumnRenameClause;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ComputeNodeClause;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.analysis.CreateFunctionStmt;
 import com.starrocks.analysis.CreateIndexClause;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -49,7 +38,6 @@ import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.DropColumnClause;
-import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropIndexClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
@@ -80,7 +68,6 @@ import com.starrocks.analysis.ModifyTablePropertiesClause;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.RecoverDbStmt;
 import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.analysis.RecoverTableStmt;
 import com.starrocks.analysis.ReorderColumnsClause;
@@ -92,9 +79,7 @@ import com.starrocks.analysis.ShowAuthenticationStmt;
 import com.starrocks.analysis.ShowBackupStmt;
 import com.starrocks.analysis.ShowBrokerStmt;
 import com.starrocks.analysis.ShowColumnStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDataStmt;
 import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.analysis.ShowDeleteStmt;
 import com.starrocks.analysis.ShowDynamicPartitionStmt;
@@ -146,6 +131,44 @@ public abstract class AstVisitor<R, C> {
         return visitNode(statement, context);
     }
 
+    // ---------------------------------------- Database Statement -----------------------------------------------------
+
+    public R visitUseDbStatement(UseDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateDbStatement(CreateDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropDbStatement(DropDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowDataStmt(ShowDataStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitDDLStatement(DdlStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -170,17 +193,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitSetStatement(SetStmt stmt, C context) {
         return visitStatement(stmt, context);
     }
 
-    public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
 
     public R visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, C context) {
         return visitStatement(statement, context);
@@ -198,26 +214,6 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-    public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
     public R visitBaseViewStatement(BaseViewStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -390,19 +386,6 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitUseDbStatement(UseDbStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-
-    public R visitShowCreateDbStatement(ShowCreateDbStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     public R visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -419,31 +402,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitCreateDbStatement(CreateDbStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitDropDbStatement(DropDbStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     public R visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitShowDataStmt(ShowDataStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
-    public R visitRecoverDbStmt(RecoverDbStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -487,7 +446,7 @@ public abstract class AstVisitor<R, C> {
     public R visitCreateFunction(CreateFunctionStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
-    
+
     public R visitShowOpenTableStmt(ShowOpenTableStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -498,6 +457,40 @@ public abstract class AstVisitor<R, C> {
 
     public R visitShowBackupStmt(ShowBackupStmt statement, C context) {
         return visitShowStatement(statement, context);
+    }
+
+    // ------------------------------------------- Admin Statement -----------------------------------------------------
+
+    public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowConfigStatement(AdminShowConfigStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminRepairTableStatement(AdminRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ------------------------------------------- Analyze Statement ---------------------------------------------------

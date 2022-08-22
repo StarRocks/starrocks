@@ -82,14 +82,6 @@ std::pair<JNIEnv*, JVMFunctionHelper&> JVMFunctionHelper::getInstanceWithEnv() {
 }
 
 void JVMFunctionHelper::_init() {
-    std::string home = getenv("STARROCKS_HOME");
-    std::vector<std::string> class_paths = {home + "/lib/jni-packages/starrocks-java-utils-jar-with-dependencies.jar",
-                                            home + "/lib/jni-packages/udf-extensions-jar-with-dependencies.jar",
-                                            home + "/lib/jni-packages/starrocks-jdbc-bridge-jar-with-dependencies.jar"};
-    for (auto path : class_paths) {
-        _add_class_path(path);
-    }
-
     _object_class = JNI_FIND_CLASS("java/lang/Object");
     _object_array_class = JNI_FIND_CLASS("[Ljava/lang/Object;");
     _string_class = JNI_FIND_CLASS("java/lang/String");
@@ -172,38 +164,6 @@ void JVMFunctionHelper::_init() {
     name = JVMFunctionHelper::to_jni_class_name(UDAFStateList::clazz_name);
     jclass loaded_clazz = JNI_FIND_CLASS(name.c_str());
     _function_states_clazz = new JVMClass(std::move(loaded_clazz));
-}
-
-// https://stackoverflow.com/questions/45232522/how-to-set-classpath-of-a-running-jvm-in-cjni
-void JVMFunctionHelper::_add_class_path(const std::string& path) {
-    const std::string urlPath = "file://" + path;
-    LOG(INFO) << "add class path:" << urlPath;
-    jclass classLoaderCls = _env->FindClass("java/lang/ClassLoader");
-    auto env = _env;
-    LOCAL_REF_GUARD_ENV(env, classLoaderCls);
-    jmethodID getSystemClassLoaderMethod =
-            _env->GetStaticMethodID(classLoaderCls, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
-    jobject classLoaderInstance = _env->CallStaticObjectMethod(classLoaderCls, getSystemClassLoaderMethod);
-    LOCAL_REF_GUARD_ENV(env, classLoaderInstance);
-
-    jclass urlClassLoaderCls = _env->FindClass("java/net/URLClassLoader");
-    LOCAL_REF_GUARD_ENV(env, urlClassLoaderCls);
-
-    jmethodID addUrlMethod = _env->GetMethodID(urlClassLoaderCls, "addURL", "(Ljava/net/URL;)V");
-    jclass urlCls = _env->FindClass("java/net/URL");
-    LOCAL_REF_GUARD_ENV(env, urlCls);
-
-    jmethodID urlConstructor = _env->GetMethodID(urlCls, "<init>", "(Ljava/lang/String;)V");
-    jobject urlInstance = _env->NewObject(urlCls, urlConstructor, _env->NewStringUTF(urlPath.c_str()));
-    LOCAL_REF_GUARD_ENV(env, urlInstance);
-
-    _env->CallVoidMethod(classLoaderInstance, addUrlMethod, urlInstance);
-    if (auto e = _env->ExceptionOccurred()) {
-        LOCAL_REF_GUARD_ENV(env, e);
-        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);
-        LOG(WARNING) << "Exception: " << msg;
-        _env->ExceptionClear();
-    }
 }
 
 jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, int sz) {
@@ -378,6 +338,14 @@ void JVMFunctionHelper::get_result_from_boxed_array(FunctionContext* ctx, int ty
     _env->CallStaticVoidMethod(_udf_helper_class, _get_boxed_result, type, rows, jcolumn,
                                reinterpret_cast<int64_t>(col));
     CHECK_UDF_CALL_EXCEPTION(_env, ctx);
+}
+
+Status JVMFunctionHelper::get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows) {
+    col->resize(rows);
+    _env->CallStaticVoidMethod(_udf_helper_class, _get_boxed_result, type, rows, jcolumn,
+                               reinterpret_cast<int64_t>(col));
+    RETURN_ERROR_IF_JNI_EXCEPTION(_env);
+    return Status::OK();
 }
 
 jobject JVMFunctionHelper::list_get(jobject obj, int idx) {

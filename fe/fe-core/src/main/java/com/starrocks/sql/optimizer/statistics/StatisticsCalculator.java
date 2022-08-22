@@ -35,7 +35,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -734,7 +733,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
             }
         }
-        return Math.max(1, rowCount);
+        return rowCount;
     }
 
     @Override
@@ -1358,14 +1357,23 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
-        OptExpression produce = optimizerContext.getCteContext().getCTEProduce(cteId);
-        Statistics produceStatistics = produce.getGroupExpression().getGroup().getStatistics();
-        if (null == produceStatistics) {
-            produceStatistics = produce.getStatistics();
+        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
+
+        // The statistics of producer and children are equal theoretically, but statistics of children
+        // plan maybe more accurate in actually
+        if (!produceStatisticsOp.isPresent() && context.getChildrenStatistics().isEmpty()) {
+            Preconditions.checkState(false, "Impossible cte statistics");
         }
 
-        Preconditions.checkNotNull(produce.getStatistics());
+        if (!context.getChildrenStatistics().isEmpty()) {
+            //  use the statistics of children first
+            context.setStatistics(context.getChildStatistics(0));
+            return visitOperator(node, context);
+        }
 
+        // None children, may force CTE, use the statistics of producer
+        Preconditions.checkState(produceStatisticsOp.isPresent());
+        Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {
             ColumnRefOperator produceRef = columnRefMap.get(ref);
@@ -1380,13 +1388,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalCTEProduce(LogicalCTEProduceOperator node, ExpressionContext context) {
-        context.setStatistics(context.getChildStatistics(0));
+        Statistics statistics = context.getChildStatistics(0);
+        context.setStatistics(statistics);
+        optimizerContext.getCteContext().addCTEStatistics(node.getCteId(), context.getChildStatistics(0));
         return visitOperator(node, context);
     }
 
     @Override
     public Void visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
-        context.setStatistics(context.getChildStatistics(0));
+        Statistics statistics = context.getChildStatistics(0);
+        context.setStatistics(statistics);
+        optimizerContext.getCteContext().addCTEStatistics(node.getCteId(), context.getChildStatistics(0));
         return visitOperator(node, context);
     }
 

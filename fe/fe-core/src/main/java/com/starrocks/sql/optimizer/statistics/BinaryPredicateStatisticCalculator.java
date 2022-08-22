@@ -52,7 +52,8 @@ public class BinaryPredicateStatisticCalculator {
             StatisticRangeValues predicateRange;
 
             if (constant.isPresent()) {
-                Optional<Double> c = StatisticUtils.convertStatisticsToDouble(constant.get().getType(), constant.get().toString());
+                Optional<Double> c = StatisticUtils.convertStatisticsToDouble(
+                        constant.get().getType(), constant.get().toString());
                 if (c.isPresent()) {
                     predicateRange = new StatisticRangeValues(c.get(), c.get(), 1);
                 } else {
@@ -95,7 +96,8 @@ public class BinaryPredicateStatisticCalculator {
                             * f / columnStatistic.getHistogram().getTotalRows();
                 }
             } else {
-                Optional<Double> optDouble = StatisticUtils.convertStatisticsToDouble(constantOperator.getType(), constant.toString());
+                Optional<Double> optDouble = StatisticUtils.convertStatisticsToDouble(
+                        constantOperator.getType(), constant.toString());
                 if (optDouble.isPresent() && (optDouble.get() < columnStatistic.getMinValue()
                         || optDouble.get() > columnStatistic.getMaxValue())) {
                     predicateFactor = 0;
@@ -118,7 +120,8 @@ public class BinaryPredicateStatisticCalculator {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
-                Optional<Double> c = StatisticUtils.convertStatisticsToDouble(constant.get().getType(), constant.get().toString());
+                Optional<Double> c = StatisticUtils.convertStatisticsToDouble(
+                        constant.get().getType(), constant.get().toString());
                 if (c.isPresent()) {
                     predicateRange = new StatisticRangeValues(c.get(), c.get(), 1);
                 } else {
@@ -170,7 +173,8 @@ public class BinaryPredicateStatisticCalculator {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
-                Optional<Double> d = StatisticUtils.convertStatisticsToDouble(constant.get().getType(), constant.get().toString());
+                Optional<Double> d = StatisticUtils.convertStatisticsToDouble(
+                        constant.get().getType(), constant.get().toString());
                 if (d.isPresent()) {
                     predicateRange = new StatisticRangeValues(NEGATIVE_INFINITY, d.get(), NaN);
                 } else {
@@ -206,7 +210,8 @@ public class BinaryPredicateStatisticCalculator {
         if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
             StatisticRangeValues predicateRange;
             if (constant.isPresent()) {
-                Optional<Double> d = StatisticUtils.convertStatisticsToDouble(constant.get().getType(), constant.get().toString());
+                Optional<Double> d = StatisticUtils.convertStatisticsToDouble(
+                        constant.get().getType(), constant.get().toString());
                 if (d.isPresent()) {
                     predicateRange = new StatisticRangeValues(d.get(), POSITIVE_INFINITY, NaN);
                 } else {

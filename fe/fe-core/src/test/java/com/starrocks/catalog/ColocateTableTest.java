@@ -22,16 +22,18 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Multimap;
-import com.starrocks.analysis.DropDbStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -247,12 +249,10 @@ public class ColocateTableTest {
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Colocate tables must have same replication num: 1");
 
-        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-                minTimes = 0;
-                result = Arrays.asList(10001, 10002, 10003);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> getAvailableBackendIds() {
+                return Arrays.asList(10001L, 10002L, 10003L);       
             }
         };
         

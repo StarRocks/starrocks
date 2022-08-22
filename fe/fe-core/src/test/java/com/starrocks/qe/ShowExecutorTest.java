@@ -46,6 +46,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -311,12 +312,10 @@ public class ShowExecutorTest {
     @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
 
-        globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        new Expectations(globalStateMgr) {
-            {
-                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-                minTimes = 0;
-                result = Arrays.asList(10001, 10002, 10003);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> getAvailableBackendIds() {
+                return Arrays.asList(10001L, 10002L, 10003L);       
             }
         };
         // Prepare to Test

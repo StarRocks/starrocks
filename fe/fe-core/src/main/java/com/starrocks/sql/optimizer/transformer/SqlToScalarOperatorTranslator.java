@@ -459,6 +459,10 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitVariableExpr(VariableExpr node, Void context) {
+            if (node.isNull()) {
+                return ConstantOperator.createNull(node.getType());
+            }
+
             switch (node.getType().getPrimitiveType()) {
                 case BOOLEAN:
                     return ConstantOperator.createBoolean(node.getBoolValue());
@@ -473,8 +477,12 @@ public final class SqlToScalarOperatorTranslator {
                 case FLOAT:
                 case DOUBLE:
                     return ConstantOperator.createFloat(node.getFloatValue());
-                default:
+                case CHAR:
+                case VARCHAR:
                     return ConstantOperator.createVarchar(node.getStrValue());
+                default:
+                    throw new StarRocksPlannerException("Not support variable type "
+                            + node.getType().getPrimitiveType(), ErrorType.INTERNAL_ERROR);
             }
         }
 

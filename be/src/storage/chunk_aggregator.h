@@ -14,8 +14,6 @@
 
 namespace starrocks::vectorized {
 
-using CompareFN = void (*)(const Column* col, uint8_t* flags);
-
 class ChunkAggregator {
 private:
     ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,

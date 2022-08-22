@@ -1,11 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -20,7 +18,6 @@ import org.apache.velocity.app.VelocityEngine;
 import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public abstract class StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
@@ -83,7 +80,6 @@ public abstract class StatisticsCollectJob {
     }
 
     public void collectStatisticSync(String sql) throws Exception {
-
         LOG.debug("statistics collect sql : " + sql);
         ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
@@ -115,36 +111,5 @@ public abstract class StatisticsCollectJob {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         return sw.toString();
-    }
-
-    protected String getSampleTabletHint(Table table, long rows) {
-        Set<String> randomTablets = Sets.newHashSet();
-        rows = Math.max(rows, 1);
-
-        // calculate the number of tablets by each partition
-        // simpleTabletNums = simpleRows / partitionNums / (actualPartitionRows / actualTabletNums)
-        long avgRowsPerPartition = rows / Math.max(table.getPartitions().size(), 1);
-
-        for (Partition p : table.getPartitions()) {
-            List<Long> ids = p.getBaseIndex().getTabletIdsInOrder();
-
-            if (ids.isEmpty()) {
-                continue;
-            }
-
-            if (p.getBaseIndex().getRowCount() < (avgRowsPerPartition / 2)) {
-                continue;
-            }
-
-            long avgRowsPerTablet = Math.max(p.getBaseIndex().getRowCount() / ids.size(), 1);
-            long tabletCounts = Math.max(avgRowsPerPartition / avgRowsPerTablet, 1);
-            tabletCounts = Math.min(tabletCounts, ids.size());
-
-            for (int i = 0; i < tabletCounts; i++) {
-                randomTablets.add(String.valueOf(ids.get(i)));
-            }
-        }
-
-        return " Tablet(" + String.join(", ", randomTablets) + ")";
     }
 }

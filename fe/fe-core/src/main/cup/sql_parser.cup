@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.starrocks.analysis.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.analysis.SetOperationStmt.Qualifier;
 import com.starrocks.analysis.SetOperationStmt.Operation;
 import com.starrocks.analysis.SetOperationStmt.SetOperand;
@@ -293,7 +292,7 @@ nonterminal StatementBase stmt, show_stmt, show_param, help_stmt, load_stmt,
     show_routine_load_stmt, show_routine_load_task_stmt,
     describe_stmt, alter_stmt,
     kill_stmt, drop_stmt, grant_stmt, revoke_stmt, create_stmt, set_stmt, sync_stmt, cancel_stmt, cancel_param, delete_stmt,
-    unsupported_stmt, export_stmt, admin_stmt, truncate_stmt,
+    unsupported_stmt, export_stmt, truncate_stmt,
     import_columns_stmt, import_where_stmt, install_plugin_stmt, uninstall_plugin_stmt, analyze_stmt, create_analyze_stmt,
     alter_resource_group_stmt;
 
@@ -641,8 +640,6 @@ stmt ::=
     | unsupported_stmt : stmt
     {: RESULT = stmt; :}
     | export_stmt : stmt
-    {: RESULT = stmt; :}
-    | admin_stmt : stmt
     {: RESULT = stmt; :}
     | truncate_stmt : stmt
     {: RESULT = stmt; :}
@@ -4350,21 +4347,6 @@ integer_list ::=
     | INTEGER_LITERAL:item
     {:
         RESULT = Lists.newArrayList(item);
-    :}
-    ;
-
-admin_stmt ::=
-    KW_ADMIN KW_REPAIR KW_TABLE base_table_ref:table_ref
-    {:
-        RESULT = new AdminRepairTableStmt(table_ref);
-    :}
-    | KW_ADMIN KW_CANCEL KW_REPAIR KW_TABLE base_table_ref:table_ref
-    {:
-        RESULT = new AdminCancelRepairTableStmt(table_ref);
-    :}
-    | KW_ADMIN KW_CHECK KW_TABLET LPAREN integer_list:tabletIds RPAREN opt_properties:properties
-    {:
-        RESULT = new AdminCheckTabletsStmt(tabletIds, properties);
     :}
     ;
 

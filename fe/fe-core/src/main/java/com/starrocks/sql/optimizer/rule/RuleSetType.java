@@ -17,5 +17,4 @@ public enum RuleSetType {
     PRUNE_PROJECT,
     COLLECT_CTE,
     INLINE_CTE,
-    INLINE_ONE_CTE,
 }

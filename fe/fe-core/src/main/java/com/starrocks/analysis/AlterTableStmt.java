@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -73,8 +72,6 @@ public class AlterTableStmt extends DdlStmt {
                             "you can use 'ALTER MATERIALIZED VIEW' to alter it.",
                     tbl.getTbl(), tbl.getTbl());
         }
-
-        CatalogUtils.checkIsLakeTable(tbl.getDb(), tbl.getTbl());
 
         if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), tbl.getDb(), tbl.getTbl(),
                 PrivPredicate.ALTER)) {

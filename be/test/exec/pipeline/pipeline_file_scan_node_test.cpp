@@ -45,8 +45,6 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        auto* engine = StorageEngine::instance();
-        _exec_env->set_storage_engine(engine);
 
         const auto& params = _request.params;
         const auto& query_id = params.query_id;

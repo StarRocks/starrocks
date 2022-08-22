@@ -5,10 +5,12 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -21,6 +23,18 @@ import java.util.List;
 import java.util.Map;
 
 public class SubqueryUtils {
+
+    private static Function getAggregateFunction(String functionName, Type[] argTypes) {
+        Function func = Expr.getBuiltinFunction(functionName, argTypes,
+                Function.CompareMode.IS_IDENTICAL);
+        if (argTypes.length > 0 && argTypes[0].isDecimalV3()) {
+            func =
+                    DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) func,
+                            argTypes[0],
+                            argTypes[0]);
+        }
+        return func;
+    }
 
     // ApplyNode doesn't need to check the number of subquery's return rows
     // when the correlation predicate meets these requirements:
@@ -97,22 +111,18 @@ public class SubqueryUtils {
     }
 
     public static CallOperator createCountRowsOperator() {
-        Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
-                Function.CompareMode.IS_IDENTICAL);
+        Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT});
         return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)),
-                count,
-                false);
+                count, false);
     }
 
     public static CallOperator createCountRowsOperator(ScalarOperator column) {
-        Function count = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT},
-                Function.CompareMode.IS_IDENTICAL);
+        Function count = getAggregateFunction(FunctionSet.COUNT, new Type[] {Type.BIGINT});
         return new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(column), count, false);
     }
 
     public static CallOperator createAnyValueOperator(ScalarOperator column) {
-        Function anyValueFn = Expr.getBuiltinFunction(FunctionSet.ANY_VALUE, new Type[] {column.getType()},
-                Function.CompareMode.IS_IDENTICAL);
+        Function anyValueFn = getAggregateFunction(FunctionSet.ANY_VALUE, new Type[] {column.getType()});
         return new CallOperator(FunctionSet.ANY_VALUE, column.getType(), Lists.newArrayList(column), anyValueFn);
     }
 

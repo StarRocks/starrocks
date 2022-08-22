@@ -136,8 +136,7 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
                                            MorselPtr&& morsel, ScanOperator* op,
                                            vectorized::ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer,
-                      workgroup::TypeConnectorScanExecutor),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),

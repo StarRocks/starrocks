@@ -16,14 +16,16 @@ statement
     : queryStatement                                                                        #query
 
     // Database Statement
-    | alterDbQuotaStmt                                                                      #alterDbQuota
+    | useDatabaseStatement                                                                  #useDb
+    | useCatalogStatement                                                                   #useCatalog
+    | showDatabasesStatement                                                                #showDatabases
+    | alterDbQuotaStmtatement                                                               #alterDbQuota
     | createDbStatement                                                                     #createDb
     | dropDbStatement                                                                       #dropDb
     | showCreateDbStatement                                                                 #showCreateDb
     | alterDatabaseRename                                                                   #databaseRename
     | recoverDbStmt                                                                         #revoverDb
     | showDataStmt                                                                          #showData
-    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // Table Statement
     | createTableStatement                                                                  #createTable
@@ -83,15 +85,14 @@ statement
     | showRoutineLoadStatement                                                              #showRoutineLoad
 
     // Admin Statement
-    | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
-    | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
-    | ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?                                     #adminShowConfig
-    | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
-    | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
-            (WHERE where=expression)?                                                       #adminShowReplicaStatus
-    | ADMIN REPAIR TABLE qualifiedName partitionNames?                                      #adminRepairTable
-    | ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?                               #adminCancelRepairTable
-    | ADMIN CHECK tabletList properties                                                     #adminCheckTablets
+    | adminSetConfigStatement                                                               #adminSetConfig
+    | adminSetReplicaStatusStatement                                                        #adminSetReplicaStatus
+    | adminShowConfigStatement                                                              #adminShowConfig
+    | adminShowReplicaDistributionStatement                                                 #adminShowReplicaDistribution
+    | adminShowReplicaStatusStatement                                                       #adminShowReplicaStatus
+    | adminRepairTableStatement                                                             #adminRepairTable
+    | adminCancelRepairTableStatement                                                       #adminCancelRepairTable
+    | adminCheckTabletsStatement                                                            #adminCheckTablets
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem
@@ -126,9 +127,6 @@ statement
     | cancelLoadStatement                                                                   #cancelLoad
 
     // Other statement
-    | USE qualifiedName                                                                     #useDb
-    | USE CATALOG identifierOrString                                                        #useCatalog
-    | showDatabasesStatement                                                                #showDatabases
     | showVariablesStatement                                                                #showVariables
     | showProcesslistStatement                                                              #showProcesslist
     | showUserPropertyStatement                                                             #showUserProperty
@@ -140,6 +138,7 @@ statement
     | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
     | showWarningStatement                                                                  #showWarning
+    | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // privilege
     | GRANT identifierOrString TO user                                                      #grantRole
@@ -164,7 +163,16 @@ statement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
-alterDbQuotaStmt
+
+useDatabaseStatement
+    : USE qualifiedName
+    ;
+
+useCatalogStatement
+    : USE CATALOG identifierOrString
+    ;
+
+alterDbQuotaStmtatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -195,11 +203,6 @@ showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
     ;
-
-showDynamicPartitionStatement
-    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
-    ;
-
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------
 
@@ -435,6 +438,38 @@ refreshMaterializedViewStatement
 
 cancelRefreshMaterializedViewStatement
     : CANCEL REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    ;
+
+// ------------------------------------------- Admin Statement ---------------------------------------------------------
+
+adminSetConfigStatement
+    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    ;
+adminSetReplicaStatusStatement
+    : ADMIN SET REPLICA STATUS properties
+    ;
+adminShowConfigStatement
+    : ADMIN SHOW FRONTEND CONFIG (LIKE pattern=string)?
+    ;
+
+adminShowReplicaDistributionStatement
+    : ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?
+    ;
+
+adminShowReplicaStatusStatement
+    : ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames? (WHERE where=expression)?
+    ;
+
+adminRepairTableStatement
+    : ADMIN REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCancelRepairTableStatement
+    : ADMIN CANCEL REPAIR TABLE qualifiedName partitionNames?
+    ;
+
+adminCheckTabletsStatement
+    : ADMIN CHECK tabletList properties
     ;
 
 // ------------------------------------------- Cluster Mangement Statement ---------------------------------------------
@@ -847,6 +882,10 @@ setExprOrDefault
 showAuthenticationStatement
     : SHOW ALL AUTHENTICATION                                   #showAllAuthentication
     | SHOW AUTHENTICATION (FOR user)?                           #showAuthenticationForUser
+    ;
+
+showDynamicPartitionStatement
+    : SHOW DYNAMIC PARTITION TABLES ((FROM | IN) db=qualifiedName)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------

@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.LimitPruneTabletsRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -135,6 +136,7 @@ public class Optimizer {
         if (!sessionVariable.isDisableJoinReorder()
                 && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
             if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
+                CTEUtils.collectForceCteStatistics(memo, context);
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
@@ -189,17 +191,17 @@ public class Optimizer {
 
     void logicalRuleRewrite(Memo memo, TaskContext rootTaskContext) {
         CTEContext cteContext = context.getCteContext();
-        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+        CTEUtils.collectCteOperators(memo, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
-            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_ONE_CTE);
-            CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+            ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_CTE);
+            CTEUtils.collectCteOperators(memo, context);
         }
         cleanUpMemoGroup(memo);
 
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         rewriteSubquery(memo, rootTaskContext);
-        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+        CTEUtils.collectCteOperators(memo, context);
 
         // Add full cte required columns, and save orig required columns
         // If cte was inline, the columns don't effect normal prune
@@ -237,7 +239,7 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
 
-        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
+        CTEUtils.collectCteOperators(memo, context);
         if (cteContext.needOptimizeCTE()) {
             cteContext.reset();
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.COLLECT_CTE);
@@ -269,7 +271,6 @@ public class Optimizer {
 
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
-        CTEUtils.collectCteOperatorsWithoutCosts(memo, context);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, LimitPruneTabletsRule.getInstance());
@@ -277,19 +278,16 @@ public class Optimizer {
 
         cleanUpMemoGroup(memo);
 
-        // compute CTE inline by costs
-        if (cteContext.needOptimizeCTE()) {
-            CTEUtils.collectCteOperators(memo, context);
-        }
-
-        // compute CTE inline by costs
-        while (cteContext.needOptimizeCTE() && cteContext.hasInlineCTE()) {
+        CTEUtils.collectCteOperators(memo, context);
+        // inline CTE if consume use once
+        while (cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(memo, context);
         }
 
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new GroupByCountDistinctRewriteRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
 
         cleanUpMemoGroup(memo);
@@ -311,6 +309,7 @@ public class Optimizer {
     private OptExpression extractBestPlan(PhysicalPropertySet requiredProperty,
                                           Group rootGroup) {
         GroupExpression groupExpression = rootGroup.getBestExpression(requiredProperty);
+        Preconditions.checkNotNull(groupExpression, "no plan this sql");
         List<PhysicalPropertySet> inputProperties = groupExpression.getInputProperties(requiredProperty);
 
         List<OptExpression> childPlans = Lists.newArrayList();

@@ -590,8 +590,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: O_ORDERKEY, 2: O_CUSTKEY, 5: O_ORDERDATE"));
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: O_CUSTKEY, 5: O_ORDERDATE, 1: O_ORDERKEY\n");
     }
 
     @Test
@@ -602,8 +602,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
         sql = "select count(distinct v1) from t0 group by v2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)\n" +
-                "  |  group by: 1: v1, 2: v2"));
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2, 1: v1");
     }
 
     @Test
@@ -763,24 +763,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
-            assertContains(unionPlan, "  4:OlapScanNode\n" +
-                    "     table: t1, rollup: t1\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10015,10017,10019\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 360000\n" +
+            assertContains(unionPlan, "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
-            assertContains(unionPlan, "  1:OlapScanNode\n" +
-                    "     table: t0, rollup: t0\n" +
-                    "     preAggregation: on\n" +
-                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
-                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                    "     tabletList=10006,10008,10010\n" +
-                    "     actualRows=0, avgRowSize=4.0\n" +
-                    "     cardinality: 360000\n" +
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)\n");
+            assertContains(unionPlan, "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
         }
@@ -890,13 +876,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    select * from cte union all\n" +
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+        Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
-                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
-                "     tabletList=10015,10017,10019\n" +
-                "     actualRows=0, avgRowSize=1.0\n" +
-                "     cardinality: 400000"));
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n"));
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
@@ -1120,4 +1103,74 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     - filter_id = 0, probe_expr = (2: v2)");
     }
 
+    @Test
+    public void testGroupByDistinct1() throws Exception {
+        String sql = "select count(distinct v1), sum(v3), count(v3), max(v3), min(v3)" +
+                "from t0 group by v2;";
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: v1), sum(9: sum), sum(10: count), max(11: max), min(12: min)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3), count(3: v3), max(3: v3), min(3: v3)\n" +
+                "  |  group by: 2: v2, 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testGroupByDistinct2() throws Exception {
+        String sql = "select count(distinct v1), sum(distinct v1), sum(v3), count(v3), max(v3), min(v3)" +
+                "from t0 group by v2;";
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCteReuse(true);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1: v1), sum(1: v1), sum(10: sum), sum(11: count), max(12: max), min(13: min)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3), count(3: v3), max(3: v3), min(3: v3)\n" +
+                "  |  group by: 2: v2, 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testExpressionWithCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                "   select * from t0" +
+                ") " +
+                "select sum(k2) from (" +
+                "   SELECT * " +
+                "   from x1 join[bucket] " +
+                "   (SELECT v1 + 1 as k1, v2 + 2 as k2, v3 + 3 as k3 from x1) as y1 on x1.v1 = y1.k1" +
+                ") d group by v3, k3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v1 = 10: expr\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+        assertContains(plan, "    BUCKET_SHUFFLE_HASH_PARTITIONED: 10: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 10> : 7: v1 + 1\n" +
+                "  |  <slot 11> : 8: v2 + 2\n" +
+                "  |  <slot 12> : 9: v3 + 3\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
 }

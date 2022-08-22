@@ -77,29 +77,6 @@ public class ScalarOperatorEvaluatorTest {
     }
 
     @Test
-    public void evaluationUtc() throws AnalysisException {
-        CallOperator operator = new CallOperator("utc_timestamp", Type.VARCHAR, Lists.newArrayList());
-
-        ConnectContext ctx = new ConnectContext(null);
-        ctx.setThreadLocalInfo();
-        ctx.setStartTime();
-
-        Function fn = new Function(new FunctionName("utc_timestamp"), new Type[] {}, Type.DATETIME, false);
-
-        new Expectations(operator) {
-            {
-                operator.getFunction();
-                result = fn;
-            }
-        };
-
-        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
-
-        assertEquals(LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MINUTES),
-                ((ConstantOperator) result).getDatetime().truncatedTo(ChronoUnit.MINUTES));
-    }
-
-    @Test
     public void evaluationFromUtc() {
         CallOperator operator = new CallOperator(FunctionSet.STR_TO_DATE, Type.VARCHAR, Lists.newArrayList(
                 ConstantOperator.createVarchar("2003-10-11 23:56:25"),

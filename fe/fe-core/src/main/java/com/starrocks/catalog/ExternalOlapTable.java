@@ -311,6 +311,7 @@ public class ExternalOlapTable extends OlapTable {
             throw new DdlException("database " + dbId + " does not exist");
         }
         db.writeLock();
+        long start = System.currentTimeMillis();
 
         try {
             lastExternalMeta = meta;
@@ -402,6 +403,7 @@ public class ExternalOlapTable extends OlapTable {
                     LOG.error("invalid partition type: {}", partitionType);
                     return;
             }
+            long endOfPartitionBuild = System.currentTimeMillis();
 
             indexIdToMeta.clear();
             indexNameToId.clear();
@@ -437,8 +439,10 @@ public class ExternalOlapTable extends OlapTable {
                 // TODO(wulei)
                 // indexNameToId.put(indexMeta.getIndex_name(), index.getIndexId());
             }
+            long endOfIndexMetaBuild = System.currentTimeMillis();
 
             rebuildFullSchema();
+            long endOfSchemaRebuild = System.currentTimeMillis();
 
             idToPartition.clear();
             nameToPartition.clear();
@@ -464,7 +468,6 @@ public class ExternalOlapTable extends OlapTable {
                     MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
                             IndexState.fromThrift(indexMeta.getIndex_state()));
                     index.setRowCount(indexMeta.getRow_count());
-                    index.setRollupIndexInfo(indexMeta.getRollup_index_id(), indexMeta.getRollup_finished_version());
                     for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
                         LocalTablet tablet = new LocalTablet(tTabletMeta.getTablet_id());
                         tablet.setCheckedVersion(tTabletMeta.getChecked_version());
@@ -496,6 +499,7 @@ public class ExternalOlapTable extends OlapTable {
                 }
                 addPartition(partition);
             }
+            long endOfTabletMetaBuild = System.currentTimeMillis();
 
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
@@ -519,6 +523,12 @@ public class ExternalOlapTable extends OlapTable {
                     backend.setBackendState(BackendState.values()[backendMeta.getState()]);
                 }
             }
+            LOG.info("TableMetaSyncer finish meta update. partition build cost: {}ms, " +
+                            "index meta build cost: {}ms, schema rebuild cost: {}ms, " +
+                            "tablet meta build cost: {}ms, total cost: {}ms",
+                    endOfPartitionBuild - start, endOfIndexMetaBuild - endOfPartitionBuild,
+                    endOfSchemaRebuild - endOfIndexMetaBuild, endOfTabletMetaBuild - endOfSchemaRebuild,
+                    System.currentTimeMillis() - start);
         } finally {
             db.writeUnlock();
         }

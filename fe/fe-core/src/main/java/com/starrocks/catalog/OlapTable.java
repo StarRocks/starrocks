@@ -1872,6 +1872,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
         }
     }
@@ -1950,5 +1952,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 }
             }
         }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
+        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
+
+        Map<String, String> tableProperty = getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+        return properties;
     }
 }

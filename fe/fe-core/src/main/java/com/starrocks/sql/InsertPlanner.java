@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -58,6 +59,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -109,18 +111,11 @@ public class InsertPlanner {
                 columnRefFactory);
 
         //7. Build fragment exec plan
-        ExecPlan execPlan;
-        if ((queryRelation instanceof SelectRelation &&
-                queryRelation.hasLimit())
-                || insertStmt.getTargetTable() instanceof MysqlTable) {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        } else {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        }
+        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                || insertStmt.getTargetTable() instanceof MysqlTable);
+        ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
 
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
@@ -337,6 +332,13 @@ public class InsertPlanner {
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
                                                           List<ColumnRefOperator> outputColumns) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+        if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
+            DistributionProperty distributionProperty =
+                    new DistributionProperty(new GatherDistributionSpec(queryRelation.getLimit().getLimit()));
+            return new PhysicalPropertySet(distributionProperty);
+        }
+
         if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
             return new PhysicalPropertySet();
         }

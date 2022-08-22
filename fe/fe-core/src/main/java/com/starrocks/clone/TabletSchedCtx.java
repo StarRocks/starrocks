@@ -503,7 +503,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad()) {
+            if (replica.isBad() || replica.getState() == ReplicaState.DECOMMISSION) {
                 continue;
             }
 
@@ -550,7 +550,14 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 continue;
             }
 
-            long srcPathHash = slot.takeSlot(srcReplica.getPathHash());
+            long srcPathHash;
+            try {
+                srcPathHash = slot.takeSlot(srcReplica.getPathHash());
+            } catch (SchedException e) {
+                LOG.info("take slot from replica {}(belonged backend {}) failed, {}", srcReplica.getId(),
+                        srcReplica.getBackendId(), e.getMessage());
+                continue;
+            }
             if (srcPathHash != -1) {
                 setSrc(srcReplica);
                 return;
