@@ -12,7 +12,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
-import mockit.Mocked;
 import org.apache.avro.Schema;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;

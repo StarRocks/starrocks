@@ -111,7 +111,7 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void SubmitTaskRegularTest() throws Exception {
+    public void submitTaskRegularTest() throws Exception {
 
         ConnectContext ctx = starRocksAssert.getCtx();
         ctx.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
@@ -130,10 +130,11 @@ public class TaskManagerTest {
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
         Constants.TaskRunState state = null;
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0;
+        int maxRetry = 5;
         while (retryCount < maxRetry) {
             state = taskRuns.get(0).getState();
-            retryCount ++;
+            retryCount++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                 break;
@@ -147,7 +148,7 @@ public class TaskManagerTest {
 
     // This test is temporarily removed because it is unstable,
     // and it will be added back when the cause of the problem is found and fixed.
-    public void SubmitMvTaskTest() {
+    public void submitMvTaskTest() {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
@@ -173,10 +174,11 @@ public class TaskManagerTest {
             List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
 
             Constants.TaskRunState state = null;
-            int retryCount = 0, maxRetry = 5;
+            int retryCount = 0;
+            int maxRetry = 5;
             while (retryCount < maxRetry) {
                 state = taskRuns.get(0).getState();
-                retryCount ++;
+                retryCount++;
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
                 if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
                     break;
@@ -194,7 +196,7 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void SubmitMvAsyncTaskTest() {
+    public void submitMvAsyncTaskTest() {
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -219,11 +221,12 @@ public class TaskManagerTest {
 
             // at least 2 times = schedule 1 times + execute 1 times
             List<TaskRunStatus> taskRuns = null;
-            int retryCount = 0, maxRetry = 5;
+            int retryCount = 0;
+            int maxRetry = 5;
             while (retryCount < maxRetry) {
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
                 taskRuns = taskManager.showTaskRunStatus(null);
-                if(taskRuns.size() == 2) {
+                if (taskRuns.size() == 2) {
                     Set<Constants.TaskRunState> taskRunStates =
                             taskRuns.stream().map(TaskRunStatus::getState).collect(Collectors.toSet());
                     if (taskRunStates.size() == 1 && (taskRunStates.contains(Constants.TaskRunState.FAILED) ||
@@ -277,10 +280,11 @@ public class TaskManagerTest {
             LOG.info(taskRunStatus);
         }
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0;
+        int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            if(allHistory.size() == 2) {
+            if (allHistory.size() == 2) {
                 break;
             }
             retryCount++;

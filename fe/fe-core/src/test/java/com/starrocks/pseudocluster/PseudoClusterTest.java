@@ -35,8 +35,9 @@ public class PseudoClusterTest {
         try {
             stmt.execute("create database test");
             stmt.execute("use test");
-            stmt.execute(
-                    "create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
+            stmt.execute("create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
             Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);"));
             System.out.printf("updated %d rows\n", stmt.getUpdateCount());
             stmt.execute("select * from test");

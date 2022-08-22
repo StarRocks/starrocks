@@ -97,7 +97,7 @@ public class SetExecutorTest {
     public void testSetSessionAndGlobal(@Mocked EditLog editLog) throws Exception {
         new Expectations(editLog) {
             {
-                editLog.logGlobalVariableV2((GlobalVarPersistInfo)any);
+                editLog.logGlobalVariableV2((GlobalVarPersistInfo) any);
                 minTimes = 1;
             }
         };

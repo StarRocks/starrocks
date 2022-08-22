@@ -2,7 +2,6 @@
 
 package com.starrocks.server;
 
-import com.amazonaws.services.dynamodbv2.document.Expected;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
@@ -35,8 +34,6 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.validation.constraints.AssertTrue;
 
 import static org.apache.iceberg.types.Types.NestedField.optional;
 
@@ -77,9 +74,9 @@ public class CatalogLevelTest {
                 result = hiveTable;
             }
         };
-        String sql_1 = "select col1 from hive_catalog.hive_db.hive_table";
+        String sql1 = "select col1 from hive_catalog.hive_db.hive_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
 
     }
 
@@ -149,9 +146,9 @@ public class CatalogLevelTest {
                 result = hudiTable;
             }
         };
-        String sql_1 = "select col1 from hudi_catalog.hudi_db.hudi_table";
+        String sql1 = "select col1 from hudi_catalog.hudi_db.hudi_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
     }
 
     @Test
@@ -185,9 +182,9 @@ public class CatalogLevelTest {
                 result = icebergTable;
             }
         };
-        String sql_1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
+        String sql1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
 
     }
 }

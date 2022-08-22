@@ -230,7 +230,8 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4");
         Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v4', 10002, 'test.t0_stats', " +
                 "histogram(v4, 64, 0.1),  '[[\"00000101\",\"10\"],[\"19910101\",\"20\"]]', NOW() " +
-                "FROM (SELECT v4 FROM test.t0_stats where rand() <= 0.1 and v4 is not null  and v4 not in (\"0000-01-01\",\"1991-01-01\") " +
+                "FROM (SELECT v4 FROM test.t0_stats where rand() <= 0.1 and v4 is not null " +
+                "and v4 not in (\"0000-01-01\",\"1991-01-01\") " +
                 "ORDER BY v4 LIMIT 9223372036854775807) t", sql);
 
         mostCommonValues.clear();
@@ -240,7 +241,8 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5");
         Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v5', 10002, 'test.t0_stats', " +
                 "histogram(v5, 64, 0.1),  '[[\"19910101000000\",\"20\"],[\"00000101000000\",\"10\"]]', NOW() " +
-                "FROM (SELECT v5 FROM test.t0_stats where rand() <= 0.1 and v5 is not null  and v5 not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
+                "FROM (SELECT v5 FROM test.t0_stats where rand() <= 0.1 and v5 is not null " +
+                "and v5 not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
                 "ORDER BY v5 LIMIT 9223372036854775807) t", sql);
 
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",

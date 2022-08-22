@@ -32,7 +32,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -260,7 +259,7 @@ public class KafkaRoutineLoadJobTest {
         Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
         Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
         Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
-        long dbId = 1l;
+        long dbId = 1L;
         long tableId = 2L;
 
         new Expectations() {

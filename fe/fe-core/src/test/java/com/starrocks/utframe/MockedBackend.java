@@ -170,14 +170,14 @@ public class MockedBackend {
         }
 
         @Override
-        public THeartbeatResult heartbeat(TMasterInfo master_info) {
+        public THeartbeatResult heartbeat(TMasterInfo masterInfo) {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
 
         @Override
-        public void send_heartbeat(TMasterInfo master_info) {
+        public void send_heartbeat(TMasterInfo masterInfo) {
         }
 
         @Override
@@ -241,12 +241,12 @@ public class MockedBackend {
         }
 
         @Override
-        public TAgentResult make_snapshot(TSnapshotRequest snapshot_request) {
+        public TAgentResult make_snapshot(TSnapshotRequest snapshotRequest) {
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
         @Override
-        public TAgentResult release_snapshot(String snapshot_path) {
+        public TAgentResult release_snapshot(String snapshotPath) {
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
@@ -276,12 +276,12 @@ public class MockedBackend {
         }
 
         @Override
-        public TExportStatusResult get_export_status(TUniqueId task_id) {
+        public TExportStatusResult get_export_status(TUniqueId taskId) {
             return new TExportStatusResult(new TStatus(TStatusCode.OK), TExportState.FINISHED);
         }
 
         @Override
-        public TStatus erase_export_task(TUniqueId task_id) {
+        public TStatus erase_export_task(TUniqueId taskId) {
             return new TStatus(TStatusCode.OK);
         }
 

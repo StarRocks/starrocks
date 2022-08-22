@@ -157,11 +157,12 @@ public class RollupJobV2Test extends DDLTestBase {
         materializedViewHandler.runAfterCatalogReady();
         assertEquals(AlterJobV2.JobState.RUNNING, rollupJob.getJobState());
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0;
+        int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             materializedViewHandler.runAfterCatalogReady();
-            if(rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
+            if (rollupJob.getJobState() == AlterJobV2.JobState.FINISHED) {
                 break;
             }
             retryCount++;

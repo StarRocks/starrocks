@@ -9,18 +9,14 @@ import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TruncatePartitionClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.CaseInsensitiveStream;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.parser.StarRocksLexer;
 import com.starrocks.sql.parser.StarRocksParser;
-
 import com.starrocks.utframe.UtFrameUtils;
-
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.junit.Assert;
@@ -45,7 +41,8 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testModifyBackendHost() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+    public void testModifyBackendHost() throws NoSuchFieldException, SecurityException,
+            IllegalArgumentException, IllegalAccessException {
         String sql = "alter system modify backend host '127.0.0.1' to 'testHost'";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -60,7 +57,8 @@ public class AstBuilderTest {
     }
 
     @Test
-    public void testModifyFrontendHost() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+    public void testModifyFrontendHost() throws NoSuchFieldException, SecurityException,
+            IllegalArgumentException, IllegalAccessException {
         String sql = "alter system modify frontend host '127.0.0.1' to 'testHost'";
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
@@ -80,7 +78,7 @@ public class AstBuilderTest {
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         AlterTableStmt aStmt = (AlterTableStmt) statement;
         List<AlterClause> alterClauses = aStmt.getOps();
-        TruncatePartitionClause c = (TruncatePartitionClause)alterClauses.get(0);
+        TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
     }
 }

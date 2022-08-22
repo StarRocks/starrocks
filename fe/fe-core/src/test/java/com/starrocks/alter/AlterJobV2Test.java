@@ -55,12 +55,12 @@ public class AlterJobV2Test {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable(
-                        "CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE test.properties_change_test(k1 int, v1 int) primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
+                .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
+                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {

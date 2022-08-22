@@ -196,11 +196,14 @@ public class HudiTableTest {
         Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
                 Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createFixed("FIXED", "FIXED", "F",1)),
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createFixed("FIXED", "FIXED", "F", 1)),
                 ScalarType.createType(PrimitiveType.VARCHAR));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createUnion(Schema.create(Schema.Type.INT)))
-                ,ScalarType.createType(PrimitiveType.INT));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createMap(Schema.create(Schema.Type.INT)))
-                ,ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createUnion(Schema.create(Schema.Type.INT))),
+                ScalarType.createType(PrimitiveType.INT));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createMap(Schema.create(Schema.Type.INT))),
+                ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
     }
 }

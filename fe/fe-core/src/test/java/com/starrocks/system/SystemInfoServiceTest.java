@@ -51,7 +51,7 @@ public class SystemInfoServiceTest {
                 return globalStateMgr;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 globalStateMgr.getEditLog();
                 result = editLog;
@@ -91,9 +91,7 @@ public class SystemInfoServiceTest {
     public void testUpdateBackendAddressNotFoundBe() throws Exception {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(
-            "originalHost-test", "sandbox"
-        );
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("originalHost-test", "sandbox");
         // This case will occur backend [%s] not found exception
         service.modifyBackendHost(clause);
     }
@@ -175,7 +173,7 @@ public class SystemInfoServiceTest {
                 return addr;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 addr.getHostAddress();
                 result = "127.0.0.1";
@@ -226,7 +224,7 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(10001);
         service.addBackend(be);
-        long backendId = service.getBackendIdWithStarletPort("newHost",10001);
+        long backendId = service.getBackendIdWithStarletPort("newHost", 10001);
         Assert.assertEquals(be.getId(), backendId);
     }
 }

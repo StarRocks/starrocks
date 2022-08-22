@@ -64,11 +64,12 @@ public class BatchRollupJobTest {
     @Test
     public void testBatchRollup() throws Exception {
         starRocksAssert.withTable(
-                "create table db1.tbl1(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+                "create table db1.tbl1(k1 int, k2 int, k3 int) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         // batch add 3 rollups
-        String stmtStr =
-                "alter table db1.tbl1 add rollup r1(k1) duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
+        String stmtStr = "alter table db1.tbl1 add rollup r1(k1) duplicate key(k1), r2(k1, k2) " +
+                "duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
@@ -113,12 +114,12 @@ public class BatchRollupJobTest {
 
     @Test
     public void testCancelBatchRollup() throws Exception {
-        starRocksAssert.withTable(
-                "create table db1.tbl2(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+        starRocksAssert.withTable("create table db1.tbl2(k1 int, k2 int, k3 int) " +
+                "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         // batch add 3 rollups
-        String stmtStr =
-                "alter table db1.tbl2 add rollup r1(k1) duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
+        String stmtStr = "alter table db1.tbl2 add rollup r1(k1) " +
+                "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(stmtStr, ctx);
         GlobalStateMgr.getCurrentState().getAlterInstance().processAlterTable(alterTableStmt);
 
