@@ -265,11 +265,13 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     }
 
     auto token = _thread_pool_flush->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-    std::vector<std::pair<Status, int64_t>> pair_vec;
+    std::vector<std::pair<Status, int64_t>> pair_vec(to_flush_tablet.size());
+    int i = 0;
     for (auto& tablet : to_flush_tablet) {
-        Status st;
-        token->submit_func([&]() { st = std::move(tablet->data_dir()->get_meta()->flush()); });
-        pair_vec.push_back(std::make_pair(st, tablet->tablet_id()));
+        auto dir = tablet->data_dir();
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = std::move(dir->get_meta()->flush()); });
+        pair_vec[i].second = tablet->tablet_id();
+        i++;
     }
 
     token->wait();
@@ -290,13 +292,13 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     int64_t duration_ns = 0;
     SCOPED_RAW_TIMER(&duration_ns);
 
-    std::vector<std::pair<Status, std::string>> pair_vec;
-    pair_vec.reserve(affected_dirs.size());
+    int i = 0;
+    std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _thread_pool_flush->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        Status st;
-        token->submit_func([&]() { st = std::move(dir->get_meta()->flush()); });
-        pair_vec.push_back(std::make_pair(st, dir->path()));
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = std::move(dir->get_meta()->flush()); });
+        pair_vec[i].second = dir->path();
+        i++;
     }
 
     // wait for all the flush task complete
