@@ -21,19 +21,15 @@
 
 package com.starrocks.utframe;
 
+
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -49,7 +45,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;

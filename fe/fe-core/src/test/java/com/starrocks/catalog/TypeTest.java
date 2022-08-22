@@ -131,6 +131,10 @@ public class TypeTest {
         Assert.assertEquals(60, arrayType.getMysqlResultSetFieldLength());
         Assert.assertEquals(0, arrayType.getMysqlResultSetFieldDecimals());
         Assert.assertEquals(33, arrayType.getMysqlResultSetFieldCharsetIndex());
+
+        // function (an invisible type for users, just used to express the lambda Functions in high-order functions)
+        type = Type.FUNCTION;
+        Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
     }
 
     @Test

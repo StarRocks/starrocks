@@ -24,8 +24,6 @@ package com.starrocks.alter;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.sql.ast.ShowAlterStmt;
-import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -35,6 +33,8 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.ThreadUtil;
@@ -60,15 +60,14 @@ public class AlterJobV2Test {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable(
-                        "CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE test.properties_change_test(k1 int, v1 int) primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
-                .withTable(
-                        "CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP DUPLICATE KEY(k1) " +
-                                "DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+                .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " + 
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.segmentv2(k1 int, k2 int, v1 int sum) " + 
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " + 
+                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
+                .withTable("CREATE TABLE modify_column_test(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                        "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {

@@ -237,7 +237,7 @@ public class CatalogRecycleBinTest {
         // if already expired, we should return false but won't erase the flag
         Assert.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
         Assert.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
-     }
+    }
 
     @Test
     public void testRecycleDb(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
@@ -340,21 +340,21 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                editLog.logEraseMultiTables((List<Long>)any);
+                editLog.logEraseMultiTables((List<Long>) any);
                 minTimes = 0;
             }
         };
 
         // 1. add 2 tables
-        long DB_ID = 1;
+        long dbId = 1;
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleTable(DB_ID, table1);
-        recycleBin.recycleTable(DB_ID, table2SameName);
-        recycleBin.recycleTable(DB_ID, table2);
+        recycleBin.recycleTable(dbId, table1);
+        recycleBin.recycleTable(dbId, table2SameName);
+        recycleBin.recycleTable(dbId, table2);
 
-        Assert.assertEquals(recycleBin.getTables(DB_ID), Arrays.asList(table1, table2));
-        Assert.assertEquals(recycleBin.getTable(DB_ID, table1.getId()), table1);
-        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), table2);
+        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table1, table2));
+        Assert.assertEquals(recycleBin.getTable(dbId, table1.getId()), table1);
+        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table1.getId()));
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(table2.getId()));
 
@@ -365,9 +365,9 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
 
-        Assert.assertEquals(recycleBin.getTables(DB_ID), Arrays.asList(table2));
-        Assert.assertEquals(recycleBin.getTable(DB_ID, table1.getId()), null);
-        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), table2);
+        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table2));
+        Assert.assertEquals(recycleBin.getTable(dbId, table1.getId()), null);
+        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
 
         // 3. set recyle later, check if recycle now
         CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
@@ -382,14 +382,14 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
-        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), table2);
+        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
         // 5. will erase after expire time + latency time
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
         recycleBin.eraseTable(now);
-        Assert.assertEquals(recycleBin.getTable(DB_ID, table2.getId()), null);
+        Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), null);
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
     }
@@ -409,7 +409,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.onErasePartition((Partition)any);
+                globalStateMgr.onErasePartition((Partition) any);
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();
@@ -425,14 +425,14 @@ public class CatalogRecycleBinTest {
         };
 
         // 1. add 2 partitions
-        long DB_ID = 1;
-        long TABLE_ID = 2;
+        long dbId = 1;
+        long tableId = 2;
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
-        recycleBin.recyclePartition(DB_ID, TABLE_ID, p1, null, dataProperty, (short) 2, false, null, false);
-        recycleBin.recyclePartition(DB_ID, TABLE_ID, p2SameName, null, dataProperty, (short) 2, false, null, false);
-        recycleBin.recyclePartition(DB_ID, TABLE_ID, p2, null, dataProperty, (short) 2, false, null, false);
+        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null, false);
+        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null, false);
+        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null, false);
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
@@ -489,7 +489,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.onErasePartition((Partition)any);
+                globalStateMgr.onErasePartition((Partition) any);
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();
@@ -505,14 +505,14 @@ public class CatalogRecycleBinTest {
         };
 
         // 1. add 2 partitions
-        long DB_ID = 1;
-        long TABLE_ID = 2;
+        long dbId = 1;
+        long tableId = 2;
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
-        recycleBin.recyclePartition(DB_ID, TABLE_ID, p1, null, dataProperty, (short) 2, false, null, true);
-        recycleBin.recyclePartition(DB_ID, TABLE_ID, p2SameName, null, dataProperty, (short) 2, false, null, true);
-        recycleBin.recyclePartition(DB_ID, TABLE_ID, p2, null, dataProperty, (short) 2, false, null, true);
+        recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null, true);
+        recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null, true);
+        recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null, true);
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);

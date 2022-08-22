@@ -70,7 +70,7 @@ public class MetricTypeTest extends PlanTestBase {
     }
 
     @Test
-    public void TestJoinOnBitmapColumn() {
+    public void testJoinOnBitmapColumn() {
         String sql = "select * from test.bitmap_table a join test.bitmap_table b on a.id2 = b.id2";
         starRocksAssert.query(sql).analysisError("bitmap", "not support binary predicate");
 

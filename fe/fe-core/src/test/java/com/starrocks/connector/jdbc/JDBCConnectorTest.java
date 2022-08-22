@@ -21,7 +21,7 @@ public class JDBCConnectorTest {
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         ConnectorContext context = new ConnectorContext("jdbcmysql", "jdbc", properties);
-        Assert.assertThrows(IllegalArgumentException.class, ()-> new JDBCConnector(context));
+        Assert.assertThrows(IllegalArgumentException.class, () -> new JDBCConnector(context));
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
         try {
             new JDBCConnector(context);

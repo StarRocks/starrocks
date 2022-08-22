@@ -46,9 +46,6 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.scheduler.Constants;
-import com.starrocks.scheduler.TaskManagerTest;
-import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.task.AgentTask;
@@ -76,8 +73,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 
@@ -150,11 +145,12 @@ public class SchemaChangeJobV2Test extends DDLTestBase  {
         schemaChangeHandler.runAfterCatalogReady();
         Assert.assertEquals(JobState.RUNNING, schemaChangeJob.getJobState());
 
-        int retryCount = 0, maxRetry = 5;
+        int retryCount = 0;
+        int maxRetry = 5;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             schemaChangeHandler.runAfterCatalogReady();
-            if(schemaChangeJob.getJobState() == JobState.FINISHED) {
+            if (schemaChangeJob.getJobState() == JobState.FINISHED) {
                 break;
             }
             retryCount++;

@@ -3,7 +3,6 @@ package com.starrocks.sql.common;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.PartitionValue;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;

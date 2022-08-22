@@ -2,13 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.InsertStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.TableName;
-import com.starrocks.common.UserException;
-import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -25,19 +19,19 @@ public class AdminShowTest {
     }
 
     @Test
-    public void TestAdminShowConfig() {
+    public void testAdminShowConfig() {
         analyzeSuccess("admin show frontend config;");
         analyzeSuccess("admin show frontend config like '%parallel%';");
     }
 
     @Test
-    public void TestAdminShowReplicaDistribution() {
+    public void testAdminShowReplicaDistribution() {
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);");
     }
 
     @Test
-    public void TestAdminShowReplicaStatus() {
+    public void testAdminShowReplicaStatus() {
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM db1.tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2)\n" +
                 "WHERE STATUS = \"VERSION_ERROR\";");
