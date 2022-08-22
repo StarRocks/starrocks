@@ -426,7 +426,7 @@ void MathFunctions::decimal_round(const int128_t& lv, const int32_t& original_sc
     if (scale_diff > 0) {
         if (keep_scale) {
             // Up scale and down scale can offset when keep scale is set
-            // E.g. 1.2345 --(scale up by 2)--> 1.234500 --(scale down by 2) --> 1.2345
+            // E.g. 1.2345 --(scale up by 2)--> 1.234500 --(scale down by 2)--> 1.2345
             *res = lv;
         } else {
             (*is_over_flow) |= DecimalV3Cast::round<int128_t, int128_t, int128_t, rule, true, true>(
@@ -434,7 +434,7 @@ void MathFunctions::decimal_round(const int128_t& lv, const int32_t& original_sc
         }
     } else if (scale_diff < 0) {
         // Up scale and down scale cannot offset when keep scale is set
-        // E.g. 1.2345 --(scale down by 2)--> 1.23 --(scale up by 2) --> 1.2300
+        // E.g. 1.2345 --(scale down by 2)--> 1.23 --(scale up by 2)--> 1.2300
         (*is_over_flow) |= DecimalV3Cast::round<int128_t, int128_t, int128_t, rule, false, true>(
                 lv, get_scale_factor<int128_t>(-scale_diff), res);
         if (keep_scale) {
@@ -443,6 +443,7 @@ void MathFunctions::decimal_round(const int128_t& lv, const int32_t& original_sc
                     *res, get_scale_factor<int128_t>(-scale_diff), &new_res);
             *res = new_res;
         } else if (target_scale < 0) {
+            // E.g. round(13.14, -1), 13.14 --(scale down by 3)--> 1e1 --(scale up by 1)--> 10
             int128_t new_res;
             (*is_over_flow) |= DecimalV3Cast::round<int128_t, int128_t, int128_t, rule, true, true>(
                     *res, get_scale_factor<int128_t>(-target_scale), &new_res);
