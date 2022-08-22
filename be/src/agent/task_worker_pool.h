@@ -66,7 +66,7 @@ public:
         MAKE_SNAPSHOT,
         RELEASE_SNAPSHOT,
         MOVE,
-        RECOVER_TABLET,
+        RECOVER_TABLET, // Deprecated
         UPDATE_TABLET_META_INFO
     };
 
@@ -154,4 +154,93 @@ private:
     std::atomic<bool> _stopped{false};
     std::vector<std::thread> _worker_threads;
 }; // class TaskWorkerPool
+
+template <TaskWorkerPool::TaskWorkerType type>
+struct TaskWorkerTypeTraits {};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::CREATE_TABLE> {
+    using TReq = TCreateTabletReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::DROP_TABLE> {
+    using TReq = TDropTabletReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::PUSH> {
+    using TReq = TPushReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::REALTIME_PUSH> {
+    using TReq = TPushReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::PUBLISH_VERSION> {
+    using TReq = TPublishVersionRequest;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::CLEAR_TRANSACTION_TASK> {
+    using TReq = TClearTransactionTaskRequest;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::DELETE> {
+    using TReq = TPushReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::ALTER_TABLE> {
+    using TReq = TAlterTabletReqV2;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::CLONE> {
+    using TReq = TCloneReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::STORAGE_MEDIUM_MIGRATE> {
+    using TReq = TStorageMediumMigrateReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::CHECK_CONSISTENCY> {
+    using TReq = TCheckConsistencyReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::UPLOAD> {
+    using TReq = TUploadReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::DOWNLOAD> {
+    using TReq = TDownloadReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::MAKE_SNAPSHOT> {
+    using TReq = TSnapshotRequest;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::RELEASE_SNAPSHOT> {
+    using TReq = TReleaseSnapshotRequest;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::MOVE> {
+    using TReq = TMoveDirReq;
+};
+
+template <>
+struct TaskWorkerTypeTraits<TaskWorkerPool::UPDATE_TABLET_META_INFO> {
+    using TReq = TUpdateTabletMetaInfoReq;
+};
+
 } // namespace starrocks
