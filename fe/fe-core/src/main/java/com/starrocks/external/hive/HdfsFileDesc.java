@@ -8,16 +8,17 @@ import com.starrocks.external.hive.text.TextFileFormatDesc;
 public class HdfsFileDesc {
     private String fileName;
     private String compression;
+    // length == -1 and fileName == "" when the table type is hudi MOR table
+    // and the base file is not exists (log files only).
     private long length;
     private ImmutableList<HdfsFileBlockDesc> blockDescs;
     private boolean splittable;
     private TextFileFormatDesc textFileFormatDesc;
     private ImmutableList<String> hudiDeltaLogs;
-    private boolean isHudiMORTable;
 
     public HdfsFileDesc(String fileName, String compression, long length,
                         ImmutableList<HdfsFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
-                        boolean splittable, TextFileFormatDesc textFileFormatDesc, boolean isHudiMORTable) {
+                        boolean splittable, TextFileFormatDesc textFileFormatDesc) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
@@ -25,7 +26,6 @@ public class HdfsFileDesc {
         this.hudiDeltaLogs = hudiDeltaLogs;
         this.splittable = splittable;
         this.textFileFormatDesc = textFileFormatDesc;
-        this.isHudiMORTable = isHudiMORTable;
     }
 
     public String getFileName() {
@@ -54,10 +54,6 @@ public class HdfsFileDesc {
 
     public ImmutableList<String> getHudiDeltaLogs() {
         return hudiDeltaLogs;
-    }
-
-    public boolean isHudiMORTable() {
-        return isHudiMORTable;
     }
 
 }
