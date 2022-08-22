@@ -15,7 +15,6 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -193,7 +192,8 @@ public class QueryAnalyzer {
                 return join;
             } else if (relation instanceof TableRelation) {
                 if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                            relation.getResolveTableName().getTbl());
                 } else {
                     aliasSet.add(relation.getResolveTableName().getTbl());
                 }
@@ -249,7 +249,8 @@ public class QueryAnalyzer {
             } else {
                 if (relation.getResolveTableName() != null) {
                     if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                                relation.getResolveTableName().getTbl());
                     } else {
                         aliasSet.add(relation.getResolveTableName().getTbl());
                     }
@@ -340,10 +341,6 @@ public class QueryAnalyzer {
             }
 
             if (joinEqual != null) {
-                if (joinEqual.contains(Subquery.class)) {
-                    throw new SemanticException("Not support use subquery in ON clause");
-                }
-
                 /*
                  * sourceRelation.getRelationFields() is used to represent the column information of output.
                  * To ensure the OnPredicate in semi/anti is correct, the relation needs to be re-assembled here
