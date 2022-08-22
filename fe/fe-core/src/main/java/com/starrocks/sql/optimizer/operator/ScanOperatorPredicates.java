@@ -73,4 +73,10 @@ public class ScanOperatorPredicates {
                 Objects.equal(getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
                 Objects.equal(getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
     }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(idToPartitionKey, selectedPartitionIds, partitionConjuncts,
+                noEvalPartitionConjuncts, nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
+    }
 }
