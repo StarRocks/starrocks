@@ -2,25 +2,19 @@
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Queues;
 import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -39,13 +33,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.time.LocalDateTime;
-import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class TaskManagerTest {
