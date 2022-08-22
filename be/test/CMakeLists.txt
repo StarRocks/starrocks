@@ -90,7 +90,8 @@ set(EXEC_FILES
         ./exprs/vectorized/json_functions_test.cpp
         ./exprs/vectorized/lambda_function_expr_test.cpp
         ./exprs/vectorized/like_test.cpp
-        exprs/vectorized/map_element_expr_test.cpp
+        ./exprs/vectorized/map_element_expr_test.cpp
+        ./exprs/vectorized/map_functions_test.cpp
         ./exprs/vectorized/math_functions_test.cpp
         ./exprs/vectorized/null_if_expr_test.cpp
         ./exprs/vectorized/percentile_functions_test.cpp
