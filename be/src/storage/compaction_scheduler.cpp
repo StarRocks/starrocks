@@ -219,7 +219,7 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
         VLOG(2) << "try tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type);
 
         if (!_check_precondition(compaction_candidate)) {
-            LOG(INFO) << "check compaction precondition failed, candidate info: " << compaction_candidate.to_string();
+            VLOG(2) << "check compaction precondition failed, candidate info: " << compaction_candidate.to_string();
             break;
         }
 
