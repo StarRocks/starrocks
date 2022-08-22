@@ -207,6 +207,8 @@ private:
             } else {                                                                        \
                 return Status::MemoryLimitExceeded("Mem usage has exceed the limit of BE"); \
             }                                                                               \
+        } catch (std::runtime_error const& e) {                                             \
+            return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));        \
         }                                                                                   \
     } while (0)
 
