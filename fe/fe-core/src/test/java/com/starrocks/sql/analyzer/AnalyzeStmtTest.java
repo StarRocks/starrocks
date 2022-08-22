@@ -144,7 +144,7 @@ public class AnalyzeStmtTest {
         Column v2 = table.getColumn("v2");
 
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
+                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as bigint(20))) as string), " +
                         "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
                         "WHERE table_id = 10004 and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
