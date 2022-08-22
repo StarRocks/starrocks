@@ -556,11 +556,11 @@ public class PseudoBackend {
     }
 
     private void handleRealtimePushTypeDelete(TPushReq pushReq, TFinishTaskRequest finish) {
-        List<TTabletInfo> finish_tablet_infos = Lists.newArrayList();
+        List<TTabletInfo> finishTabletInfos = Lists.newArrayList();
         long tabletId = pushReq.getTablet_id();
         Tablet tablet = tabletManager.getTablet(tabletId);
-        finish_tablet_infos.add(tablet.getTabletInfo());
-        finish.setFinish_tablet_infos(finish_tablet_infos);
+        finishTabletInfos.add(tablet.getTabletInfo());
+        finish.setFinish_tablet_infos(finishTabletInfos);
         finish.setRequest_version(pushReq.getVersion());
     }
 
@@ -570,7 +570,7 @@ public class PseudoBackend {
         }
 
         @Override
-        public THeartbeatResult heartbeat(TMasterInfo master_info) throws TException {
+        public THeartbeatResult heartbeat(TMasterInfo masterInfo) throws TException {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
@@ -627,12 +627,12 @@ public class PseudoBackend {
         }
 
         @Override
-        public TAgentResult make_snapshot(TSnapshotRequest snapshot_request) {
+        public TAgentResult make_snapshot(TSnapshotRequest snapshotRequest) {
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
         @Override
-        public TAgentResult release_snapshot(String snapshot_path) {
+        public TAgentResult release_snapshot(String snapshotPath) {
             return new TAgentResult(new TStatus(TStatusCode.OK));
         }
 
@@ -662,12 +662,12 @@ public class PseudoBackend {
         }
 
         @Override
-        public TExportStatusResult get_export_status(TUniqueId task_id) {
+        public TExportStatusResult get_export_status(TUniqueId taskId) {
             return new TExportStatusResult(new TStatus(TStatusCode.OK), TExportState.FINISHED);
         }
 
         @Override
-        public TStatus erase_export_task(TUniqueId task_id) {
+        public TStatus erase_export_task(TUniqueId taskId) {
             return new TStatus(TStatusCode.OK);
         }
 
@@ -766,8 +766,7 @@ public class PseudoBackend {
             final QueryProgress progress = queryProgresses.computeIfAbsent(queryid, k -> new QueryProgress(k));
             if (params.fragment.output_sink != null && params.fragment.output_sink.type == TDataSinkType.RESULT_SINK) {
                 resultSinkInstanceToQueryId.put(
-                        DebugUtil.printId(params.params.fragment_instance_id)
-                        , queryid);
+                        DebugUtil.printId(params.params.fragment_instance_id), queryid);
             }
             progress.addFragment(1);
             executor.submit(() -> {
@@ -811,8 +810,7 @@ public class PseudoBackend {
                     return CompletableFuture.completedFuture(result);
                 }
                 resultSinkInstanceToQueryId.put(
-                        DebugUtil.printId(params.unique_param_per_instance.get(0).params.fragment_instance_id)
-                        , queryid);
+                        DebugUtil.printId(params.unique_param_per_instance.get(0).params.fragment_instance_id), queryid);
             }
             executor.submit(() -> {
                 execBatchPlanFragmentsWithReport(params);
@@ -1029,11 +1027,11 @@ public class PseudoBackend {
     private void runOlapScan(TPlanNode olapScanNode, List<TScanRangeParams> tScanRangeParams)
             throws Exception {
         for (TScanRangeParams scanRangeParams : tScanRangeParams) {
-            long tablet_id = scanRangeParams.scan_range.internal_scan_range.tablet_id;
+            long tabletId = scanRangeParams.scan_range.internal_scan_range.tablet_id;
             long version = Long.parseLong(scanRangeParams.scan_range.internal_scan_range.version);
-            Tablet tablet = tabletManager.getTablet(tablet_id);
+            Tablet tablet = tabletManager.getTablet(tabletId);
             if (tablet == null) {
-                String msg = String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tablet_id,
+                String msg = String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tabletId,
                         version);
                 System.out.println(msg);
                 throw new Exception(msg);

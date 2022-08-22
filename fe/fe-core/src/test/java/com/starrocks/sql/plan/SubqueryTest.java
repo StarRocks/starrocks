@@ -21,7 +21,10 @@ public class SubqueryTest extends PlanTestBase {
         Assert.assertTrue(plan, plan.contains("17:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 3: v3 + 14: v5 = 13: expr, CASE WHEN (15: countRows IS NULL) OR (15: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL WHEN 9: v4 IS NOT NULL THEN TRUE WHEN 16: countNotNulls < 15: countRows THEN NULL ELSE FALSE END IS NULL"));
+                "  |  other join predicates: 3: v3 + 14: v5 = 13: expr, CASE WHEN (15: countRows IS NULL) " +
+                "OR (15: countRows = 0) THEN FALSE WHEN 2: v2 IS NULL THEN NULL " +
+                "WHEN 9: v4 IS NOT NULL THEN TRUE WHEN 16: countNotNulls < 15: countRows " +
+                "THEN NULL ELSE FALSE END IS NULL"));
         Assert.assertTrue(plan.contains("10:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -136,7 +139,8 @@ public class SubqueryTest extends PlanTestBase {
         connectContext.setDatabase("test");
 
         String sql =
-                "select * from join1 where join1.dt > 1 and NOT EXISTS (select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
+                "select * from join1 where join1.dt > 1 and NOT EXISTS " +
+                        "(select * from join1 as a where join1.dt = 1 and a.id = join1.id)" +
                         "and NOT EXISTS (select * from join1 as a where join1.dt = 2 and a.id = join1.id);";
         String explainString = getFragmentPlan(sql);
 
@@ -265,7 +269,8 @@ public class SubqueryTest extends PlanTestBase {
                 "FROM\n" +
                 "  t0 AS t0_2\n" +
                 "GROUP BY\n" +
-                "  ( CAST(t0_2.v1 AS INT) - NULL ) IN (SELECT subt0.v1  FROM  t1 AS t1_3 RIGHT ANTI JOIN t0 subt0 ON t1_3.v5 = subt0.v1 ),\n" +
+                "  ( CAST(t0_2.v1 AS INT) - NULL ) IN (SELECT subt0.v1  FROM  t1 " +
+                "AS t1_3 RIGHT ANTI JOIN t0 subt0 ON t1_3.v5 = subt0.v1 ),\n" +
                 "  t0_2.v1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "30:HASH JOIN\n" +
@@ -318,7 +323,9 @@ public class SubqueryTest extends PlanTestBase {
         assertContains(plan, "  16:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
+                "  |  other join predicates: CASE WHEN (18: countRows IS NULL) OR (18: countRows = 0) " +
+                "THEN FALSE WHEN 1: v1 IS NULL THEN NULL WHEN 16: v4 IS NOT NULL " +
+                "THEN TRUE WHEN 19: countNotNulls < 18: countRows THEN NULL ELSE FALSE END");
 
         sql = "select * from t0 where exists (select v4 from t1) or (1=0 and exists (select v7 from t2));";
         plan = getFragmentPlan(sql);
@@ -987,7 +994,8 @@ public class SubqueryTest extends PlanTestBase {
             getFragmentPlan(sql);
         } catch (Exception e) {
             Assert.assertEquals(
-                    "only support one subquery in ((SELECT v1 FROM test.t0 WHERE v2 = v5)) = ((SELECT v4 FROM test.t1 WHERE v2 = v5))",
+                    "only support one subquery in ((SELECT v1 FROM test.t0 WHERE v2 = v5)) = " +
+                            "((SELECT v4 FROM test.t1 WHERE v2 = v5))",
                     e.getMessage());
         }
         try {

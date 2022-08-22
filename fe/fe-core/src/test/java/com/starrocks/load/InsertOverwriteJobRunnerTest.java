@@ -47,10 +47,12 @@ public class InsertOverwriteJobRunnerTest {
                         "CREATE TABLE insert_overwrite_test.t2(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
         starRocksAssert
-                .withTable("create table insert_overwrite_test.t3(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                .withTable("create table insert_overwrite_test.t3(c1 int, c2 int, c3 int) " +
+                        "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
-                .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) " +
+                        "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
     }

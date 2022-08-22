@@ -113,13 +113,16 @@ public class QueryBuildersTest {
         QueryBuilders.QueryBuilder q5 = QueryBuilders.termsQuery("k2", Arrays.asList("aaa", "bbb", "ccc"));
         QueryBuilders.QueryBuilder q6 = QueryBuilders.boolQuery().must(q4).should(q5);
         assertEquals(
-                "{\"bool\":{\"must\":{\"range\":{\"k1\":{\"gt\":-200,\"lt\":200}}},\"should\":{\"terms\":{\"k2\":[\"aaa\",\"bbb\",\"ccc\"]}}}}",
+                "{\"bool\":{\"must\":{\"range\":{\"k1\":{\"gt\":-200,\"lt\":200}}}," +
+                        "\"should\":{\"terms\":{\"k2\":[\"aaa\",\"bbb\",\"ccc\"]}}}}",
                 toJson(q6));
         assertEquals(
-                "{\"bool\":{\"filter\":[{\"range\":{\"k1\":{\"gt\":-200,\"lt\":200}}},{\"terms\":{\"k2\":[\"aaa\",\"bbb\",\"ccc\"]}}]}}",
+                "{\"bool\":{\"filter\":[{\"range\":{\"k1\":{\"gt\":-200,\"lt\":200}}}," +
+                        "{\"terms\":{\"k2\":[\"aaa\",\"bbb\",\"ccc\"]}}]}}",
                 toJson(QueryBuilders.boolQuery().filter(q4).filter(q5)));
         assertEquals(
-                "{\"bool\":{\"filter\":{\"range\":{\"k1\":{\"gt\":-200,\"lt\":200}}},\"must_not\":{\"terms\":{\"k2\":[\"aaa\",\"bbb\",\"ccc\"]}}}}",
+                "{\"bool\":{\"filter\":{\"range\":{\"k1\":{\"gt\":-200,\"lt\":200}}}," +
+                        "\"must_not\":{\"terms\":{\"k2\":[\"aaa\",\"bbb\",\"ccc\"]}}}}",
                 toJson(QueryBuilders.boolQuery().filter(q4).mustNot(q5)));
 
     }

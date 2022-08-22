@@ -40,10 +40,10 @@ public class PushDownAggRuleTest {
         scanColumnMap.put(new ColumnRefOperator(2, Type.INT, "name", true), null);
 
         new Expectations(scanOp) {{
-            scanOp.getColRefToColumnMetaMap();
-            minTimes = 0;
-            result = scanColumnMap;
-        }};
+                scanOp.getColRefToColumnMetaMap();
+                minTimes = 0;
+                result = scanColumnMap;
+            }};
 
         OptExpression filter = new OptExpression(new LogicalFilterOperator(
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,

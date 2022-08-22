@@ -95,8 +95,8 @@ public class OperatorStrings {
 
             return new OperatorStr("logical project (" +
                     project.getColumnRefMap().values().stream().map(ScalarOperator::debugString)
-                            .collect(Collectors.joining(",")) + ")"
-                    , step, Collections.singletonList(strBuilder));
+                            .collect(Collectors.joining(",")) + ")",
+                    step, Collections.singletonList(strBuilder));
         }
 
         @Override
@@ -126,8 +126,8 @@ public class OperatorStrings {
                     + aggregate.getGroupingKeys().stream().map(ScalarOperator::debugString)
                     .collect(Collectors.joining(",")) + ") ("
                     + aggregate.getAggregations().values().stream().map(CallOperator::debugString).
-                    collect(Collectors.joining(",")) + ")"
-                    , step, Collections.singletonList(strBuilder));
+                    collect(Collectors.joining(",")) + ")",
+                    step, Collections.singletonList(strBuilder));
         }
 
         @Override
@@ -164,8 +164,8 @@ public class OperatorStrings {
 
             LogicalApplyOperator apply = (LogicalApplyOperator) optExpression.getOp();
             return new OperatorStr("logical apply " +
-                    "(" + apply.getSubqueryOperator().debugString() + ")"
-                    , step, Arrays.asList(left, right));
+                    "(" + apply.getSubqueryOperator().debugString() + ")",
+                    step, Arrays.asList(left, right));
         }
 
         @Override
