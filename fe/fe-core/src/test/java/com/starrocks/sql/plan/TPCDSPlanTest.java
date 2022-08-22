@@ -647,7 +647,12 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: ss_cdemo_sk = 53: cd_demo_sk\n" +
-                "  |  other predicates: ((((55: cd_marital_status = 'M') AND (56: cd_education_status = '4 yr Degree')) AND ((14: ss_sales_price >= 100.00) AND (14: ss_sales_price <= 150.00))) OR (((55: cd_marital_status = 'D') AND (56: cd_education_status = '2 yr Degree')) AND ((14: ss_sales_price >= 50.00) AND (14: ss_sales_price <= 100.00)))) OR (((55: cd_marital_status = 'S') AND (56: cd_education_status = 'College')) AND ((14: ss_sales_price >= 150.00) AND (14: ss_sales_price <= 200.00)))\n" +
+                "  |  other predicates: ((((55: cd_marital_status = 'M') AND (56: cd_education_status = '4 yr Degree')) " +
+                "AND ((14: ss_sales_price >= 100.00) AND (14: ss_sales_price <= 150.00))) OR " +
+                "(((55: cd_marital_status = 'D') AND (56: cd_education_status = '2 yr Degree')) AND " +
+                "((14: ss_sales_price >= 50.00) AND (14: ss_sales_price <= 100.00)))) OR (((55: cd_marital_status = 'S') " +
+                "AND (56: cd_education_status = 'College')) AND ((14: ss_sales_price >= 150.00) " +
+                "AND (14: ss_sales_price <= 200.00)))\n" +
                 "  |  \n" +
                 "  |----10:EXCHANGE");
     }

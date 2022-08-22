@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -114,29 +114,29 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     /*
         Performance test
-        query	  FORCE CTE(ms)	  NONE CTE(ms)	FORCE/NONE
-        QUERY95	     34,681	        9,384	       3.70
-        QUERY59	     7,468	        2,392	       3.12
-        QUERY39-2    646	        348	           1.86
-        QUERY39-1    893	        593	           1.51
-        QUERY11	     57,774	        52,200	       1.11
-        QUERY04	     94,417	        86,726	       1.09
-        QUERY74	     34,964	        34,936	       1.00
-        QUERY31	     3,560	        3,653	       0.97
-        QUERY02	     4,088	        4,205	       0.97
-        QUERY30	     1,117	        1,291	       0.87
-        QUERY75	     16,970	        19,781	       0.86
-        QUERY01	     1,351	        1,586	       0.85
-        QUERY81	     1,281	        2,081	       0.62
-        QUERY64	     18,377	        31,747	       0.58
-        QUERY23-1    76,103	        136,791	       0.56
-        QUERY23-2    75,989	        138,349	       0.55
-        QUERY14-2    19,626	        36,485	       0.54
-        QUERY14-1    21,884	        54,389	       0.40
-        QUERY24-2    4,844	        15,153	       0.32
-        QUERY24-1    4,894	        15,355	       0.32
-        QUERY57	     4,294	        16,763	       0.26
-        QUERY47	     6,143	        28,724	       0.21
+        query     FORCE CTE(ms)   NONE CTE(ms)  FORCE/NONE
+        QUERY95      34,681         9,384          3.70
+        QUERY59      7,468          2,392          3.12
+        QUERY39-2    646            348            1.86
+        QUERY39-1    893            593            1.51
+        QUERY11      57,774         52,200         1.11
+        QUERY04      94,417         86,726         1.09
+        QUERY74      34,964         34,936         1.00
+        QUERY31      3,560          3,653          0.97
+        QUERY02      4,088          4,205          0.97
+        QUERY30      1,117          1,291          0.87
+        QUERY75      16,970         19,781         0.86
+        QUERY01      1,351          1,586          0.85
+        QUERY81      1,281          2,081          0.62
+        QUERY64      18,377         31,747         0.58
+        QUERY23-1    76,103         136,791        0.56
+        QUERY23-2    75,989         138,349        0.55
+        QUERY14-2    19,626         36,485         0.54
+        QUERY14-1    21,884         54,389         0.40
+        QUERY24-2    4,844          15,153         0.32
+        QUERY24-1    4,894          15,355         0.32
+        QUERY57      4,294          16,763         0.26
+        QUERY47      6,143          28,724         0.21
      */
 
     @Test
