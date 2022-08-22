@@ -65,8 +65,8 @@ public class LakeTable extends OlapTable {
         return tableProperty.getStorageInfo().getShardStorageInfo();
     }
 
-    public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS)
-            throws DdlException {
+    public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS,
+            boolean allowAsyncWriteBack) throws DdlException {
         String storageGroup;
         // s3://bucket/serviceId/tableId/
         String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
@@ -90,8 +90,8 @@ public class LakeTable extends OlapTable {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty
-                .setStorageInfo(new StorageInfo(newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS)));
+        tableProperty.setStorageInfo(new StorageInfo(
+                newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS, allowAsyncWriteBack)));
     }
 
     @Override
@@ -147,6 +147,10 @@ public class LakeTable extends OlapTable {
                 // storage_cache_ttl
                 properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
                         String.valueOf(storageInfo.getStorageCacheTtlS()));
+
+                // allow_async_write_back
+                properties.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
+                        String.valueOf(storageInfo.isAllowAsyncWriteBack()));
             }
         }
         return properties;
