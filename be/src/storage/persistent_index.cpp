@@ -1569,14 +1569,39 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         // so we can load persistent index according to PersistentIndexMetaPB
         EditVersion version = index_meta.version();
         if (version == lastest_applied_version) {
-            status = load(index_meta);
-            LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id() << " version:" << version.to_string()
-                      << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
-                      << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                      << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
-                      << " memory: " << memory_usage() << " status: " << status.to_string()
-                      << " time:" << timer.elapsed_time() / 1000000 << "ms";
-            return status;
+            MutableIndexMetaPB l0_meta = index_meta.l0_meta();
+            if (l0_meta.format_version() != PERSISTENT_INDEX_VERSION_1) {
+                LOG(WARNING) << "different format version, we need to rebuild persistent index";
+                status = Status::InternalError("different format version");
+            } else {
+                status = load(index_meta);
+            }
+            if (status.ok()) {
+                LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id()
+                          << " version:" << version.to_string() << " size: " << _size
+                          << " l0_size: " << (_l0 ? _l0->size() : 0) << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                          << " #shard: " << (_l1 ? _l1->_shards.size() : 0) << " l1_size:" << (_l1 ? _l1->_size : 0)
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                return status;
+            } else {
+                LOG(WARNING) << "load persistent index failed, tablet: " << tablet->tablet_id()
+                             << ", status: " << status;
+                if (index_meta.has_l0_meta()) {
+                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
+                    std::string l0_file_name =
+                            strings::Substitute("index.l0.$0.$1", l0_version.major(), l0_version.minor());
+                    Status st = FileSystem::Default()->delete_file(l0_file_name);
+                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
+                }
+                if (index_meta.has_l1_version()) {
+                    EditVersion l1_version = index_meta.l1_version();
+                    std::string l1_file_name =
+                            strings::Substitute("index.l1.$0.$1", l1_version.major(), l1_version.minor());
+                    Status st = FileSystem::Default()->delete_file(l1_file_name);
+                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                }
+            }
         }
     }
 
