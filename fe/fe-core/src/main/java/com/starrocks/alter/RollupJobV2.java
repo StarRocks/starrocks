@@ -28,6 +28,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -49,6 +50,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -74,6 +76,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -847,15 +850,34 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
         CreateMaterializedViewStmt stmt;
+        Map<String, Expr> columnNameToDefineExpr;
+        boolean fallback = false;
         try {
             List<StatementBase> stmts = SqlParser.parse(origStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
             stmt = (CreateMaterializedViewStmt) stmts.get(origStmt.idx);
             stmt.setIsReplay(true);
-            Map<String, Expr> columnNameToDefineExpr = stmt.parseDefineExprWithoutAnalyze(origStmt.originStmt);
+            columnNameToDefineExpr = stmt.parseDefineExprWithoutAnalyze(origStmt.originStmt);
             setColumnsDefineExpr(columnNameToDefineExpr);
         } catch (Exception e) {
-            throw new IOException("error happens when parsing create materialized view stmt: " + origStmt.originStmt, e);
+            fallback = true;
+            LOG.warn("error happens when parsing create materialized view stmt in job: " +
+                    origStmt.originStmt, e);
         }
 
+        if (fallback) {
+            // compatibility old parser can work but new parser failed
+            com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(
+                    new SqlScanner(new StringReader(origStmt.originStmt),
+                    SqlModeHelper.MODE_DEFAULT));
+            try {
+                stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, origStmt.idx);
+                stmt.setIsReplay(true);
+                columnNameToDefineExpr = stmt.parseDefineExprWithoutAnalyze(origStmt.originStmt);
+                setColumnsDefineExpr(columnNameToDefineExpr);
+            } catch (Exception e) {
+                throw new IOException("error happens when parsing create materialized view stmt: " +
+                        origStmt.originStmt, e);
+            }
+        }
     }
 }
