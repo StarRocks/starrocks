@@ -685,10 +685,10 @@ public class HiveMetaClient {
         try {
             // files in hdfs may have multiple directories, so we need to list all files in hdfs recursively here
             RemoteIterator<LocatedFileStatus> blockIterator = null;
-            if (ConnectContext.get().getSessionVariable().isRecursiveDirSearchEnabled()) {
-                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
-            } else {
+            if (ConnectContext.get() != null && !ConnectContext.get().getSessionVariable().isRecursiveDirSearchEnabled()) {
                 blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            } else {
+                blockIterator = fileSystem.listFiles(new Path(uri.getPath()), true);
             }
             while (blockIterator.hasNext()) {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
