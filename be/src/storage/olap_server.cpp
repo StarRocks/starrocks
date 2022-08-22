@@ -422,7 +422,8 @@ void* StorageEngine::_rocksdb_meta_compact_thread_callback(void* arg) {
 
         int32_t interval = config::manual_compact_periodically_interval;
         if (interval <= 0) {
-            LOG(WARNING) << "manual_compact_periodically_interval config is illegal: " << interval << ", force set to 1800";
+            LOG(WARNING) << "manual_compact_periodically_interval config is illegal: " << interval
+                         << ", force set to 1800";
             interval = 1800;
         }
         SLEEP_IN_BG_WORKER(interval);
