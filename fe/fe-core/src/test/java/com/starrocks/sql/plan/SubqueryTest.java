@@ -637,9 +637,9 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on t0.v1 = (select count(*) from t1 where t0.v2 = t1.v5) + t1.v6";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
-                    "  |  join op: CROSS JOIN\n" +
+                    "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other predicates: 1: v1 = 11: expr + 6: v6");
+                    "  |  other join predicates: 1: v1 = 11: expr + 6: v6");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -665,9 +665,9 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on (select count(*) from t0 where t0.v2 = t1.v5) + t0.v3 = t1.v5";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
-                    "  |  join op: CROSS JOIN\n" +
+                    "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  other predicates: 11: expr + 3: v3 = 5: v5");
+                    "  |  other join predicates: 11: expr + 3: v3 = 5: v5");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +

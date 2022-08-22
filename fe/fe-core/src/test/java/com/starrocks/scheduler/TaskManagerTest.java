@@ -281,7 +281,7 @@ public class TaskManagerTest {
         }
 
         int retryCount = 0;
-        int maxRetry = 5;
+        int maxRetry = 10;
         while (retryCount < maxRetry) {
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (allHistory.size() == 2) {
