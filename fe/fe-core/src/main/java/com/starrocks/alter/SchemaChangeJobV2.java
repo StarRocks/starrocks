@@ -37,6 +37,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -515,6 +516,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
 
+            Set<String> modifiedColumns = getModifiedColumns(tbl);
+
             for (long partitionId : partitionIndexMap.rowKeySet()) {
                 Partition partition = tbl.getPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
@@ -548,6 +551,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // all partitions are good
             onFinished(tbl);
+
+            // If schema changes include fields which defined in related mv, set those mv state to inactive.
+            inactiveRelatedMv(modifiedColumns, tbl);
         } finally {
             db.writeUnlock();
         }
@@ -559,6 +565,40 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
+    }
+
+    private Set<String> getModifiedColumns(OlapTable tbl) {
+        if (tbl.getRelatedMaterializedViews().isEmpty()) {
+            return Sets.newHashSet();
+        }
+        Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
+            for (Column col : entry.getValue()) {
+                if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+                    modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                }
+            }
+        }
+        return modifiedColumns;
+    }
+
+    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable tbl) {
+        if (modifiedColumns.isEmpty()) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        for (Long mvId : tbl.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId);
+            if (mv == null) {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+                continue;
+            }
+            for (Column mvColumn : mv.getColumns()) {
+                if (modifiedColumns.contains(mvColumn.getName())) {
+                    mv.setActive(false);
+                }
+            }
+        }
     }
 
     private void onFinished(OlapTable tbl) {
