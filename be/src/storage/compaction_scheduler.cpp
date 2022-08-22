@@ -204,14 +204,14 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
     while (true) {
         if (!_can_schedule_next()) {
             VLOG(2) << "_can_schedule_next is false. skip";
-            return nullptr;
+            break;
         }
         compaction_candidate = StorageEngine::instance()->compaction_manager()->pick_candidate();
         VLOG(2) << "get candidate:" << compaction_candidate.to_string();
         if (!compaction_candidate.is_valid()) {
             // means there no candidate tablet, break
             LOG(INFO) << "do not get a qualified candidate";
-            return nullptr;
+            break;
         }
 
         int64_t tablet_id = compaction_candidate.tablet->tablet_id();
@@ -220,7 +220,7 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
 
         if (!_check_precondition(compaction_candidate)) {
             LOG(INFO) << "check compaction precondition failed, candidate info: " << compaction_candidate.to_string();
-            return nullptr;
+            break;
         }
 
         if (_can_do_compaction(compaction_candidate, &compaction_task)) {
