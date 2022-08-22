@@ -1,5 +1,28 @@
 # StarRocks version 2.3
 
+## 2.3.1
+
+发布日期： 2022 年 8 月 22 日
+
+### 功能优化
+
+- Broker Load 支持将 Parquet 文件的 List 列转化为非嵌套 ARRAY 数据类型。[#9150](https://github.com/StarRocks/starrocks/pull/9150)
+- 优化 JSON 类型相关函数（json_query、get_json_string 和 get_json_int）性能。[#9623](https://github.com/StarRocks/starrocks/pull/9623)
+- 优化报错信息：查询 Hive、Iceberg、Hudi 外表时，如果查询的数据类型未被支持，系统针对相应的列报错。[#10139](https://github.com/StarRocks/starrocks/pull/10139)
+- 降低资源组调度延迟，优化资源隔离性能。[#10122](https://github.com/StarRocks/starrocks/pull/10122)
+
+### 问题修复
+
+修复了如下 Bug：
+
+- 查询 Elasticsearch 外表时，`limit` 算子下推问题导致返回错误结果。[#9952](https://github.com/StarRocks/starrocks/pull/9952)
+- 使用 `limit` 算子查询 Oracle 外表失败。[#9542](https://github.com/StarRocks/starrocks/pull/9542)
+- Routine Load 中，Kafka Broker 停止工作导致 BE 卡死。[#9935](https://github.com/StarRocks/starrocks/pull/9935)
+- 查询与外表数据类型不匹配的 Parquet 文件导致 BE 停止工作。[#10107](https://github.com/StarRocks/starrocks/pull/10107)
+- 外表 Scan 范围为空，导致查询阻塞超时。[#10091](https://github.com/StarRocks/starrocks/pull/10091)
+- 子查询中包含 ORDER BY 子句时，系统报错。[#10180](https://github.com/StarRocks/starrocks/pull/10180)
+- 并发重加载 Hive 元数据导致 Hive Metastore 挂起。[#10132](https://github.com/StarRocks/starrocks/pull/10132)
+
 ## 2.3.0
 
 发布日期： 2022 年 7 月 29 日
