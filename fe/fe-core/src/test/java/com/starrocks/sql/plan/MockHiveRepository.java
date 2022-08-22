@@ -21,7 +21,6 @@ import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.spark.sql.sources.In;
 
 import java.util.List;
 import java.util.Map;

@@ -112,8 +112,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
-    private final static AtomicInteger INDEX = new AtomicInteger(0);
-    private final static AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
+    private static final AtomicInteger INDEX = new AtomicInteger(0);
+    private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -253,7 +253,7 @@ public class UtFrameUtils {
         frontend.start(startBDB, new String[0]);
     }
 
-    public synchronized static void createMinStarRocksCluster(boolean startBDB) {
+    public static synchronized void createMinStarRocksCluster(boolean startBDB) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -645,9 +645,11 @@ public class UtFrameUtils {
      */
     public static class PseudoJournalReplayer {
         // master journal queue
-        private static BlockingQueue<JournalTask> masterJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> masterJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue
-        private static BlockingQueue<JournalTask> followerJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> followerJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // constantly move master journal to follower and mark succeed
         private static Thread fakeJournalWriter = null;
 

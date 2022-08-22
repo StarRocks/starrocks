@@ -327,16 +327,17 @@ public class TempPartitionTest {
         stmtStr = "alter table db2.tbl2 replace partition(p1, p2) with temporary partition(tp2, tp3);";
         alterTable(stmtStr, true);
 
-        stmtStr =
-                "alter table db2.tbl2 replace partition(p1, p2) with temporary partition(tp1, tp2) properties('invalid' = 'invalid');";
+        stmtStr = "alter table db2.tbl2 replace partition(p1, p2) " +
+                "with temporary partition(tp1, tp2) properties('invalid' = 'invalid');";
         alterTable(stmtStr, true);
 
-        stmtStr =
-                "alter table db2.tbl2 replace partition(p1, p2) with temporary partition(tp2, tp3) properties('strict_range' = 'false');";
+        stmtStr = "alter table db2.tbl2 replace partition(p1, p2) " +
+                "with temporary partition(tp2, tp3) properties('strict_range' = 'false');";
         alterTable(stmtStr, true);
 
-        stmtStr =
-                "alter table db2.tbl2 replace partition(p1, p2) with temporary partition(tp1, tp2) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        stmtStr = "alter table db2.tbl2 replace partition(p1, p2) " +
+                "with temporary partition(tp1, tp2) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTable(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
@@ -371,8 +372,8 @@ public class TempPartitionTest {
         alterTable(stmtStr, true);
         stmtStr = "alter table db2.tbl2 replace partition(p31, p32) with temporary partition(tp3);";
         alterTable(stmtStr, true);
-        stmtStr =
-                "alter table db2.tbl2 replace partition(p31, p32) with temporary partition(tp3) properties('strict_range' = 'false');";
+        stmtStr = "alter table db2.tbl2 replace partition(p31, p32) " +
+                "with temporary partition(tp3) properties('strict_range' = 'false');";
         alterTable(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
@@ -395,8 +396,8 @@ public class TempPartitionTest {
         checkPartitionExist(tbl2, "p2", true, false);
         checkPartitionExist(tbl2, "p3", true, true);
 
-        stmtStr =
-                "alter table db2.tbl2 replace partition(tp3) with temporary partition(p3) properties('use_temp_partition_name' = 'true');";
+        stmtStr = "alter table db2.tbl2 replace partition(tp3) " +
+                "with temporary partition(p3) properties('use_temp_partition_name' = 'true');";
         alterTable(stmtStr, false);
         checkPartitionExist(tbl2, "tp1", false, true);
         checkPartitionExist(tbl2, "tp2", false, true);
@@ -469,8 +470,8 @@ public class TempPartitionTest {
         TempPartitions tempPartitions = Deencapsulation.getField(tbl2, "tempPartitions");
         testSerializeTempPartitions(tempPartitions);
 
-        stmtStr =
-                "alter table db2.tbl2 replace partition (tp1, tp2) with temporary partition (p2) properties('strict_range' = 'false');";
+        stmtStr = "alter table db2.tbl2 replace partition (tp1, tp2) " +
+                "with temporary partition (p2) properties('strict_range' = 'false');";
         alterTable(stmtStr, false);
         checkShowPartitionsResultNum("db2.tbl2", false, 2);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
@@ -484,14 +485,14 @@ public class TempPartitionTest {
         checkTablet("db2.tbl2", "tp3", false, 2);
 
         // for now, we have 2 partitions: p2, tp3, [min, 20), [20, 30). 0 temp partition. 
-        stmtStr =
-                "alter table db2.tbl2 add temporary partition tp4 values less than('20') ('in_memory' = 'true') distributed by hash(k1) buckets 3";
+        stmtStr = "alter table db2.tbl2 add temporary partition tp4 values less than('20') " +
+                "('in_memory' = 'true') distributed by hash(k1) buckets 3";
         alterTableWithNewAnalyzer(stmtStr, true);
-        stmtStr =
-                "alter table db2.tbl2 add temporary partition tp4 values less than('20') ('in_memory' = 'true', 'replication_num' = '2') distributed by hash(k2) buckets 3";
+        stmtStr = "alter table db2.tbl2 add temporary partition tp4 values less than('20') " +
+                "('in_memory' = 'true', 'replication_num' = '2') distributed by hash(k2) buckets 3";
         alterTableWithNewAnalyzer(stmtStr, true);
-        stmtStr =
-                "alter table db2.tbl2 add temporary partition tp4 values less than('20') ('in_memory' = 'true', 'replication_num' = '1') distributed by hash(k2) buckets 3";
+        stmtStr = "alter table db2.tbl2 add temporary partition tp4 values less than('20') " +
+                "('in_memory' = 'true', 'replication_num' = '1') distributed by hash(k2) buckets 3";
         alterTableWithNewAnalyzer(stmtStr, false);
 
         Partition p2 = tbl2.getPartition("p2");
@@ -562,11 +563,11 @@ public class TempPartitionTest {
         alterTableWithNewAnalyzer(stmtStr, false);
         stmtStr = "alter table db3.tbl3 replace partition (tp4) with temporary partition(tp5)";
         alterTable(stmtStr, true);
-        stmtStr =
-                "alter table db3.tbl3 replace partition (tp4) with temporary partition(tp5) properties('strict_range' = 'true', 'use_temp_partition_name' = 'true')";
+        stmtStr = "alter table db3.tbl3 replace partition (tp4) with temporary partition(tp5) " +
+                "properties('strict_range' = 'true', 'use_temp_partition_name' = 'true')";
         alterTable(stmtStr, true);
-        stmtStr =
-                "alter table db3.tbl3 replace partition (tp4) with temporary partition(tp5) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true')";
+        stmtStr = "alter table db3.tbl3 replace partition (tp4) with temporary partition(tp5) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true')";
         alterTable(stmtStr, false);
 
         // now base range is [min, 10), [50, 60) -> p1,tp5

@@ -75,9 +75,9 @@ public class CatalogLevelTest {
                 result = hiveTable;
             }
         };
-        String sql_1 = "select col1 from hive_catalog.hive_db.hive_table";
+        String sql1 = "select col1 from hive_catalog.hive_db.hive_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
 
     }
 
@@ -173,9 +173,9 @@ public class CatalogLevelTest {
                 result = hudiTable;
             }
         };
-        String sql_1 = "select col1 from " + catalogName + "." + dbName + "." + tableName;
+        String sql1 = "select col1 from " + catalogName + "." + dbName + "." + tableName;
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
     }
 
     @Test
@@ -209,9 +209,9 @@ public class CatalogLevelTest {
                 result = icebergTable;
             }
         };
-        String sql_1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
+        String sql1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
 
     }
 }

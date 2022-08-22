@@ -16,19 +16,19 @@ public class AdminShowTest {
     }
 
     @Test
-    public void TestAdminShowConfig() {
+    public void testAdminShowConfig() {
         analyzeSuccess("admin show frontend config;");
         analyzeSuccess("admin show frontend config like '%parallel%';");
     }
 
     @Test
-    public void TestAdminShowReplicaDistribution() {
+    public void testAdminShowReplicaDistribution() {
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);");
     }
 
     @Test
-    public void TestAdminShowReplicaStatus() {
+    public void testAdminShowReplicaStatus() {
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM db1.tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2)\n" +
                 "WHERE STATUS = \"VERSION_ERROR\";");

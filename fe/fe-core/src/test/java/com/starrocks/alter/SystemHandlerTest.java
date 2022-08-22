@@ -3,22 +3,17 @@
 package com.starrocks.alter;
 
 
-import java.util.ArrayList;
-import java.util.List;
-
 
 import com.starrocks.analysis.AlterClause;
-
 import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.analysis.ModifyFrontendAddressClause;
-
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-
-
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class SystemHandlerTest {
     

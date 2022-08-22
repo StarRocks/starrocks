@@ -1,16 +1,17 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks;
+
+
+import com.starrocks.common.Config;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.Assert;
+import org.junit.Test;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-
-import org.junit.Assert;
-import org.junit.Test;
-
-import com.starrocks.common.Config;
-
-import mockit.Mock;
-import mockit.MockUp;
 
 public class StarRocksFETest {
 
@@ -45,7 +46,7 @@ public class StarRocksFETest {
         method.setAccessible(true);
         try {
             method.invoke(StarRocksFE.class);
-        } catch (InvocationTargetException e) { 
+        } catch (InvocationTargetException e) {
         }
         Assert.assertTrue(testFlag);
         deleteDir(new File(testDir + "/"));

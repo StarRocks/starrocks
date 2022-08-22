@@ -29,8 +29,8 @@ public class CacheLoaderTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
 
-        String DB_NAME = "test";
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -116,8 +116,11 @@ public class CacheLoaderTest {
         Assert.assertEquals("{19.0=5, 20.0=4, 27.0=8}", histogram.getMCV().toString());
 
         statisticData.setColumnName("v4");
-        statisticData.setHistogram("{ \"buckets\" : [[\"20220102\",\"20220107\",\"6\",\"1\"],[\"20220108\",\"20220113\",\"12\",\"1\"]," +
-                "[\"20220114\",\"20220121\",\"18\",\"1\"],[\"20220122\",\"20220128\",\"24\",\"1\"],[\"20220129\",\"20220130\",\"30\",\"1\"]], " +
+        statisticData.setHistogram("{ \"buckets\" : [[\"20220102\",\"20220107\",\"6\",\"1\"]," +
+                "[\"20220108\",\"20220113\",\"12\",\"1\"]," +
+                "[\"20220114\",\"20220121\",\"18\",\"1\"]," +
+                "[\"20220122\",\"20220128\",\"24\",\"1\"]," +
+                "[\"20220129\",\"20220130\",\"30\",\"1\"]], " +
                 "\"mcv\" : [[\"20220127\",\"8\"],[\"20220119\",\"5\"],[\"20220120\",\"4\"]] }");
 
         histogram = Deencapsulation.invoke(columnHistogramStatsCacheLoader, "convert2Histogram", statisticData);

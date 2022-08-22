@@ -2,9 +2,9 @@
 
 package com.starrocks.sql.optimizer;
 
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -14,6 +14,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -81,8 +82,8 @@ public class UtilsTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-        String DB_NAME = "test";
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);

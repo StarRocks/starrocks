@@ -91,17 +91,17 @@ public class AnalyzeShowTest {
         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
         String sql = "SHOW AUTHENTICATION;";
-        ShowAuthenticationStmt stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        ShowAuthenticationStmt stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
         Assert.assertEquals("root", stmt.getUserIdent().getQualifiedUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
-        stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertTrue(stmt.isAll());
         Assert.assertNull(stmt.getUserIdent());
 
         sql = "SHOW AUTHENTICATION FOR xx";
-        stmt = (ShowAuthenticationStmt)analyzeSuccess(sql);
+        stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
         Assert.assertEquals("default_cluster:xx", stmt.getUserIdent().getQualifiedUser());
     }
