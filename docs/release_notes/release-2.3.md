@@ -2,11 +2,11 @@
 
 ## 2.3.1
 
-Release date: August 20, 2022
+Release date: August 22, 2022
 
 ### Improvements
 
-- Broker Load supports transforming the List type in Parquet files into non-nested ARRAY data type.[#9150](https://github.com/StarRocks/starrocks/pull/9150)
+- Broker Load supports transforming the List type in Parquet files into non-nested ARRAY data type. [#9150](https://github.com/StarRocks/starrocks/pull/9150)
 - Optimizes the performance of JSON-related functions (json_query, get_json_string, and get_json_int). [#9623](https://github.com/StarRocks/starrocks/pull/9623)
 - Optimizes the exception message: during a query on Hive, Iceberg, or Hudi, if the data type of the column in the query is not supported by StarRocks, the system throws an exception on the corresponding column. [#10139](https://github.com/StarRocks/starrocks/pull/10139)
 - Reduces the schedule latency of resource group to optimize the resource isolation performance. [#10122](https://github.com/StarRocks/starrocks/pull/10122)
@@ -19,7 +19,7 @@ The following bugs are fixed:
 - Query on Oracle external table fails when the `limit` operator is used. [#9542](https://github.com/StarRocks/starrocks/pull/9542)
 - BE is blocked when all Kafka Brokers are stopped during a Routine Load. [#9935](https://github.com/StarRocks/starrocks/pull/9935)
 - BE crashes during a query on a Parquet file whose data type mismatches that of the corresponding external table. [#10107](https://github.com/StarRocks/starrocks/pull/10107)
-- Query hangs because the scan range is empty. [#10091](https://github.com/StarRocks/starrocks/pull/10091)
+- Query timeout because the scan range of external table is empty. [#10091](https://github.com/StarRocks/starrocks/pull/10091)
 - The system throws an exception when ORDER BY clause is included in a sub-query. [#10180](https://github.com/StarRocks/starrocks/pull/10180)
 - Hive Metastore hangs when the Hive metadata is reloaded asynchronously. [#10132](https://github.com/StarRocks/starrocks/pull/10132)
 
