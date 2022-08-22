@@ -83,7 +83,7 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (long backendId : getBackendIds()) {
-            Replica replica = new Replica(-1, backendId, -1, null);
+            Replica replica = new Replica(getId(), backendId, -1, null);
             allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {
                 localReplicas.add(replica);

@@ -55,6 +55,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -126,6 +127,7 @@ import org.apache.thrift.TException;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.RejectedExecutionException;
@@ -490,6 +492,12 @@ public class LeaderImpl {
             // rollup may be dropped
             throw new MetaNotFoundException("tablet " + tabletId + " does not exist");
         }
+
+        // lake tablet not need to compare schemaHash
+        if (tabletMeta.isLakeTablet()) {
+            return;
+        }
+
         if (!tabletMeta.containsSchemaHash(schemaHash)) {
             throw new MetaNotFoundException("tablet[" + tabletId
                     + "] schemaHash is not equal to index's switchSchemaHash. "
@@ -521,17 +529,29 @@ public class LeaderImpl {
             }
             throw new MetaNotFoundException("Could not find rollup index.");
         }
-        LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-        if (tablet == null) {
-            LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
-            return null;
+
+        Tablet tablet = index.getTablet(tabletId);
+        if (tablet instanceof LakeTablet) {
+            List<Replica> allQueryableReplicas = Lists.newArrayList();
+            tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                    0, -1, 0);
+            if (allQueryableReplicas.isEmpty()) {
+                LOG.warn("no queryable replica found in tablet {}", tabletId);
+                return null;
+            }
+            return allQueryableReplicas.get(0);
+        } else {
+            if (tablet == null) {
+                LOG.warn("could not find tablet {} in rollup index {} ", tabletId, indexId);
+                return null;
+            }
+            Replica replica = ((LocalTablet) tablet).getReplicaByBackendId(backendId);
+            if (replica == null) {
+                LOG.warn("could not find replica with backend {} in tablet {} in rollup index {} ",
+                        backendId, tabletId, indexId);
+            }
+            return replica;
         }
-        Replica replica = tablet.getReplicaByBackendId(backendId);
-        if (replica == null) {
-            LOG.warn("could not find replica with backend {} in tablet {} in rollup index {} ",
-                    backendId, tabletId, indexId);
-        }
-        return replica;
     }
 
     private void finishClearAlterTask(AgentTask task, TFinishTaskRequest request) {

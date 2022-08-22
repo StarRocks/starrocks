@@ -490,11 +490,7 @@ Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetShare
               << ", file size=" << _request.broker_scan_range.ranges[0].file_size;
 
     if (!path.empty()) {
-        std::unique_ptr<PushBrokerReader> reader = std::make_unique<PushBrokerReader>();
-        if (reader == nullptr) {
-            LOG(WARNING) << "fail to create reader. tablet=" << cur_tablet->full_name();
-            return Status::InternalError("Fail to create reader");
-        }
+        auto reader = std::make_unique<PushBrokerReader>();
         DeferOp reader_close([&reader] { return reader->close(); });
 
         // 3. read data and write rowset

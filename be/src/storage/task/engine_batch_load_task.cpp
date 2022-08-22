@@ -29,10 +29,10 @@
 
 #include "gen_cpp/AgentService_types.h"
 #include "runtime/current_thread.h"
+#include "storage/lake/spark_load.h"
 #include "storage/olap_common.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet.h"
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
@@ -57,7 +57,12 @@ Status EngineBatchLoadTask::execute() {
 
     AgentStatus status = STARROCKS_SUCCESS;
     if (_push_req.push_type == TPushType::LOAD_V2) {
-        status = _init();
+        if (_push_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+            status = _init_lake();
+        } else {
+            status = _init();
+        }
+
         if (status == STARROCKS_SUCCESS) {
             uint32_t retry_time = 0;
             while (retry_time < PUSH_MAX_RETRY) {
@@ -117,6 +122,18 @@ AgentStatus EngineBatchLoadTask::_init() {
     return status;
 }
 
+// only set _is_init
+AgentStatus EngineBatchLoadTask::_init_lake() {
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    if (_is_init) {
+        VLOG(3) << "has been inited";
+        return status;
+    }
+    _is_init = true;
+    return status;
+}
+
 AgentStatus EngineBatchLoadTask::_process() {
     AgentStatus status = STARROCKS_SUCCESS;
     if (!_is_init) {
@@ -151,13 +168,6 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
         return Status::InternalError("The input tablet_info_vec is a null pointer");
     }
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
-    if (tablet == nullptr) {
-        LOG(WARNING) << "Not found tablet: " << request.tablet_id;
-        StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
-        return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
-    }
-
     PushType type = PUSH_NORMAL_V2;
 
     int64_t duration_ns = 0;
@@ -165,23 +175,67 @@ Status EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabletIn
     int64_t write_rows = 0;
     DCHECK(request.__isset.transaction_id);
     SCOPED_RAW_TIMER(&duration_ns);
-    vectorized::PushHandler push_handler;
-    Status res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
-    if (!res.ok()) {
-        LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
-                     << ", tablet=" << tablet->full_name()
-                     << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
-        StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+
+    Status res;
+
+    if (request.tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto tablet_or = tablet_manager->get_tablet(request.tablet_id);
+        if (!tablet_or.ok()) {
+            LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
+                         << ", tablet=" << request.tablet_id
+                         << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+            return tablet_or.status();
+        }
+        
+        auto tablet = tablet_or.value();
+
+        lake::SparkLoadHandler handler;
+        res = handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id: " << request.transaction_id
+                         << ", tablet=" << tablet.id()
+                         << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+        } else {
+            LOG(INFO) << "Finish to load file."
+                      << ". txn_id: " << request.transaction_id << ", tablet=" << tablet.id()
+                      << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            write_bytes = handler.write_bytes();
+            write_rows = handler.write_rows();
+            StarRocksMetrics::instance()->push_requests_success_total.increment(1);
+            StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
+            StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
+            StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
+        }
+
     } else {
-        LOG(INFO) << "Finish to load file."
-                  << ". txn_id: " << request.transaction_id << ", tablet=" << tablet->full_name()
-                  << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
-        write_bytes = push_handler.write_bytes();
-        write_rows = push_handler.write_rows();
-        StarRocksMetrics::instance()->push_requests_success_total.increment(1);
-        StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
-        StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
-        StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
+        if (tablet == nullptr) {
+            LOG(WARNING) << "Not found tablet: " << request.tablet_id;
+            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+            return Status::NotFound(fmt::format("Not found tablet: {}", request.tablet_id));
+        }
+
+        vectorized::PushHandler push_handler;
+        res = push_handler.process_streaming_ingestion(tablet, request, type, tablet_info_vec);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to load file. res=" << res << ", txn_id=" << request.transaction_id
+                         << ", tablet=" << tablet->full_name()
+                         << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
+        } else {
+            LOG(INFO) << "Finish to load file."
+                      << ". txn_id=" << request.transaction_id << ", tablet=" << tablet->full_name()
+                      << ", cost=" << PrettyPrinter::print(duration_ns, TUnit::TIME_NS);
+            write_bytes = push_handler.write_bytes();
+            write_rows = push_handler.write_rows();
+            StarRocksMetrics::instance()->push_requests_success_total.increment(1);
+            StarRocksMetrics::instance()->push_request_duration_us.increment(duration_ns / 1000);
+            StarRocksMetrics::instance()->push_request_write_bytes.increment(write_bytes);
+            StarRocksMetrics::instance()->push_request_write_rows.increment(write_rows);
+        }
     }
 
     return res;

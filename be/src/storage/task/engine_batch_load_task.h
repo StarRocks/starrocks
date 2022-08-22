@@ -52,6 +52,8 @@ private:
     // The initial function of pusher
     virtual AgentStatus _init();
 
+    virtual AgentStatus _init_lake();
+
     // The process of push data to olap engine
     //
     // Output parameters:
