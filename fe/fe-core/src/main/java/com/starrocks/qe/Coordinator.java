@@ -274,7 +274,8 @@ public class Coordinator {
 
     // Used for broker load task/export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
-                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables) {
+                       List<ScanNode> scanNodes, String timezone, long startTime,
+                       Map<String, String> sessionVariables) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -1773,11 +1774,8 @@ public class Coordinator {
                             FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
                             params.instanceExecParams.add(instanceParam);
 
-                            // The assignPerDriverSeq strategy assigns buckets to each driver sequence to avoid local shuffle.
-                            // If a fragment instance is assigned only one bucket, assignPerDriverSeq strategy will set pipeline_dop to one.
-                            // Therefore, in this scenario, do not use assignPerDriverSeq strategy, in order to use a bigger pipeline_dop
-                            // and insert local shuffle to improve the degree of parallelism.
-                            boolean assignPerDriverSeq = assignScanRangesPerDriverSeq && scanRangeParams.size() > 1;
+                            boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
+                                    enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop);
                             if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
@@ -1985,6 +1983,21 @@ public class Coordinator {
         return value;
     }
 
+    /**
+     * This strategy assigns buckets to each driver sequence to avoid local shuffle.
+     * If the number of buckets assigned to a fragment instance is less than pipelineDop,
+     * pipelineDop will be set to num_buckets, which will reduce the degree of operator parallelism.
+     * Therefore, when there are few buckets (<=pipeline_dop/2), insert local shuffle instead of using this strategy
+     * to improve the degree of parallelism.
+     *
+     * @param scanRanges The buckets assigned to a fragment instance.
+     * @param pipelineDop The expected pipelineDop.
+     * @return Whether using the strategy of assigning scanRanges to each driver sequence.
+     */
+    private <T> boolean enableAssignScanRangesPerDriverSeq(List<T> scanRanges, int pipelineDop) {
+        return scanRanges.size() > pipelineDop / 2;
+    }
+
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
                                                   BucketSeqToScanRange bucketSeqToScanRange,
                                                   int parallelExecInstanceNum, int pipelineDop, boolean enablePipeline,
@@ -1999,12 +2012,9 @@ public class Coordinator {
                     .add(bucketSeqAndScanRanges);
         }
 
-        // The assignPerDriverSeq strategy assigns buckets to each driver sequence to avoid local shuffle.
-        // If a fragment instance is assigned only one bucket, assignPerDriverSeq strategy will set pipeline_dop to one.
-        // Therefore, in this scenario, do not use assignPerDriverSeq strategy, in order to use a bigger pipeline_dop
-        // and insert local shuffle to improve the degree of parallelism.
         boolean assignPerDriverSeq =
-                enablePipeline && addressToScanRanges.values().stream().allMatch(scanRanges -> scanRanges.size() > 1);
+                enablePipeline && addressToScanRanges.values().stream()
+                        .allMatch(scanRanges -> enableAssignScanRangesPerDriverSeq(scanRanges, pipelineDop));
 
         for (Map.Entry<TNetworkAddress, List<Map.Entry<Integer, Map<Integer,
                 List<TScanRangeParams>>>>> addressScanRange : addressToScanRanges.entrySet()) {
