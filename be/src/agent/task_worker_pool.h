@@ -128,8 +128,8 @@ private:
     TAgentTaskRequestPtr _pop_task();
     TAgentTaskRequestPtr _pop_task(TPriority::type pri);
 
-    void _alter_tablet(TaskWorkerPool* worker_pool_this, const TAgentTaskRequest& alter_tablet_request,
-                       int64_t signature, TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
+    void _alter_tablet(const TAlterTabletReqV2& alter_tablet_request, int64_t signature, TTaskType::type task_type,
+                       TFinishTaskRequest* finish_task_request);
 
     AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
                           bool overwrite, std::vector<std::string>* error_msgs);

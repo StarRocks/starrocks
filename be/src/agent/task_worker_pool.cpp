@@ -431,7 +431,7 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
             TTaskType::type task_type = agent_task_req->task_type;
             switch (task_type) {
             case TTaskType::ALTER:
-                worker_pool_this->_alter_tablet(worker_pool_this, *agent_task_req, signatrue, task_type,
+                worker_pool_this->_alter_tablet(agent_task_req->alter_tablet_req_v2, signatrue, task_type,
                                                 &finish_task_request);
                 break;
             default:
@@ -442,12 +442,11 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
         }
         worker_pool_this->remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
-    return (void*)nullptr;
+    return nullptr;
 }
 
-void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgentTaskRequest& agent_task_req,
-                                   int64_t signature, TTaskType::type task_type,
-                                   TFinishTaskRequest* finish_task_request) {
+void TaskWorkerPool::_alter_tablet(const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
+                                   TTaskType::type task_type, TFinishTaskRequest* finish_task_request) {
     AgentStatus status = STARROCKS_SUCCESS;
     TStatus task_status;
     std::vector<std::string> error_msgs;
@@ -471,11 +470,10 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     TTabletId new_tablet_id;
     TSchemaHash new_schema_hash = 0;
     if (status == STARROCKS_SUCCESS) {
-        new_tablet_id = agent_task_req.alter_tablet_req_v2.new_tablet_id;
-        new_schema_hash = agent_task_req.alter_tablet_req_v2.new_schema_hash;
-        EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(),
-                                          agent_task_req.alter_tablet_req_v2, signature, task_type, &error_msgs,
-                                          process_name);
+        new_tablet_id = alter_tablet_request.new_tablet_id;
+        new_schema_hash = alter_tablet_request.new_schema_hash;
+        EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), alter_tablet_request,
+                                          signature, task_type, &error_msgs, process_name);
         Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
         if (!sc_status.ok()) {
             status = STARROCKS_ERROR;
@@ -1455,7 +1453,7 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
         finish_task(finish_task_request);
         worker_pool_this->remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
-    return (void*)nullptr;
+    return nullptr;
 }
 
 AgentStatus TaskWorkerPool::get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
@@ -1513,7 +1511,7 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
         finish_task(finish_task_request);
         worker_pool_this->remove_task_info(agent_task_req->task_type, agent_task_req->signature);
     }
-    return (void*)nullptr;
+    return nullptr;
 }
 
 AgentStatus TaskWorkerPool::_move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src,
