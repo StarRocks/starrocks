@@ -103,11 +103,26 @@ public class ExpressionAnalyzer {
     private boolean isHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             // expand this in the future.
-            if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP)) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_SUM)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private Expr rewriteHighOrderFunction(Expr expr) {
+        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+        if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_SUM)
+                && functionCallExpr.getChildren().size() > 1) {
+            // array_sum(lambda_expr, []...) -> array_sum(array_map(lambda_expr, []...))
+            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(arrayMap);
+            return arrayMap;
+        }
+        return null;
     }
 
     // only high-order functions can use lambda functions.
@@ -132,6 +147,10 @@ public class ExpressionAnalyzer {
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
+        Expr res = rewriteHighOrderFunction(expression);
+        if (res != null) {
+            visitor.visit(res, scope);
+        }
     }
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         if (expression.hasLambdaFunction()) {

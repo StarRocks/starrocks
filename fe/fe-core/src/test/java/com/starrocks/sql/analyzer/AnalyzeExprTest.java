@@ -100,4 +100,21 @@ public class AnalyzeExprTest {
         analyzeFail("select array_map(x -> z,[1])");
         analyzeFail("select array_map(x -> x,[1],null)");
     }
+
+    @Test
+    public void testLambdaFunctionArraySum() {
+        analyzeSuccess("select array_sum(x -> x,[])");
+        analyzeSuccess("select array_sum(x -> x,[null])");
+        analyzeSuccess("select array_sum(x -> x,[1])");
+        analyzeSuccess("select array_sum(x -> x is null,null)");
+        analyzeSuccess("select array_sum(x -> x is null,[null]),array_map(x -> x is null,null)");
+        analyzeSuccess("select array_sum((x,y) -> x + y, [], [])");
+        analyzeSuccess("select array_sum((x,y) -> x, [], [])");
+
+        analyzeFail("select array_sum(x,y -> x + y, [], [])"); // should be (x,y)
+        analyzeFail("select array_sum((x,y,z) -> x + y, [], [])");
+        analyzeFail("select array_sum([1], x -> x)");
+        analyzeFail("select array_sum(x -> z,[1])");
+        analyzeFail("select array_sum(x -> x,[1],null)");
+    }
 }
