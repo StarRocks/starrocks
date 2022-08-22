@@ -145,9 +145,15 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        PhysicalPropertySet rightBroadcastProperty =
-                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        if (node.getJoinType().isRightJoin() || node.getJoinType().isFullOuterJoin()) {
+            PhysicalPropertySet rightGather =
+                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createGatherDistributionSpec()));
+            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightGather));
+        } else {
+            PhysicalPropertySet rightBroadcastProperty =
+                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        }
         return null;
     }
 

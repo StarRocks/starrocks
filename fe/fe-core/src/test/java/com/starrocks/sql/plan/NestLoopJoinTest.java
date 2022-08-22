@@ -49,7 +49,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     public void testNLJoinExplicit() throws Exception {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("nestloop");
         assertNestloopJoin("SELECT * from t0 a join t0 b on a.v1 < b.v1", "INNER JOIN", "1: v1 < 4: v1");
-        assertNestloopJoin("SELECT * from t0 a left join t0 b on a.v1 < b.v1", "LEFT OUTER JOIN", "1: v1 < 4: v1");
+        assertNestloopJoin("SELECT * from t0 a left join t0 b on a.v1 < b.v1", "RIGHT OUTER JOIN", "1: v1 < 4: v1");
         assertNestloopJoin("SELECT * from t0 a right join t0 b on a.v1 < b.v1", "RIGHT OUTER JOIN", "1: v1 < 4: v1");
         assertNestloopJoin("SELECT * from t0 a full join t0 b on a.v1 < b.v1", "FULL OUTER JOIN", "1: v1 < 4: v1");
 
@@ -65,6 +65,41 @@ public class NestLoopJoinTest extends PlanTestBase {
         // assertNestloopJoin("SELECT * from t0 a left join t0 b on a.v1 < b.v1", "LEFT OUTER JOIN", "1: v1 < 4: v1");
         // assertNestloopJoin("SELECT * from t0 a right join t0 b on a.v1 < b.v1", "RIGHT OUTER JOIN", "1: v1 < 4: v1");
         // assertNestloopJoin("SELECT * from t0 a full join t0 b on a.v1 < b.v1", "FULL OUTER JOIN", "1: v1 < 4: v1");
+    }
+
+    // Right outer join needs a GATHER distribution
+    @Test
+    public void testNLJoinRight() throws Exception {
+        String planFragment = getFragmentPlan("select * from t0 a right join t0 b on a.v1 < b.v1");
+        Assert.assertTrue(planFragment, planFragment.contains("3:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 < 4: v1\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE"));
+        Assert.assertTrue(planFragment, planFragment.contains("PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED"));
+
+        // full join
+        planFragment = getFragmentPlan("select * from t0 a full join t0 b on a.v1 < b.v1");
+        Assert.assertTrue(planFragment, planFragment.contains("3:NESTLOOP JOIN\n" +
+                "  |  join op: FULL OUTER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 < 4: v1\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE"));
+        Assert.assertTrue(planFragment, planFragment.contains("PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED"));
     }
 
 }
