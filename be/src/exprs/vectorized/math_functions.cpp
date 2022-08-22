@@ -423,6 +423,10 @@ void MathFunctions::decimal_round(const int128_t& lv, const int32_t& original_sc
         target_scale = -max_precision;
     }
     int32_t scale_diff = target_scale - original_scale;
+    if (std::abs(scale_diff) > max_precision) {
+        (*is_over_flow) = true;
+        return;
+    }
     if (scale_diff > 0) {
         if (keep_scale) {
             // Up scale and down scale can offset when keep scale is set
