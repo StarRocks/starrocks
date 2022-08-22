@@ -173,7 +173,7 @@ public class CatalogLevelTest {
                 result = hudiTable;
             }
         };
-        String sql_1 = "select col1 from " + catalogName + "." + dbName + "." + tableName;
+        String sql1 = "select col1 from " + catalogName + "." + dbName + "." + tableName;
 
         AnalyzeTestUtil.analyzeSuccess(sql1);
     }
