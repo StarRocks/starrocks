@@ -55,7 +55,6 @@ public class ShowCreateMaterializedViewStmtTest {
                 new ShowCreateTableStmt(new TableName("test", "mv1"),
                         ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW test.mv1", stmt.toString());
         Assert.assertEquals("test", stmt.getDb());
         Assert.assertEquals("mv1", stmt.getTable());
         Assert.assertEquals(2, ShowCreateTableStmt.getMaterializedViewMetaData().getColumnCount());

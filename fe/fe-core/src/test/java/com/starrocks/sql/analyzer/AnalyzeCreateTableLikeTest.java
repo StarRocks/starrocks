@@ -37,7 +37,6 @@ public class AnalyzeCreateTableLikeTest {
         Assert.assertEquals("tbl2", stmt.getTableName());
         Assert.assertEquals("test", stmt.getExistedDbName());
         Assert.assertEquals("tbl1", stmt.getExistedTableName());
-        Assert.assertEquals("CREATE TABLE `test`.`tbl2` LIKE `test`.`tbl1`", stmt.toSql());
     }
 
     @Test

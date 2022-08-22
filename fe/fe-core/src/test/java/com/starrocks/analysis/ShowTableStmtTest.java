@@ -45,7 +45,6 @@ public class ShowTableStmtTest {
         ShowTableStmt stmt = new ShowTableStmt("", false, null);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW TABLES FROM testDb", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDb());
         Assert.assertFalse(stmt.isVerbose());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
@@ -53,7 +52,6 @@ public class ShowTableStmtTest {
 
         stmt = new ShowTableStmt("abc", true, null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW FULL TABLES FROM abc", stmt.toString());
         Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
@@ -61,10 +59,10 @@ public class ShowTableStmtTest {
         stmt = new ShowTableStmt("abc", true, "bcd");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("bcd", stmt.getPattern());
-        Assert.assertEquals("SHOW FULL TABLES FROM abc LIKE 'bcd'", stmt.toString());
         Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Tables_in_abc", stmt.getMetaData().getColumn(0).getName());
         Assert.assertEquals("Table_type", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("bcd", stmt.getPattern());
     }
 
     @Test(expected = SemanticException.class)

@@ -293,6 +293,7 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("release", new Integer(SqlParserSymbols.KW_RELEASE));
         keywordMap.put("rename", new Integer(SqlParserSymbols.KW_RENAME));
         keywordMap.put("repeatable", new Integer(SqlParserSymbols.KW_REPEATABLE));
+        keywordMap.put("replace", new Integer(SqlParserSymbols.KW_REPLACE));
         keywordMap.put("replace_if_not_null", new Integer(SqlParserSymbols.KW_REPLACE_IF_NOT_NULL));
         keywordMap.put("repositories", new Integer(SqlParserSymbols.KW_REPOSITORIES));
         keywordMap.put("repository", new Integer(SqlParserSymbols.KW_REPOSITORY));

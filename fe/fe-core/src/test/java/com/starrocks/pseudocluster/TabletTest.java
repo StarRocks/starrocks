@@ -33,4 +33,23 @@ public class TabletTest {
         dest.cloneFrom(src);
         Assert.assertEquals(6, dest.maxContinuousVersion());
     }
+
+    @Test
+    public void testVersionGC() throws Exception {
+        long oldVersionExpireSec = Tablet.versionExpireSec;
+        Tablet.versionExpireSec = 1;
+        try {
+            Tablet ret = new Tablet(1, 1, 1, 1, true);
+            for (int i = 2; i < 16; i++) {
+                ret.commitRowset(new Rowset(i, "rowset" + i), i);
+                Thread.sleep(100);
+            }
+            long oldMinVersion = ret.minVersion();
+            ret.versionGC();
+            long newMinVersion = ret.minVersion();
+            Assert.assertTrue(oldMinVersion < newMinVersion);
+        } finally {
+            Tablet.versionExpireSec = oldVersionExpireSec;
+        }
+    }
 }

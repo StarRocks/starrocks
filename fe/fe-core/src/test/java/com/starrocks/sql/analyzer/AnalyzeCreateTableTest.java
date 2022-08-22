@@ -34,8 +34,6 @@ public class AnalyzeCreateTableTest {
         Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertNull(stmt.getProperties());
-        Assert.assertTrue(stmt.toSql()
-                .contains("rollup( `index1` (`col1`, `col2`), `index2` (`col2`, `col3`))"));
     }
 
     @Test

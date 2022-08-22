@@ -21,12 +21,14 @@ public class AnalyzeTruncateTableTest {
 
     @Test
     public void normalTest() {
-       TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE example_db.tbl;");
-       Assert.assertEquals("TRUNCATE TABLE `example_db`.`tbl`", stmt.toSql());
-       stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
-       Assert.assertEquals("TRUNCATE TABLE `test`.`tbl`PARTITIONS (p1, p2)", stmt.toSql());
-       Assert.assertEquals("tbl", stmt.getTblName());
-       Assert.assertEquals("test", stmt.getDbName());
+        TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE example_db.tbl;");
+        Assert.assertEquals("tbl", stmt.getTblName());
+        Assert.assertEquals("example_db", stmt.getDbName());
+
+        stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
+        Assert.assertEquals("tbl", stmt.getTblName());
+        Assert.assertEquals("test", stmt.getDbName());
+        Assert.assertEquals(stmt.getTblRef().getPartitionNames().toString(), "PARTITIONS (p1, p2)");
     }
 
     @Test

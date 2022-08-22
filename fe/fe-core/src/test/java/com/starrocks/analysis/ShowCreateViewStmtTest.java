@@ -56,7 +56,7 @@ public class ShowCreateViewStmtTest {
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table tbl1";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {

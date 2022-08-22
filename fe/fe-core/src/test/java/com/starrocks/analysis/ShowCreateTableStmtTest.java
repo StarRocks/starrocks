@@ -39,7 +39,6 @@ public class ShowCreateTableStmtTest {
         ShowCreateTableStmt stmt =
                 new ShowCreateTableStmt(new TableName("testDb", "testTbl"), ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW CREATE TABLE testDb.testTbl", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDb());
         Assert.assertEquals("testTbl", stmt.getTable());
         Assert.assertEquals(2, stmt.getMetaData().getColumnCount());
