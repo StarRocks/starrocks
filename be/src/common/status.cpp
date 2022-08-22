@@ -87,7 +87,12 @@ Status::Status(TStatusCode::type code, Slice msg, Slice ctx) : _state(assemble_s
 
 #if defined(ENABLE_STATUS_FAILED)
 int32_t Status::get_cardinality_of_inject() {
-    return starrocks::config::cardinality_of_inject;
+    const auto& cardinality_of_inject = starrocks::config::cardinality_of_inject;
+    if (cardinality_of_inject < 1) {
+        return 1;
+    } else {
+        return cardinality_of_inject;
+    }
 }
 
 void Status::access_directory_of_inject() {
