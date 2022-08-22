@@ -1033,4 +1033,86 @@ private:
         return res.build_nullable_column();
     }
 };
+
+template <PrimitiveType PT>
+class ArrayFilter {
+public:
+    using CppType = RunTimeCppType<PT>;
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_filter(columns); }
+
+private:
+    static ColumnPtr _array_filter(const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone_empty();
+        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]);
+
+        if (src_column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column();
+            const auto& src_null_column = src_nullable_column->null_column();
+
+            auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+            auto* dest_null_column = dest_nullable_column->mutable_null_column();
+            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+
+            if (src_column->has_null()) {
+                dest_null_column->get_data() = src_null_column->get_data();
+            } else {
+                dest_null_column->get_data().resize(chunk_size, 0);
+            }
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+            _filter_array_items(down_cast<ArrayColumn*>(src_data_column.get()), bool_column,
+                                down_cast<ArrayColumn*>(dest_data_column), dest_null_column);
+        } else {
+            _filter_array_items(down_cast<ArrayColumn*>(src_column.get()), bool_column,
+                                down_cast<ArrayColumn*>(dest_column.get()), nullptr);
+        }
+        return dest_column;
+    }
+
+private:
+    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
+                                    NullColumn* desc_null_map) {
+        ArrayColumn* filter;
+        NullColumn* null_map = nullptr;
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+
+        if (raw_filter->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(raw_filter.get());
+            filter = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            null_map = nullable_column->null_column().get();
+        } else {
+            filter = down_cast<ArrayColumn*>(raw_filter.get());
+        }
+        for (size_t i = 0; i < src_column->size(); ++i) {
+            if (desc_null_map == nullptr || !desc_null_map->get_data()[i]) {
+                // null filter is regard as invalid, so does not filter items.
+                if (null_map != nullptr && null_map->get_data()[i]) {
+                    dest_column->append(*src_column, i, 1);
+                } else { // a not-null filter
+                    size_t elem_size = 0;
+                    size_t filter_elem_id = filter->offsets().get_data()[i];
+                    size_t filter_elem_it_limit = filter->offsets().get_data()[i + 1];
+                    for (size_t src_elem_id = src_column->offsets().get_data()[i];
+                         src_elem_id < src_column->offsets().get_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
+                        // only keep the valid elements
+                        if (filter_elem_id < filter_elem_it_limit && !filter->elements().is_null(filter_elem_id) &&
+                            filter->elements().get(filter_elem_id).get_int8() != 0) {
+                            dest_column->elements_column()->append(src_column->elements(), src_elem_id, 1);
+                            ++elem_size;
+                        }
+                    }
+                    dest_offsets.emplace_back(dest_offsets.back() + elem_size);
+                }
+            } else {
+                dest_offsets.emplace_back(dest_offsets.back());
+            }
+        }
+    }
+};
+
 } // namespace starrocks::vectorized
