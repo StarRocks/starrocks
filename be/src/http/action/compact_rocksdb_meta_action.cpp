@@ -14,15 +14,13 @@
 
 namespace starrocks {
 
-CompactRocksDbMetaAction::CompactRocksDbMetaAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
-
 void CompactRocksDbMetaAction::handle(HttpRequest* req) {
     LOG(INFO) << "accept one request " << req->debug_string();
     _compact(req);
     LOG(INFO) << "compact rocksdb meta finished!";
 }
 
-void CompactRocksDbMetaAction::_compact(HttpRequest *req) {
+void CompactRocksDbMetaAction::_compact(HttpRequest* req) {
     _exec_env->storage_engine()->do_manual_compact(true);
 }
 

@@ -11,20 +11,20 @@
 
 namespace starrocks {
 
-    class ExecEnv;
+class ExecEnv;
 
-    class CompactRocksDbMetaAction : public HttpHandler {
-    public:
-        explicit CompactRocksDbMetaAction(ExecEnv* exec_env);
+class CompactRocksDbMetaAction : public HttpHandler {
+public:
+    explicit CompactRocksDbMetaAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
-        ~CompactRocksDbMetaAction() override = default;
+    ~CompactRocksDbMetaAction() override = default;
 
-        void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 
-    private:
-        void _compact(HttpRequest* req);
+private:
+    void _compact(HttpRequest* req);
 
-        ExecEnv* _exec_env;
-    };
+    ExecEnv* _exec_env;
+};
 
 } // end namespace starrocks
