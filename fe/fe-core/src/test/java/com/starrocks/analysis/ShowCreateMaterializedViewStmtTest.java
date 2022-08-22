@@ -69,6 +69,7 @@ public class ShowCreateMaterializedViewStmtTest {
         String createMvSql = "create materialized view mv1 " +
                 "distributed by hash(k1) " +
                 "refresh manual " +
+                "PROPERTIES('replication_num' = '1')\n" +
                 "as select k1, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
@@ -96,6 +97,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "partition by k3 " +
                 "distributed by hash(k3) " +
                 "refresh manual " +
+                "PROPERTIES('replication_num' = '1')\n" +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
@@ -124,6 +126,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "partition by date_trunc('month',k1)" +
                 "distributed by hash(k3) " +
                 "refresh manual " +
+                "PROPERTIES('replication_num' = '1')\n" +
                 "as select k1, k2+v1 as k3 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
@@ -152,6 +155,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "partition by (date_trunc('month',k3))" +
                 "distributed by hash(k3) " +
                 "refresh manual " +
+                "PROPERTIES('replication_num' = '1')\n" +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();

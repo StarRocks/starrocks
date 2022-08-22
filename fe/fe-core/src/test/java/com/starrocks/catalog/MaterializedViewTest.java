@@ -461,6 +461,7 @@ public class MaterializedViewTest {
                 .withNewMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
                         "as select k2, sum(v1) as total from tbl_drop group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView mv = ((MaterializedView) testDb.getTable("mv_to_check"));
@@ -495,6 +496,7 @@ public class MaterializedViewTest {
                 .withNewMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         String alterSql = "alter table tbl_to_rename rename new_tbl_name;";
@@ -529,6 +531,7 @@ public class MaterializedViewTest {
                 .withNewMaterializedView("create materialized view mv_to_check\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
                         "as select k2, sum(v1) as total from tbl_to_rename group by k2;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         String alterPartitionSql = "alter table tbl_to_rename rename partition p1 new_p1;";

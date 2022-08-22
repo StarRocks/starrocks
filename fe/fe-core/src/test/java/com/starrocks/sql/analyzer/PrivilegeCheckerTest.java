@@ -624,6 +624,7 @@ public class PrivilegeCheckerTest {
                 .withNewMaterializedView("create materialized view mv1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
+                        "PROPERTIES('replication_num' = '1')\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
         auth = starRocksAssert.getCtx().getGlobalStateMgr().getAuth();
         starRocksAssert.getCtx().setQualifiedUser("test");
