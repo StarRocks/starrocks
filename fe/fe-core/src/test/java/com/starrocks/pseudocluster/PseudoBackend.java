@@ -1031,7 +1031,7 @@ public class PseudoBackend {
             long version = Long.parseLong(scanRangeParams.scan_range.internal_scan_range.version);
             Tablet tablet = tabletManager.getTablet(tabletId);
             if (tablet == null) {
-                String msg = String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tablet_id,
+                String msg = String.format("olapScan(be:%d tablet:%d version:%d) failed: tablet not found ", getId(), tabletId,
                         version);
                 System.out.println(msg);
                 throw new Exception(msg);
