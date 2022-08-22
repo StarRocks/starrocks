@@ -49,6 +49,7 @@
 #include "exprs/vectorized/java_function_call_expr.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
+#include "exprs/vectorized/map_element_expr.h"
 #include "exprs/vectorized/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
@@ -341,6 +342,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::ARRAY_ELEMENT_EXPR:
         *expr = pool->add(vectorized::ArrayElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::MAP_ELEMENT_EXPR:
+        *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));

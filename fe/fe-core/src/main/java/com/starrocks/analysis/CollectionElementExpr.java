@@ -27,19 +27,19 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
-public class ArrayElementExpr extends Expr {
-    public ArrayElementExpr(Expr expr, Expr subscript) {
+public class CollectionElementExpr extends Expr {
+    public CollectionElementExpr(Expr expr, Expr subscript) {
         this.children.add(expr);
         this.children.add(subscript);
     }
 
-    public ArrayElementExpr(Type type, Expr expr, Expr subscript) {
+    public CollectionElementExpr(Type type, Expr expr, Expr subscript) {
         this.type = type;
         this.children.add(expr);
         this.children.add(subscript);
     }
 
-    public ArrayElementExpr(ArrayElementExpr other) {
+    public CollectionElementExpr(CollectionElementExpr other) {
         super(other);
     }
 
@@ -56,16 +56,20 @@ public class ArrayElementExpr extends Expr {
 
     @Override
     protected void toThrift(TExprNode msg) {
-        msg.setNode_type(TExprNodeType.ARRAY_ELEMENT_EXPR);
+        if (getChild(0).getType().isArrayType()){
+            msg.setNode_type(TExprNodeType.ARRAY_ELEMENT_EXPR);
+        } else {
+            msg.setNode_type(TExprNodeType.MAP_ELEMENT_EXPR);
+        }
     }
 
     @Override
     public Expr clone() {
-        return new ArrayElementExpr(this);
+        return new CollectionElementExpr(this);
     }
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitArrayElementExpr(this, context);
+        return visitor.visitCollectionElementExpr(this, context);
     }
 }

@@ -10,13 +10,13 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.operator.OperatorType.ARRAY_ELEMENT;
+import static com.starrocks.sql.optimizer.operator.OperatorType.COLLECTION_ELEMENT;
 
-public class ArrayElementOperator extends ScalarOperator {
+public class CollectionElementOperator extends ScalarOperator {
     protected List<ScalarOperator> arguments = Lists.newArrayList();
 
-    public ArrayElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator) {
-        super(ARRAY_ELEMENT, type);
+    public CollectionElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator) {
+        super(COLLECTION_ELEMENT, type);
         this.arguments.add(arrayOperator);
         this.arguments.add(subscriptOperator);
     }
@@ -57,7 +57,7 @@ public class ArrayElementOperator extends ScalarOperator {
 
     @Override
     public ScalarOperator clone() {
-        ArrayElementOperator operator = (ArrayElementOperator) super.clone();
+        CollectionElementOperator operator = (CollectionElementOperator) super.clone();
         // Deep copy here
         List<ScalarOperator> newArguments = Lists.newArrayList();
         this.arguments.forEach(p -> newArguments.add(p.clone()));
@@ -67,7 +67,7 @@ public class ArrayElementOperator extends ScalarOperator {
 
     @Override
     public <R, C> R accept(ScalarOperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitArrayElement(this, context);
+        return visitor.visitCollectionElement(this, context);
     }
 
     @Override
@@ -78,7 +78,7 @@ public class ArrayElementOperator extends ScalarOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        ArrayElementOperator that = (ArrayElementOperator) o;
+        CollectionElementOperator that = (CollectionElementOperator) o;
         return Objects.equal(arguments, that.arguments);
     }
 

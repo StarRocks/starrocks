@@ -90,6 +90,7 @@ set(EXEC_FILES
         ./exprs/vectorized/json_functions_test.cpp
         ./exprs/vectorized/lambda_function_expr_test.cpp
         ./exprs/vectorized/like_test.cpp
+        exprs/vectorized/map_element_expr_test.cpp
         ./exprs/vectorized/math_functions_test.cpp
         ./exprs/vectorized/null_if_expr_test.cpp
         ./exprs/vectorized/percentile_functions_test.cpp
@@ -211,7 +212,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
-	./storage/memtable_flush_executor_test.cpp
+	    ./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
