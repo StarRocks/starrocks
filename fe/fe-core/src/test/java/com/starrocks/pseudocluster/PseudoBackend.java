@@ -766,8 +766,7 @@ public class PseudoBackend {
             final QueryProgress progress = queryProgresses.computeIfAbsent(queryid, k -> new QueryProgress(k));
             if (params.fragment.output_sink != null && params.fragment.output_sink.type == TDataSinkType.RESULT_SINK) {
                 resultSinkInstanceToQueryId.put(
-                        DebugUtil.printId(params.params.fragment_instance_id)
-                        , queryid);
+                        DebugUtil.printId(params.params.fragment_instance_id), queryid);
             }
             progress.addFragment(1);
             executor.submit(() -> {
@@ -811,8 +810,7 @@ public class PseudoBackend {
                     return CompletableFuture.completedFuture(result);
                 }
                 resultSinkInstanceToQueryId.put(
-                        DebugUtil.printId(params.unique_param_per_instance.get(0).params.fragment_instance_id)
-                        , queryid);
+                        DebugUtil.printId(params.unique_param_per_instance.get(0).params.fragment_instance_id), queryid);
             }
             executor.submit(() -> {
                 execBatchPlanFragmentsWithReport(params);
