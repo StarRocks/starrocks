@@ -469,7 +469,8 @@ public class SubqueryTest extends PlanTestBase {
                     "    where l.t1a = r.t1a\n" +
                     ");";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "args: DECIMAL64; result: DECIMAL64(10,2); args nullable: false; result nullable: true");
+            assertContains(plan,
+                    "args: DECIMAL64; result: DECIMAL64(10,2); args nullable: false; result nullable: true");
             assertContains(plan, "  7:Project\n" +
                     "  |  output columns:\n" +
                     "  |  10 <-> [10: id_decimal, DECIMAL64(10,2), true]\n" +

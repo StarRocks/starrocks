@@ -24,7 +24,8 @@ static const size_t kPrimaryKeyLimitSize = 128;
 
 Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
     Schema schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
+        slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
                                                                         FieldType::OLAP_FIELD_TYPE_TINYINT, false);
@@ -52,7 +53,8 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _sink(sink),
           _aggregator(nullptr),
           _mem_tracker(mem_tracker) {
-    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
+        _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
     _init_aggregator_if_needed();

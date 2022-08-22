@@ -90,4 +90,10 @@ public class BeTabletManager {
         }
         return tabletInfo;
     }
+
+    public synchronized void maintenance() {
+        for (Tablet tablet : tablets.values()) {
+            tablet.versionGC();
+        }
+    }
 }

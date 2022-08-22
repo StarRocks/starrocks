@@ -20,6 +20,7 @@ class Chunk;
 namespace starrocks::lake {
 
 class DeltaWriterImpl;
+class TabletWriter;
 
 class DeltaWriter {
     using Chunk = starrocks::vectorized::Chunk;
@@ -27,8 +28,12 @@ class DeltaWriter {
 public:
     using Ptr = std::unique_ptr<DeltaWriter>;
 
+    // for load
     static Ptr create(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                       const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+
+    // for schema change
+    static Ptr create(int64_t tablet_id, int64_t max_buffer_size, MemTracker* mem_tracker);
 
     explicit DeltaWriter(DeltaWriterImpl* impl) : _impl(impl) {}
 
@@ -57,6 +62,8 @@ public:
     [[nodiscard]] int64_t txn_id() const;
 
     [[nodiscard]] MemTracker* mem_tracker();
+
+    [[nodiscard]] TabletWriter* tablet_writer();
 
 private:
     DeltaWriterImpl* _impl;

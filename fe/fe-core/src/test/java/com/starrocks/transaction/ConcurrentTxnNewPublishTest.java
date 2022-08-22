@@ -9,7 +9,8 @@ import java.sql.SQLException;
 public class ConcurrentTxnNewPublishTest extends ConcurrentTxnTest {
     @Override
     void setup() throws SQLException {
-        withRead = false;
-        Config.enable_new_publish_mechanism = true;
+        runTime = 20;
+        withRead = true;
+        Config.enable_new_publish_mechanism = false;
     }
 }
