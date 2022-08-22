@@ -44,6 +44,8 @@ public:
         _thread_pool = thread_pool;
     }
 
+    int num_queued_tasks() const;
+
     void set_ownership(Ownership ownership) { _ownership = ownership; }
 
     void set_busy_sleep_ms(int64_t value) { _busy_sleep_ms = value; }

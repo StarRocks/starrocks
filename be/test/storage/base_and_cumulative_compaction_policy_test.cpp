@@ -262,7 +262,7 @@ TEST(BaseAndCumulativeCompactionPolicyTest, test_create_base_compaction_without_
         RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>();
         rowset_meta->set_start_version(10);
         rowset_meta->set_end_version(19);
-        rowset_meta->set_creation_time(base_time +1);
+        rowset_meta->set_creation_time(base_time + 1);
         rowset_meta->set_segments_overlap(NONOVERLAPPING);
         rowset_meta->set_num_segments(1);
         rowset_meta->set_total_disk_size(1024 * 1024);

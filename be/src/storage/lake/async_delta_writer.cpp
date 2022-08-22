@@ -17,6 +17,7 @@ DIAGNOSTIC_POP
 #include "runtime/current_thread.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
+#include "util/bthreads/executor.h"
 
 namespace starrocks::lake {
 
@@ -32,6 +33,7 @@ public:
     AsyncDeltaWriterImpl(int64_t tablet_id, int64_t txn_id, int64_t partition_id,
                          const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
             : _writer(DeltaWriter::create(tablet_id, txn_id, partition_id, slots, mem_tracker)),
+              _executor(nullptr),
               _queue_id{kInvalidQueueId},
               _open_mtx(),
               _status(),
@@ -71,6 +73,7 @@ private:
     Status do_open();
 
     DeltaWriter::Ptr _writer;
+    bthreads::ThreadPoolExecutor* _executor;
     bthread::ExecutionQueueId<Task> _queue_id;
     bthread::Mutex _open_mtx;
     Status _status;
@@ -127,8 +130,19 @@ inline Status AsyncDeltaWriterImpl::do_open() {
     if (UNLIKELY(StorageEngine::instance() == nullptr)) {
         return Status::InternalError("StorageEngine::instance() is NULL");
     }
+
+    // TODO: create own executor if no executor of local tablet can be shared.
+    auto stores = StorageEngine::instance()->get_stores_for_create_tablet(TStorageMedium::HDD);
+    if (stores.empty()) {
+        stores = StorageEngine::instance()->get_stores_for_create_tablet(TStorageMedium::SSD);
+    }
+    if (stores.empty()) {
+        return Status::ServiceUnavailable("No store available for share thread pool executor");
+    }
+    _executor = stores.front()->async_delta_writer_executor();
+
     bthread::ExecutionQueueOptions opts;
-    opts.executor = StorageEngine::instance()->async_delta_writer_executor();
+    opts.executor = stores.front()->async_delta_writer_executor();
     if (UNLIKELY(opts.executor == nullptr)) {
         return Status::InternalError("AsyncDeltaWriterExecutor init failed");
     }
@@ -146,6 +160,10 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.indexes_size = indexes_size;
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
+    if (_executor->num_queued_tasks() >= 10240 /*TODO: configurable*/) {
+        task.cb(Status::ServiceUnavailable("Too many pending tasks of async delta writer"));
+        return;
+    }
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
     }

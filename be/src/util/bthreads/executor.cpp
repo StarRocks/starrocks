@@ -22,4 +22,8 @@ int ThreadPoolExecutor::submit(void* (*fn)(void*), void* args) {
     return st.ok() ? 0 : -1;
 }
 
+int ThreadPoolExecutor::num_queued_tasks() const {
+    return _thread_pool->num_queued_tasks();
+}
+
 } // namespace starrocks::bthreads

@@ -49,10 +49,6 @@
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
 
-namespace bthread {
-class Executor;
-}
-
 namespace starrocks {
 
 class DataDir;
@@ -156,8 +152,7 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
-    bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
-
+    // TODO: maybe we should move this thread pool to `DataDir`.
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
     UpdateManager* update_manager() { return _update_manager.get(); }
@@ -337,8 +332,6 @@ private:
     std::unique_ptr<TxnManager> _txn_manager;
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
-
-    std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 

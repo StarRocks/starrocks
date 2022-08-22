@@ -163,17 +163,6 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
-    std::unique_ptr<ThreadPool> thread_pool;
-    RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
-                            .set_min_threads(config::number_tablet_writer_threads / 2)
-                            .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
-                            .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
-                            .build(&thread_pool));
-
-    _async_delta_writer_executor =
-            std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
-
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
 
@@ -192,13 +181,14 @@ Status StorageEngine::_init_store_map() {
     std::vector<std::thread> threads;
     SpinLock error_msg_lock;
     std::string error_msg;
+    int num_stores = _options.store_paths.size();
     for (auto& path : _options.store_paths) {
         DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();
-        threads.emplace_back([store, &error_msg_lock, &error_msg]() {
-            auto st = store->init();
+        threads.emplace_back([store, num_stores, &error_msg_lock, &error_msg]() {
+            auto st = store->init(false, config::number_tablet_writer_threads / num_stores);
             if (!st.ok()) {
                 {
                     std::lock_guard<SpinLock> l(error_msg_lock);

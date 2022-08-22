@@ -43,6 +43,10 @@ class Tablet;
 class TabletManager;
 class TxnManager;
 
+namespace bthreads {
+class ThreadPoolExecutor;
+}
+
 // A DataDir used to manage data in same path.
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
@@ -54,7 +58,7 @@ public:
     DataDir(const DataDir&) = delete;
     void operator=(const DataDir&) = delete;
 
-    Status init(bool read_only = false);
+    Status init(bool read_only = false, int max_delta_writer_threads = 16);
     void stop_bg_worker();
 
     const std::string& path() const { return _path; }
@@ -120,6 +124,8 @@ public:
 
     Status update_capacity();
 
+    bthreads::ThreadPoolExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+
 private:
     Status _init_data_dir();
     Status _init_tmp_dir();
@@ -159,6 +165,8 @@ private:
     std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
+
+    std::unique_ptr<bthreads::ThreadPoolExecutor> _async_delta_writer_executor;
 };
 
 } // namespace starrocks

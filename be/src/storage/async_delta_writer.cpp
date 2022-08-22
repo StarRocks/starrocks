@@ -6,6 +6,7 @@
 
 #include "runtime/current_thread.h"
 #include "storage/storage_engine.h"
+#include "util/bthreads/executor.h"
 
 namespace starrocks::vectorized {
 
@@ -67,7 +68,7 @@ Status AsyncDeltaWriter::_init() {
         return Status::InternalError("StorageEngine::instance() is NULL");
     }
     bthread::ExecutionQueueOptions opts;
-    opts.executor = StorageEngine::instance()->async_delta_writer_executor();
+    opts.executor = _writer->tablet()->data_dir()->async_delta_writer_executor();
     if (UNLIKELY(opts.executor == nullptr)) {
         return Status::InternalError("AsyncDeltaWriterExecutor init failed");
     }
@@ -85,6 +86,11 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     task.indexes_size = req.indexes_size;
     task.write_cb = cb;
     task.commit_after_write = req.commit_after_write;
+    // TODO: configurable
+    if (UNLIKELY(_writer->tablet()->data_dir()->async_delta_writer_executor()->num_queued_tasks() >= 10240)) {
+        task.write_cb->run(Status::ServiceUnavailable("Too many pending tasks of async delta writer"), nullptr);
+        return;
+    }
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;

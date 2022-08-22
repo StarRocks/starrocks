@@ -48,10 +48,12 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/txn_manager.h"
 #include "storage/utils.h" // for check_dir_existed
+#include "util/bthreads/executor.h"
 #include "util/defer_op.h"
 #include "util/errno.h"
 #include "util/monotime.h"
 #include "util/string_util.h"
+#include "util/threadpool.h"
 
 using strings::Substitute;
 
@@ -77,7 +79,7 @@ DataDir::~DataDir() {
     delete _kv_store;
 }
 
-Status DataDir::init(bool read_only) {
+Status DataDir::init(bool read_only, int max_delta_writer_threads) {
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_fs->path_exists(_path));
     std::string align_tag_path = _path + ALIGN_TAG_PREFIX;
@@ -91,6 +93,17 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
+
+    std::unique_ptr<ThreadPool> thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
+                            .set_min_threads(max_delta_writer_threads / 2)
+                            .set_max_threads(std::max<int>(1, max_delta_writer_threads))
+                            .set_max_queue_size(40960)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
+                            .build(&thread_pool));
+
+    _async_delta_writer_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
 
     _is_used = true;
     return Status::OK();
