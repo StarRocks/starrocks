@@ -287,7 +287,7 @@ TEST_F(VecMathFunctionsTest, DecimalRoundNullTest) {
 }
 
 TEST_F(VecMathFunctionsTest, DecimalRoundUpToTest) {
-    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {-1}, {}, {"18451"}, {});
+    testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {-1}, {}, {"18450"}, {});
     testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {0}, {}, {"18451"}, {});
     testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {1}, {}, {"18450.8"}, {});
     testRoundDecimal<TYPE_ROUND_UP_TO>({"18450.76"}, {}, 10, 2, {2}, {}, {"18450.76"}, {});
