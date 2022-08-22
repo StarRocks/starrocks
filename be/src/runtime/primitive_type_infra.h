@@ -66,6 +66,7 @@ namespace starrocks {
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
+    M(FUNCTION)                         \
     M(JSON)
 
 #define _TYPE_DISPATCH_CASE(type) \
