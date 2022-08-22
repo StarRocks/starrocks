@@ -36,7 +36,7 @@ public class NestLoopJoinTest extends PlanTestBase {
 
     private void assertNestloopJoin(String sql, String joinType, String onPredicate) throws Exception {
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("  3:NESTLOOP JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("NESTLOOP JOIN\n" +
                 "  |  join op: " + joinType + "\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: " + onPredicate));
@@ -65,35 +65,25 @@ public class NestLoopJoinTest extends PlanTestBase {
     @Test
     public void testNLJoinRight() throws Exception {
         String planFragment = getFragmentPlan("select * from t0 a right join t0 b on a.v1 < b.v1");
-        Assert.assertTrue(planFragment, planFragment.contains("3:NESTLOOP JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("  4:NESTLOOP JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE"));
-        Assert.assertTrue(planFragment, planFragment.contains("PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED"));
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:EXCHANGE"));
 
         // full join
         planFragment = getFragmentPlan("select * from t0 a full join t0 b on a.v1 < b.v1");
-        Assert.assertTrue(planFragment, planFragment.contains("3:NESTLOOP JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("  4:NESTLOOP JOIN\n" +
                 "  |  join op: FULL OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE"));
-        Assert.assertTrue(planFragment, planFragment.contains("PLAN FRAGMENT 1\n" +
-                " OUTPUT EXPRS:\n" +
-                "  PARTITION: RANDOM\n" +
-                "\n" +
-                "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 02\n" +
-                "    UNPARTITIONED"));
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:EXCHANGE"));
     }
 
 }
