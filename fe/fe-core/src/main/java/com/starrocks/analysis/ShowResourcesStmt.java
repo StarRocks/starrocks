@@ -22,6 +22,7 @@ import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 public class ShowResourcesStmt extends ShowStmt {
     public ShowResourcesStmt() {
@@ -43,5 +44,23 @@ public class ShowResourcesStmt extends ShowStmt {
         } else {
             return RedirectStatus.NO_FORWARD;
         }
+    }
+    @Override
+    public String toSql() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SHOW RESOURCES");
+        return sb.toString();
+    }
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowResourceStatement(this, context);
+    }
+    @Override
+    public String toString() {
+        return toSql();
     }
 }

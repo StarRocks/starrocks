@@ -116,6 +116,12 @@ statement
     | alterResourceGroupStatement                                                           #alterResourceGroup
     | showResourceGroupStatement                                                            #showResourceGroup
 
+    // Extenal Resource Statement
+    | createResourceStatement                                                               #createResource
+    | alterResourceStatement                                                                #alterResource
+    | dropResourceStatement                                                                 #dropResource
+    | showResourceStatement                                                                 #showResource
+
     //UDF
     | showFunctionsStatement                                                                #showFunctions
     | dropFunctionStatement                                                                 #dropFunctionst
@@ -724,6 +730,22 @@ alterResourceGroupStatement
 showResourceGroupStatement
     : SHOW RESOURCE GROUP identifier
     | SHOW RESOURCE GROUPS ALL?
+    ;
+
+createResourceStatement
+    : CREATE EXTERNAL? RESOURCE resourceName=identifierOrString properties?
+    ;
+
+alterResourceStatement
+    : ALTER RESOURCE resourceName=identifierOrString SET properties
+    ;
+
+dropResourceStatement
+    : DROP RESOURCE resourceName=identifierOrString
+    ;
+
+showResourceStatement
+    : SHOW RESOURCES
     ;
 
 classifier
