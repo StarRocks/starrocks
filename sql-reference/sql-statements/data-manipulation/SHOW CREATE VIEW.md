@@ -69,7 +69,3 @@ SHOW CREATE VIEW example_db.example_view;
 | example_view | CREATE VIEW `example_view` (k1, k2, k3, v1) COMMENT "VIEW" AS SELECT `default_cluster:db1`.`example_table`.`k1` AS `k1`, `default_cluster:db1`.`example_table`.`k2` AS `k2`, `default_cluster:db1`.`example_table`.`k3` AS `k3`, `default_cluster:db1`.`example_table`.`v1` AS `v1` FROM `default_cluster:db1`.`example_table`; | utf8                 | utf8_general_ci      |
 +--------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
 ```
-
-## 相关操作
-
-StarRocks 还支持创建物化视图，详细信息请参见[物化视图](/using_starrocks/Materialized_view.md)。
