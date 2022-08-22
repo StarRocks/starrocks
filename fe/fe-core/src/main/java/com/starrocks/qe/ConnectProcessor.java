@@ -280,7 +280,8 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
-                .setDb(ctx.getDatabase());
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();
 
         // execute this query.

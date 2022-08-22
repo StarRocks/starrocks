@@ -3431,7 +3431,11 @@ public class LocalMetastore implements ConnectorMetadata {
     private void disableMaterializedView(Database db, OlapTable olapTable) {
         for (long mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId);
-            mv.setActive(false);
+            if (mv != null) {
+                mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+            }
         }
     }
 
@@ -4397,8 +4401,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
-                throw new DdlException("Table[" + tableName + "] is not OLAP table");
+            if (!table.isOlapOrLakeTable()) {
+                throw new DdlException("Table[" + tableName + "] is not OLAP table or LAKE table");
             }
 
             OlapTable olapTable = (OlapTable) table;

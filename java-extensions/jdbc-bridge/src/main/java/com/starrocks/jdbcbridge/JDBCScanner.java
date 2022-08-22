@@ -5,6 +5,7 @@ package com.starrocks.jdbcbridge;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import java.lang.reflect.Array;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -21,6 +22,8 @@ public class JDBCScanner {
     private ResultSet resultSet;
     private ResultSetMetaData resultSetMetaData;
     private List<String> resultColumnClassNames;
+    private List<Object[]> resultChunk;
+    private int resultNumRows = 0;
 
     public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
         this.driverLocation = driverLocation;
@@ -47,8 +50,11 @@ public class JDBCScanner {
         resultSet = statement.getResultSet();
         resultSetMetaData = resultSet.getMetaData();
         resultColumnClassNames = new ArrayList<>(resultSetMetaData.getColumnCount());
+        resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
+            Class<?> clazz = Class.forName(resultSetMetaData.getColumnClassName(i));
+            resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
         }
     }
 
@@ -62,22 +68,23 @@ public class JDBCScanner {
     }
 
     // return columnar chunk
-    public List<List<Object>> getNextChunk() throws Exception {
+    public List<Object[]> getNextChunk() throws Exception {
         int chunkSize = scanContext.getStatementFetchSize();
         int columnCount = resultSetMetaData.getColumnCount();
-        List<List<Object>> chunk = new ArrayList<>(columnCount);
-        for (int i = 0; i < columnCount; i++) {
-            chunk.add(new ArrayList<>(chunkSize));
-        }
-        int numRows = 0;
+        resultNumRows = 0;
         do {
             for (int i = 0; i < columnCount; i++) {
-                chunk.get(i).add(resultSet.getObject(i + 1));
+                resultChunk.get(i)[resultNumRows] = resultSet.getObject(i + 1);
             }
-            numRows++;
-        } while (numRows < chunkSize && resultSet.next());
-        return chunk;
+            resultNumRows++;
+        } while (resultNumRows < chunkSize && resultSet.next());
+        return resultChunk;
     }
+
+    public int getResultNumRows() {
+        return resultNumRows;
+    }
+
 
     public void close() throws Exception {
         if (resultSet != null) {

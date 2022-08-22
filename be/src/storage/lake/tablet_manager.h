@@ -80,10 +80,16 @@ public:
 
     Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    Status delete_txn_vlog(int64_t tablet_id, int64_t version);
+
     Status delete_segment(int64_t tablet_id, std::string_view segment_name);
 
     // Transform a txn log into versioned txn log(i.e., rename `txn_{tablet_id}_{txn_id}` to `vtxn_{tablet_id}_{log_version}`)
     Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
+
+    Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+
+    Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
     void prune_metacache();
 
@@ -103,6 +109,8 @@ public:
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
+
+    std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }
 

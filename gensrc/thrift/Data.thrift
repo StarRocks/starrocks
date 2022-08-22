@@ -104,3 +104,8 @@ struct TStatisticData {
     13: optional i64 meta_version
 }
 
+// Result data for user variable
+struct TVariableData {
+    1: optional bool isNull
+    2: optional binary result
+}

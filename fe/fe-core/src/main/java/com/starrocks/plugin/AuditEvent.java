@@ -59,6 +59,8 @@ public class AuditEvent {
     public String user = "";
     @AuditField(value = "ResourceGroup")
     public String resourceGroup = "default_wg";
+    @AuditField(value = "Catalog")
+    public String catalog = "";
     @AuditField(value = "Db")
     public String db = "";
     @AuditField(value = "State")
@@ -127,6 +129,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setResourceGroup(String resourceGroup) {
             auditEvent.resourceGroup = resourceGroup;
+            return this;
+        }
+
+        public AuditEventBuilder setCatalog(String catalog) {
+            auditEvent.catalog = catalog;
             return this;
         }
 

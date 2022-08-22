@@ -164,7 +164,10 @@ private:
         // A Request may have multiple Chunks, so only when the last Chunk of the Request is consumed,
         // the callback is closed->run() Let the sender continue to send data
         google::protobuf::Closure* closure = nullptr;
+        // if pass_through is used, the chunk will be stored in chunk_ptr.
+        // otherwise, the chunk that has not been deserialized will be stored in pchunk and deserialized lazily during get_chunk
         ChunkUniquePtr chunk_ptr;
+        ChunkPB pchunk;
         // Time in nano of saving closure
         int64_t queue_enter_time = -1;
 
@@ -176,6 +179,10 @@ private:
                   driver_sequence(driver_sequence),
                   closure(closure),
                   chunk_ptr(std::move(chunk_ptr)) {}
+
+        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
+                  const ChunkPB& pchunk)
+                : chunk_bytes(chunk_bytes), driver_sequence(driver_sequence), closure(closure), pchunk(pchunk) {}
     };
 
     typedef std::list<ChunkItem> ChunkList;
@@ -184,6 +191,7 @@ private:
 
     StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
 
+    template <bool need_deserialization>
     StatusOr<ChunkList> get_chunks_from_request(const PTransmitChunkParams& request, size_t& total_chunk_bytes);
 
     Status try_to_build_chunk_meta(const PTransmitChunkParams& request);
@@ -205,6 +213,18 @@ private:
     // _producer_token is used to ensure that the order of dequeueing is the same as enqueueing
     // it is only used when the order needs to be guaranteed
     std::unique_ptr<ChunkQueue::producer_token_t> _producer_token;
+
+    struct ChunkQueueState {
+        // Record the number of blocked closure in the queue
+        std::atomic_int32_t blocked_closure_num = 0;
+        // Record whether the queue is in the unplug state.
+        // In the unplug state, has_output will return true directly if there is a chunk in the queue.
+        // Otherwise, it will try to batch enough chunks to reduce the scheduling overhead.
+        bool unpluging = false;
+        bool is_short_circuited = false;
+    };
+    std::vector<ChunkQueueState> _chunk_queue_states;
+
     std::atomic<size_t> _total_chunks{0};
     bool _is_pipeline_level_shuffle = false;
 
@@ -219,7 +239,7 @@ private:
     // key of second level is request sequence
     phmap::flat_hash_map<int, phmap::flat_hash_map<int64_t, ChunkList>> _buffered_chunk_queues;
 
-    std::vector<bool> _short_circuit_driver_sequences;
+    static constexpr size_t kUnplugBufferThreshold = 16;
 };
 
 } // namespace starrocks

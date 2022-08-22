@@ -282,7 +282,8 @@ public class StarRocksAssert {
             return UtFrameUtils.getFragmentPlan(connectContext, sql);
         }
 
-        public void analysisError(String keywords) {
+        // Assert true only if analysisException.getMessage() contains all keywords.
+        public void analysisError(String... keywords) {
             try {
                 explainQuery();
             } catch (AnalysisException | StarRocksPlannerException analysisException) {

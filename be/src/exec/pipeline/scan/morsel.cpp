@@ -24,8 +24,7 @@ void LogicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderP
     params->short_key_ranges = _short_key_ranges;
 }
 
-/// MorselQueueFactory
-
+/// MorselQueueFactory.
 size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
@@ -38,7 +37,9 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
     return total;
 }
 
-IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq) {
+IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
+                                                           bool need_local_shuffle)
+        : _need_local_shuffle(need_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
         return;
