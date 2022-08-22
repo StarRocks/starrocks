@@ -146,55 +146,6 @@ public class TaskManagerTest {
 
     }
 
-    // This test is temporarily removed because it is unstable,
-    // and it will be added back when the cause of the problem is found and fixed.
-    public void submitMvTaskTest() {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {}
-        };
-        String sql = "create materialized view test.mv1\n" +
-                "partition by date_trunc('month',k1)\n" +
-                "distributed by hash(k2)\n" +
-                "refresh manual\n" +
-                "properties('replication_num' = '1')\n" +
-                "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;";
-        Database testDb = null;
-        try {
-            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-            testDb = GlobalStateMgr.getCurrentState().getDb("test");
-            MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
-            Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            taskManager.createTask(task, true);
-            taskManager.executeTask(task.getName());
-            List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
-
-            Constants.TaskRunState state = null;
-            int retryCount = 0;
-            int maxRetry = 5;
-            while (retryCount < maxRetry) {
-                state = taskRuns.get(0).getState();
-                retryCount++;
-                ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-                if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
-                    break;
-                }
-                LOG.info("SubmitMvTaskTest is waiting for TaskRunState retryCount:" + retryCount);
-            }
-            Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        } finally {
-            if (testDb != null) {
-                testDb.dropTable("mv1");
-            }
-        }
-    }
-
     @Test
     public void submitMvAsyncTaskTest() {
         new MockUp<StmtExecutor>() {
@@ -247,50 +198,6 @@ public class TaskManagerTest {
                 testDb.dropTable("mv1");
             }
         }
-    }
-
-    @Test
-    public void periodicalTaskRegularTest() throws DdlException {
-        new MockUp<Coordinator>() {
-            @Mock
-            public void exec() throws Exception {}
-        };
-
-        LocalDateTime now = LocalDateTime.now();
-        Task task = new Task("test_periodical");
-        task.setCreateTime(System.currentTimeMillis());
-        task.setDbName("test");
-        task.setDefinition("select 1");
-        task.setExpireTime(0L);
-        long startTime = Utils.getLongFromDateTime(LocalDateTime.now().plusSeconds(3));
-        TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
-        task.setSchedule(taskSchedule);
-        task.setType(Constants.TaskType.PERIODICAL);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        LOG.info("start time is :" + now);
-        taskManager.createTask(task, false);
-        TaskRunHistory taskRunHistory = taskManager.getTaskRunManager().getTaskRunHistory();
-        taskRunHistory.getAllHistory().clear();
-
-        ThreadUtil.sleepAtLeastIgnoreInterrupts(10000L);
-        taskManager.dropTasks(ImmutableList.of(task.getId()), true);
-
-        Deque<TaskRunStatus> allHistory = taskRunHistory.getAllHistory();
-        for (TaskRunStatus taskRunStatus : allHistory) {
-            LOG.info(taskRunStatus);
-        }
-
-        int retryCount = 0;
-        int maxRetry = 10;
-        while (retryCount < maxRetry) {
-            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
-            if (allHistory.size() == 2) {
-                break;
-            }
-            retryCount++;
-            LOG.info("periodicalTaskRegularTest is waiting for JobState retryCount:" + retryCount);
-        }
-        Assert.assertEquals(2, allHistory.size());
     }
 
     @Test
