@@ -83,27 +83,18 @@ public class BinaryPredicateStatisticCalculator {
                     .build();
 
             double predicateFactor;
-            if (columnStatistic.getHistogram() != null) {
-                double rowCountInHistogram;
-                Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
-                if (histogramTopN.containsKey(constant.toString())) {
-                    rowCountInHistogram = histogramTopN.get(constant.toString());
-                    predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
-                } else {
-                    Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
-                    double f = 1 / max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(), 1);
-                    predicateFactor = (columnStatistic.getHistogram().getTotalRows() - mostCommonValuesCount)
-                            * f / columnStatistic.getHistogram().getTotalRows();
-                }
+            double rowCountInHistogram;
+            Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
+            // If there is a constant key in mcv, the ratio in mcv is directly used for filtering estimation.
+            // If it does not hit, filter out the key that appears in mcv, and then use the cardinality estimation
+            if (histogramTopN.containsKey(constantOperator.toString())) {
+                rowCountInHistogram = histogramTopN.get(constantOperator.toString());
+                predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
             } else {
-                Optional<Double> optDouble = StatisticUtils.convertStatisticsToDouble(
-                        constantOperator.getType(), constant.toString());
-                if (optDouble.isPresent() && (optDouble.get() < columnStatistic.getMinValue()
-                        || optDouble.get() > columnStatistic.getMaxValue())) {
-                    predicateFactor = 0;
-                } else {
-                    predicateFactor = 1 / max(columnStatistic.getDistinctValuesCount(), 1);
-                }
+                Long mostCommonValuesCount = histogramTopN.values().stream().reduce(Long::sum).orElse(0L);
+                double f = 1 / max(columnStatistic.getDistinctValuesCount() - histogramTopN.size(), 1);
+                predicateFactor = (columnStatistic.getHistogram().getTotalRows() - mostCommonValuesCount)
+                        * f / columnStatistic.getHistogram().getTotalRows();
             }
 
             double rowCount = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction()) * predicateFactor;

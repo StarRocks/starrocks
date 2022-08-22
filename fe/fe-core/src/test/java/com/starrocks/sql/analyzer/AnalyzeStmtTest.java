@@ -144,12 +144,16 @@ public class AnalyzeStmtTest {
         Column v2 = table.getColumn("v2");
 
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), " +
+                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
+                        "cast(max(cast(max as bigint(20))) as string), " +
                         "cast(min(cast(min as bigint(20))) as string) FROM column_statistics " +
                         "WHERE table_id = 10004 and column_name = \"v1\" GROUP BY db_id, table_id, column_name " +
-                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                        "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), cast(min(cast(min as bigint(20))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" GROUP BY db_id, table_id, column_name",
+                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(sum(data_size) as bigint), " +
+                        "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint(20))) as string), " +
+                        "cast(min(cast(min as bigint(20))) as string) " +
+                        "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" " +
+                        "GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList(v1, v2)));
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
@@ -164,8 +168,10 @@ public class AnalyzeStmtTest {
                         "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
                         "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
                         "UNION ALL  " +
-                        "SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v2`)), " +
-                        "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0 ",
+                        "SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, " +
+                        "IFNULL(hll_union(hll_hash(`v2`)), " +
+                        "hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() " +
+                        "FROM test.t0 partition t0 ",
                 collectJob.buildCollectFullStatisticSQL(database, table, partition, Lists.newArrayList("v1", "v2")));
     }
 
@@ -190,7 +196,8 @@ public class AnalyzeStmtTest {
             partition.getBaseIndex().setRowCount(10000);
         }
 
-        String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets properties(\"histogram_sample_ratio\"=\"0.1\")";
+        String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.1\")";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
@@ -198,14 +205,16 @@ public class AnalyzeStmtTest {
             partition.getBaseIndex().setRowCount(400000);
         }
 
-        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets properties(\"histogram_sample_ratio\"=\"0.2\")";
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.2\")";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(20000000);
         }
-        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets properties(\"histogram_sample_ratio\"=\"0.9\")";
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.9\")";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
     }
@@ -216,7 +225,9 @@ public class AnalyzeStmtTest {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
         Assert.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
 
-        Assert.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID = 10004", StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
-        Assert.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID = 10004", StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.FULL));
+        Assert.assertEquals("DELETE FROM table_statistic_v1 WHERE TABLE_ID = 10004",
+                StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.SAMPLE));
+        Assert.assertEquals("DELETE FROM column_statistics WHERE TABLE_ID = 10004",
+                StatisticSQLBuilder.buildDropStatisticsSQL(10004L, StatsConstants.AnalyzeType.FULL));
     }
 }

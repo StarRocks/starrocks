@@ -134,8 +134,8 @@ public class FoldConstantsRuleTest {
         CastOperator cast6 = new CastOperator(Type.BIGINT, ConstantOperator.createDate(LocalDateTime.now()));
         assertEquals(cast6, rule.apply(cast6, null));
 
-        CastOperator cast7 = new CastOperator(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1)
-                , ConstantOperator.createDecimal(BigDecimal.valueOf(0.00008),
+        CastOperator cast7 = new CastOperator(ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 1, 1),
+                ConstantOperator.createDecimal(BigDecimal.valueOf(0.00008),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 6, 6))
         );
         assertEquals("0.0", rule.apply(cast7, null).toString());

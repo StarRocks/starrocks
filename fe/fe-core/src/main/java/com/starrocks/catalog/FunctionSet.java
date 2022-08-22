@@ -675,6 +675,9 @@ public class FunctionSet {
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
         for (Type t : Type.getSupportedTypes()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
             if (t.isNull()) {
                 continue; // NULL is handled through type promotion.
             }

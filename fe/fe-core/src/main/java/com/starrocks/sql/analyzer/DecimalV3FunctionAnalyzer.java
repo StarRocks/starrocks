@@ -69,7 +69,7 @@ public class DecimalV3FunctionAnalyzer {
             return Type.INVALID;
         }
 
-        if (fnName.equals(FunctionSet.HISTOGRAM)) {
+        if (FunctionSet.HISTOGRAM.equals(fnName)) {
             return Type.VARCHAR;
         }
 

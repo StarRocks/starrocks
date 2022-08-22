@@ -49,7 +49,7 @@ public class PartitionDescTest {
     }
 
     @Test(expected = NotImplementedException.class)
-    public void TestToPartitionInfo() throws DdlException {
+    public void testToPartitionInfo() throws DdlException {
         Column id = new Column("id", Type.BIGINT);
         List<Column> columns = Lists.newArrayList(id);
         Map<String, Long> partitionNameToId = new HashMap<>();

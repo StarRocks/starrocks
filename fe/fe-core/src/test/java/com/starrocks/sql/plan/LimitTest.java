@@ -503,8 +503,8 @@ public class LimitTest extends PlanTestBase {
                 "  1:EXCHANGE\n" +
                 "     limit: 10"));
 
-        sql =
-                "select v1 from (select * from t0 limit 10) x0 left outer join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
+        sql = "select v1 from (select * from t0 limit 10) x0 left outer " +
+                "join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("5:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +

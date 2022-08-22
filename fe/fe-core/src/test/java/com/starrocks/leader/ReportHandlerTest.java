@@ -36,8 +36,8 @@ public class ReportHandlerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable(
-                        "CREATE TABLE test.properties_change_test(k1 int, v1 int) primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
+                .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
+                        "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');");
     }
 
     @Test
