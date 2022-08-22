@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看指定表的建表语句。只有拥有该表`SELECT_PRIV`权限的用户才可以查看。注意使用 [external catalog](/using_starrocks/Manage_data.md) 管理的表，如 Apache Hive™ 表）暂不支持使用该语句查看。
+查看指定表的建表语句。只有拥有该表`SELECT_PRIV`权限的用户才可以查看。注意使用 [external catalog](/using_starrocks/Manage_data.md) 管理的表，如 Apache Hive™ 表暂不支持使用该语句查看。
 
 ## 语法
 
@@ -47,7 +47,7 @@ CREATE TABLE example_table
 ENGINE = olap
 AGGREGATE KEY(k1, k2)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(k1) BUCKETS 32;
+DISTRIBUTED BY HASH(k1) BUCKETS 10;
 ```
 
 查看表`example_table`的建表语句。
@@ -66,7 +66,7 @@ SHOW CREATE TABLE example_db.example_table;
 ) ENGINE=OLAP 
 AGGREGATE KEY(`k1`, `k2`)
 COMMENT "my first starrocks table"
-DISTRIBUTED BY HASH(`k1`) BUCKETS 32 
+DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
