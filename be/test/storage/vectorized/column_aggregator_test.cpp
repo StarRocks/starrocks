@@ -671,7 +671,7 @@ TEST(ColumnAggregator, testArrayReplace) {
 
 // NOLINTNEXTLINE
 TEST(ColumnAggregator, testNullArrayReplaceIfNotNull2) {
-    auto array_type_info = get_array_type_info(get_type_info(FieldType::OLAP_FIELD_TYPE_INT));
+    auto array_type_info = std::make_shared<ArrayTypeInfo>(get_type_info(FieldType::OLAP_FIELD_TYPE_INT));
     FieldPtr field =
             std::make_shared<Field>(1, "test_array", array_type_info,
                                     FieldAggregationMethod::OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, 1, false, true);
