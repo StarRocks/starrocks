@@ -556,6 +556,7 @@ public class HiveMetaClient {
             }
             stats.setNumDistinctValues(distinctCnt.size());
             stats.setNumNulls(numNulls);
+            stats.setType(HiveColumnStats.StatisticType.ESTIMATE);
             result.put(column.getName(), stats);
         }
 
