@@ -21,7 +21,7 @@ void CompactRocksDbMetaAction::handle(HttpRequest* req) {
 }
 
 void CompactRocksDbMetaAction::_compact(HttpRequest* req) {
-    _exec_env->storage_engine()->do_manual_compact(true);
+    StorageEngine::instance()->do_manual_compact(true);
 }
 
 } // end namespace starrocks
