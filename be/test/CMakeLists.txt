@@ -39,10 +39,11 @@ set(EXEC_FILES
         ./exec/vectorized/file_scan_node_test.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
+        ./exec/vectorized/analytor_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/sorting_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/vectorized/analytor_test.cpp
         ./exec/es/es_query_builder_test.cpp
@@ -161,6 +162,7 @@ set(EXEC_FILES
         ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
+        ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp

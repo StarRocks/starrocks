@@ -148,6 +148,35 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hudiTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;
     }
+    _hudi_instant_time = tdesc.hudiTable.instant_time;
+    _hive_column_names = tdesc.hudiTable.hive_column_names;
+    _hive_column_types = tdesc.hudiTable.hive_column_types;
+    _input_format = tdesc.hudiTable.input_format;
+    _serde_lib = tdesc.hudiTable.serde_lib;
+}
+
+const std::string& HudiTableDescriptor::get_base_path() const {
+    return _table_location;
+}
+
+const std::string& HudiTableDescriptor::get_instant_time() const {
+    return _hudi_instant_time;
+}
+
+const std::string& HudiTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+const std::string& HudiTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+const std::string& HudiTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+const std::string& HudiTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
 }
 
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}

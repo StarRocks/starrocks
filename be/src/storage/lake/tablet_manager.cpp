@@ -81,6 +81,11 @@ std::string TabletManager::segment_location(int64_t tablet_id, std::string_view 
     return _location_provider->segment_location(tablet_id, segment_name);
 }
 
+std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
+                                                         int64_t expire_time) const {
+    return _location_provider->tablet_metadata_lock_location(tablet_id, version, expire_time);
+}
+
 std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
     return fmt::format("schema_{}", tablet_id);
 }
@@ -543,10 +548,6 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
 }
 
 static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change, TabletMetadata* metadata) {
-    if (op_schema_change.rowsets_size() == 0) {
-        return Status::OK();
-    }
-
     for (const auto& rowset : op_schema_change.rowsets()) {
         if (rowset.num_rows() > 0 || rowset.has_delete_predicate()) {
             auto new_rowset = metadata->add_rowsets();
@@ -631,7 +632,7 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
             if (txn_vlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-                // txn log does not exist but the new version metadata has been generated, maybe
+                // txn version log does not exist but the new version metadata has been generated, maybe
                 // this is a duplicated publish version request.
                 return Status::OK();
             } else if (!txn_vlog.ok()) {
@@ -728,6 +729,23 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
         (void)fs::delete_file(txn_log_path);
         return Status::OK();
     }
+}
+
+Status TabletManager::put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
+    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto tablet_metadata_lock_path = tablet_metadata_lock_location(tablet_id, version, expire_time);
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, tablet_metadata_lock_path));
+    auto tablet_metadata_lock = std::make_unique<TabletMetadataLockPB>();
+    RETURN_IF_ERROR(wf->append(tablet_metadata_lock->SerializeAsString()));
+    RETURN_IF_ERROR(wf->close());
+
+    return Status::OK();
+}
+
+Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
+    auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
 }
 
 void TabletManager::start_gc() {

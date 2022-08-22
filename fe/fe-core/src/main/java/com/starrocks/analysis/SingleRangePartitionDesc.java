@@ -154,11 +154,14 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         tabletType = PropertyAnalyzer.analyzeTabletType(properties);
 
-        // analyze enable storage cache and cache ttl
+        // analyze enable storage cache and cache ttl, and whether allow async write back
         boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
                 properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+        boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+
         if (storageCacheTtlS < -1) {
             throw new AnalysisException("Storage cache ttl should not be less than -1");
         }
@@ -168,7 +171,11 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (enableStorageCache && storageCacheTtlS == 0) {
             storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
         }
-        storageInfo = new StorageInfo(null, new StorageCacheInfo(enableStorageCache, storageCacheTtlS));
+        if (!enableStorageCache && allowAsyncWriteBack) {
+            throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");
+        }
+        storageInfo =
+                new StorageInfo(null, new StorageCacheInfo(enableStorageCache, storageCacheTtlS, allowAsyncWriteBack));
 
         if (otherProperties == null) {
             // check unknown properties

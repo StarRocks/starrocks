@@ -62,7 +62,7 @@ public abstract class Type implements Cloneable {
     private static final List<PrimitiveType> skipCompareTypes = Arrays.asList(
             PrimitiveType.INVALID_TYPE, PrimitiveType.NULL_TYPE, PrimitiveType.DECIMALV2,
             PrimitiveType.DECIMAL32, PrimitiveType.DECIMAL64, PrimitiveType.DECIMAL128,
-            PrimitiveType.TIME, PrimitiveType.JSON);
+            PrimitiveType.TIME, PrimitiveType.JSON, PrimitiveType.FUNCTION);
 
     // Static constant types for scalar types that don't require additional information.
     public static final ScalarType INVALID = new ScalarType(PrimitiveType.INVALID_TYPE);
@@ -111,6 +111,7 @@ public abstract class Type implements Cloneable {
     public static final ScalarType PERCENTILE = new ScalarType(PrimitiveType.PERCENTILE);
     public static final ScalarType JSON = new ScalarType(PrimitiveType.JSON);
     public static final ScalarType UNKNOWN_TYPE = ScalarType.createUnknownType();
+    public static final ScalarType FUNCTION = new ScalarType(PrimitiveType.FUNCTION);
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
@@ -159,6 +160,7 @@ public abstract class Type implements Cloneable {
                     .add(DECIMAL64)
                     .add(DECIMAL128)
                     .add(JSON)
+                    .add(FUNCTION)
                     .add(UNKNOWN_TYPE)
                     .build();
 
@@ -541,6 +543,10 @@ public abstract class Type implements Cloneable {
         return !isInvalid();
     }
 
+    public boolean isUnknown() {
+        return isScalarType(PrimitiveType.UNKNOWN_TYPE);
+    }
+
     public boolean isNull() {
         return isScalarType(PrimitiveType.NULL_TYPE);
     }
@@ -644,6 +650,8 @@ public abstract class Type implements Cloneable {
                 return Type.DECIMAL128;
             case JSON:
                 return Type.JSON;
+            case FUNCTION:
+                return Type.FUNCTION;
             default:
                 return null;
         }
@@ -651,41 +659,41 @@ public abstract class Type implements Cloneable {
 
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canJoinOn() {
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canGroupBy() {
         // TODO(mofei) support group by for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
-        return !isOnlyMetricType() && !isJsonType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isComplexType();
+        return !isOnlyMetricType() && !isJsonType() && !isComplexType() && !isFunctionType();
     }
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
-        return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType();
+        return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType() && !isFunctionType();
     }
 
     /**
@@ -697,7 +705,7 @@ public abstract class Type implements Cloneable {
 
     public boolean supportBloomFilter() {
         return isScalarType() && !isFloatingPointType() && !isTinyint() && !isBoolean() && !isDecimalV3() &&
-                !isJsonType() && !isOnlyMetricType();
+                !isJsonType() && !isOnlyMetricType() && !isFunctionType();
     }
 
     public static final String OnlyMetricTypeErrorMsg =
@@ -822,6 +830,10 @@ public abstract class Type implements Cloneable {
 
     public boolean isPseudoType() {
         return this instanceof PseudoType;
+    }
+
+    public boolean isFunctionType() {
+        return isScalarType(PrimitiveType.FUNCTION);
     }
 
     /**
@@ -1249,6 +1261,8 @@ public abstract class Type implements Cloneable {
             case DECIMAL64:
             case DECIMAL128:
                 return this;
+            case FUNCTION:
+                return FUNCTION;
             default:
                 return INVALID;
 

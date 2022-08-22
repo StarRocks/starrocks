@@ -1921,10 +1921,19 @@ public class LocalMetastore implements ConnectorMetadata {
                     storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
                 }
 
+                // set to false if absent
+                boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
+
+                if (!enableStorageCache && allowAsyncWriteBack) {
+                    throw new DdlException("storage allow_async_write_back can't be enabled when cache is disabled");
+                }
+
                 // get service shard storage info from StarMgr
                 ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
 
-                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS);
+                ((LakeTable) olapTable)
+                        .setStorageInfo(shardStorageInfo, enableStorageCache, storageCacheTtlS, allowAsyncWriteBack);
             } else {
                 Preconditions.checkState(stmt.isOlapEngine());
                 olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -2533,7 +2542,9 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         StorageInfo partitionStorageInfo = partitionInfo.getStorageInfo(partitionId);
         CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(partitionStorageInfo.isEnableStorageCache())
-                .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS()).build();
+                .setTtlSeconds(partitionStorageInfo.getStorageCacheTtlS())
+                .setAllowAsyncWriteBack(partitionStorageInfo.isAllowAsyncWriteBack())
+                .build();
         ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder(table.getShardStorageInfo())
                 .setCacheInfo(cacheInfo).build();
         int bucketNum = distributionInfo.getBucketNum();
@@ -4401,8 +4412,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (table.getType() != Table.TableType.OLAP) {
-                throw new DdlException("Table[" + tableName + "] is not OLAP table");
+            if (!table.isOlapOrLakeTable()) {
+                throw new DdlException("Table[" + tableName + "] is not OLAP table or LAKE table");
             }
 
             OlapTable olapTable = (OlapTable) table;

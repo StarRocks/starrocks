@@ -3,6 +3,7 @@ package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.Tablet;
 import org.junit.AfterClass;
@@ -13,6 +14,7 @@ import org.junit.Test;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -29,7 +31,8 @@ public class ConcurrentTxnTest {
     public static void tearDown() throws Exception {
     }
 
-    static AtomicInteger totalRead = new AtomicInteger(0);
+    static AtomicInteger totalTabletRead = new AtomicInteger(0);
+    static AtomicInteger totalTableRead = new AtomicInteger(0);
 
     class TableLoad {
         String db;
@@ -55,7 +58,7 @@ public class ConcurrentTxnTest {
                     "create table " + table +
                             " ( pk bigint NOT NULL, v0 string not null) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS " +
                             numTablet + " PROPERTIES(\"replication_num\" = \"" + replicationNum +
-                            "\", \"storage_medium\" = \"SSD\");");
+                            "\", \"storage_medium\" = \"SSD\")");
         }
 
         boolean hasTask(int tsMs) {
@@ -64,10 +67,11 @@ public class ConcurrentTxnTest {
 
         void loadOnce() throws SQLException {
             List<String> sqls = new ArrayList<>();
-            sqls.add("insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\");");
+            sqls.add("insert into " + db + "." + table + " values (1,\"1\"), (2,\"2\"), (3,\"3\")");
             if (withRead) {
-                sqls.add("select * from " + db + "." + table + ";");
-                totalRead.addAndGet(numTablet);
+                sqls.add("select * from " + db + "." + table);
+                totalTableRead.incrementAndGet();
+                totalTabletRead.addAndGet(numTablet);
             }
             PseudoCluster.getInstance().runSqlList(null, sqls);
         }
@@ -76,6 +80,7 @@ public class ConcurrentTxnTest {
     class DBLoad {
         int numDB;
         int numTable;
+        int numTabletPerTable = 0;
         boolean withRead = false;
         List<TableLoad> tableLoads;
         volatile Exception error;
@@ -86,6 +91,13 @@ public class ConcurrentTxnTest {
             this.numDB = numDB;
             this.numTable = numTable;
             this.withRead = withRead;
+        }
+
+        DBLoad(int numDB, int numTable, int numTabletPerTable, boolean withRead) {
+            this.numDB = numDB;
+            this.numTable = numTable;
+            this.withRead = withRead;
+            this.numTabletPerTable = numTabletPerTable;
         }
 
         void run(int numThread, int runSeconds) {
@@ -105,6 +117,9 @@ public class ConcurrentTxnTest {
             List<Future<?>> futures = new ArrayList<Future<?>>();
             for (int i = 0; i < numTable; i++) {
                 int numTablet = r.nextInt(16) + 1;
+                if (this.numTabletPerTable != 0) {
+                    numTablet = this.numTabletPerTable;
+                }
                 int replicationNum = 3;
                 int loadIntervalMs = (r.nextInt(40) + 1) * scheduleIntervalMs;
                 String dbName = "db_" + (i % numDB);
@@ -187,12 +202,15 @@ public class ConcurrentTxnTest {
         }
     }
 
-    int runTime = 3;
-    int numDB = 20;
+    int runTime = 2;
+    int numDB = 2;
     int numTable = 100;
     int numThread = 2;
+    // 0 means random num of tablets
+    int numTabletPerTable = 0;
     int runSeconds = 2;
     boolean withRead = true;
+    boolean deleteRunDir = true;
 
     void setup() throws SQLException {
         Config.enable_new_publish_mechanism = false;
@@ -202,12 +220,27 @@ public class ConcurrentTxnTest {
     public void testConcurrentLoad() throws Exception {
         setup();
         for (int i = 0; i < runTime; i++) {
-            DBLoad dbLoad = new DBLoad(numDB, numTable, withRead);
+            totalTabletRead.set(0);
+            totalTableRead.set(0);
+            PseudoBackend.scansByQueryId.clear();
+            DBLoad dbLoad = new DBLoad(numDB, numTable, numTabletPerTable, withRead);
             dbLoad.run(numThread, runSeconds);
+            System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
+                    totalTabletRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(),
+                    Tablet.getTotalReadFailed());
+            if (numTabletPerTable != 0) {
+                for (Map.Entry<String, AtomicInteger> kv : PseudoBackend.scansByQueryId.entrySet()) {
+                    if (kv.getValue().get() != numTabletPerTable) {
+                        String msg = String.format("queryId: %s numScan: %d\n", kv.getKey(), kv.getValue().get());
+                        Assert.fail(msg);
+                    }
+                }
+            }
+            System.out.printf("tableRead: %d scanQueryId: %d\n", totalTableRead.get(), PseudoBackend.scansByQueryId.size());
+            Assert.assertEquals(totalTableRead.get(), PseudoBackend.scansByQueryId.size());
+            Assert.assertEquals(totalTabletRead.get(), Tablet.getTotalReadSucceed());
+            Tablet.clearStats();
         }
-        System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
-                totalRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(), Tablet.getTotalReadFailed());
-        Assert.assertEquals(totalRead.get(), Tablet.getTotalReadSucceed());
-        PseudoCluster.getInstance().shutdown(true);
+        PseudoCluster.getInstance().shutdown(deleteRunDir);
     }
 }

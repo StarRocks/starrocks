@@ -44,6 +44,7 @@ public class ReplayFromDumpTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        connectContext.getSessionVariable().setJoinImplementationMode("auto");
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
     }
@@ -185,7 +186,7 @@ public class ReplayFromDumpTest {
     @Test
     public void testSSB10() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/ssb10"));
-        Assert.assertTrue(replayPair.second.contains("  14:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:Project\n" +
                 "  |  output columns:\n" +
                 "  |  13 <-> [13: lo_revenue, INT, false]\n" +
                 "  |  22 <-> [22: d_year, INT, false]\n" +
@@ -200,9 +201,9 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second.contains("  49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  other predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
+                "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
@@ -223,7 +224,7 @@ public class ReplayFromDumpTest {
                 "  |  \n" +
                 "  40:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  other predicates: cast([934: d_month_seq, INT, true] as BIGINT) >= [987: expr, BIGINT, true]\n" +
+                "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) >= [987: expr, BIGINT, true]\n" +
                 "  |  cardinality: 36525\n" +
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 36524.5] ESTIMATE\n" +
@@ -246,7 +247,7 @@ public class ReplayFromDumpTest {
     public void testTPCDS23_1() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains(" MultiCastDataSinks\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 51\n" +
                 "    RANDOM\n" +
@@ -260,7 +261,7 @@ public class ReplayFromDumpTest {
                 "  38:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
+                "  |  other join predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
     }
 
     @Test
@@ -379,10 +380,12 @@ public class ReplayFromDumpTest {
 
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/cross_reorder"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("14:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  14:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: (2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
+                "  |  other join predicates: CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
+                "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1', " +
+                "(2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
     }
 
     @Test
@@ -400,9 +403,10 @@ public class ReplayFromDumpTest {
     public void testMultiCountDistinct() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  32:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), multi_distinct_count(128: case), max(103: count)"));
+                "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone), " +
+                "multi_distinct_count(128: case), max(103: count)"));
     }
 
     @Test
@@ -559,10 +563,13 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNotNulls < 24: countRows THEN NULL ELSE FALSE END IS NULL"));
+                "  |  other join predicates: if(22: c_0_0 != 1: c_0_0, 4: c_0_3, 23: c_0_3) = 21: expr, " +
+                "CASE WHEN (24: countRows IS NULL) OR (24: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL " +
+                "THEN NULL WHEN 17: c_0_0 IS NOT NULL THEN TRUE WHEN 25: countNotNulls < 24: countRows " +
+                "THEN NULL ELSE FALSE END IS NULL"));
         Assert.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +

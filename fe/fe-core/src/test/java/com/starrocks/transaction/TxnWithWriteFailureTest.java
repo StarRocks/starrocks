@@ -17,7 +17,9 @@ public class TxnWithWriteFailureTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql(null, "create database test");
         cluster.runSql("test",
-                "create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
+                "create table test ( pk bigint NOT NULL, v0 string not null, v1 int not null ) " +
+                        "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 " +
+                        "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
     }
 
     @AfterClass

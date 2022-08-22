@@ -13,12 +13,16 @@ import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
 import com.starrocks.lake.proto.DropTableRequest;
 import com.starrocks.lake.proto.DropTableResponse;
+import com.starrocks.lake.proto.LockTabletMetadataRequest;
+import com.starrocks.lake.proto.LockTabletMetadataResponse;
 import com.starrocks.lake.proto.PublishLogVersionRequest;
 import com.starrocks.lake.proto.PublishLogVersionResponse;
 import com.starrocks.lake.proto.PublishVersionRequest;
 import com.starrocks.lake.proto.PublishVersionResponse;
 import com.starrocks.lake.proto.TabletStatRequest;
 import com.starrocks.lake.proto.TabletStatResponse;
+import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
+import com.starrocks.lake.proto.UnlockTabletMetadataResponse;
 
 public interface LakeService {
     @BrpcMeta(serviceName = "LakeService", methodName = "publish_version")
@@ -44,5 +48,11 @@ public interface LakeService {
 
     @BrpcMeta(serviceName = "LakeService", methodName = "publish_log_version")
     PublishLogVersionResponse publishLogVersion(PublishLogVersionRequest request);
+
+    @BrpcMeta(serviceName = "LakeService", methodName = "lock_tablet_metadata")
+    LockTabletMetadataResponse lockTabletMetadata(LockTabletMetadataRequest request);
+
+    @BrpcMeta(serviceName = "LakeService", methodName = "unlock_tablet_metadata")
+    UnlockTabletMetadataResponse unlockTabletMetadata(UnlockTabletMetadataRequest request);
 }
 

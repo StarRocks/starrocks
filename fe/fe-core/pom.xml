@@ -948,6 +948,7 @@ under the License.
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
                     <excludes>**/sql/parser/gen/**</excludes>
                 </configuration>
                 <executions>

@@ -40,7 +40,7 @@ public class FakeEditLog extends MockUp<EditLog> {
     private Map<Long, TransactionState> allTransactionState = new HashMap<>();
 
     @Mock
-    public void $init(String nodeName) {
+    public void init(String nodeName) {
     }
 
     @Mock

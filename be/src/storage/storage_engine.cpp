@@ -63,6 +63,7 @@
 namespace starrocks {
 
 StorageEngine* StorageEngine::_s_instance = nullptr;
+StorageEngine* StorageEngine::_p_instance = nullptr;
 
 static Status _validate_options(const EngineOptions& options) {
     if (options.store_paths.empty()) {
@@ -91,6 +92,10 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()) {
+#ifdef BE_TEST
+    _p_instance = _s_instance;
+    _s_instance = this;
+#endif
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
@@ -103,7 +108,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
 #ifdef BE_TEST
     if (_s_instance == this) {
-        _s_instance = nullptr;
+        _s_instance = _p_instance;
     }
 #endif
 }
@@ -155,7 +160,6 @@ Status StorageEngine::_open() {
 
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
-    starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
     auto dirs = get_stores<false>();

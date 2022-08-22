@@ -82,6 +82,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
 
 import java.io.ByteArrayInputStream;
@@ -111,8 +112,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
-    private final static AtomicInteger INDEX = new AtomicInteger(0);
-    private final static AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
+    private static final AtomicInteger INDEX = new AtomicInteger(0);
+    private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
 
     public static final String createStatisticsTableStmt = "CREATE TABLE `table_statistic_v1` (\n" +
             "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -252,7 +253,7 @@ public class UtFrameUtils {
         frontend.start(startBDB, new String[0]);
     }
 
-    public synchronized static void createMinStarRocksCluster(boolean startBDB) {
+    public static synchronized void createMinStarRocksCluster(boolean startBDB) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -514,7 +515,8 @@ public class UtFrameUtils {
 
         ExecPlan execPlan = new PlanFragmentBuilder()
                 .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                        TResultSinkType.MYSQL_PROTOCAL, true);
 
         OperatorStrings operatorPrinter = new OperatorStrings();
         return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
@@ -613,7 +615,7 @@ public class UtFrameUtils {
         private DataOutputBuffer buffer;
         private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-        protected static void setUpImageVersion (){
+        protected static void setUpImageVersion() {
             MetaContext metaContext = new MetaContext();
             metaContext.setMetaVersion(FeMetaVersion.VERSION_CURRENT);
             metaContext.setStarRocksMetaVersion(StarRocksFEMetaVersion.VERSION_CURRENT);
@@ -643,9 +645,11 @@ public class UtFrameUtils {
      */
     public static class PseudoJournalReplayer {
         // master journal queue
-        private static BlockingQueue<JournalTask> masterJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> masterJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // follower journal queue
-        private static BlockingQueue<JournalTask> followerJournalQueue = new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
+        private static BlockingQueue<JournalTask> followerJournalQueue =
+                new ArrayBlockingQueue<>(Config.metadata_journal_queue_size);
         // constantly move master journal to follower and mark succeed
         private static Thread fakeJournalWriter = null;
 

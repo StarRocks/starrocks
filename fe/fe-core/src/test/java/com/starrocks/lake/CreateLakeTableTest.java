@@ -2,20 +2,22 @@
 
 package com.starrocks.lake;
 
+
 import com.google.common.collect.Lists;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -149,6 +151,7 @@ public class CreateLakeTableTest {
             StorageInfo partitionStorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partitionId);
             Assert.assertTrue(partitionStorageInfo.isEnableStorageCache());
             Assert.assertEquals(3600, partitionStorageInfo.getStorageCacheTtlS());
+            Assert.assertEquals(false, partitionStorageInfo.isAllowAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -158,7 +161,8 @@ public class CreateLakeTableTest {
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
-                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200');"));
+                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200'," +
+                        "'allow_async_write_back' = 'true');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
             // check table property
@@ -174,6 +178,7 @@ public class CreateLakeTableTest {
             StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
             Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
             Assert.assertEquals(7200, partition2StorageInfo.getStorageCacheTtlS());
+            Assert.assertEquals(true, partition2StorageInfo.isAllowAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -210,5 +215,14 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                                 "engine = starrocks primary key (key1) distributed by hash(key1) buckets 3"));
+
+        // storage_cache disabled but allow_async_write_back = true
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "storage allow_async_write_back can't be enabled when cache is disabled",
+                () -> createTable(
+                        "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
+                        "engine = starrocks distributed by hash(key1) buckets 3\n" +
+                        " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
+                        "'allow_async_write_back' = 'true');"));
     }
 }

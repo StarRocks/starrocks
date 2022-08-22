@@ -190,6 +190,9 @@ public:
 
 protected:
     static StorageEngine* _s_instance;
+
+    static StorageEngine* _p_instance;
+
     int32_t _effective_cluster_id;
 
 private:

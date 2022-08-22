@@ -32,6 +32,10 @@ public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
         return storageCacheInfo.getCacheTtlS();
     }
 
+    public boolean isAllowAsyncWriteBack() {
+        return storageCacheInfo.isAllowAsyncWriteBack();
+    }
+
     public ShardStorageInfo getShardStorageInfo() {
         return shardStorageInfo;
     }
