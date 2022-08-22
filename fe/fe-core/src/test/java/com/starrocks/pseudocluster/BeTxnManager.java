@@ -81,11 +81,11 @@ public class BeTxnManager {
                 totalTablets++;
                 Tablet tablet = backend.getTabletManager().getTablet(tabletInfo.tabletId);
                 if (tablet == null) {
-                    errorTabletIds.add(tablet.id);
+                    errorTabletIds.add(tabletInfo.tabletId);
                     if (e == null) {
                         e = new UserException(
                                 "publish version failed txn:" + txnId + " partition:" + pInfo.partition_id + " tablet:" +
-                                        tablet.id + " not found");
+                                        tabletInfo.tabletId + " not found");
                     }
                 } else {
                     try {

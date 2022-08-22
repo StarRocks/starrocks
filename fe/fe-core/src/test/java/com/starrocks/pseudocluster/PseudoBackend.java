@@ -45,6 +45,7 @@ import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TAgentPublishRequest;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TAgentTaskRequest;
+import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TBackendInfo;
 import com.starrocks.thrift.TCancelPlanFragmentParams;
@@ -502,6 +503,30 @@ public class PseudoBackend {
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
     }
 
+    private void handleAlter(TAgentTaskRequest request, TFinishTaskRequest finishTaskRequest) throws Exception {
+        TAlterTabletReqV2 task = request.alter_tablet_req_v2;
+        Tablet baseTablet = tabletManager.getTablet(task.base_tablet_id);
+        if (baseTablet == null) {
+            throw new Exception(
+                    String.format("alter (base:%d, new:%d version:%d) failed base tablet not found", task.base_tablet_id,
+                            task.new_tablet_id, task.alter_version));
+        }
+        Tablet newTablet = tabletManager.getTablet(task.new_tablet_id);
+        if (newTablet == null) {
+            throw new Exception(
+                    String.format("alter (base:%d, new:%d version:%d) failed new tablet not found", task.base_tablet_id,
+                            task.new_tablet_id, task.alter_version));
+        }
+        if (newTablet.isRunning() == true) {
+            throw new Exception(
+                    String.format("alter (base:%d, new:%d version:%d) failed new tablet is running", task.base_tablet_id,
+                            task.new_tablet_id, task.alter_version));
+        }
+        newTablet.convertFrom(baseTablet, task.alter_version);
+        newTablet.setRunning(true);
+        finishTaskRequest.finish_tablet_infos = Lists.newArrayList(newTablet.getTabletInfo());
+    }
+
     void handleTask(TAgentTaskRequest request) {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                 request.getTask_type(), request.getSignature(), new TStatus(TStatusCode.OK));
@@ -523,6 +548,10 @@ public class PseudoBackend {
                     break;
                 case REALTIME_PUSH:
                     handleRealtimePush(request, finishTaskRequest);
+                    break;
+                case ALTER:
+                    handleAlter(request, finishTaskRequest);
+                    break;
                 default:
                     LOG.info("ignore task type:" + finishTaskRequest.task_type + " signature:" + finishTaskRequest.signature);
             }

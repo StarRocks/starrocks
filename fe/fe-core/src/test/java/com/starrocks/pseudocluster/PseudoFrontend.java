@@ -91,8 +91,6 @@ public class PseudoFrontend {
 
         // root running dir
         createAndClearDir(this.runningDir);
-        // clear and create log dir
-        createAndClearDir(runningDir + "/log/");
         // clear and create meta dir
         createAndClearDir(runningDir + "/starrocks-meta/");
         // clear and create conf dir
@@ -107,10 +105,10 @@ public class PseudoFrontend {
     private void initFeConf(String confDir, Map<String, String> feConf) throws IOException {
         Map<String, String> finalFeConf = Maps.newHashMap(MIN_FE_CONF);
         // these 2 configs depends on running dir, so set them here.
-        finalFeConf.put("LOG_DIR", this.runningDir + "/log");
+        finalFeConf.put("LOG_DIR", this.runningDir);
+        finalFeConf.put("sys_log_dir", this.runningDir);
+        finalFeConf.put("audit_log_dir", this.runningDir);
         finalFeConf.put("meta_dir", this.runningDir + "/starrocks-meta");
-        finalFeConf.put("sys_log_dir", this.runningDir + "/log");
-        finalFeConf.put("audit_log_dir", this.runningDir + "/log");
         finalFeConf.put("tmp_dir", this.runningDir + "/temp_dir");
         // use custom config to add or override default config
         finalFeConf.putAll(feConf);
