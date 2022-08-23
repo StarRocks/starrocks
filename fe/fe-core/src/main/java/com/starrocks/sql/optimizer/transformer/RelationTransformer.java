@@ -564,25 +564,13 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         rightOpt.getFieldMappings().stream())
                 .collect(Collectors.toList()));
 
-        if (node.getOnPredicate() == null) {
-            OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
-                    .setJoinType(JoinOperator.CROSS_JOIN)
-                    .setJoinHint(node.getJoinHint())
-                    .build(), Lists.newArrayList(leftOpt, rightOpt),
-                    expressionMapping);
-
-            LogicalProjectOperator projectOperator =
-                    new LogicalProjectOperator(expressionMapping.getFieldMappings().stream().distinct()
-                            .collect(Collectors.toMap(Function.identity(), Function.identity())));
-            return new LogicalPlan(joinOptExprBuilder.withNewRoot(projectOperator),
-                    expressionMapping.getFieldMappings(), null);
-        }
-
         Pair<OptExprBuilder, OptExprBuilder> pair = processOnClauseSubquery(node, leftOpt, rightOpt, expressionMapping);
         leftOpt = pair.first;
         rightOpt = pair.second;
 
-        // Join on predicate may be removed by processOnClauseSubquery
+        // There are two cases where join on predicate is null
+        // case 1: no join on predicate
+        // case 2: one join on predicate containing existential/quantified subquery which will be removed after subquery rewrite procedure
         if (node.getOnPredicate() == null) {
             OptExprBuilder joinOptExprBuilder = new OptExprBuilder(new LogicalJoinOperator.Builder()
                     .setJoinType(JoinOperator.CROSS_JOIN)
@@ -690,6 +678,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     private Pair<OptExprBuilder, OptExprBuilder> processOnClauseSubquery(JoinRelation node, OptExprBuilder leftOpt,
                                                                          OptExprBuilder rightOpt,
                                                                          ExpressionMapping expressionMapping) {
+        if (node.getOnPredicate() == null) {
+            return Pair.create(leftOpt, rightOpt);
+        }
         List<Expr> joinOnConjuncts = Expr.extractConjuncts(node.getOnPredicate());
         OptExprBuilder newLeftOpt = leftOpt;
         OptExprBuilder newRightOpt = rightOpt;
