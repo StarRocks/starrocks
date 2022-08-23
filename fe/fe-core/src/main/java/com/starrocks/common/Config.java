@@ -1700,5 +1700,5 @@ public class Config extends ConfigBase {
     public static boolean enable_new_publish_mechanism = false;
 
     @ConfField(mutable = true)
-    public static boolean recursive_dir_search_enabled = true;
+    public static boolean recursive_dir_search_enabled = false;
 }
