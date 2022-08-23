@@ -31,7 +31,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.sql.optimizer.rule.mv.MVUtils;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
 import java.io.DataInput;
@@ -184,7 +184,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (defineStmt == null) {
             return;
         }
-        Map<String, Expr> columnNameToDefineExpr = MVUtils.parseColumnNameToDefineExpr(defineStmt);
+        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
         setColumnsDefineExpr(columnNameToDefineExpr);
     }
 }

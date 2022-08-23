@@ -52,7 +52,7 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.mv.MVUtils;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -844,7 +844,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
 
-        Map<String, Expr> columnNameToDefineExpr = MVUtils.parseColumnNameToDefineExpr(origStmt);
+        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
         setColumnsDefineExpr(columnNameToDefineExpr);
     }
 }
