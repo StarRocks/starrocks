@@ -33,7 +33,8 @@ public class AlterRoutineLoadAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
         }
-        Preconditions.checkArgument(context.getDatabase().equalsIgnoreCase(dbName),
+        Preconditions.checkArgument(context.getDatabase().equalsIgnoreCase(dbName)
+                        || context.getDatabase().equalsIgnoreCase(""),
                 "session's dbname not equal lable's dbname", context.getDatabase(), dbName);
         LabelName labelName = new LabelName(dbName,  statement.getLabel());
         statement.setLabelName(labelName);
