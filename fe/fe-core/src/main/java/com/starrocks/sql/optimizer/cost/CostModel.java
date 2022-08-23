@@ -319,7 +319,8 @@ public class CostModel {
             // memory cost
             Statistics cteStatistics = context.getChildStatistics(0);
             double ratio = ConnectContext.get().getSessionVariable().getCboCTERuseRatio();
-            return CostEstimate.of(0, cteStatistics.getComputeSize() * ratio, 0);
+            double produceSize = cteStatistics.getOutputSize(context.getChildOutputColumns(0));
+            return CostEstimate.of(produceSize * node.getConsumeNum() * 0.5, produceSize * (1 + ratio), 0);
         }
 
         @Override
