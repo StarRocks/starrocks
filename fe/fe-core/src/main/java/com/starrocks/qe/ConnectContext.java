@@ -522,7 +522,9 @@ public class ConnectContext {
         if (killConnection) {
             isKilled = true;
             // Close channel to break connection with client
-            getMysqlChannel().close();
+            if (getMysqlChannel() != null) {
+                getMysqlChannel().close();
+            }
         }
         // Now, cancel running process.
         StmtExecutor executorRef = executor;

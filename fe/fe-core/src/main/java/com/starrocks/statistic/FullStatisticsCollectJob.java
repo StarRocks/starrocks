@@ -7,6 +7,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import org.apache.velocity.VelocityContext;
 
 import java.util.List;
@@ -34,7 +37,14 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect() throws Exception {
+    public void collect(AnalyzeStatus analyzeStatus) throws Exception {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        ExecuteEnv.getInstance().getScheduler().submit2(context);
+        context.getConnectScheduler().registerConnection(context);
+
+        analyzeStatus.setConnectionId(context.getConnectionId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
 
@@ -48,9 +58,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
             for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
                 String sql = buildCollectFullStatisticSQL(db, table, partition, splitColItem);
-                collectStatisticSync(sql);
+                collectStatisticSync(sql, context);
             }
         }
+        context.getConnectScheduler().unregisterConnection(context);
+        context.cleanup();
     }
 
     public String buildCollectFullStatisticSQL(Database database, Table table, Partition partition,

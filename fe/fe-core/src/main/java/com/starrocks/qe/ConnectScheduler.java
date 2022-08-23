@@ -204,4 +204,51 @@ public class ConnectScheduler {
             }
         }
     }
+
+    public boolean submit2(ConnectContext context) {
+        if (context == null) {
+            return false;
+        }
+        context.setConnectionId(nextConnectionId.getAndAdd(1));
+        context.resetConnectionStartTime();
+        context.setThreadLocalInfo();
+        context.setConnectScheduler(ConnectScheduler.this);
+        return true;
+    }
+
+    private class LoopHandler2 implements Runnable {
+        ConnectContext context;
+
+        LoopHandler2(ConnectContext context) {
+            this.context = context;
+        }
+
+        @Override
+        public void run() {
+            try {
+                // Set thread local info
+                context.setThreadLocalInfo();
+                context.setConnectScheduler(ConnectScheduler.this);
+
+                if (!registerConnection(context)) {
+                    context.getState().setError("Reach limit of connections");
+                    return;
+                }
+
+                context.setStartTime();
+                ConnectProcessor processor = new ConnectProcessor(context);
+                processor.loop();
+            } catch (Exception e) {
+                // for unauthrorized access such lvs probe request, may cause exception, just log it in debug level
+                if (context.getCurrentUserIdentity() != null) {
+                    LOG.warn("connect processor exception because ", e);
+                } else {
+                    LOG.debug("connect processor exception because ", e);
+                }
+            } finally {
+                unregisterConnection(context);
+                context.cleanup();
+            }
+        }
+    }
 }
