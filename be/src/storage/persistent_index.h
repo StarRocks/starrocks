@@ -66,7 +66,6 @@ struct KVRef {
 };
 
 class PersistentIndex;
-class ImmutableIndex;
 
 class ImmutableIndexWriter {
 public:
@@ -194,13 +193,9 @@ public:
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
-    static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t kv_pair_size, const size_t size,
-                                                                const size_t usage_percent);
+    static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
 
     static size_t estimate_nbucket(size_t key_size, size_t size, size_t nshard, size_t npage);
-
-    static std::tuple<size_t, size_t> estimate_slice_nshard_and_npage(const size_t total_key_size, const size_t size,
-                                                                      const size_t usage_percent);
 };
 
 class ShardByLengthMutableIndex {
@@ -320,7 +315,6 @@ private:
     // TODO: confirm whether can be just one shard in a offset, which means shard size always be 1, it can simplify the manager of various shards.
     // <key size, <shard offset, shard size>>
     std::map<uint32_t, std::pair<uint32_t, uint32_t>> _shard_info_by_key_size;
-    std::set<std::pair<size_t, size_t>> _flushed_shard_idxes;
 };
 
 class ImmutableIndex {
