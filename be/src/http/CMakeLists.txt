@@ -48,6 +48,7 @@ add_library(Webserver STATIC
   action/metrics_action.cpp
   action/stream_load.cpp
   action/meta_action.cpp
+  action/compact_rocksdb_meta_action.cpp
   action/compaction_action.cpp
   action/update_config_action.cpp
   action/list_workgroup_action.cpp
