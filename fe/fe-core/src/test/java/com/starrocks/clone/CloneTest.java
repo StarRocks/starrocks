@@ -2,7 +2,6 @@
 package com.starrocks.clone;
 
 import com.starrocks.common.Config;
-import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.pseudocluster.PseudoClusterUtils;
 import com.starrocks.pseudocluster.Tablet;
