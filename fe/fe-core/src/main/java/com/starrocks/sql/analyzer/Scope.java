@@ -103,7 +103,7 @@ public class Scope {
             if (parent != null
                     //Correlated subqueries currently only support accessing properties in the first level outer layer
                     && !relationId.equals(outerRelationId)
-                    || isLambdaScope) { // also to analyze the nested lambda arguments.
+                    || parent != null && isLambdaScope) { // also to analyze the nested lambda arguments.
                 return parent.resolveField(expression, fieldIndexOffset + relationFields.getAllFields().size(),
                         outerRelationId);
             }
