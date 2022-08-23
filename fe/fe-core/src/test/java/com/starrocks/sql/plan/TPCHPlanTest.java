@@ -75,6 +75,13 @@ public class TPCHPlanTest extends PlanTestBase {
     }
 
     @Test
+    public void test() throws Exception {
+        String sql = "select count(distinct v1) from t0 having avg(distinct v3) > 0 order by sum(distinct v2)";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testLateral() {
         runFileUnitTest("optimized-plan/lateral");
     }

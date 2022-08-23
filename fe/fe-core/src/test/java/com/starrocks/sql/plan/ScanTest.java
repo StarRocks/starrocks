@@ -110,7 +110,7 @@ public class ScanTest extends PlanTestBase {
     public void testProject() throws Exception {
         String sql = "select v1 from t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
+        assertContains(planFragment, "PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
                 + "\n"
@@ -119,7 +119,7 @@ public class ScanTest extends PlanTestBase {
                 + "  0:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
-                + "     partitions=0/1"));
+                + "     partitions=0/1");
     }
 
     @Test
@@ -209,12 +209,12 @@ public class ScanTest extends PlanTestBase {
         sql = "select t1.k2, sum(t1.k9) from baseall t1 " +
                 "join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
+        assertContains(plan, "  |----2:OlapScanNode\n" +
                 "  |       TABLE: baseall\n" +
-                "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
-        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join");
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: ON"));
+                "     PREAGGREGATION: ON");
 
         sql = "select t3.k2, sum(t3.k9) from baseall t1 " +
                 "join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 " +

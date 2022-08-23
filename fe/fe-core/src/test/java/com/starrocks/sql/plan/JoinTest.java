@@ -1482,12 +1482,12 @@ public class JoinTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains("  4:HASH JOIN\n" +
                         "  |  join op: INNER JOIN (PARTITIONED)\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 2: id = 5: id",
-                "  0:OlapScanNode\n" +
+                        "  |  equal join conjunct: 5: id = 2: id",
+                "  2:OlapScanNode\n" +
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 2: id > 1",
-                "  2:OlapScanNode\n" +
+                "  0:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 5: id > 1");
