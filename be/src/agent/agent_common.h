@@ -33,6 +33,30 @@ enum class TaskWorkerType {
     UPDATE_TABLET_META_INFO
 };
 
+#define APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)                                                       \
+    M(CREATE_TABLE, create_tablet_req, _create_tablet_worker_thread_callback)                             \
+    M(DROP_TABLE, drop_tablet_req, _drop_tablet_worker_thread_callback)                                   \
+    M(PUSH, push_req, _push_worker_thread_callback)                                                       \
+    M(PUBLISH_VERSION, publish_version_req, _publish_version_worker_thread_callback)                      \
+    M(CLEAR_TRANSACTION_TASK, clear_transaction_task_req, _clear_transaction_task_worker_thread_callback) \
+    M(DELETE, push_req, _delete_worker_thread_callback)                                                   \
+    M(ALTER_TABLE, alter_tablet_req_v2, _alter_tablet_worker_thread_callback)                             \
+    M(CLONE, clone_req, _clone_worker_thread_callback)                                                    \
+    M(STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req, )                                               \
+    M(CHECK_CONSISTENCY, check_consistency_req, _storage_medium_migrate_worker_thread_callback)           \
+    M(UPLOAD, upload_req, _upload_worker_thread_callback)                                                 \
+    M(DOWNLOAD, download_req, _download_worker_thread_callback)                                           \
+    M(MAKE_SNAPSHOT, snapshot_req, _make_snapshot_thread_callback)                                        \
+    M(RELEASE_SNAPSHOT, release_snapshot_req, _release_snapshot_thread_callback)                          \
+    M(MOVE, move_dir_req, _move_dir_thread_callback)                                                      \
+    M(UPDATE_TABLET_META_INFO, update_tablet_meta_info_req, _update_tablet_meta_worker_thread_callback)
+
+#define APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)                                   \
+    M(TaskWorkerType::REPORT_TASK, NOP, _report_task_worker_thread_callback)             \
+    M(TaskWorkerType::REPORT_DISK_STATE, NOP, _report_disk_state_worker_thread_callback) \
+    M(TaskWorkerType::REPORT_OLAP_TABLE, NOP, _report_task_worker_thread_callback)       \
+    M(TaskWorkerType::REPORT_WORKGROUP, NOP, _report_workgroup_thread_callback)
+
 template <TaskWorkerType type>
 struct TaskWorkerTypeTraits {
     bool has_req = false;

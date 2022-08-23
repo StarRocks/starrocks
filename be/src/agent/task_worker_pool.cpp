@@ -66,9 +66,7 @@ std::mutex TaskWorkerPoolBase::_s_task_signatures_locks[TTaskType::type::NUM_TAS
 std::set<int64_t> TaskWorkerPoolBase::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 
 TaskWorkerPoolBase::TaskWorkerPoolBase(ExecEnv* env, int worker_count)
-        : _env(env),
-          _worker_thread_condition_variable(new std::condition_variable()),
-          _worker_count(worker_count) {
+        : _env(env), _worker_thread_condition_variable(new std::condition_variable()), _worker_count(worker_count) {
     _backend.__set_host(BackendOptions::get_localhost());
     _backend.__set_be_port(config::be_port);
     _backend.__set_http_port(config::webserver_port);
@@ -100,8 +98,7 @@ void TaskWorkerPoolBase::stop() {
 }
 
 template <TaskWorkerType TaskType>
-TaskWorkerPool<TaskType>::TaskWorkerPool(ExecEnv* env, int worker_num)
-        : TaskWorkerPoolBase(env, worker_num) {
+TaskWorkerPool<TaskType>::TaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPoolBase(env, worker_num) {
     if constexpr (TaskType == TaskWorkerType::CREATE_TABLE) {
         _callback_function = TaskWorkerPoolThreadCallback::_create_tablet_worker_thread_callback;
     } else if constexpr (TaskType == TaskWorkerType::DROP_TABLE) {
@@ -216,6 +213,16 @@ typename TaskWorkerPool<TaskType>::AgentTaskRequestPtr TaskWorkerPool<TaskType>:
         convert_task->recv_time = task.recv_time;
     }
     convert_task->isset = task.__isset;
+
+    if constexpr (false) {
+    }
+#define M(WORKER_TYPE, T_ITEM_NAME, CALLBACK)                     \
+    else if constexpr (TaskType == TaskWorkerType::WORKER_TYPE) { \
+        convert_task->task_req = task.T_ITEM_NAME;                \
+    }
+    APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)
+#undef M
+
     return convert_task;
 }
 
