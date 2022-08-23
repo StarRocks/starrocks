@@ -41,8 +41,7 @@ public class RefreshMaterializedViewTest {
                 .withNewMaterializedView("create materialized view mv_to_refresh\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
-                        "PROPERTIES('replication_num' = '1')\n" +
-                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;;");
+                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);

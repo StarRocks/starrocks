@@ -34,6 +34,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.AstVisitor;
@@ -353,7 +354,15 @@ public class MaterializedViewAnalyzer {
                                        Map<TableName, Table> tableNameTableMap) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             List<Column> mvColumnItems = statement.getMvColumnItems();
-
+            Map<String, String> properties = statement.getProperties();
+            if (properties == null) {
+                properties = Maps.newHashMap();
+                statement.setProperties(properties);
+            }
+            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
+                properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
+                        autoInferReplicationNum(tableNameTableMap).toString());
+            }
             if (distributionDesc == null) {
                 if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
                     distributionDesc = new HashDistributionDesc(Config.default_bucket_num,
@@ -370,6 +379,21 @@ public class MaterializedViewAnalyzer {
                 }
             }
             distributionDesc.analyze(columnSet);
+        }
+
+        private Short autoInferReplicationNum(Map<TableName, Table> tableNameTableMap) {
+            // For replication_num, we select the maximum value of all tables replication_num
+            Short defaultReplicationNum = 1;
+            for (Table table : tableNameTableMap.values()) {
+                if (table instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) table;
+                    Short replicationNum = olapTable.getDefaultReplicationNum();
+                    if (replicationNum > defaultReplicationNum) {
+                        defaultReplicationNum = replicationNum;
+                    }
+                }
+            }
+            return defaultReplicationNum;
         }
 
         @Override
@@ -432,7 +456,8 @@ public class MaterializedViewAnalyzer {
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
             if (!mv.isActive()) {
-                throw new SemanticException("Refresh materialized view failed because " + mv.getName() + " is not active.");
+                throw new SemanticException(
+                        "Refresh materialized view failed because " + mv.getName() + " is not active.");
             }
             return null;
         }
