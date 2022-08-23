@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -49,7 +50,6 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
-import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.Arrays;

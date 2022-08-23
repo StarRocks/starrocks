@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
