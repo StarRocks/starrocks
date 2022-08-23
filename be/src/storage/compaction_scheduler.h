@@ -36,7 +36,7 @@ private:
 
     std::shared_ptr<CompactionTask> _try_get_next_compaction_task() const;
 
-    static bool _can_do_compaction(const CompactionCandidate& candidate, bool* need_reschedule,
+    static bool _can_do_compaction(const CompactionCandidate& candidate,
                                    std::shared_ptr<CompactionTask>* compaction_task);
 
     // if check fails, should not reschedule the tablet
