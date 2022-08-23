@@ -2,12 +2,13 @@
 
 package com.starrocks.external.iceberg.cost;
 
-import mockit.Expectations;
-import mockit.Mocked;
+
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import mockit.Expectations;
+import mockit.Mocked;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.types.Types;
@@ -15,8 +16,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class IcebergTableStatisticCalculatorTest {

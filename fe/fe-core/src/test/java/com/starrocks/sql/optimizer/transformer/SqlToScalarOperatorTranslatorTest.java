@@ -16,7 +16,7 @@ import static org.junit.Assert.assertEquals;
 public class SqlToScalarOperatorTranslatorTest {
 
     @Test
-    public void TestTranslateConstant() {
+    public void testTranslateConstant() {
         DateLiteral literal = new DateLiteral(2000, 12, 1);
         ScalarOperator so =
                 SqlToScalarOperatorTranslator.translate(literal, new ExpressionMapping(null, Collections.emptyList()));

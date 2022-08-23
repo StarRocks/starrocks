@@ -9,12 +9,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class TPCDSPlanTestBase extends PlanTestBase {
-    final static protected String[] tpcdsTables =
+    protected static final String[] tpcdsTables =
             {"call_center", "catalog_page", "catalog_returns", "catalog_sales", "customer", "customer_address",
                     "customer_demographics", "date_dim", "household_demographics", "income_band", "inventory", "item",
                     "promotion", "reason", "ship_mode", "store", "store_returns", "store_sales", "time_dim",
                     "warehouse", "web_page", "web_returns", "web_sales", "web_site"};
-    final static protected int[] tpcdsTablesRowCount =
+    protected static final int[] tpcdsTablesRowCount =
             {6, 11718, 144067, 1441548, 100000, 50000, 1920800, 73049, 7200, 20, 11745000, 18000, 300, 35, 20, 12,
                     287514, 2880404, 86400, 5, 60, 71763, 719384, 30};
 
@@ -1674,7 +1674,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "  cs_item_rev,\n" +
             "  cs_item_rev /((ss_item_rev + cs_item_rev + ws_item_rev) / 3) * 100 cs_dev,\n" +
             "  ws_item_rev,\n" +
-            "  ws_item_rev /((ss_item_rev + cs_item_rev + ws_item_rev) / 3) * 100 ws_dev,(ss_item_rev + cs_item_rev + ws_item_rev) / 3 average\n" +
+            "  ws_item_rev /((ss_item_rev + cs_item_rev + ws_item_rev) / 3) * 100 " +
+            "ws_dev,(ss_item_rev + cs_item_rev + ws_item_rev) / 3 average\n" +
             "from\n" +
             "  ss_items,\n" +
             "  cs_items,\n" +
@@ -2216,7 +2217,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "              and i_brand in ('amalgimporto #1','edu packscholar #1','exportiimporto #1',\n" +
             "                         'importoamalg #1')))\n" +
             "group by i_manager_id, d_moy) tmp1\n" +
-            "where case when avg_monthly_sales > 0 then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1\n" +
+            "where case when avg_monthly_sales > 0 " +
+            "then abs (sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1\n" +
             "order by i_manager_id\n" +
             "        ,avg_monthly_sales\n" +
             "        ,sum_sales\n" +
@@ -3373,7 +3375,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             " from v2\n" +
             " where  d_year = 2001 and\n" +
             "        avg_monthly_sales > 0 and\n" +
-            "        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1\n" +
+            "        case when avg_monthly_sales > 0 " +
+            "then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1\n" +
             " order by sum_sales - avg_monthly_sales, nsum\n" +
             " limit 100;";
 
@@ -3508,9 +3511,11 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "     ,web_sales\n" +
             "     ,store_sales\n" +
             "     ,max(web_sales)\n" +
-            "         over (partition by item_sk order by d_date rows between unbounded preceding and current row) web_cumulative\n" +
+            "         over (partition by item_sk order by d_date rows " +
+            "between unbounded preceding and current row) web_cumulative\n" +
             "     ,max(store_sales)\n" +
-            "         over (partition by item_sk order by d_date rows between unbounded preceding and current row) store_cumulative\n" +
+            "         over (partition by item_sk order by d_date rows " +
+            "between unbounded preceding and current row) store_cumulative\n" +
             "     from (select case when web.item_sk is not null then web.item_sk else store.item_sk end item_sk\n" +
             "                 ,case when web.d_date is not null then web.d_date else store.d_date end d_date\n" +
             "                 ,web.cume_sales web_sales\n" +
@@ -4146,7 +4151,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "        ))\n" +
             "group by i_category, i_class, i_brand,\n" +
             "         s_store_name, s_company_name, d_moy) tmp1\n" +
-            "where case when (avg_monthly_sales <> 0) then (abs(sum_sales - avg_monthly_sales) / avg_monthly_sales) else null end > 0.1\n" +
+            "where case when (avg_monthly_sales <> 0) " +
+            "then (abs(sum_sales - avg_monthly_sales) / avg_monthly_sales) else null end > 0.1\n" +
             "order by sum_sales - avg_monthly_sales, s_store_name\n" +
             "limit 100;";
 
@@ -5656,7 +5662,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             " from v2\n" +
             " where  d_year = 2000 and\n" +
             "        avg_monthly_sales > 0 and\n" +
-            "        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1\n" +
+            "        case when avg_monthly_sales > 0 " +
+            "then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > 0.1\n" +
             " order by sum_sales - avg_monthly_sales, psum\n" +
             " limit 100;\n";
 
@@ -5822,7 +5829,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      and household_demographics.hd_vehicle_count > 0\n" +
             "      and (\n" +
             "        case\n" +
-            "          when household_demographics.hd_vehicle_count > 0 then household_demographics.hd_dep_count / household_demographics.hd_vehicle_count\n" +
+            "          when household_demographics.hd_vehicle_count > 0 " +
+            "then household_demographics.hd_dep_count / household_demographics.hd_vehicle_count\n" +
             "          else null\n" +
             "        end\n" +
             "      ) > 1.2\n" +
@@ -6030,8 +6038,10 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "         and t_w_secyear.year = 2001+1\n" +
             "         and t_s_firstyear.year_total > 0\n" +
             "         and t_w_firstyear.year_total > 0\n" +
-            "         and case when t_w_firstyear.year_total > 0 then t_w_secyear.year_total / t_w_firstyear.year_total else null end\n" +
-            "           > case when t_s_firstyear.year_total > 0 then t_s_secyear.year_total / t_s_firstyear.year_total else null end\n" +
+            "         and case when t_w_firstyear.year_total > 0 " +
+            "then t_w_secyear.year_total / t_w_firstyear.year_total else null end\n" +
+            "           > case when t_s_firstyear.year_total > 0 " +
+            "then t_s_secyear.year_total / t_s_firstyear.year_total else null end\n" +
             " order by 3,2,1\n" +
             "limit 100;";
 
@@ -6230,7 +6240,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "      )\n" +
             "      and household_demographics.hd_vehicle_count > 0\n" +
             "      and case\n" +
-            "        when household_demographics.hd_vehicle_count > 0 then household_demographics.hd_dep_count / household_demographics.hd_vehicle_count\n" +
+            "        when household_demographics.hd_vehicle_count > 0 " +
+            "then household_demographics.hd_dep_count / household_demographics.hd_vehicle_count\n" +
             "        else null\n" +
             "      end > 1\n" +
             "      and date_dim.d_year in (1999, 1999 + 1, 1999 + 2)\n" +
@@ -7374,7 +7385,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             "  cr_item_qty,\n" +
             "  cr_item_qty /(sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 * 100 cr_dev,\n" +
             "  wr_item_qty,\n" +
-            "  wr_item_qty /(sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 * 100 wr_dev,(sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 average\n" +
+            "  wr_item_qty /(sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 * 100 " +
+            "wr_dev,(sr_item_qty + cr_item_qty + wr_item_qty) / 3.0 average\n" +
             "from\n" +
             "  sr_items,\n" +
             "  cr_items,\n" +

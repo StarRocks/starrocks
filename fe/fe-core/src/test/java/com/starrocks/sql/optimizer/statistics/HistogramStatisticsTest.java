@@ -122,7 +122,8 @@ public class HistogramStatisticsTest {
 
     void check(ColumnRefOperator columnRefOperator, String type, int constant, Statistics statistics, int rowCount) {
         BinaryPredicateOperator binaryPredicateOperator
-                = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.valueOf(type), columnRefOperator, ConstantOperator.createBigint(constant));
+                = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.valueOf(type),
+                columnRefOperator, ConstantOperator.createBigint(constant));
         Statistics estimated = PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
         Assert.assertEquals(rowCount, estimated.getOutputRowCount(), 0.1);
     }

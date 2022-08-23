@@ -76,7 +76,7 @@ public class MaterializedViewTest {
         Assert.assertEquals(OlapTable.OlapTableState.ROLLUP, mv2.getState());
         Assert.assertEquals(null, mv2.getDefaultDistributionInfo());
         Assert.assertEquals(null, mv2.getPartitionInfo());
-        mv2.setReplicationNum((short)3);
+        mv2.setReplicationNum((short) 3);
         Assert.assertEquals(3, mv2.getDefaultReplicationNum().shortValue());
         mv2.setStorageMedium(TStorageMedium.SSD);
         Assert.assertEquals("SSD", mv2.getStorageMedium());
@@ -297,7 +297,7 @@ public class MaterializedViewTest {
                 new FunctionCallExpr("date_trunc", Arrays.asList(quarterStringLiteral, slotRef1));
         exprs.add(quarterFunctionCallExpr);
 
-        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs,partitionColumns);
+        RangePartitionInfo partitionInfo = new ExpressionRangePartitionInfo(exprs, partitionColumns);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);

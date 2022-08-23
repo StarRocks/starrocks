@@ -46,9 +46,9 @@ CONF_String(priority_networks, "");
 //// tcmalloc gc parameter
 ////
 // Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "10737418240");
+CONF_mInt64(tc_use_memory_min, "0");
 // free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "20");
+CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
@@ -801,4 +801,16 @@ CONF_Int16(jdbc_connection_pool_size, "8");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+/*
+ * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
+ * to inject error through return random status(except ok).
+ */
+CONF_Int32(cardinality_of_inject, "100");
+
+/*
+ * Config range for inject erros,
+ * Specify the source code directory,
+ * Split by "," strictly.
+ */
+CONF_String(directory_of_inject, "/src/exec,/src/exprs");
 } // namespace starrocks::config

@@ -51,6 +51,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
+    RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(),
                                                     _scanner_params.scan_ranges[0]->file_length);

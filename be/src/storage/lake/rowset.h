@@ -25,6 +25,8 @@ public:
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
+    [[nodiscard]] int index() const { return _index; }
+
     [[nodiscard]] const RowsetMetadata& metadata() const { return *_rowset_metadata; }
 
 private:

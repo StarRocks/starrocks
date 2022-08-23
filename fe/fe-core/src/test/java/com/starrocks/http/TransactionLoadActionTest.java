@@ -1,40 +1,30 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.http;
 
+
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMetadata;
-
+import com.starrocks.http.rest.TransactionLoadAction;
+import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import mockit.Mock;
+import mockit.MockUp;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-
-import org.json.JSONObject;
-import org.junit.Assert;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import com.starrocks.http.rest.ActionStatus;
-import com.starrocks.http.rest.RestBaseAction;
-import com.starrocks.http.rest.TransactionLoadAction;
-import com.starrocks.http.rest.TransactionResult;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
-import com.starrocks.system.Backend;
-
-import mockit.MockUp;
-import mockit.Mock;
 import java.io.IOException;
-import java.net.ServerSocket;
-import java.util.List;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpResponseStatus;
 
 public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
@@ -87,15 +77,15 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void beginTransactionTimes() throws IOException {
-        String PATH_URI = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
+        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
 
-        for (int i = 0; i < 4096; i ++) {
+        for (int i = 0; i < 4096; i++) {
             Request request = new Request.Builder()
                     .get()
                     .addHeader("Authorization", rootAuth)
                     .addHeader("db", "testDb")
                     .addHeader("label", String.valueOf(i))
-                    .url(PATH_URI)
+                    .url(pathUri)
                     .method("POST", new RequestBody() {
 
                         @Override
@@ -118,11 +108,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void beginTransaction() throws IOException {
-        String PATH_URI = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
+        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override
@@ -144,11 +134,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void commitTransaction() throws IOException {
-        String PATH_URI = "http://localhost:" + HTTP_PORT + "/api/transaction/commit";
+        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/commit";
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override
@@ -171,7 +161,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 .get()
                 .addHeader("Authorization", rootAuth)
                 .addHeader("db", "abc")
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override
@@ -194,11 +184,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void rollbackTransaction() throws IOException {
-        String PATH_URI = "http://localhost:" + HTTP_PORT + "/api/transaction/rollback";
+        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/rollback";
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override
@@ -221,7 +211,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 .get()
                 .addHeader("Authorization", rootAuth)
                 .addHeader("db", "abc")
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override
@@ -244,7 +234,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 .get()
                 .addHeader("Authorization", rootAuth)
                 .addHeader("db", "testDb")
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override
@@ -267,11 +257,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void prepareTransaction() throws IOException {
-        String PATH_URI = "http://localhost:" + HTTP_PORT + "/api/transaction/prepare";
+        String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/prepare";
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
-                .url(PATH_URI)
+                .url(pathUri)
                 .method("POST", new RequestBody() {
 
                     @Override

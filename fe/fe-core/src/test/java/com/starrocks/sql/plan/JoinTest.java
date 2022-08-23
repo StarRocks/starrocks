@@ -314,7 +314,7 @@ public class JoinTest extends PlanTestBase {
         String query = "select t1.* from t0, t2, t3, t1 where t1.v4 = t2.v7 " +
                 "and t1.v4 = t3.v10 and t3.v10 = t0.v1";
         String explainString = getFragmentPlan(query);
-        Assert.assertFalse(explainString, explainString.contains("NESTLOOP JOIN"));
+        Assert.assertFalse(explainString.contains("NESTLOOP JOIN"));
     }
 
     @Test
@@ -495,7 +495,8 @@ public class JoinTest extends PlanTestBase {
                 "    EXCHANGE ID: 06\n" +
                 "    HASH_PARTITIONED: 7: v7");
 
-        sql = "select a.v1, a.v4 from (select v7,v8 from t2) b join[shuffle] (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v2 = t1.v4) a " +
+        sql = "select a.v1, a.v4 from (select v7,v8 from t2) b " +
+                "join[shuffle] (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v2 = t1.v4) a " +
                 "on a.v1 = b.v7 and a.v2 = b.v8";
         plan = getFragmentPlan(sql);
         assertContains(plan, " 8:HASH JOIN\n" +
@@ -911,8 +912,8 @@ public class JoinTest extends PlanTestBase {
                 "    EXCHANGE ID: 05\n" +
                 "    HASH_PARTITIONED: 9: v9, 7: v7, 8: v8");
 
-        sql =
-                "select a.v1, a.v4, b.v7, b.v10 from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+        sql = "select a.v1, a.v4, b.v7, b.v10 " +
+                "from (select v1, v2, v4 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
                         "(select v7, v8, v10 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
                         "on a.v2 = b.v8 and a.v1 = b.v7";
         plan = getFragmentPlan(sql);
@@ -935,8 +936,8 @@ public class JoinTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 2: v2, 1: v1");
 
         // check can not adjust column orders
-        sql =
-                "select a.v1, a.v4, b.v7, b.v10 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+        sql = "select a.v1, a.v4, b.v7, b.v10 from " +
+                "(select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
                         "(select v7, v8, v10, v11 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
                         "on a.v2 = b.v8 and a.v4 = b.v8";
         plan = getFragmentPlan(sql);
@@ -958,8 +959,8 @@ public class JoinTest extends PlanTestBase {
                 "    HASH_PARTITIONED: 10: v10, 11: v11");
 
         // check can not adjust column orders
-        sql =
-                "select a.v1, a.v4, b.v7, b.v10 from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
+        sql = "select a.v1, a.v4, b.v7, b.v10 " +
+                "from (select v1, v2, v4, v5 from t0 join[shuffle] t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5) a join[shuffle] " +
                         "(select v7, v8, v10, v11 from t2 join[shuffle] t3 on t2.v7 = t3.v10 and t2.v8 = t3.v11) b " +
                         "on a.v2 = b.v8 and a.v4 = b.v10";
         plan = getFragmentPlan(sql);
@@ -987,7 +988,8 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testSemiJoinFalsePredicate() throws Exception {
         String sql = "select * from t0 left semi join t3 on t0.v1 = t3.v10 " +
-                "AND CASE WHEN NULL THEN t0.v1 ELSE '' END = CASE WHEN true THEN 'fGrak3iTt' WHEN false THEN t3.v10 ELSE 'asf' END";
+                "AND CASE WHEN NULL THEN t0.v1 ELSE '' END = " +
+                "CASE WHEN true THEN 'fGrak3iTt' WHEN false THEN t3.v10 ELSE 'asf' END";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -1132,8 +1134,8 @@ public class JoinTest extends PlanTestBase {
                 minTimes = 0;
             }
         };
-        String sql =
-                "WITH t_temp AS (select join1.id as id1,  join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
+        String sql = "WITH t_temp AS (select join1.id as id1, " +
+                "join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
         String explainString = getFragmentPlan(sql);
         Assert.assertTrue(explainString.contains("equal join conjunct: 8: id = 11: id"));
         Assert.assertTrue(explainString.contains("  |----2:EXCHANGE\n" +
@@ -1322,7 +1324,7 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
-    public void TestSemiJoinNameResolve() {
+    public void testSemiJoinNameResolve() {
         String sql = "select join1.dt from  test.join1 right semi join test.join2 on join1.id = join2.id";
         starRocksAssert.query(sql).analysisError("Column '`join1`.`dt`' cannot be resolved");
 
@@ -1352,18 +1354,18 @@ public class JoinTest extends PlanTestBase {
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: true"));
 
-        queryStr =
-                "select * from test.colocate1 t1 join (select k1, k2 from test.colocate2 group by k1, k2) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
+        queryStr = "select * from test.colocate1 t1 join " +
+                "(select k1, k2 from test.colocate2 group by k1, k2) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: true"));
 
-        queryStr =
-                "select * from test.colocate1 t1 join (select k1, k2 from test.colocate2 group by k1, k2, k3) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
+        queryStr = "select * from test.colocate1 t1 " +
+                "join (select k1, k2 from test.colocate2 group by k1, k2, k3) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: true"));
 
-        queryStr =
-                "select * from (select k1, k2 from test.colocate1 group by k1, k2) t1 join (select k1, k2 from test.colocate2 group by k1, k2) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
+        queryStr = "select * from (select k1, k2 from test.colocate1 group by k1, k2) t1 " +
+                "join (select k1, k2 from test.colocate2 group by k1, k2) t2 on t1.k1 = t2.k1 and t1.k2 = t2.k2";
         explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("colocate: true"));
 
@@ -1700,8 +1702,8 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testJoinConst() throws Exception {
-        String sql =
-                "with user_info as (select 2 as user_id, 'mike' as user_name), address as (select 1 as user_id, 'newzland' as address_name) \n" +
+        String sql = "with user_info as (select 2 as user_id, 'mike' as user_name), " +
+                "address as (select 1 as user_id, 'newzland' as address_name) \n" +
                         "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  6:HASH JOIN\n" +
@@ -2124,14 +2126,14 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testEmptyTableDisableBucketJoin() throws Exception {
-        String sql =
-                "select colocate1.k1 from colocate1 join[bucket] test_agg on colocate1.k1 = test_agg.k1 and colocate1.k2 = test_agg.k2";
+        String sql = "select colocate1.k1 from colocate1 " +
+                "join[bucket] test_agg on colocate1.k1 = test_agg.k1 and colocate1.k2 = test_agg.k2";
         String plan = getFragmentPlan(sql);
         assertContains(plan, " 4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)");
 
-        sql =
-                "select colocate1.k1 from colocate1 join[bucket] colocate2 on colocate1.k1 = colocate2.k2 and colocate1.k2 = colocate2.k3";
+        sql = "select colocate1.k1 from colocate1 " +
+                "join[bucket] colocate2 on colocate1.k1 = colocate2.k2 and colocate1.k2 = colocate2.k3";
         plan = getFragmentPlan(sql);
         assertContains(plan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)");
@@ -2455,8 +2457,8 @@ public class JoinTest extends PlanTestBase {
     public void testColocateSingleJoinEqEquivalentPropertyInfo() throws Exception {
         FeConstants.runningUnitTest = true;
         {
-            String sql =
-                    "select * from ( select * from colocate_t0 join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1 " +
+            String sql = "select * from ( select * from colocate_t0 " +
+                    "join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1 " +
                             "join[bucket] colocate_t2 on s1.v4 = colocate_t2.v7";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
@@ -2464,9 +2466,10 @@ public class JoinTest extends PlanTestBase {
                     "  |  equal join conjunct: 4: v4 = 7: v7");
         }
         {
-            String sql =
-                    "select * from ( select * from colocate_t0 join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1, " +
-                            "( select * from colocate_t2 join[colocate] colocate_t3 on colocate_t2.v7 = colocate_t3.v10 ) s2 " +
+            String sql = "select * from ( select * from colocate_t0 " +
+                    "join[colocate] colocate_t1 on colocate_t0.v1 = colocate_t1.v4 ) s1, " +
+                            "( select * from colocate_t2 join[colocate] colocate_t3 " +
+                    "on colocate_t2.v7 = colocate_t3.v10 ) s2 " +
                             "where s1.v4 = s2.v10";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  7:HASH JOIN\n" +
@@ -2498,16 +2501,16 @@ public class JoinTest extends PlanTestBase {
     public void testJoinOnPredicateCommutativityNotInnerJoin() throws Exception {
         FeConstants.runningUnitTest = true;
         {
-            String sql =
-                    "select * from ( select * from t0 left join[bucket] t1 on t0.v1 = t1.v4 ) s1 join[bucket] t2 on s1.v4 = t2.v7";
+            String sql = "select * from ( select * from t0 left join[bucket] t1 on t0.v1 = t1.v4 ) s1 " +
+                    "join[bucket] t2 on s1.v4 = t2.v7";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 7: v7");
         }
         {
-            String sql =
-                    "select * from ( select * from t0 right join[bucket] t1 on t0.v1 = t1.v4 ) s1 join[bucket] t2 on s1.v4 = t2.v7";
+            String sql = "select * from ( select * from t0 right join[bucket] t1 on t0.v1 = t1.v4 ) s1 " +
+                    "join[bucket] t2 on s1.v4 = t2.v7";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "  |  join op: INNER JOIN (PARTITIONED)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -2551,15 +2554,10 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testValueNodeJoin() throws Exception {
-        String sql = "select count(*) from " +
-                "(" +
-                "select test_all_type.t1c as left_int, test_all_type1.t1c as right_int " +
-                "from (select * from test_all_type limit 0) test_all_type " +
-                "cross join " +
-                "(select * from test_all_type limit 0) test_all_type1 " +
-                "cross join " +
-                "(select * from test_all_type limit 0) test_all_type6" +
-                ") t;";
+        String sql = "select count(*) from (select test_all_type.t1c as left_int, " +
+                "test_all_type1.t1c as right_int from (select * from test_all_type limit 0) " +
+                "test_all_type cross join (select * from test_all_type limit 0) test_all_type1 " +
+                "cross join (select * from test_all_type limit 0) test_all_type6) t;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:EMPTYSET");
         assertContains(plan, "1:EMPTYSET");

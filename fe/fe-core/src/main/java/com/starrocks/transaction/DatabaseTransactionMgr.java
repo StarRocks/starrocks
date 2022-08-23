@@ -430,7 +430,6 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateListeners.add(listener);
         }
-        transactionState.buildFinishChecker(db);
         txnSpan.setAttribute("tables", tableListString.toString());
 
         // before state transform
@@ -455,6 +454,7 @@ public class DatabaseTransactionMgr {
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
+        transactionState.prepareFinishChecker(db);
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
         Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
