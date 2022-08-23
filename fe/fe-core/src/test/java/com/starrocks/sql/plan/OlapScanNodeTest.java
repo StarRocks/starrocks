@@ -1,4 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
@@ -111,8 +112,8 @@ public class OlapScanNodeTest {
 
     @Test
     public void transformForMultiItemListPartition(@Mocked TableRef tableRef,
-                                                    @Mocked OlapTable olapTable,
-                                                    @Mocked ListPartitionInfo partitionInfo)
+                                                   @Mocked OlapTable olapTable,
+                                                   @Mocked ListPartitionInfo partitionInfo)
             throws UserException {
         FeConstants.runningUnitTest = true;
         TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
@@ -137,8 +138,8 @@ public class OlapScanNodeTest {
         p2.add(pItem2);
 
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = new HashMap<>();
-        multiLiteralExprValues.put(10001L,p1);
-        multiLiteralExprValues.put(10002L,p2);
+        multiLiteralExprValues.put(10001L, p1);
+        multiLiteralExprValues.put(10002L, p2);
 
         List<Column> partitionColumns = new ArrayList<>();
         partitionColumns.add(new Column("dt", Type.DATE));

@@ -379,8 +379,8 @@ public class PartitionPruneRuleTest {
         p2.add(pItem2);
 
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = new HashMap<>();
-        multiLiteralExprValues.put(10001L,p1);
-        multiLiteralExprValues.put(10002L,p2);
+        multiLiteralExprValues.put(10001L, p1);
+        multiLiteralExprValues.put(10002L, p2);
 
         List<Column> partitionColumns = new ArrayList<>();
         partitionColumns.add(new Column("dt", Type.DATE));

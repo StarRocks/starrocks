@@ -293,5 +293,5 @@ public class ListPartitionForOlapPrunerTest {
         Assert.assertEquals(10001L, actual1);
         Assert.assertEquals(10002L, actual2);
     }
-    
+
 }
