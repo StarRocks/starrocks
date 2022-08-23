@@ -181,7 +181,7 @@ private:
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
     // Dynamic thread pool used to concurrently flush WAL to disk
-    std::unique_ptr<ThreadPool> _thread_pool_flush;
+    std::unique_ptr<ThreadPool> _flush_thread_pool;
 
     TxnManager(const TxnManager&) = delete;
     const TxnManager& operator=(const TxnManager&) = delete;

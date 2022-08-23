@@ -54,7 +54,7 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32
                       .set_min_threads(1)
                       .set_max_threads(store_num * 2)
                       .set_idle_timeout(MonoDelta::FromSeconds(30))
-                      .build(&_thread_pool_flush);
+                      .build(&_flush_thread_pool);
     CHECK(st.ok());
 }
 
@@ -264,7 +264,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         persisted.insert(path);
     }
 
-    auto token = _thread_pool_flush->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     std::vector<std::pair<Status, int64_t>> pair_vec(to_flush_tablet.size());
     int i = 0;
     for (auto& tablet : to_flush_tablet) {
@@ -294,7 +294,7 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
 
     int i = 0;
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
-    auto token = _thread_pool_flush->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
         token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = std::move(dir->get_meta()->flush()); });
         pair_vec[i].second = dir->path();
