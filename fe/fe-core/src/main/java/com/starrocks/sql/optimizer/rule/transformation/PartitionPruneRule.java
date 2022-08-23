@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -12,6 +13,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.planner.ListPartitionForOlapPruner;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -55,6 +57,9 @@ public class PartitionPruneRule extends TransformationRule {
         if (partitionInfo.getType() == PartitionType.RANGE) {
             selectedPartitionIds =
                     partitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
+        } else if (partitionInfo.getType() == PartitionType.LIST) {
+            selectedPartitionIds =
+                    listPartitionPrune((ListPartitionInfo) partitionInfo, olapScanOperator);
         }
 
         if (selectedPartitionIds == null) {
@@ -70,6 +75,20 @@ public class PartitionPruneRule extends TransformationRule {
         return Lists.newArrayList(OptExpression.create(
                 builder.withOperator(olapScanOperator).setSelectedPartitionId(selectedPartitionIds).build(),
                 input.getInputs()));
+    }
+
+    private List<Long> listPartitionPrune(ListPartitionInfo listPartitionInfo,
+                                          LogicalOlapScanOperator olapScanOperator) {
+
+        PartitionPruner partitionPruner = new ListPartitionForOlapPruner(
+                listPartitionInfo.getLiteralExprValues(), listPartitionInfo.getMultiLiteralExprValues(),
+                listPartitionInfo.getPartitionColumns(), olapScanOperator.getColumnFilters());
+        try {
+            return partitionPruner.prune();
+        } catch (AnalysisException e) {
+            LOG.warn("PartitionPrune Failed. ", e);
+        }
+        return null;
     }
 
     private List<Long> partitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
