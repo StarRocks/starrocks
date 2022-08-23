@@ -116,7 +116,7 @@ void HttpClient::set_method(HttpMethod method) {
     case POST:
         curl_easy_setopt(_curl, CURLOPT_POST, 1L);
         return;
-    case DELETE:
+    case HttpMethod::DELETE:
         curl_easy_setopt(_curl, CURLOPT_CUSTOMREQUEST, "DELETE");
         return;
     case HEAD:
@@ -153,7 +153,7 @@ Status HttpClient::execute_post_request(const std::string& payload, std::string*
 }
 
 Status HttpClient::execute_delete_request(const std::string& payload, std::string* response) {
-    set_method(DELETE);
+    set_method(HttpMethod::DELETE);
     set_payload(payload);
     return execute(response);
 }

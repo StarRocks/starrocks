@@ -77,30 +77,30 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_publish_version;
     std::unique_ptr<ThreadPool> _thread_pool_clone;
 
-    std::unique_ptr<TaskWorkerPool> _create_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _drop_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _push_workers;
-    std::unique_ptr<TaskWorkerPool> _publish_version_workers;
-    std::unique_ptr<TaskWorkerPool> _clear_transaction_task_workers;
-    std::unique_ptr<TaskWorkerPool> _delete_workers;
-    std::unique_ptr<TaskWorkerPool> _alter_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _clone_workers;
-    std::unique_ptr<TaskWorkerPool> _storage_medium_migrate_workers;
-    std::unique_ptr<TaskWorkerPool> _check_consistency_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::CREATE_TABLE>> _create_tablet_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::DROP_TABLE>> _drop_tablet_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::PUSH>> _push_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::PUBLISH_VERSION>> _publish_version_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::CLEAR_TRANSACTION_TASK>> _clear_transaction_task_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::DELETE>> _delete_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::ALTER_TABLE>> _alter_tablet_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::CLONE>> _clone_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::STORAGE_MEDIUM_MIGRATE>> _storage_medium_migrate_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::CHECK_CONSISTENCY>> _check_consistency_workers;
 
     // These 3 worker-pool do not accept tasks from FE.
     // It is self triggered periodically and reports to Fe master
-    std::unique_ptr<TaskWorkerPool> _report_task_workers;
-    std::unique_ptr<TaskWorkerPool> _report_disk_state_workers;
-    std::unique_ptr<TaskWorkerPool> _report_tablet_workers;
-    std::unique_ptr<TaskWorkerPool> _report_workgroup_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::REPORT_TASK>> _report_task_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::REPORT_DISK_STATE>> _report_disk_state_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::REPORT_OLAP_TABLE>> _report_tablet_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::REPORT_WORKGROUP>> _report_workgroup_workers;
 
-    std::unique_ptr<TaskWorkerPool> _upload_workers;
-    std::unique_ptr<TaskWorkerPool> _download_workers;
-    std::unique_ptr<TaskWorkerPool> _make_snapshot_workers;
-    std::unique_ptr<TaskWorkerPool> _release_snapshot_workers;
-    std::unique_ptr<TaskWorkerPool> _move_dir_workers;
-    std::unique_ptr<TaskWorkerPool> _update_tablet_meta_info_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::UPLOAD>> _upload_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::DOWNLOAD>> _download_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::MAKE_SNAPSHOT>> _make_snapshot_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::RELEASE_SNAPSHOT>> _release_snapshot_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::MOVE>> _move_dir_workers;
+    std::unique_ptr<TaskWorkerPool<TaskWorkerType::UPDATE_TABLET_META_INFO>> _update_tablet_meta_info_workers;
 };
 
 void AgentServer::Impl::init_or_die() {
@@ -150,38 +150,41 @@ void AgentServer::Impl::init_or_die() {
     // It is the same code to create workers of each type, so we use a macro
     // to make code to be more readable.
 #ifndef BE_TEST
-#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                            \
-    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, worker_num)); \
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)                  \
+    pool_name.reset(new TaskWorkerPool<type>(type, _exec_env, worker_num)); \
     pool_name->start();
 #else
 #define CREATE_AND_START_POOL(type, pool_name, worker_num)
 #endif // BE_TEST
 
-    CREATE_AND_START_POOL(CREATE_TABLE, _create_tablet_workers, config::create_tablet_worker_count);
-    CREATE_AND_START_POOL(DROP_TABLE, _drop_tablet_workers, config::drop_tablet_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::CREATE_TABLE, _create_tablet_workers, config::create_tablet_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::DROP_TABLE, _drop_tablet_workers, config::drop_tablet_worker_count);
     // Both PUSH and REALTIME_PUSH type use _push_workers
-    CREATE_AND_START_POOL(PUSH, _push_workers,
+    CREATE_AND_START_POOL(TaskWorkerType::PUSH, _push_workers,
                           config::push_worker_count_normal_priority + config::push_worker_count_high_priority);
-    CREATE_AND_START_POOL(PUBLISH_VERSION, _publish_version_workers, 1);
-    CREATE_AND_START_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers,
+    CREATE_AND_START_POOL(TaskWorkerType::PUBLISH_VERSION, _publish_version_workers, 1);
+    CREATE_AND_START_POOL(TaskWorkerType::CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers,
                           config::clear_transaction_task_worker_count);
-    CREATE_AND_START_POOL(DELETE, _delete_workers,
+    CREATE_AND_START_POOL(TaskWorkerType::DELETE, _delete_workers,
                           config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority);
-    CREATE_AND_START_POOL(ALTER_TABLE, _alter_tablet_workers, config::alter_tablet_worker_count);
-    CREATE_AND_START_POOL(CLONE, _clone_workers, 1);
-    CREATE_AND_START_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers,
+    CREATE_AND_START_POOL(TaskWorkerType::ALTER_TABLE, _alter_tablet_workers, config::alter_tablet_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::CLONE, _clone_workers, 1);
+    CREATE_AND_START_POOL(TaskWorkerType::STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers,
                           config::storage_medium_migrate_count);
-    CREATE_AND_START_POOL(CHECK_CONSISTENCY, _check_consistency_workers, config::check_consistency_worker_count);
-    CREATE_AND_START_POOL(REPORT_TASK, _report_task_workers, REPORT_TASK_WORKER_COUNT);
-    CREATE_AND_START_POOL(REPORT_DISK_STATE, _report_disk_state_workers, REPORT_DISK_STATE_WORKER_COUNT);
-    CREATE_AND_START_POOL(REPORT_OLAP_TABLE, _report_tablet_workers, REPORT_OLAP_TABLE_WORKER_COUNT);
-    CREATE_AND_START_POOL(REPORT_WORKGROUP, _report_workgroup_workers, REPORT_WORKGROUP_WORKER_COUNT);
-    CREATE_AND_START_POOL(UPLOAD, _upload_workers, config::upload_worker_count);
-    CREATE_AND_START_POOL(DOWNLOAD, _download_workers, config::download_worker_count);
-    CREATE_AND_START_POOL(MAKE_SNAPSHOT, _make_snapshot_workers, config::make_snapshot_worker_count);
-    CREATE_AND_START_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers, config::release_snapshot_worker_count);
-    CREATE_AND_START_POOL(MOVE, _move_dir_workers, 1);
-    CREATE_AND_START_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers, 1);
+    CREATE_AND_START_POOL(TaskWorkerType::CHECK_CONSISTENCY, _check_consistency_workers,
+                          config::check_consistency_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::REPORT_TASK, _report_task_workers, REPORT_TASK_WORKER_COUNT);
+    CREATE_AND_START_POOL(TaskWorkerType::REPORT_DISK_STATE, _report_disk_state_workers,
+                          REPORT_DISK_STATE_WORKER_COUNT);
+    CREATE_AND_START_POOL(TaskWorkerType::REPORT_OLAP_TABLE, _report_tablet_workers, REPORT_OLAP_TABLE_WORKER_COUNT);
+    CREATE_AND_START_POOL(TaskWorkerType::REPORT_WORKGROUP, _report_workgroup_workers, REPORT_WORKGROUP_WORKER_COUNT);
+    CREATE_AND_START_POOL(TaskWorkerType::UPLOAD, _upload_workers, config::upload_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::DOWNLOAD, _download_workers, config::download_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::MAKE_SNAPSHOT, _make_snapshot_workers, config::make_snapshot_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::RELEASE_SNAPSHOT, _release_snapshot_workers,
+                          config::release_snapshot_worker_count);
+    CREATE_AND_START_POOL(TaskWorkerType::MOVE, _move_dir_workers, 1);
+    CREATE_AND_START_POOL(TaskWorkerType::UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers, 1);
 #undef CREATE_AND_START_POOL
 }
 
@@ -190,31 +193,31 @@ AgentServer::Impl::~Impl() {
 
 #ifndef BE_TEST
     _thread_pool_clone->shutdown();
-#define STOP_POOL(type, pool_name) pool_name->stop();
+#define STOP_POOL(pool_name) pool_name->stop();
 #else
-#define STOP_POOL(type, pool_name)
+#define STOP_POOL(pool_name)
 #endif // BE_TEST
-    STOP_POOL(CREATE_TABLE, _create_tablet_workers);
-    STOP_POOL(DROP_TABLE, _drop_tablet_workers);
+    STOP_POOL(_create_tablet_workers);
+    STOP_POOL(_drop_tablet_workers);
     // Both PUSH and REALTIME_PUSH type use _push_workers
-    STOP_POOL(PUSH, _push_workers);
-    STOP_POOL(PUBLISH_VERSION, _publish_version_workers);
-    STOP_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers);
-    STOP_POOL(DELETE, _delete_workers);
-    STOP_POOL(ALTER_TABLE, _alter_tablet_workers);
-    STOP_POOL(CLONE, _clone_workers);
-    STOP_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers);
-    STOP_POOL(CHECK_CONSISTENCY, _check_consistency_workers);
-    STOP_POOL(REPORT_TASK, _report_task_workers);
-    STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
-    STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
-    STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
-    STOP_POOL(UPLOAD, _upload_workers);
-    STOP_POOL(DOWNLOAD, _download_workers);
-    STOP_POOL(MAKE_SNAPSHOT, _make_snapshot_workers);
-    STOP_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers);
-    STOP_POOL(MOVE, _move_dir_workers);
-    STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
+    STOP_POOL(_push_workers);
+    STOP_POOL(_publish_version_workers);
+    STOP_POOL(_clear_transaction_task_workers);
+    STOP_POOL(_delete_workers);
+    STOP_POOL(_alter_tablet_workers);
+    STOP_POOL(_clone_workers);
+    STOP_POOL(_storage_medium_migrate_workers);
+    STOP_POOL(_check_consistency_workers);
+    STOP_POOL(_report_task_workers);
+    STOP_POOL(_report_disk_state_workers);
+    STOP_POOL(_report_tablet_workers);
+    STOP_POOL(_report_workgroup_workers);
+    STOP_POOL(_upload_workers);
+    STOP_POOL(_download_workers);
+    STOP_POOL(_make_snapshot_workers);
+    STOP_POOL(_release_snapshot_workers);
+    STOP_POOL(_move_dir_workers);
+    STOP_POOL(_update_tablet_meta_info_workers);
 #undef STOP_POOL
 }
 

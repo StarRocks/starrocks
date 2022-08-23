@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include "agent/agent_common.h"
 #include "agent/status.h"
 #include "agent/utils.h"
 #include "gen_cpp/AgentService_types.h"
@@ -43,35 +44,6 @@ class ExecEnv;
 
 class TaskWorkerPoolBase {
 public:
-    enum TaskWorkerType {
-        CREATE_TABLE,
-        DROP_TABLE,
-        PUSH,
-        REALTIME_PUSH,
-        PUBLISH_VERSION,
-        CLEAR_ALTER_TASK, // Deprecated
-        CLEAR_TRANSACTION_TASK,
-        DELETE,
-        ALTER_TABLE,
-        QUERY_SPLIT_KEY, // Deprecated
-        CLONE,
-        STORAGE_MEDIUM_MIGRATE,
-        CHECK_CONSISTENCY,
-        REPORT_TASK,
-        REPORT_DISK_STATE,
-        REPORT_OLAP_TABLE,
-        REPORT_WORKGROUP,
-        UPLOAD,
-        DOWNLOAD,
-        MAKE_SNAPSHOT,
-        RELEASE_SNAPSHOT,
-        MOVE,
-        RECOVER_TABLET, // Deprecated
-        UPDATE_TABLET_META_INFO
-    };
-
-    using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
-
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
     TaskWorkerPoolBase(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
@@ -118,12 +90,15 @@ protected:
     std::vector<std::thread> _worker_threads;
 };
 
+
+template <TaskWorkerType TaskType>
 class TaskWorkerPool : public TaskWorkerPoolBase {
     friend class TaskWorkerPoolThreadCallback;
 
 public:
-    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num)
-            : TaskWorkerPoolBase(task_worker_type, env, worker_num) {}
+    using AgentTaskRequestPtr = std::shared_ptr<AgentTaskRequest<TaskType>>;
+
+    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
 
     // Submit task to task pool
     //
@@ -135,11 +110,12 @@ public:
     size_t num_queued_tasks() const;
 
 private:
-    size_t _push_task(TAgentTaskRequestPtr task);
-    TAgentTaskRequestPtr _pop_task();
-    TAgentTaskRequestPtr _pop_task(TPriority::type pri);
+    size_t _push_task(AgentTaskRequestPtr task);
+    AgentTaskRequestPtr _pop_task();
+    AgentTaskRequestPtr _pop_task(TPriority::type pri);
+    static AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task);
 
-    std::deque<TAgentTaskRequestPtr> _tasks;
+    std::deque<AgentTaskRequestPtr> _tasks;
 };
 
 class TaskWorkerPoolThreadCallback {
@@ -169,92 +145,5 @@ public:
                               TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
 };
 
-template <TaskWorkerPool::TaskWorkerType type>
-struct TaskWorkerTypeTraits {};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::CREATE_TABLE> {
-    using TReq = TCreateTabletReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::DROP_TABLE> {
-    using TReq = TDropTabletReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::PUSH> {
-    using TReq = TPushReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::REALTIME_PUSH> {
-    using TReq = TPushReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::PUBLISH_VERSION> {
-    using TReq = TPublishVersionRequest;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::CLEAR_TRANSACTION_TASK> {
-    using TReq = TClearTransactionTaskRequest;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::DELETE> {
-    using TReq = TPushReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::ALTER_TABLE> {
-    using TReq = TAlterTabletReqV2;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::CLONE> {
-    using TReq = TCloneReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::STORAGE_MEDIUM_MIGRATE> {
-    using TReq = TStorageMediumMigrateReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::CHECK_CONSISTENCY> {
-    using TReq = TCheckConsistencyReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::UPLOAD> {
-    using TReq = TUploadReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::DOWNLOAD> {
-    using TReq = TDownloadReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::MAKE_SNAPSHOT> {
-    using TReq = TSnapshotRequest;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::RELEASE_SNAPSHOT> {
-    using TReq = TReleaseSnapshotRequest;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::MOVE> {
-    using TReq = TMoveDirReq;
-};
-
-template <>
-struct TaskWorkerTypeTraits<TaskWorkerPool::UPDATE_TABLET_META_INFO> {
-    using TReq = TUpdateTabletMetaInfoReq;
-};
 
 } // namespace starrocks

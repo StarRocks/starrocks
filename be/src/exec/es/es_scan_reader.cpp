@@ -206,7 +206,7 @@ Status ESScanReader::close() {
     std::string scratch_target = _target + REQUEST_SEARCH_SCROLL_PATH;
     RETURN_IF_ERROR(_network_client.init(scratch_target));
     _network_client.set_basic_auth(_user_name, _passwd);
-    _network_client.set_method(DELETE);
+    _network_client.set_method(HttpMethod::DELETE);
     _network_client.set_content_type("application/json");
     _network_client.set_timeout_ms(5 * 1000);
     if (_ssl_enabled) {

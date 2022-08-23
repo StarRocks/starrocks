@@ -213,22 +213,22 @@ bool EvHttpServer::register_handler(const HttpMethod& method, const std::string&
     pthread_rwlock_wrlock(&_rw_lock);
     PathTrie<HttpHandler*>* root = nullptr;
     switch (method) {
-    case GET:
+    case HttpMethod::GET:
         root = &_get_handlers;
         break;
-    case PUT:
+    case HttpMethod::PUT:
         root = &_put_handlers;
         break;
-    case POST:
+    case HttpMethod::POST:
         root = &_post_handlers;
         break;
-    case DELETE:
+    case HttpMethod::DELETE:
         root = &_delete_handlers;
         break;
-    case HEAD:
+    case HttpMethod::HEAD:
         root = &_head_handlers;
         break;
-    case OPTIONS:
+    case HttpMethod::OPTIONS:
         root = &_options_handlers;
         break;
     default:
@@ -303,7 +303,7 @@ HttpHandler* EvHttpServer::_find_handler(HttpRequest* req) {
     case POST:
         _post_handlers.retrieve(path, &handler, req->params());
         break;
-    case DELETE:
+    case HttpMethod::DELETE:
         _delete_handlers.retrieve(path, &handler, req->params());
         break;
     case HEAD:
