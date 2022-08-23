@@ -43,8 +43,8 @@ public class ListPartitionForOlapPrunerTest {
                 new PartitionValue("chongqing").getValue(Type.STRING));
 
         literalExprValues = new HashMap<>();
-        literalExprValues.put(10001L,p1);
-        literalExprValues.put(10002L,p2);
+        literalExprValues.put(10001L, p1);
+        literalExprValues.put(10002L, p2);
         pruner = new ListPartitionForOlapPruner(literalExprValues, multiLiteralExprValues,
                 partitionColumns, columnFilters);
 
@@ -74,8 +74,8 @@ public class ListPartitionForOlapPrunerTest {
         p2.add(pItem2);
 
         multiLiteralExprValues = new HashMap<>();
-        multiLiteralExprValues.put(10001L,p1);
-        multiLiteralExprValues.put(10002L,p2);
+        multiLiteralExprValues.put(10001L, p1);
+        multiLiteralExprValues.put(10002L, p2);
         pruner = new ListPartitionForOlapPruner(literalExprValues, multiLiteralExprValues,
                 partitionColumns, columnFilters);
 
@@ -293,7 +293,5 @@ public class ListPartitionForOlapPrunerTest {
         Assert.assertEquals(10001L, actual1);
         Assert.assertEquals(10002L, actual2);
     }
-
-
-
+    
 }
