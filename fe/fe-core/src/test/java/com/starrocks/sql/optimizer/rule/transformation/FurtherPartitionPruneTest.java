@@ -123,7 +123,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from ptest where d2 not in ('2021-12-01', null)");
         sqlList.add("select * from ptest where (d2 < '1000-01-01' and s1 >= '2020-12-01') or (d2 >= '2020-12-01')");
         sqlList.add(
-                "select * from ptest where (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') or (d2 >= '2020-12-01')");
+                "select * from ptest where (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') " +
+                        "or (d2 >= '2020-12-01')");
         sqlList.add("select * from ptest where d2 = '1000-01-01' and d2 not between '1000-01-01' and '2020-12-01'");
         sqlList.add("select * from ptest where s1 like '%1' and d2 in (null, null)");
         sqlList.add("select * from ptest where s1 is null and d2 not in (null, '2022-01-01')");
@@ -140,7 +141,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
         sqlList.add("select * from ptest where not not d2 <=> null");
         sqlList.add(
-                "select * from ptest where not not (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') or (d2 >= '2020-12-01')");
+                "select * from ptest where not not (d2 not between '1000-01-01' and '2020-12-01' and s1 >= '2020-12-01') " +
+                        "or (d2 >= '2020-12-01')");
 
         return sqlList.stream().map(e -> Arguments.of(e));
     }
@@ -148,15 +150,17 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
     private static Stream<Arguments> onePartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add(
-                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') and d2 < '2020-04-01'");
+                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') " +
+                        "and d2 < '2020-04-01'");
         sqlList.add(
-                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') and s1 not like ''" +
-                        " and d2 < '2020-04-01' and s1 like 'a'");
+                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') " +
+                        "and s1 not like '' and d2 < '2020-04-01' and s1 like 'a'");
 
         sqlList.add("select * from tbl_int where (k1 in (200,201,202,203,204) or k1 > 400) and k1 <= 300");
         sqlList.add("select * from tbl_int where not not (k1 in (200,201,202,203,204) or k1 > 400) and k1 <= 300");
         sqlList.add(
-                "select * from tbl_int where (k1 in (200,201,202,203,204) or k1 > 400 and s1 is null) and k1 <= 300 and s1 in ('a', 'b') and s1 != s2");
+                "select * from tbl_int where (k1 in (200,201,202,203,204) or k1 > 400 and s1 is null) and k1 <= 300 " +
+                        "and s1 in ('a', 'b') and s1 != s2");
         sqlList.add("select * from tbl_int where (k1 in (200,201,202,203,204,200,201,202,203,204,200,201,202,203,204" +
                 ",200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204" +
                 ",200,201,202,203,204,200,201,202,203,204,200,201,202,203,204,200,201,202,203,204) or k1 > 400) and k1 <= 300");
@@ -176,7 +180,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add(
                 "select * from tbl_int where ((k1 = 1 or k1 not between 50 and 400) and k1 <300) or k1 > floor(1000.5)");
         sqlList.add(
-                "select * from tbl_int where ((k1 = 1 or k1 not between 50 and 400) and k1 <300) or k1 > floor(1000.5) and s1 > s1 + s2");
+                "select * from tbl_int where ((k1 = 1 or k1 not between 50 and 400) and k1 <300) or k1 > floor(1000.5) " +
+                        "and s1 > s1 + s2");
 
         sqlList.add("select * from two_key where k1 = 5");
         sqlList.add("select * from two_key where k1 = 5 and d1 = '2020-09-01'");
@@ -202,22 +207,26 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
         sqlList.add("select * from tbl_int where (k1 >= 0 and k1 < 100) or (k1 >= 300 and k1 < 400)");
         sqlList.add(
-                "select * from tbl_int where (k1 >= 0 and k1 < 100) or (k1 >= 300 and k1 < 400) and (k1 not in (1,2,3) or k1 not in (300,301,302))");
+                "select * from tbl_int where (k1 >= 0 and k1 < 100) or (k1 >= 300 and k1 < 400) and (k1 not in (1,2,3) " +
+                        "or k1 not in (300,301,302))");
 
         sqlList.add("select * from tbl_int where k1 = 1 or k1 between 200 and 299");
         sqlList.add("select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400)");
         sqlList.add(
                 "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302)");
         sqlList.add(
-                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302) and abs(k1) = 1");
+                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302) " +
+                        "and abs(k1) = 1");
         sqlList.add(
-                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302) and (k1 = 1 or s1 < s2)");
+                "select * from tbl_int where k1 in (1,2,3,4,5) or (k1 >= 300 and k1 < 400) and k1 not in (1,2,3,300,301,302) " +
+                        "and (k1 = 1 or s1 < s2)");
 
         sqlList.add("select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301)) or k1 in (50,99,300)");
         sqlList.add(
                 "select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301,null,null)) or k1 in (50,99,300,null,null)");
         sqlList.add(
-                "select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301,null,null)) or k1 in (50,99,300,null,null) and (k1 in (1,2,3) or k1 != 1)");
+                "select * from tbl_int where (k1 > 100 and k1 in (1,2,3,4,5,301,null,null)) or k1 in (50,99,300,null,null)" +
+                        " and (k1 in (1,2,3) or k1 != 1)");
 
         sqlList.add("select * from tbl_int where k1 not in (null,1,2,3,100) or (k1 < 100 or k1 > 300)");
         sqlList.add("select * from tbl_int where s1 like 'a' and (k1 < 100 or k1 > 300)");
@@ -227,7 +236,6 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
 
         sqlList.add("select * from tbl_int where not (k1 >= 100 and k1 < 300)");
         sqlList.add("select * from tbl_int where not not not (k1 >= 100 and k1 < 300)");
-
 
         sqlList.add("select * from two_key where k1 = 100");
         return sqlList.stream().map(e -> Arguments.of(e));
@@ -251,7 +259,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
                 "select * from tbl_int where (k1 in (1, 300) or (k1 > 200 and k1 <=350) or k1 = 50) and (k1 > 0 and k1 < 400)");
 
         sqlList.add(
-                "select * from tbl_int where (k1 = 1 and s1 = 2 and s2 = 300) or (k1 > 100 and k1 < 200 and s1 = 1) or (k1 in (300, 350))");
+                "select * from tbl_int where (k1 = 1 and s1 = 2 and s2 = 300) or (k1 > 100 and k1 < 200 and s1 = 1) " +
+                        "or (k1 in (300, 350))");
         sqlList.add("select * from tbl_int where (k1 < 400 or k1 > 300) and k1 > 1 and not (k1 >= 200 and k1 < 300)");
         sqlList.add(
                 "select * from tbl_int where k1 not in (1,2,3) and s1 not in ('a') and s1 = s2 and (k1 < 200 or k1 > 300)");
@@ -283,7 +292,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from tbl_int where k1 is null or (k1 != 1)");
 
         sqlList.add(
-                "select * from tbl_int where (k1 < s1 and k1 not in (1,2,3) or k1 =300) and (k1 in (1, 300) or k1 > 0 or k1 <= 350 or k1 = 200)");
+                "select * from tbl_int where (k1 < s1 and k1 not in (1,2,3) or k1 =300) and (k1 in (1, 300) " +
+                        "or k1 > 0 or k1 <= 350 or k1 = 200)");
         sqlList.add(
                 "select * from tbl_int where (s1 like 'a' and k1 > floor(k1) or s2 like 'b') or k1 in (1,100,400) and k1 > 0");
         sqlList.add(
