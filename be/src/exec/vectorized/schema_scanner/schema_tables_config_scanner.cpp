@@ -34,8 +34,8 @@ Status SchemaTablesConfigScanner::start(RuntimeState* state) {
     }
     TGetTablesConfigRequest tables_config_req;
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req, &_tables_config_response));
+        RETURN_IF_ERROR(SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req,
+                                                        &_tables_config_response));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
