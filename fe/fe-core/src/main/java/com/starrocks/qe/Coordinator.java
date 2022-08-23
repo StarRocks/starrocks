@@ -272,7 +272,7 @@ public class Coordinator {
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
     }
 
-    // Used for broker load task/export task coordinator
+    // Used for broker export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
                        List<ScanNode> scanNodes, String timezone, long startTime,
                        Map<String, String> sessionVariables) {
@@ -280,6 +280,38 @@ public class Coordinator {
         this.jobId = jobId;
         this.queryId = queryId;
         this.connectContext = null;
+        this.descTable = descTable.toThrift();
+        this.fragments = fragments;
+        this.scanNodes = scanNodes;
+        this.queryOptions = new TQueryOptions();
+        if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            final TCompressionType loadCompressionType = CompressionUtils
+                    .findTCompressionByName(
+                            sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+            if (loadCompressionType != null) {
+                this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+            }
+        }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
+        this.queryGlobals.setTime_zone(timezone);
+        this.needReport = true;
+        this.preferComputeNode = false;
+        this.useComputeNodeNumber = -1;
+        this.nextInstanceId = new TUniqueId();
+        nextInstanceId.setHi(queryId.hi);
+        nextInstanceId.setLo(queryId.lo + 1);
+    }
+
+    // Used for broker load task coordinator
+    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
+                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables,
+                       ConnectContext context) {
+        this.isBlockQuery = true;
+        this.jobId = jobId;
+        this.queryId = queryId;
+        this.connectContext = context;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;

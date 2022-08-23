@@ -103,7 +103,7 @@ public abstract class BulkLoadJob extends LoadJob {
         }
     }
 
-    public static BulkLoadJob fromLoadStmt(LoadStmt stmt) throws DdlException {
+    public static BulkLoadJob fromLoadStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         // get db id
         String dbName = stmt.getLabel().getDbName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -117,7 +117,7 @@ public abstract class BulkLoadJob extends LoadJob {
             switch (stmt.getEtlJobType()) {
                 case BROKER:
                     bulkLoadJob = new BrokerLoadJob(db.getId(), stmt.getLabel().getLabelName(),
-                            stmt.getBrokerDesc(), stmt.getOrigStmt());
+                            stmt.getBrokerDesc(), stmt.getOrigStmt(), context);
                     break;
                 case SPARK:
                     bulkLoadJob = new SparkLoadJob(db.getId(), stmt.getLabel().getLabelName(),
