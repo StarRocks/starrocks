@@ -1513,6 +1513,7 @@ public class GlobalStateMgr {
         };
     }
 
+
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
@@ -1536,12 +1537,14 @@ public class GlobalStateMgr {
                     hasLog = replayJournalInner(cursor, true);
                     metaReplayState.setOk();
                 } catch (JournalInconsistentException | InterruptedException e) {
-                    LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
+                    LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                            replayedJournalId.get() + 1, e);
                     // TODO exit gracefully
                     Util.stdoutWithTime(e.getMessage());
                     System.exit(-1);
                 } catch (Throwable e) {
-                    LOG.error("replayer thread catch an exception when replay journal.", e);
+                    LOG.error("replayer thread catch an exception when replay journal {}.",
+                            replayedJournalId.get() + 1, e);
                     metaReplayState.setException(e);
                     try {
                         Thread.sleep(5000);
@@ -1627,10 +1630,14 @@ public class GlobalStateMgr {
             cursor = journal.read(startJournalId, toJournalId);
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
-            LOG.warn("got interrupt exception or inconsistent exception when replay journal, will exit, ", e);
+            LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+                    replayedJournalId.get(),
+                    e);
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
+
+
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -1658,16 +1665,25 @@ public class GlobalStateMgr {
         long startTime = System.currentTimeMillis();
         long lineCnt = 0;
         while (true) {
-            JournalEntity entity = null;
-            entity = cursor.next();
+            try {
+                JournalEntity entity = null;
+                entity = cursor.next();
 
-            // EOF or aggressive retry
-            if (entity == null) {
-                break;
+                // EOF or aggressive retry
+                if (entity == null) {
+                    break;
+                }
+
+                // apply
+                EditLog.loadJournal(this, entity);
+            } catch (Throwable e) {
+                if (canSkipBadReplayedJournal()) {
+                    LOG.error("!!! DANGER: SKIP JOURNAL {} !!!", replayedJournalId.incrementAndGet(), e);
+                    continue;
+                }
+                throw e;  // handled in outer loop
             }
 
-            // apply
-            EditLog.loadJournal(this, entity);
             replayedJournalId.incrementAndGet();
             LOG.debug("journal {} replayed.", replayedJournalId);
 
@@ -1698,6 +1714,22 @@ public class GlobalStateMgr {
         if (replayedJournalId.get() - startReplayId > 0) {
             LOG.info("replayed journal from {} - {}", startReplayId, replayedJournalId);
             return true;
+        }
+        return false;
+    }
+
+    private boolean canSkipBadReplayedJournal() {
+        try {
+            for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
+                if (Long.valueOf(idStr) == replayedJournalId.get() + 1) {
+                    LOG.info("skip bad replayed journal id {} because configed {}",
+                            idStr, Config.metadata_journal_skip_bad_journal_ids);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
+                    Config.metadata_journal_skip_bad_journal_ids, e);
         }
         return false;
     }
