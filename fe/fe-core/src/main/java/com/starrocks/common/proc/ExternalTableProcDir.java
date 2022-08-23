@@ -18,10 +18,7 @@ public class ExternalTableProcDir implements ProcDirInterface {
 
     public static final String SCHEMA = "schema";
 
-    // TODO implementing show proc external table partitions
-    private static final String PARTITIONS = "partitions";
     private static final ImmutableList<String> CHILDREN_NODES = new ImmutableList.Builder<String>()
-            .add(PARTITIONS)
             .add(SCHEMA)
             .build();
 
@@ -55,7 +52,6 @@ public class ExternalTableProcDir implements ProcDirInterface {
             throw new AnalysisException("Entry name is null");
         }
 
-        // TODO add partitions
         if (entryName.equals(SCHEMA)) {
             return new ExternalSchemaProcNode(table);
         } else {
