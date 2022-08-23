@@ -139,7 +139,7 @@ public class AnalyzeManager implements Writable {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
     }
 
-    public void expireBasicStatisticsCache(BasicStatsMeta basicStatsMeta) {
+    public void refreshBasicStatisticsCache(BasicStatsMeta basicStatsMeta) {
         Database db = GlobalStateMgr.getCurrentState().getDb(basicStatsMeta.getDbId());
         if (null == db) {
             return;
@@ -149,6 +149,7 @@ public class AnalyzeManager implements Writable {
             return;
         }
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, basicStatsMeta.getColumns());
+        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, basicStatsMeta.getColumns());
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -170,7 +171,7 @@ public class AnalyzeManager implements Writable {
                 new Pair<>(histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn()), histogramStatsMeta);
     }
 
-    public void expireHistogramStatisticsCache(HistogramStatsMeta histogramStatsMeta) {
+    public void refreshHistogramStatisticsCache(HistogramStatsMeta histogramStatsMeta) {
         Database db = GlobalStateMgr.getCurrentState().getDb(histogramStatsMeta.getDbId());
         if (null == db) {
             return;
@@ -180,6 +181,8 @@ public class AnalyzeManager implements Writable {
             return;
         }
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(),
+                Lists.newArrayList(histogramStatsMeta.getColumn()));
+        GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table,
                 Lists.newArrayList(histogramStatsMeta.getColumn()));
     }
 

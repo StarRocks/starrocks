@@ -368,22 +368,22 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
         Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
 
-        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
+        List<String> columnHasHistogram = new ArrayList<>();
         for (ColumnRefOperator columnRefOperator : requiredColumnRefs) {
             if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
                     .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
-                columnHasHistogram.add(columnRefOperator);
+                columnHasHistogram.add(columnRefOperator.getName());
             }
         }
 
-        Map<ColumnRefOperator, Histogram> histogramStatistics =
+        Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columnHasHistogram);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i))) {
+            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
                 columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i))).build();
+                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
             } else {
                 columnStatistic = columnStatisticList.get(i);
             }

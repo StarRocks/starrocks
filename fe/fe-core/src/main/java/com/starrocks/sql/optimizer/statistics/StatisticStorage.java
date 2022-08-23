@@ -2,8 +2,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -13,7 +13,9 @@ public interface StatisticStorage {
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
 
-    Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns);
+    default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
+        return Maps.newHashMap();
+    }
 
     default void expireHistogramStatistics(Long tableId, List<String> columns) {
     }

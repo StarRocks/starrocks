@@ -819,6 +819,10 @@ public class StmtExecutor {
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()));
+
+            //Could populate column statistic cache after Analyze table manually
+            GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), analyzeStatus.getColumns());
+            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, analyzeStatus.getColumns());
         } else {
             analyzeStatus = statisticExecutor.collectStatistics(
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
@@ -826,6 +830,10 @@ public class StmtExecutor {
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                                     StatsConstants.AnalyzeType.FULL,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
+
+            //Could populate column statistic cache after Analyze table manually
+            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, analyzeStatus.getColumns());
+            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, analyzeStatus.getColumns());
         }
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {
