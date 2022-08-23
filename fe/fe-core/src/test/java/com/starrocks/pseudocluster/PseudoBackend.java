@@ -164,7 +164,7 @@ public class PseudoBackend {
     public static final long DEFAULT_TOTA_CAP_B = 100000000000L;
     public static final long DEFAULT_AVAI_CAP_B = 50000000000L;
     public static final long DEFAULT_USED_CAP_B = 20000000000L;
-    public static final long DEFAULT_CHUNK_SIZE_ON_DISK_B = 1 << 20;
+    public static final long DEFAULT_SIZE_ON_DISK_PER_ROWSET_B = 1 << 20;
 
     private long currentDataUsedCapacityB;
     private long currentAvailableCapacityB;
@@ -483,6 +483,7 @@ public class PseudoBackend {
     }
 
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+        // Ignore the initial disk usage of tablet
         Tablet t = tabletManager.createTablet(request.create_tablet_req);
     }
 
@@ -517,10 +518,8 @@ public class PseudoBackend {
         if (srcTablet == null) {
             throw new Exception("clone failed src tablet " + task.tablet_id + " on " + srcBackend.be.getId() + " not found");
         }
-        // currently, only incremental clone is supported
         String oldInfo = destTablet.versionInfo();
-        int numRowsetCloned = destTablet.cloneFrom(srcTablet);
-        updateDiskUsage(numRowsetCloned * PseudoBackend.DEFAULT_CHUNK_SIZE_ON_DISK_B);
+        destTablet.cloneFrom(srcTablet);
         System.out.printf("clone tablet:%d src:%s dest:%s %s->%s\n", task.tablet_id, srcBackend.be.getId(), be.getId(),
                 oldInfo, destTablet.versionInfo());
         finish.finish_tablet_infos = Lists.newArrayList(destTablet.getTabletInfo());
@@ -1206,11 +1205,17 @@ public class PseudoBackend {
         return result;
     }
 
-    private synchronized void updateDiskUsage(long delta) {
+    /**
+     * We update the disk usage when a txn is published successfully.
+     * Currently, we update it in rowset granularity, i.e. no matter how many bytes we write in a txn,
+     * the cost of disk space is the same.
+     *
+     * @param delta the number of bytes to increase or decrease
+     */
+    public synchronized void updateDiskUsage(long delta) {
         if ((currentAvailableCapacityB - delta) < currentTotalCapacityB * 0.05) {
             return;
         }
-        System.out.println("backend " + getId() + ", delta " + delta);
         currentDataUsedCapacityB += delta;
         currentAvailableCapacityB -= delta;
     }
@@ -1242,7 +1247,6 @@ public class PseudoBackend {
                     result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
                     result.status.errorMsgs.add(e.getMessage());
                 }
-                updateDiskUsage(PseudoBackend.DEFAULT_CHUNK_SIZE_ON_DISK_B);
             } else {
                 result.status.statusCode = TStatusCode.INTERNAL_ERROR.getValue();
                 result.status.errorMsgs.add("no associated load channel");

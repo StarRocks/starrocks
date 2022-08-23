@@ -68,6 +68,10 @@ public class PseudoCluster {
         }
     }
 
+    public void setQueryTimeout(int timeout) {
+        dataSource.setDefaultQueryTimeout(timeout);
+    }
+
     private class HeatBeatPool extends PseudoGenericPool<HeartbeatService.Client> {
         public HeatBeatPool(String name) {
             super(name);

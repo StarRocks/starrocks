@@ -61,6 +61,11 @@ public class BeTabletManager {
                 tabletIdsByPartition.remove(removed.partitionId);
             }
             LOG.info("Dropped tablet {} force:{}", removed.id, force);
+            // TODO: if tablet trash feature is simulated, we should consider not updating disk usage.
+            if (PseudoBackend.getCurrentBackend() != null) {
+                PseudoBackend.getCurrentBackend().updateDiskUsage(
+                        0 - removed.numRowsets() * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+            }
         } else {
             LOG.warn("Drop Tablet {} not found", tabletId);
         }

@@ -1,8 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present StarRocks Inc.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import java.sql.SQLException;
-import java.util.Random;
 
 public class PseudoClusterUtils {
     public static Tablet triggerIncrementalCloneOnce(PseudoCluster cluster, long destBeId)

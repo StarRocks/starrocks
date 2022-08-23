@@ -242,11 +242,13 @@ public class Tablet {
             tryCommitPendingRowsets();
         } else {
             if (pendingRowsets.size() >= maxPendingVersions) {
-                throw new Exception(String.format("tablet:%d commit version:%d failed pendingRowsets size:%d >= %d", id, version,
-                        pendingRowsets.size(), maxPendingVersions));
+                throw new Exception(
+                        String.format("tablet:%d commit version:%d failed pendingRowsets size:%d >= %d", id, version,
+                                pendingRowsets.size(), maxPendingVersions));
             }
             pendingRowsets.put(version, rowset);
-            LOG.info("tablet:{} add rowset {} to pending #{}, version {}", id, rowset.rowsetid, pendingRowsets.size(), version);
+            LOG.info("tablet:{} add rowset {} to pending #{}, version {}", id, rowset.rowsetid, pendingRowsets.size(),
+                    version);
         }
     }
 
@@ -257,8 +259,12 @@ public class Tablet {
         ev.rowsets.add(rowset);
         ev.delta = rowset;
         versions.add(ev);
-        LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #version:{} #rowset:{}", rowset.txnId, id, version,
+        LOG.info("txn: {} tablet:{} rowset commit, version:{} rowset:{} #version:{} #rowset:{}", rowset.txnId, id,
+                version,
                 rowset.id, versions.size(), ev.rowsets.size());
+        if (PseudoBackend.getCurrentBackend() != null) {
+            PseudoBackend.getCurrentBackend().updateDiskUsage(PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+        }
     }
 
     public TTabletStat getStats() {
@@ -313,20 +319,20 @@ public class Tablet {
     }
 
     public synchronized String versionInfo() {
-        return String.format("[%d-%d #pending:%d]", versions.get(0).major, maxContinuousVersion(), pendingRowsets.size());
+        return String.format("[%d-%d #pending:%d]", versions.get(0).major, maxContinuousVersion(),
+                pendingRowsets.size());
     }
 
     /**
-     *
      * @param src tablet to clone from
      * @return number of rowset cloned
      * @throws Exception
      */
-    public synchronized int cloneFrom(Tablet src) throws Exception {
+    public synchronized void cloneFrom(Tablet src) throws Exception {
         if (maxContinuousVersion() >= src.maxContinuousVersion()) {
             LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
                     versionInfo());
-            return 0;
+            return;
         }
         String oldInfo = versionInfo();
         List<Long> missingVersions = getMissingVersions();
@@ -347,7 +353,6 @@ public class Tablet {
         // For easier debug reason, we also log it to stdout
         System.out.printf("\ntablet:%s clone src:%s before:%s after:%s\n",
                 id, src.versionInfo(), oldInfo, versionInfo());
-        return versionAndRowsets.size();
     }
 
     private void fullCloneFrom(Tablet src) throws Exception {
@@ -356,7 +361,12 @@ public class Tablet {
         EditVersion srcVersion = src.getMaxContinuousEditVersion();
         EditVersion destVersion = new EditVersion(srcVersion.major, srcVersion.minor, System.currentTimeMillis());
         destVersion.rowsets = srcVersion.rowsets.stream().map(Rowset::copy).collect(Collectors.toList());
+        long oldRowsetCount = numRowsets();
         versions = Lists.newArrayList(destVersion);
+        if (PseudoBackend.getCurrentBackend() != null) {
+            PseudoBackend.getCurrentBackend()
+                    .updateDiskUsage((numRowsets() - oldRowsetCount) * PseudoBackend.DEFAULT_SIZE_ON_DISK_PER_ROWSET_B);
+        }
         nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);
         tryCommitPendingRowsets();
         LOG.info("tablet:{} full clone src:{} before:{} after:{}", id, src.id, oldInfo, versionInfo());
@@ -375,7 +385,12 @@ public class Tablet {
             return;
         }
         LOG.info("tablet:{} versionGC [{},{}]{} -> [{},{}]{} remove {} versions",
-                id, versions.get(0).major, versions.get(versions.size() - 1).major, versions.size(), versions.get(i).major,
+                id, versions.get(0).major, versions.get(versions.size() - 1).major, versions.size(),
+                versions.get(i).major,
+                versions.get(versions.size() - 1).major, versions.size() - i, i);
+        System.out.printf("tablet:%d versionGC [%d,%d]%d -> [%d,%d]%d remove %d versions\n",
+                id, versions.get(0).major, versions.get(versions.size() - 1).major, versions.size(),
+                versions.get(i).major,
                 versions.get(versions.size() - 1).major, versions.size() - i, i);
         List<EditVersion> newVersions = new ArrayList<>(i);
         for (int j = i; j < versions.size(); j++) {
