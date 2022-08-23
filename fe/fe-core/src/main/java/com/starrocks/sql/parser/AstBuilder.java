@@ -2944,17 +2944,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitTruncateTableStatement(StarRocksParser.TruncateTableStatementContext context) {
-        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        TableName targetTableName = qualifiedNameToTableName(qualifiedName);
-        PartitionNames partitionNames = null;
-        if (context.partitionNames() != null) {
-            partitionNames = (PartitionNames) visit(context.partitionNames());
-        }
-        return new TruncateTableStmt(new TableRef(targetTableName, null, partitionNames));
-    }
-
-    @Override
     public ParseNode visitGrantRole(StarRocksParser.GrantRoleContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
