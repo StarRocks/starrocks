@@ -41,7 +41,7 @@ public class ExpressionStatisticCalculator {
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
         private final Statistics inputStatistics;
-        // Some function estimate need plan node row count, such as COUNT
+        // Some functions estimate need plan node row count, such as COUNT
         private final double rowCount;
 
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
