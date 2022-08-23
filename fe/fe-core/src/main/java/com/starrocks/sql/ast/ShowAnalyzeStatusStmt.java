@@ -84,8 +84,6 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             row.set(10, analyzeStatus.getReason());
         }
 
-        row.set(11, String.valueOf(analyzeStatus.getConnectionId()));
-
         return row;
     }
 

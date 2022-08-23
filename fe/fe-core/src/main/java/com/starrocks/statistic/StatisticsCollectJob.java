@@ -54,7 +54,7 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    public abstract void collect(AnalyzeStatus analyzeStatus) throws Exception;
+    public abstract void collect(ConnectContext context) throws Exception;
 
     public Database getDb() {
         return db;
@@ -85,6 +85,7 @@ public abstract class StatisticsCollectJob {
         context.setQueryId(UUIDUtil.genUUID());
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        context.setExecutor(executor);
         executor.execute();
 
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {

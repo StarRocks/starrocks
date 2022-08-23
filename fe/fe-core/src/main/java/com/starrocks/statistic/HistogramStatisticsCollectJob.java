@@ -7,8 +7,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.ExecuteEnv;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
@@ -48,12 +46,8 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect(AnalyzeStatus analyzeStatus) throws Exception {
-        ConnectContext context = StatisticUtils.buildConnectContext();
+    public void collect(ConnectContext context) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
-        ExecuteEnv.getInstance().getScheduler().submit(context);
-        analyzeStatus.setConnectionId(context.getConnectionId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         double sampleRatio = Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
         long bucketNum = Long.parseLong(properties.get(StatsConstants.HISTOGRAM_BUCKET_NUM));

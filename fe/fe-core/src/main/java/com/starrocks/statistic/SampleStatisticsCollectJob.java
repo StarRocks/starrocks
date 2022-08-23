@@ -10,7 +10,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.ExecuteEnv;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
@@ -48,12 +47,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect(AnalyzeStatus analyzeStatus) throws Exception {
-        ConnectContext context = StatisticUtils.buildConnectContext();
-        ExecuteEnv.getInstance().getScheduler().submit(context);
-        analyzeStatus.setConnectionId(context.getConnectionId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-
+    public void collect(ConnectContext context) throws Exception {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 

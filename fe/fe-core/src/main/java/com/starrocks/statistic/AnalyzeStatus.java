@@ -57,8 +57,6 @@ public class AnalyzeStatus implements Writable {
     @SerializedName("reason")
     private String reason;
 
-    private long connectionId;
-
     public AnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
                          StatsConstants.AnalyzeType type,
                          StatsConstants.ScheduleType scheduleType,
@@ -128,14 +126,6 @@ public class AnalyzeStatus implements Writable {
 
     public void setReason(String reason) {
         this.reason = reason;
-    }
-
-    public long getConnectionId() {
-        return connectionId;
-    }
-
-    public void setConnectionId(long connectionId) {
-        this.connectionId = connectionId;
     }
 
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()

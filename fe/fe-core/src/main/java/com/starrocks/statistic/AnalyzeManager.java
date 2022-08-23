@@ -17,6 +17,7 @@ import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
@@ -44,6 +45,8 @@ public class AnalyzeManager implements Writable {
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
+
+    private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -257,6 +260,17 @@ public class AnalyzeManager implements Writable {
                         .logRemoveHistogramStatsMeta(histogramStatsMetaMap.get(histogramKey));
                 histogramStatsMetaMap.remove(histogramKey);
             }
+        }
+    }
+
+    public void registerConnection(long analyzeID, ConnectContext ctx) {
+        connectionMap.put(analyzeID, ctx);
+    }
+
+    public void unregisterConnection(long analyzeID) {
+        ConnectContext context = connectionMap.remove(analyzeID);
+        if (context != null) {
+            context.kill(false);
         }
     }
 
