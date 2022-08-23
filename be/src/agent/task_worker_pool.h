@@ -118,26 +118,11 @@ private:
     std::deque<AgentTaskRequestPtr> _tasks;
 };
 
-using CreateTableWorkerPool = TaskWorkerPool<TaskWorkerType::CREATE_TABLE>;
-using DropTableWorkerPool = TaskWorkerPool<TaskWorkerType::DROP_TABLE>;
-using PushWorkerPool = TaskWorkerPool<TaskWorkerType::PUSH>;
-using PublishVersionWorkerPool = TaskWorkerPool<TaskWorkerType::PUBLISH_VERSION>;
-using ClearTransactionWorkerPool = TaskWorkerPool<TaskWorkerType::CLEAR_TRANSACTION_TASK>;
-using DeleteWorkerPool = TaskWorkerPool<TaskWorkerType::DELETE>;
-using AlterTableWorkerPool = TaskWorkerPool<TaskWorkerType::ALTER_TABLE>;
-using CloneWorkerPool = TaskWorkerPool<TaskWorkerType::CLONE>;
-using StorageMediumMigrateWorkerPool = TaskWorkerPool<TaskWorkerType::STORAGE_MEDIUM_MIGRATE>;
-using CheckConsistencyWorkerPool = TaskWorkerPool<TaskWorkerType::CHECK_CONSISTENCY>;
-using ReportTaskWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_TASK>;
-using ReportDiskStateWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_DISK_STATE>;
-using ReportOlapTableWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_OLAP_TABLE>;
-using ReportWorkgroupWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_WORKGROUP>;
-using UploadWorkerPool = TaskWorkerPool<TaskWorkerType::UPLOAD>;
-using DownloadWorkerPool = TaskWorkerPool<TaskWorkerType::DOWNLOAD>;
-using MakeSnapshotWorkerPool = TaskWorkerPool<TaskWorkerType::MAKE_SNAPSHOT>;
-using ReleaseSnapshotWorkerPool = TaskWorkerPool<TaskWorkerType::RELEASE_SNAPSHOT>;
-using MoveWorkerPool = TaskWorkerPool<TaskWorkerType::MOVE>;
-using UpdateTabletMetaInfoWorkerPool = TaskWorkerPool<TaskWorkerType::UPDATE_TABLET_META_INFO>;
+#define M(WORKER_POOL_NAME, WORKER_TYPE, T_ITEM_NAME, CALLBACK) \
+    using WORKER_POOL_NAME##WorkerPool = TaskWorkerPool<TaskWorkerType::WORKER_TYPE>;
+APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)
+APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)
+#undef M
 
 class TaskWorkerPoolThreadCallback {
 public:

@@ -99,47 +99,16 @@ void TaskWorkerPoolBase::stop() {
 
 template <TaskWorkerType TaskType>
 TaskWorkerPool<TaskType>::TaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPoolBase(env, worker_num) {
-    if constexpr (TaskType == TaskWorkerType::CREATE_TABLE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_create_tablet_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::DROP_TABLE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_drop_tablet_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::PUSH || TaskType == TaskWorkerType::REALTIME_PUSH) {
-        _callback_function = TaskWorkerPoolThreadCallback::_push_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::PUBLISH_VERSION) {
-        _callback_function = TaskWorkerPoolThreadCallback::_publish_version_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::CLEAR_TRANSACTION_TASK) {
-        _callback_function = TaskWorkerPoolThreadCallback::_clear_transaction_task_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::DELETE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_delete_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::ALTER_TABLE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_alter_tablet_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::CLONE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_clone_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::STORAGE_MEDIUM_MIGRATE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_storage_medium_migrate_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::CHECK_CONSISTENCY) {
-        _callback_function = TaskWorkerPoolThreadCallback::_check_consistency_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::REPORT_TASK) {
-        _callback_function = TaskWorkerPoolThreadCallback::_report_task_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::REPORT_DISK_STATE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_report_disk_state_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::REPORT_OLAP_TABLE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_report_tablet_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::REPORT_WORKGROUP) {
-        _callback_function = TaskWorkerPoolThreadCallback::_report_workgroup_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::UPLOAD) {
-        _callback_function = TaskWorkerPoolThreadCallback::_upload_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::DOWNLOAD) {
-        _callback_function = TaskWorkerPoolThreadCallback::_download_worker_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::MAKE_SNAPSHOT) {
-        _callback_function = TaskWorkerPoolThreadCallback::_make_snapshot_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::RELEASE_SNAPSHOT) {
-        _callback_function = TaskWorkerPoolThreadCallback::_release_snapshot_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::MOVE) {
-        _callback_function = TaskWorkerPoolThreadCallback::_move_dir_thread_callback;
-    } else if constexpr (TaskType == TaskWorkerType::UPDATE_TABLET_META_INFO) {
-        _callback_function = TaskWorkerPoolThreadCallback::_update_tablet_meta_worker_thread_callback;
-    } else {
+    if constexpr (false) {
+    }
+#define M(WORKER_POOL_NAME, WORKER_TYPE, T_ITEM_NAME, CALLBACK)      \
+    else if constexpr (TaskType == TaskWorkerType::WORKER_TYPE) {    \
+        _callback_function = TaskWorkerPoolThreadCallback::CALLBACK; \
+    }
+    APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)
+    APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)
+#undef M
+    else {
         _callback_function = nullptr;
     }
     CHECK(_callback_function != nullptr);
@@ -216,7 +185,7 @@ typename TaskWorkerPool<TaskType>::AgentTaskRequestPtr TaskWorkerPool<TaskType>:
 
     if constexpr (false) {
     }
-#define M(WORKER_TYPE, T_ITEM_NAME, CALLBACK)                     \
+#define M(WORKER_POOL_NAME, WORKER_TYPE, T_ITEM_NAME, CALLBACK)   \
     else if constexpr (TaskType == TaskWorkerType::WORKER_TYPE) { \
         convert_task->task_req = task.T_ITEM_NAME;                \
     }
@@ -1560,25 +1529,10 @@ AgentStatus TaskWorkerPoolBase::_move_dir(TTabletId tablet_id, TSchemaHash schem
     return STARROCKS_SUCCESS;
 }
 
-template class TaskWorkerPool<TaskWorkerType::CREATE_TABLE>;
-template class TaskWorkerPool<TaskWorkerType::DROP_TABLE>;
-template class TaskWorkerPool<TaskWorkerType::PUSH>;
-template class TaskWorkerPool<TaskWorkerType::PUBLISH_VERSION>;
-template class TaskWorkerPool<TaskWorkerType::CLEAR_TRANSACTION_TASK>;
-template class TaskWorkerPool<TaskWorkerType::DELETE>;
-template class TaskWorkerPool<TaskWorkerType::ALTER_TABLE>;
-template class TaskWorkerPool<TaskWorkerType::CLONE>;
-template class TaskWorkerPool<TaskWorkerType::STORAGE_MEDIUM_MIGRATE>;
-template class TaskWorkerPool<TaskWorkerType::CHECK_CONSISTENCY>;
-template class TaskWorkerPool<TaskWorkerType::REPORT_TASK>;
-template class TaskWorkerPool<TaskWorkerType::REPORT_DISK_STATE>;
-template class TaskWorkerPool<TaskWorkerType::REPORT_OLAP_TABLE>;
-template class TaskWorkerPool<TaskWorkerType::REPORT_WORKGROUP>;
-template class TaskWorkerPool<TaskWorkerType::UPLOAD>;
-template class TaskWorkerPool<TaskWorkerType::DOWNLOAD>;
-template class TaskWorkerPool<TaskWorkerType::MAKE_SNAPSHOT>;
-template class TaskWorkerPool<TaskWorkerType::RELEASE_SNAPSHOT>;
-template class TaskWorkerPool<TaskWorkerType::MOVE>;
-template class TaskWorkerPool<TaskWorkerType::UPDATE_TABLET_META_INFO>;
+#define M(WORKER_POOL_NAME, WORKER_TYPE, T_ITEM_NAME, CALLBACK) \
+    template class TaskWorkerPool<TaskWorkerType::WORKER_TYPE>;
+APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)
+APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)
+#undef M
 
 } // namespace starrocks
