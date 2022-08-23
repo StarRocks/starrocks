@@ -7,10 +7,10 @@
 
 namespace starrocks::vectorized {
 
-class SchemaTablesMetaScanner : public SchemaScanner {
+class SchemaTablesConfigScanner : public SchemaScanner {
 public:
-    SchemaTablesMetaScanner();
-    ~SchemaTablesMetaScanner() override;
+    SchemaTablesConfigScanner();
+    ~SchemaTablesConfigScanner() override;
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
@@ -19,9 +19,9 @@ private:
     Status get_new_table();
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _tables_meta_index{0};
-    TGetTablesMetaResponse _tables_meta_response;
-    static SchemaScanner::ColumnDesc _s_table_tables_meta_columns[];
+    int _tables_config_index{0};
+    TGetTablesConfigResponse _tables_config_response;
+    static SchemaScanner::ColumnDesc _s_table_tables_config_columns[];
 };
 
 } // namespace starrocks::vectorized

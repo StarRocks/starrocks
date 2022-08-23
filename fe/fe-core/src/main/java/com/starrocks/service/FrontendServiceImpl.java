@@ -112,8 +112,8 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
-import com.starrocks.thrift.TGetTablesMetaRequest;
-import com.starrocks.thrift.TGetTablesMetaResponse;
+import com.starrocks.thrift.TGetTablesConfigRequest;
+import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -147,7 +147,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
-import com.starrocks.thrift.TTableMetaInfo;
+import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
@@ -1330,9 +1330,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
-    public TGetTablesMetaResponse getTablesMeta(TGetTablesMetaRequest request) throws TException {
-        TGetTablesMetaResponse resp = new TGetTablesMetaResponse();
-        List<TTableMetaInfo> tList = new ArrayList<>();
+    public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
+        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
+        List<TTableConfigInfo> tList = new ArrayList<>();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getDbNames();
@@ -1344,9 +1344,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 try {
                     List<Table> allTables = db.getTables();
                     allTables.forEach(table -> {
-                        TTableMetaInfo tableMetaInfo = new TTableMetaInfo();
-                        tableMetaInfo.setTable_schema(dbName);
-                        tableMetaInfo.setTable_name(table.getName());
+                        TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
+                        tableConfigInfo.setTable_schema(dbName);
+                        tableConfigInfo.setTable_name(table.getName());
                         
                         if (table.isOlapOrLakeTable() || 
                                 table.getType() == TableType.OLAP_EXTERNAL ||
@@ -1355,23 +1355,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
                             // LAKE (done)
-                            tableMetaInfo = genNormalTableMetaInfo(table, tableMetaInfo);
+                            tableConfigInfo = genNormalTableConfigInfo(table, tableConfigInfo);
                         } else {
                             // SCHEMA (use default)
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
                             // BROKER (use default)                           
-                            tableMetaInfo = genDefaultMetaInfo(tableMetaInfo);
+                            tableConfigInfo = genDefaultConfigInfo(tableConfigInfo);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
-                        tList.add(tableMetaInfo);
+                        tList.add(tableConfigInfo);
                     });
                 } finally {
                     db.readUnlock();
                 }                
             }            
         });
-        resp.tables_meta_infos = tList;
+        resp.tables_config_infos = tList;
         return resp;
     }
 
@@ -1381,7 +1381,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
             .build();
 
-    private TTableMetaInfo genNormalTableMetaInfo(Table table, TTableMetaInfo tableMetaInfo) {
+    private TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
         OlapTable olapTable = (OlapTable) table;
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
@@ -1418,12 +1418,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         keysSb.append(Joiner.on(", ").join(keysColumnNames));
 
-        tableMetaInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? "NULL" : keysSb.toString());
-        tableMetaInfo.setPartition_key(partitionKeySb.toString());
-        tableMetaInfo.setDistribute_bucket(distributeNum);
-        tableMetaInfo.setDistribute_type("HASH");
-        tableMetaInfo.setDistribute_key(distributeKey);
-        tableMetaInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : "NULL");
+        tableConfigInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? "NULL" : keysSb.toString());
+        tableConfigInfo.setPartition_key(partitionKeySb.toString());
+        tableConfigInfo.setDistribute_bucket(distributeNum);
+        tableConfigInfo.setDistribute_type("HASH");
+        tableConfigInfo.setDistribute_key(distributeKey);
+        tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : "NULL");
 
         Map<String, String> properties = olapTable.getTableProperty().getProperties();
         Map<String, String> showProperties = new HashMap<>();
@@ -1437,8 +1437,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         Short replicationNum = olapTable.getDefaultReplicationNum();
         showProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
-        tableMetaInfo.setProperties(showProperties.toString());
-        return tableMetaInfo;
+        tableConfigInfo.setProperties(showProperties.toString());
+        return tableConfigInfo;
     }
 
     private boolean isSortKey(KeysType kType) {
@@ -1448,14 +1448,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return true;
     }
 
-    private TTableMetaInfo genDefaultMetaInfo(TTableMetaInfo tableMetaInfo) {
-        tableMetaInfo.setPrimary_key("def");
-        tableMetaInfo.setPartition_key("def");
-        tableMetaInfo.setDistribute_bucket("def");
-        tableMetaInfo.setDistribute_type("def");
-        tableMetaInfo.setDistribute_key("def");
-        tableMetaInfo.setSort_key("def");
-        tableMetaInfo.setProperties("def");
-        return tableMetaInfo;
+    private TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
+        tableConfigInfo.setPrimary_key("def");
+        tableConfigInfo.setPartition_key("def");
+        tableConfigInfo.setDistribute_bucket("def");
+        tableConfigInfo.setDistribute_type("def");
+        tableConfigInfo.setDistribute_key("def");
+        tableConfigInfo.setSort_key("def");
+        tableConfigInfo.setProperties("def");
+        return tableConfigInfo;
     }
 }

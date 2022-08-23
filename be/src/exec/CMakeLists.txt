@@ -116,7 +116,7 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_user_privileges_scanner.cpp
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
-    vectorized/schema_scanner/schema_tables_meta_scanner.cpp
+    vectorized/schema_scanner/schema_tables_config_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
     vectorized/jdbc_scanner.cpp
     vectorized/sorting/compare_column.cpp

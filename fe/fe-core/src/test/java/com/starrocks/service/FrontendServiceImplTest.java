@@ -23,9 +23,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TGetTablesMetaRequest;
-import com.starrocks.thrift.TGetTablesMetaResponse;
-
+import com.starrocks.thrift.TGetTablesConfigRequest;
+import com.starrocks.thrift.TGetTablesConfigResponse;
 
 import mockit.Expectations;
 import mockit.Mock;
@@ -41,7 +40,7 @@ public class FrontendServiceImplTest {
     GlobalStateMgr globalStateMgr;
 
     @Test
-    public void testGetTablesMeta() throws TException {
+    public void testGetTablesConfig() throws TException {
 
         Database db = new Database(1, "test_db");
         
@@ -120,9 +119,9 @@ public class FrontendServiceImplTest {
         };
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-        TGetTablesMetaRequest req = new TGetTablesMetaRequest();
-        TGetTablesMetaResponse response = impl.getTablesMeta(req);
-        response.tables_meta_infos.forEach(info -> {
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        response.tables_config_infos.forEach(info -> {
             if (info.getTable_name().equals("test_table_pk") || 
                 info.getTable_name().equals("test_table_uni")) {
                 Assert.assertEquals("`key_c1`, `key_c2`", info.getPrimary_key());

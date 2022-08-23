@@ -459,10 +459,10 @@ public class SchemaTable extends Table {
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .build()))
-                    .put("tables_meta",
+                    .put("tables_config",
                             new SchemaTable(
-                                    SystemId.TABLES_META_ID,
-                                    "tables_meta",
+                                    SystemId.TABLES_CONFIG_ID,
+                                    "tables_config",
                                     TableType.SCHEMA,
                                     builder()
                                             .column("TABLE_SCHEMA", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -471,7 +471,7 @@ public class SchemaTable extends Table {
                                             .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("DISTRIBUTE_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("DISTRIBUTE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                                            .column("DISTRUBTE_BUCKET", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("DISTRIBUTE_BUCKET", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))    

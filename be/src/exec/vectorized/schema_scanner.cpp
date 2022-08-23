@@ -11,7 +11,7 @@
 #include "exec/vectorized/schema_scanner/schema_schema_privileges_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_schemata_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_table_privileges_scanner.h"
-#include "exec/vectorized/schema_scanner/schema_tables_meta_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_tables_config_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_tables_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/vectorized/schema_scanner/schema_tasks_scanner.h"
@@ -97,8 +97,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<vectorized::SchemaTaskRunsScanner>();
     case TSchemaTableType::SCH_MATERIALIZED_VIEWS:
         return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
-    case TSchemaTableType::SCH_TABLES_META:
-        return std::make_unique<vectorized::SchemaTablesMetaScanner>();
+    case TSchemaTableType::SCH_TABLES_CONFIG:
+        return std::make_unique<vectorized::SchemaTablesConfigScanner>();
     default:
         return std::make_unique<vectorized::SchemaDummyScanner>();
     }

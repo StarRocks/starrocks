@@ -955,15 +955,15 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
-struct TGetTablesMetaRequest {
+struct TGetTablesConfigRequest {
 
 }
 
-struct TGetTablesMetaResponse {
-    1: optional list<TTableMetaInfo> tables_meta_infos
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
 }
 
-struct TTableMetaInfo {
+struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
     3: optional string primary_key
@@ -979,7 +979,7 @@ service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
 
-    TGetTablesMetaResponse getTablesMeta(1: TGetTablesMetaRequest request)
+    TGetTablesConfigResponse getTablesConfig(1: TGetTablesConfigRequest request)
 
     TGetUserPrivsResult getUserPrivs(1:TGetUserPrivsParams params)
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)

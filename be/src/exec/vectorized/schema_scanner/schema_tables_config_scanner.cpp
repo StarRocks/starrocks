@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "exec/vectorized/schema_scanner/schema_tables_meta_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_tables_config_scanner.h"
 
 #include "common/logging.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
@@ -9,7 +9,7 @@
 
 namespace starrocks::vectorized {
 
-SchemaScanner::ColumnDesc SchemaTablesMetaScanner::_s_table_tables_meta_columns[] = {
+SchemaScanner::ColumnDesc SchemaTablesConfigScanner::_s_table_tables_config_columns[] = {
         //   name,       type,          size,     is_null
         {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -22,34 +22,34 @@ SchemaScanner::ColumnDesc SchemaTablesMetaScanner::_s_table_tables_meta_columns[
         {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
-SchemaTablesMetaScanner::SchemaTablesMetaScanner()
-        : SchemaScanner(_s_table_tables_meta_columns,
-                        sizeof(_s_table_tables_meta_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+SchemaTablesConfigScanner::SchemaTablesConfigScanner()
+        : SchemaScanner(_s_table_tables_config_columns,
+                        sizeof(_s_table_tables_config_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaTablesMetaScanner::~SchemaTablesMetaScanner() = default;
+SchemaTablesConfigScanner::~SchemaTablesConfigScanner() = default;
 
-Status SchemaTablesMetaScanner::start(RuntimeState* state) {
+Status SchemaTablesConfigScanner::start(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
     }
-    TGetTablesMetaRequest tables_meta_req;
+    TGetTablesConfigRequest tables_config_req;
     if (nullptr != _param->ip && 0 != _param->port) {
         RETURN_IF_ERROR(
-                SchemaHelper::get_tables_meta(*(_param->ip), _param->port, tables_meta_req, &_tables_meta_response));
+                SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req, &_tables_config_response));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
     return Status::OK();
 }
 
-Status SchemaTablesMetaScanner::get_next(ChunkPtr* chunk, bool* eos) {
+Status SchemaTablesConfigScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("Used before initialized.");
     }
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
     }
-    if (_tables_meta_index >= _tables_meta_response.tables_meta_infos.size()) {
+    if (_tables_config_index >= _tables_config_response.tables_config_infos.size()) {
         *eos = true;
         return Status::OK();
     }
@@ -57,8 +57,8 @@ Status SchemaTablesMetaScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
-    const TTableMetaInfo& info = _tables_meta_response.tables_meta_infos[_tables_meta_index];
+Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
+    const TTableConfigInfo& info = _tables_config_response.tables_config_infos[_tables_config_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
@@ -156,7 +156,7 @@ Status SchemaTablesMetaScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
     }
-    _tables_meta_index++;
+    _tables_config_index++;
     return Status::OK();
 }
 
