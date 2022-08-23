@@ -2,8 +2,10 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
@@ -15,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -24,6 +27,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class RemoveAggregationFromAggTable extends TransformationRule {
+    private static List<String> unsupportedFunctionNames =
+            ImmutableList.of(FunctionSet.BITMAP_UNION,
+                    FunctionSet.BITMAP_UNION_COUNT,
+                    FunctionSet.HLL_UNION,
+                    FunctionSet.PERCENTILE_UNION);
+
     public RemoveAggregationFromAggTable() {
         super(RuleType.TF_REMOVE_AGGREGATION_BY_AGG_TABLE,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
@@ -42,6 +51,8 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
             return false;
         }
+        int keyCount = materializedIndexMeta.getSchema().stream()
+                .map(column -> column.isKey() ? 1 : 0).reduce((a, b) -> a + b).get();
 
         // group by keys contain partition columns and distribution columns
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -56,10 +67,16 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
                 .map(name -> name.toLowerCase()).collect(Collectors.toList());
 
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
+            if (unsupportedFunctionNames.contains(entry.getValue().getFnName().toLowerCase())) {
+                return false;
+            }
+        }
         List<String> keyColumns = aggregationOperator.getGroupingKeys().stream()
                 .map(columnRefOperator -> columnRefOperator.getName().toLowerCase()).collect(Collectors.toList());
-
-        if (keyColumns.containsAll(partitionColumnNames) && keyColumns.containsAll(distributionColumnNames)) {
+        if (keyCount == keyColumns.size()
+                && keyColumns.containsAll(partitionColumnNames)
+                && keyColumns.containsAll(distributionColumnNames)) {
             return true;
         }
         return false;

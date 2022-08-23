@@ -117,15 +117,6 @@ public class PreAggregateTurnOnRule {
                 scan.setTurnOffReason("");
                 return null;
             }
-            /*
-            // Duplicate table
-            if (!((OlapTable) scan.getTable()).getKeysType().isAggregationFamily()) {
-                scan.setPreAggregation(true);
-                scan.setTurnOffReason("");
-                return null;
-            }
-
-             */
 
             if (context.notPreAggregationJoin) {
                 scan.setTurnOffReason("Has can not pre-aggregation Join");
