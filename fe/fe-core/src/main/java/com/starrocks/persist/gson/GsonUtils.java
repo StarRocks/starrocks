@@ -53,6 +53,7 @@ import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.analysis.Expr;
+import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
@@ -78,6 +79,8 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.SparkResource;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableSnapshotInfo;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
@@ -197,6 +200,14 @@ public class GsonUtils {
             .registerSubtype(CatalogRecycleBin.RecycleRangePartitionInfo.class,
                     CatalogRecycleBin.RecycleRangePartitionInfo.class.getSimpleName());
 
+    private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
+            = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
+            .registerSubtype(LakeTable.class, LakeTable.class.getSimpleName());
+
+    private static final RuntimeTypeAdapterFactory<SnapshotInfo> SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY
+            = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")
+            .registerSubtype(LakeTableSnapshotInfo.class, LakeTableSnapshotInfo.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -238,6 +249,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(PARTITION_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(PARTITION_PERSIST_INFO_V_2_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
