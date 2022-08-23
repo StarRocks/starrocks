@@ -208,10 +208,9 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2");
-        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats'," +
-                " histogram(v2, 64, 0.1),  NULL, NOW() FROM " +
-                "(SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  " +
-                "ORDER BY v2 LIMIT 9223372036854775807) t", sql);
+        Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats', " +
+                "histogram(v2, cast(64 as int), cast(0.1 as double)),  NULL, NOW() FROM " +
+                "(SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  ORDER BY v2 LIMIT 10000000) t", sql);
 
         Map<String, String> mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
@@ -219,9 +218,9 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2");
         Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v2', 10002, 'test.t0_stats', " +
-                "histogram(v2, 64, 0.1),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
+                "histogram(v2, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
                 "FROM (SELECT v2 FROM test.t0_stats where rand() <= 0.1 and v2 is not null  and v2 not in (1,2) " +
-                "ORDER BY v2 LIMIT 9223372036854775807) t", sql);
+                "ORDER BY v2 LIMIT 10000000) t", sql);
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01", "10");
@@ -229,10 +228,9 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4");
         Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v4', 10002, 'test.t0_stats', " +
-                "histogram(v4, 64, 0.1),  '[[\"00000101\",\"10\"],[\"19910101\",\"20\"]]', NOW() " +
-                "FROM (SELECT v4 FROM test.t0_stats where rand() <= 0.1 and v4 is not null  " +
-                "and v4 not in (\"0000-01-01\",\"1991-01-01\") " +
-                "ORDER BY v4 LIMIT 9223372036854775807) t", sql);
+                "histogram(v4, cast(64 as int), cast(0.1 as double)),  '[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', " +
+                "NOW() FROM (SELECT v4 FROM test.t0_stats where rand() <= 0.1 and v4 is not null  and v4 not in " +
+                "(\"0000-01-01\",\"1991-01-01\") ORDER BY v4 LIMIT 10000000) t", sql);
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01 00:00:00", "10");
@@ -240,10 +238,10 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5");
         Assert.assertEquals("INSERT INTO histogram_statistics SELECT 16325, 'v5', 10002, 'test.t0_stats', " +
-                "histogram(v5, 64, 0.1),  '[[\"19910101000000\",\"20\"],[\"00000101000000\",\"10\"]]', NOW() " +
-                "FROM (SELECT v5 FROM test.t0_stats where rand() <= 0.1 and v5 is not null  " +
-                "and v5 not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") " +
-                "ORDER BY v5 LIMIT 9223372036854775807) t", sql);
+                "histogram(v5, cast(64 as int), cast(0.1 as double)),  " +
+                "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                "(SELECT v5 FROM test.t0_stats where rand() <= 0.1 and v5 is not null  " +
+                "and v5 not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY v5 LIMIT 10000000) t", sql);
 
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
                 db, olapTable, 100L, "v2");

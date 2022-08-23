@@ -5,7 +5,7 @@ import com.google.common.base.Joiner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
@@ -20,7 +20,7 @@ import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_
 public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
     private static final String COLLECT_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName'," +
-                    " histogram($columnName, $bucketNum, $sampleRatio), " +
+                    " histogram($columnName, cast($bucketNum as int), cast($sampleRatio as double)), " +
                     " $mcv," +
                     " NOW()" +
                     " FROM (SELECT $columnName FROM $dbName.$tableName where rand() <= $sampleRatio" +
@@ -65,6 +65,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
             }
 
             sql = buildCollectHistogram(db, table, sampleRatio, bucketNum, mostCommonValues, column);
+            System.out.println(sql);
             collectStatisticSync(sql);
         }
     }
@@ -95,34 +96,23 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
         context.put("bucketNum", bucketNum);
         context.put("sampleRatio", sampleRatio);
-        context.put("totalRows", Long.MAX_VALUE);
+        context.put("totalRows", Config.histogram_max_sample_row_count);
 
         Column column = table.getColumn(columnName);
 
         List<String> mcvList = new ArrayList<>();
         for (Map.Entry<String, String> entry : mostCommonValues.entrySet()) {
-            String key;
-            if (column.getType().isDate()) {
-                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_FORMATTER_UNIX)
-                        .format(DateUtils.DATEKEY_FORMATTER_UNIX);
-            } else if (column.getType().isDatetime()) {
-                key = DateUtils.parseStringWithDefaultHSM(entry.getKey(), DateUtils.DATE_TIME_FORMATTER_UNIX)
-                        .format(DateUtils.DATETIMEKEY_FORMATTER_UNIX);
-            } else {
-                key = entry.getKey();
-            }
-
-            mcvList.add("[\"" + key + "\",\"" + entry.getValue() + "\"]");
+            mcvList.add("[\"" + entry.getKey() + "\",\"" + entry.getValue() + "\"]");
         }
 
-        if (mcvList.isEmpty()) {
+        if (mostCommonValues.isEmpty()) {
             context.put("mcv", "NULL");
         } else {
             context.put("mcv", "'[" + Joiner.on(",").join(mcvList) + "]'");
         }
 
         if (!mostCommonValues.isEmpty()) {
-            if (column.getType().getPrimitiveType().isDateType()) {
+            if (column.getType().getPrimitiveType().isDateType() || column.getType().getPrimitiveType().isCharFamily()) {
                 context.put("MCVExclude", " and " + columnName + " not in (\"" +
                         Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
             } else {
