@@ -46,7 +46,7 @@ class TaskWorkerPoolBase {
 public:
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
-    TaskWorkerPoolBase(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
+    TaskWorkerPoolBase(ExecEnv* env, int worker_num);
     ~TaskWorkerPoolBase();
 
     // start the task worker callback thread
@@ -98,7 +98,7 @@ class TaskWorkerPool : public TaskWorkerPoolBase {
 public:
     using AgentTaskRequestPtr = std::shared_ptr<AgentTaskRequest<TaskType>>;
 
-    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
+    TaskWorkerPool(ExecEnv* env, int worker_num);
 
     // Submit task to task pool
     //
@@ -117,6 +117,27 @@ private:
 
     std::deque<AgentTaskRequestPtr> _tasks;
 };
+
+using CreateTableWorkerPool = TaskWorkerPool<TaskWorkerType::CREATE_TABLE>;
+using DropTableWorkerPool = TaskWorkerPool<TaskWorkerType::DROP_TABLE>;
+using PushWorkerPool = TaskWorkerPool<TaskWorkerType::PUSH>;
+using PublishVersionWorkerPool = TaskWorkerPool<TaskWorkerType::PUBLISH_VERSION>;
+using ClearTransactionWorkerPool = TaskWorkerPool<TaskWorkerType::CLEAR_TRANSACTION_TASK>;
+using DeleteWorkerPool = TaskWorkerPool<TaskWorkerType::DELETE>;
+using AlterTableWorkerPool = TaskWorkerPool<TaskWorkerType::ALTER_TABLE>;
+using CloneWorkerPool = TaskWorkerPool<TaskWorkerType::CLONE>;
+using StorageMediumMigrateWorkerPool = TaskWorkerPool<TaskWorkerType::STORAGE_MEDIUM_MIGRATE>;
+using CheckConsistencyWorkerPool = TaskWorkerPool<TaskWorkerType::CHECK_CONSISTENCY>;
+using ReportTaskWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_TASK>;
+using ReportDiskStateWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_DISK_STATE>;
+using ReportOlapTableWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_OLAP_TABLE>;
+using ReportWorkgroupWorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_WORKGROUP>;
+using UploadWorkerPool = TaskWorkerPool<TaskWorkerType::UPLOAD>;
+using DownloadWorkerPool = TaskWorkerPool<TaskWorkerType::DOWNLOAD>;
+using MakeSnapshotWorkerPool = TaskWorkerPool<TaskWorkerType::MAKE_SNAPSHOT>;
+using ReleaseSnapshotWorkerPool = TaskWorkerPool<TaskWorkerType::RELEASE_SNAPSHOT>;
+using MoveWorkerPool = TaskWorkerPool<TaskWorkerType::MOVE>;
+using UpdateTabletMetaInfoWorkerPool = TaskWorkerPool<TaskWorkerType::UPDATE_TABLET_META_INFO>;
 
 class TaskWorkerPoolThreadCallback {
 public:

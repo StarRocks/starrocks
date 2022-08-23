@@ -65,11 +65,10 @@ std::atomic<int64_t> TaskWorkerPoolBase::_s_report_version(time(nullptr) * 10000
 std::mutex TaskWorkerPoolBase::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
 std::set<int64_t> TaskWorkerPoolBase::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 
-TaskWorkerPoolBase::TaskWorkerPoolBase(TaskWorkerType task_worker_type, ExecEnv* env, int worker_count)
+TaskWorkerPoolBase::TaskWorkerPoolBase(ExecEnv* env, int worker_count)
         : _env(env),
           _worker_thread_condition_variable(new std::condition_variable()),
-          _worker_count(worker_count),
-          _task_worker_type(task_worker_type) {
+          _worker_count(worker_count) {
     _backend.__set_host(BackendOptions::get_localhost());
     _backend.__set_be_port(config::be_port);
     _backend.__set_http_port(config::webserver_port);
@@ -101,8 +100,8 @@ void TaskWorkerPoolBase::stop() {
 }
 
 template <TaskWorkerType TaskType>
-TaskWorkerPool<TaskType>::TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num)
-        : TaskWorkerPoolBase(task_worker_type, env, worker_num) {
+TaskWorkerPool<TaskType>::TaskWorkerPool(ExecEnv* env, int worker_num)
+        : TaskWorkerPoolBase(env, worker_num) {
     if constexpr (TaskType == TaskWorkerType::CREATE_TABLE) {
         _callback_function = TaskWorkerPoolThreadCallback::_create_tablet_worker_thread_callback;
     } else if constexpr (TaskType == TaskWorkerType::DROP_TABLE) {
@@ -146,7 +145,7 @@ TaskWorkerPool<TaskType>::TaskWorkerPool(TaskWorkerType task_worker_type, ExecEn
     } else {
         _callback_function = nullptr;
     }
-    static_assert(_callback_function != nullptr);
+    CHECK(_callback_function != nullptr);
 }
 
 template <TaskWorkerType TaskType>
@@ -1553,5 +1552,26 @@ AgentStatus TaskWorkerPoolBase::_move_dir(TTabletId tablet_id, TSchemaHash schem
 
     return STARROCKS_SUCCESS;
 }
+
+template class TaskWorkerPool<TaskWorkerType::CREATE_TABLE>;
+template class TaskWorkerPool<TaskWorkerType::DROP_TABLE>;
+template class TaskWorkerPool<TaskWorkerType::PUSH>;
+template class TaskWorkerPool<TaskWorkerType::PUBLISH_VERSION>;
+template class TaskWorkerPool<TaskWorkerType::CLEAR_TRANSACTION_TASK>;
+template class TaskWorkerPool<TaskWorkerType::DELETE>;
+template class TaskWorkerPool<TaskWorkerType::ALTER_TABLE>;
+template class TaskWorkerPool<TaskWorkerType::CLONE>;
+template class TaskWorkerPool<TaskWorkerType::STORAGE_MEDIUM_MIGRATE>;
+template class TaskWorkerPool<TaskWorkerType::CHECK_CONSISTENCY>;
+template class TaskWorkerPool<TaskWorkerType::REPORT_TASK>;
+template class TaskWorkerPool<TaskWorkerType::REPORT_DISK_STATE>;
+template class TaskWorkerPool<TaskWorkerType::REPORT_OLAP_TABLE>;
+template class TaskWorkerPool<TaskWorkerType::REPORT_WORKGROUP>;
+template class TaskWorkerPool<TaskWorkerType::UPLOAD>;
+template class TaskWorkerPool<TaskWorkerType::DOWNLOAD>;
+template class TaskWorkerPool<TaskWorkerType::MAKE_SNAPSHOT>;
+template class TaskWorkerPool<TaskWorkerType::RELEASE_SNAPSHOT>;
+template class TaskWorkerPool<TaskWorkerType::MOVE>;
+template class TaskWorkerPool<TaskWorkerType::UPDATE_TABLET_META_INFO>;
 
 } // namespace starrocks

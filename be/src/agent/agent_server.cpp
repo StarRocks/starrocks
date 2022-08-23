@@ -150,8 +150,8 @@ void AgentServer::Impl::init_or_die() {
     // It is the same code to create workers of each type, so we use a macro
     // to make code to be more readable.
 #ifndef BE_TEST
-#define CREATE_AND_START_POOL(type, pool_name, worker_num)                  \
-    pool_name.reset(new TaskWorkerPool<type>(type, _exec_env, worker_num)); \
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)            \
+    pool_name.reset(new TaskWorkerPool<type>(_exec_env, worker_num)); \
     pool_name->start();
 #else
 #define CREATE_AND_START_POOL(type, pool_name, worker_num)
