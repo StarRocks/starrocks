@@ -22,8 +22,6 @@
 package com.starrocks.alter;
 
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.ShowAlterStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -35,6 +33,8 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.util.ThreadUtil;

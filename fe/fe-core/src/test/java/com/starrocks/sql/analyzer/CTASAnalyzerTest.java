@@ -1,9 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-
-
-import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -13,6 +10,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;

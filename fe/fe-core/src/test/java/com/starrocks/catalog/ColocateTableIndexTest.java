@@ -2,13 +2,12 @@
 
 package com.starrocks.catalog;
 
-
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.collections.map.HashedMap;
 import org.apache.logging.log4j.LogManager;

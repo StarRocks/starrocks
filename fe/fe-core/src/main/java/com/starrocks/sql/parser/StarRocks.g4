@@ -30,32 +30,33 @@ statement
     // Table Statement
     | createTableStatement                                                                  #createTable
     | createTableAsSelectStatement                                                          #createTableAsSelect
-    | alterTableStatement                                                                   #alterTable
-    | dropTableStatement                                                                    #dropTable
-    | showTableStatement                                                                    #showTables
-    | showCreateTableStatement                                                              #showCreateTable
-    | showColumnStatement                                                                   #showColumn
-    | showTableStatusStatement                                                              #showTableStatus
-    | createIndexStatement                                                                  #createIndex
-    | dropIndexStatement                                                                    #dropIndex
-    | refreshTableStatement                                                                 #refreshTable
-    | showAlterStatement                                                                    #showAlter
-    | showDeleteStatement                                                                   #showDelete
-    | descTableStatement                                                                    #descTable
     | createTableLikeStatement                                                              #createTableLike
-    | showIndexStatement                                                                    #showIndex
+    | showCreateTableStatement                                                              #showCreateTable
+    | dropTableStatement                                                                    #dropTable
     | recoverTableStatement                                                                 #recoverTable
     | truncateTableStatement                                                                #truncateTable
-    | showTabletStatement                                                                   #showTablet
+    | showTableStatement                                                                    #showTables
+    | descTableStatement                                                                    #descTable
+    | showTableStatusStatement                                                              #showTableStatus
+    | showColumnStatement                                                                   #showColumn
+    | refreshTableStatement                                                                 #refreshTable
+    | alterTableStatement                                                                   #alterTable
     | cancelAlterTableStatement                                                             #cancelAlterTable
-    | showPartitionsStatement                                                               #showPartitions
-    | recoverPartitionStatement                                                             #recoverPartition
-    | showOpenTableStatement                                                                #showOpenTable
+    | showAlterStatement                                                                    #showAlter
 
     // View Statement
     | createViewStatement                                                                   #createView
     | alterViewStatement                                                                    #alterView
     | dropViewStatement                                                                     #dropView
+
+    // Partition Statement
+    | showPartitionsStatement                                                               #showPartitions
+    | recoverPartitionStatement                                                             #recoverPartition
+
+    // Index Statement
+    | createIndexStatement                                                                  #createIndex
+    | dropIndexStatement                                                                    #dropIndex
+    | showIndexStatement                                                                    #showIndex
 
     // Task Statement
     | submitTaskStatement                                                                   #submitTask
@@ -137,7 +138,12 @@ statement
     | showBrokerStatement                                                                   #showBroker
     | showCollationStatement                                                                #showCollation
     | setStatement                                                                          #setStmt
+
+    //Show Statement
     | showWarningStatement                                                                  #showWarning
+    | showTabletStatement                                                                   #showTablet
+    | showDeleteStatement                                                                   #showDelete
+    | showOpenTableStatement                                                                #showOpenTable
     | showDynamicPartitionStatement                                                         #showDynamicPartition
 
     // privilege

@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,8 +35,6 @@ public class AnalyzeCreateTableTest {
         Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("table1", stmt.getTableName());
         Assert.assertNull(stmt.getProperties());
-        Assert.assertTrue(stmt.toSql()
-                .contains("rollup( `index1` (`col1`, `col2`), `index2` (`col2`, `col3`))"));
     }
 
     @Test

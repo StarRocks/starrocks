@@ -32,12 +32,10 @@ import com.starrocks.analysis.AlterClause;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.ColumnRenameClause;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DropColumnClause;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ModifyColumnClause;
 import com.starrocks.analysis.MultiItemListPartitionDesc;
@@ -47,7 +45,6 @@ import com.starrocks.analysis.ReorderColumnsClause;
 import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TruncatePartitionClause;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -82,7 +79,10 @@ import com.starrocks.sql.ast.AlterDatabaseRename;
 import com.starrocks.sql.ast.AlterMaterializedViewStatement;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -189,7 +189,7 @@ public class AlterTest {
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table test_partition_exception";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {
