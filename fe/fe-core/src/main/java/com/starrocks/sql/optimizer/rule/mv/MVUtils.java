@@ -3,14 +3,32 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.CreateMaterializedViewStmt;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.io.StringReader;
+import java.util.List;
+import java.util.Map;
 
 public class MVUtils {
+
+    private static final Logger LOG = LogManager.getLogger(MVUtils.class);
+
     public static boolean isEquivalencePredicate(ScalarOperator predicate) {
         if (predicate instanceof InPredicateOperator) {
             return true;
@@ -64,4 +82,31 @@ public class MVUtils {
         }
         return "mv_" + mvColumn.getAggregationType().name().toLowerCase() + "_" + queryColumn;
     }
+
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) throws IOException {
+        CreateMaterializedViewStmt stmt;
+
+        try {
+            List<StatementBase> stmts = SqlParser.parse(originStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
+            stmt = (CreateMaterializedViewStmt) stmts.get(originStmt.idx);
+            stmt.setIsReplay(true);
+            return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
+        } catch (Exception e) {
+            LOG.warn("error happens when parsing create materialized view use new parser:" + originStmt, e);
+        }
+
+        // compatibility old parser can work but new parser failed
+        com.starrocks.analysis.SqlParser parser = new com.starrocks.analysis.SqlParser(
+                new SqlScanner(new StringReader(originStmt.originStmt),
+                        SqlModeHelper.MODE_DEFAULT));
+        try {
+            stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, originStmt.idx);
+            stmt.setIsReplay(true);
+            return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
+        } catch (Exception e) {
+            throw new IOException("error happens when parsing create materialized view stmt use old parser:" +
+                    originStmt, e);
+        }
+    }
+
 }
