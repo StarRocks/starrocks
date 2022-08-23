@@ -233,6 +233,7 @@ public class FunctionSet {
     public static final String WINDOW_FUNNEL = "window_funnel";
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
+    public static final String HISTOGRAM = "histogram";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -420,6 +421,8 @@ public class FunctionSet {
                     .add(Type.DECIMAL32)
                     .add(Type.DECIMAL64)
                     .add(Type.DECIMAL128)
+                    .add(Type.CHAR)
+                    .add(Type.VARCHAR)
                     .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
@@ -1038,7 +1041,7 @@ public class FunctionSet {
         }
 
         for (Type t : HISTOGRAM_TYPE) {
-            addBuiltin(AggregateFunction.createBuiltin("histogram",
+            addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM,
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }

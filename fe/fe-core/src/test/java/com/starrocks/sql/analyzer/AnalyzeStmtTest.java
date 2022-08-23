@@ -183,6 +183,37 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testHistogramSampleRatio() {
+        OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
+                .getDb("db").getTable("tbl");
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(10000);
+        }
+
+        String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.1\")";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(400000);
+        }
+
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.2\")";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(20000000);
+        }
+        sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
+                "properties(\"histogram_sample_ratio\"=\"0.9\")";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
+    }
+
+    @Test
     public void testDropStats() {
         String sql = "drop stats t0";
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
