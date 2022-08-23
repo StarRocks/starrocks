@@ -170,6 +170,41 @@ TEST_F(LikeTest, haystackConstantLike) {
                         .ok());
 }
 
+TEST_F(LikeTest, haystackConstantLikeLargerThanHyperscan) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>("CHINA", 1);
+
+#define LONG_PATTERN_LEN 16384
+    char large_pattern[LONG_PATTERN_LEN];
+    memset(large_pattern, 'a', LONG_PATTERN_LEN);
+    large_pattern[LONG_PATTERN_LEN - 1] = 0;
+    large_pattern[0] = 'N';
+    large_pattern[1] = '%';
+    large_pattern[2] = 'I';
+    large_pattern[3] = '%';
+#undef LONG_PATTERN_LEN
+
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
+
+    columns.push_back(haystack);
+    columns.push_back(pattern);
+
+    context->impl()->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::like(context, columns);
+
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
+
+    ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
 TEST_F(LikeTest, haystackNullableLike) {
     auto context = FunctionContext::create_test_context();
     std::unique_ptr<FunctionContext> ctx(context);
@@ -542,6 +577,38 @@ TEST_F(LikeTest, constValueRegexp) {
     for (int i = 0; i < num_rows; ++i) {
         ASSERT_EQ(expected[i], v->get_data()[i]);
     }
+
+    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
+TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+    Columns columns;
+
+    auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>("CHINA", 1);
+
+#define LONG_PATTERN_LEN 16384
+    char large_pattern[LONG_PATTERN_LEN];
+    memset(large_pattern, 'a', LONG_PATTERN_LEN);
+    large_pattern[LONG_PATTERN_LEN - 1] = 0;
+    large_pattern[2] = '.';
+#undef LONG_PATTERN_LEN
+
+    auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
+
+    columns.push_back(haystack);
+    columns.push_back(pattern);
+
+    context->impl()->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::regex(context, columns);
+
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(result));
 
     ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
                         .ok());

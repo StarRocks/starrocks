@@ -98,8 +98,25 @@ Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
         state->function = &constant_substring_fn;
     } else {
         auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
-        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
+        if (re_pattern.size() <= MAX_PATTERN_OF_HYPERSCAN) {
+            RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
+        } else {
+            RE2::Options opts;
+            opts.set_never_nl(false);
+            opts.set_dot_nl(true);
+            opts.set_log_errors(false);
+
+            state->re2 = std::make_shared<re2::RE2>(re_pattern, opts);
+            if (!state->re2->ok()) {
+                std::stringstream error;
+                error << "Invalid like expression: " << pattern_str;
+                return Status::InvalidArgument(error.str());
+            }
+
+            state->function = &like_fn_with_long_constant_pattern;
+        }
     }
+
     return Status::OK();
 }
 
@@ -158,9 +175,23 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
     } else if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->set_search_string(search_string);
         state->function = &constant_substring_fn;
-    } else {
+    } else if (pattern.size <= MAX_PATTERN_OF_HYPERSCAN) {
         std::string re_pattern(pattern.data, pattern.size);
         RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
+    } else {
+        RE2::Options opts;
+        opts.set_never_nl(false);
+        opts.set_dot_nl(true);
+        opts.set_log_errors(false);
+
+        state->re2 = std::make_shared<re2::RE2>(pattern_str, opts);
+        if (!state->re2->ok()) {
+            std::stringstream error;
+            error << "Invalid regex expression: " << pattern_str;
+            return Status::InvalidArgument(error.str());
+        }
+
+        state->function = &regex_fn_with_long_constant_pattern;
     }
 
     return Status::OK();
@@ -188,6 +219,44 @@ ColumnPtr LikePredicate::like_fn(FunctionContext* context, const starrocks::vect
 
 ColumnPtr LikePredicate::regex_fn(FunctionContext* context, const Columns& columns) {
     return regex_match(context, columns, false);
+}
+
+ColumnPtr LikePredicate::like_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+    return match_fn_with_long_constant_pattern<true>(context, columns);
+}
+
+ColumnPtr LikePredicate::regex_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+    return match_fn_with_long_constant_pattern<false>(context, columns);
+}
+
+template <bool like>
+ColumnPtr LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+
+    const auto& value_column = VECTORIZED_FN_ARGS(0);
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
+
+    ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
+    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+
+    for (int row = 0; row < num_rows; ++row) {
+        if (value_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        if constexpr (like) {
+            auto v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
+                                    *(state->re2));
+            result.append(v);
+        } else {
+            auto v = RE2::PartialMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
+                                       *(state->re2));
+            result.append(v);
+        }
+    }
+
+    return result.build(all_const);
 }
 
 // constant_ends

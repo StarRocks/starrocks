@@ -72,6 +72,8 @@ private:
      */
     DEFINE_VECTORIZED_FN(regex_fn);
 
+    DEFINE_VECTORIZED_FN(regex_fn_with_long_constant_pattern);
+    DEFINE_VECTORIZED_FN(like_fn_with_long_constant_pattern);
     /**
      * use for:
      *  a like "xxxx%"
@@ -134,6 +136,10 @@ private:
 
     static ColumnPtr regex_match_partial(FunctionContext* context, const Columns& columns);
 
+    static const size_t MAX_PATTERN_OF_HYPERSCAN = 16000;
+    template <bool like>
+    static ColumnPtr match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns);
+
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
     /// regular expression pattern. Escaped chars are copied verbatim.
     template <bool fullMatch>
@@ -157,6 +163,7 @@ private:
     struct LikePredicateState {
         char escape_char{'\\'};
 
+        std::shared_ptr<re2::RE2> re2 = nullptr;
         /// This is the function, set in the prepare function, that will be used to determine
         /// the value of the predicate. It will be set depending on whether the expression is
         /// a LIKE, RLIKE or REGEXP predicate, whether the pattern is a constant argument
