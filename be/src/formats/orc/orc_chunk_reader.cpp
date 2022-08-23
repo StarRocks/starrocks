@@ -638,21 +638,21 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
             // Possibly there are some zero padding characters in value, we have to strip them off.
             for (int i = col_start; i < col_start + size; ++i, ++pos) {
                 nulls[i] = !cvb->notNull[pos];
-                if (cvb->notNull[pos]) {
-                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                if (UNLIKELY(!cvb->notNull[pos] || (type_desc.len > 0 && data->length[pos] > type_desc.len))) {
                     vo.emplace_back(vb.size());
                 } else {
+                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
                     vo.emplace_back(vb.size());
                 }
             }
         } else {
             for (int i = col_start; i < col_start + size; ++i, ++pos) {
                 nulls[i] = !cvb->notNull[pos];
-                if (cvb->notNull[pos]) {
-                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                if (UNLIKELY(!cvb->notNull[pos] || (type_desc.len > 0 && data->length[pos] > type_desc.len))) {
                     vo.emplace_back(vb.size());
                 } else {
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
                     vo.emplace_back(vb.size());
                 }
             }
@@ -661,14 +661,22 @@ static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
         if (type_desc.type == TYPE_CHAR) {
             // Possibly there are some zero padding characters in value, we have to strip them off.
             for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
-                vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
-                vo.emplace_back(vb.size());
+                if (UNLIKELY(type_desc.len > 0 && data->length[pos] > type_desc.len)) {
+                    vo.emplace_back(vb.size());
+                } else {
+                    size_t str_size = remove_trailing_spaces(data->data[pos], data->length[pos]);
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + str_size);
+                    vo.emplace_back(vb.size());
+                }
             }
         } else {
             for (int i = col_start; i < col_start + size; ++i, ++pos) {
-                vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
-                vo.emplace_back(vb.size());
+                if (UNLIKELY(type_desc.len > 0 && data->length[pos] > type_desc.len)) {
+                    vo.emplace_back(vb.size());
+                } else {
+                    vb.insert(vb.end(), data->data[pos], data->data[pos] + data->length[pos]);
+                    vo.emplace_back(vb.size());
+                }
             }
         }
     }
