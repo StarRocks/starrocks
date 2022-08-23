@@ -11,7 +11,6 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class MVUtils {
-
     public static boolean isEquivalencePredicate(ScalarOperator predicate) {
         if (predicate instanceof InPredicateOperator) {
             return true;
@@ -65,5 +64,4 @@ public class MVUtils {
         }
         return "mv_" + mvColumn.getAggregationType().name().toLowerCase() + "_" + queryColumn;
     }
-
 }
