@@ -126,27 +126,28 @@ APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)
 
 class TaskWorkerPoolThreadCallback {
 public:
-    static void* _create_tablet_worker_thread_callback(void* arg_this);
-    static void* _drop_tablet_worker_thread_callback(void* arg_this);
-    static void* _push_worker_thread_callback(void* arg_this);
-    static void* _delete_worker_thread_callback(void* arg_this);
-    static void* _publish_version_worker_thread_callback(void* arg_this);
-    static void* _clear_transaction_task_worker_thread_callback(void* arg_this);
-    static void* _alter_tablet_worker_thread_callback(void* arg_this);
-    static void* _clone_worker_thread_callback(void* arg_this);
-    static void* _storage_medium_migrate_worker_thread_callback(void* arg_this);
-    static void* _check_consistency_worker_thread_callback(void* arg_this);
-    static void* _report_task_worker_thread_callback(void* arg_this);
-    static void* _report_disk_state_worker_thread_callback(void* arg_this);
-    static void* _report_tablet_worker_thread_callback(void* arg_this);
-    static void* _report_workgroup_thread_callback(void* arg_this);
-    static void* _upload_worker_thread_callback(void* arg_this);
-    static void* _download_worker_thread_callback(void* arg_this);
-    static void* _make_snapshot_thread_callback(void* arg_this);
-    static void* _release_snapshot_thread_callback(void* arg_this);
-    static void* _move_dir_thread_callback(void* arg_this);
-    static void* _update_tablet_meta_worker_thread_callback(void* arg_this);
+    static void* create_tablet(void* arg_this);
+    static void* drop_tablet(void* arg_this);
+    static void* push(void* arg_this);
+    static void* delete_tablet(void* arg_this);
+    static void* publish_version(void* arg_this);
+    static void* clear_transaction_task(void* arg_this);
+    static void* alter_tablet(void* arg_this);
+    static void* clone(void* arg_this);
+    static void* storage_medium_migrate(void* arg_this);
+    static void* check_consistency(void* arg_this);
+    static void* report_task(void* arg_this);
+    static void* report_disk_state(void* arg_this);
+    static void* report_tablet(void* arg_this);
+    static void* report_workgroup(void* arg_this);
+    static void* upload(void* arg_this);
+    static void* download(void* arg_this);
+    static void* make_snapshot(void* arg_this);
+    static void* release_snapshot(void* arg_this);
+    static void* move_dir(void* arg_this);
+    static void* update_tablet_meta(void* arg_this);
 
+private:
     static void _alter_tablet(const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
                               TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
 };

@@ -33,32 +33,29 @@ enum class TaskWorkerType {
     UPDATE_TABLET_META_INFO
 };
 
-#define APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)                                                          \
-    M(CreateTable, CREATE_TABLE, create_tablet_req, _create_tablet_worker_thread_callback)                   \
-    M(DropTable, DROP_TABLE, drop_tablet_req, _drop_tablet_worker_thread_callback)                           \
-    M(Push, PUSH, push_req, _push_worker_thread_callback)                                                    \
-    M(PublishVersion, PUBLISH_VERSION, publish_version_req, _publish_version_worker_thread_callback)         \
-    M(ClearTransactionTask, CLEAR_TRANSACTION_TASK, clear_transaction_task_req,                              \
-      _clear_transaction_task_worker_thread_callback)                                                        \
-    M(Delete, DELETE, push_req, _delete_worker_thread_callback)                                              \
-    M(AlterTable, ALTER_TABLE, alter_tablet_req_v2, _alter_tablet_worker_thread_callback)                    \
-    M(Clone, CLONE, clone_req, _clone_worker_thread_callback)                                                \
-    M(StorageMediumMigrate, STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req,                              \
-      _storage_medium_migrate_worker_thread_callback)                                                        \
-    M(CheckConsistency, CHECK_CONSISTENCY, check_consistency_req, _check_consistency_worker_thread_callback) \
-    M(Upload, UPLOAD, upload_req, _upload_worker_thread_callback)                                            \
-    M(Download, DOWNLOAD, download_req, _download_worker_thread_callback)                                    \
-    M(MakeSnapshot, MAKE_SNAPSHOT, snapshot_req, _make_snapshot_thread_callback)                             \
-    M(ReleaseSnapshot, RELEASE_SNAPSHOT, release_snapshot_req, _release_snapshot_thread_callback)            \
-    M(Move, MOVE, move_dir_req, _move_dir_thread_callback)                                                   \
-    M(UpdateTabletMetaInfo, UPDATE_TABLET_META_INFO, update_tablet_meta_info_req,                            \
-      _update_tablet_meta_worker_thread_callback)
+#define APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)                                                     \
+    M(CreateTable, CREATE_TABLE, create_tablet_req, create_tablet)                                      \
+    M(DropTable, DROP_TABLE, drop_tablet_req, drop_tablet)                                              \
+    M(Push, PUSH, push_req, push)                                                                       \
+    M(PublishVersion, PUBLISH_VERSION, publish_version_req, publish_version)                            \
+    M(ClearTransactionTask, CLEAR_TRANSACTION_TASK, clear_transaction_task_req, clear_transaction_task) \
+    M(Delete, DELETE, push_req, delete_tablet)                                                          \
+    M(AlterTable, ALTER_TABLE, alter_tablet_req_v2, alter_tablet)                                       \
+    M(Clone, CLONE, clone_req, clone)                                                                   \
+    M(StorageMediumMigrate, STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req, storage_medium_migrate) \
+    M(CheckConsistency, CHECK_CONSISTENCY, check_consistency_req, check_consistency)                    \
+    M(Upload, UPLOAD, upload_req, upload)                                                               \
+    M(Download, DOWNLOAD, download_req, download)                                                       \
+    M(MakeSnapshot, MAKE_SNAPSHOT, snapshot_req, make_snapshot)                                         \
+    M(ReleaseSnapshot, RELEASE_SNAPSHOT, release_snapshot_req, release_snapshot)                        \
+    M(Move, MOVE, move_dir_req, move_dir)                                                               \
+    M(UpdateTabletMetaInfo, UPDATE_TABLET_META_INFO, update_tablet_meta_info_req, update_tablet_meta)
 
-#define APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)                                    \
-    M(ReportTask, REPORT_TASK, NOP, _report_task_worker_thread_callback)                  \
-    M(ReportDiskState, REPORT_DISK_STATE, NOP, _report_disk_state_worker_thread_callback) \
-    M(ReportOlapTable, REPORT_OLAP_TABLE, NOP, _report_tablet_worker_thread_callback)     \
-    M(ReportWorkgroup, REPORT_WORKGROUP, NOP, _report_workgroup_thread_callback)
+#define APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)            \
+    M(ReportTask, REPORT_TASK, NOP, report_task)                  \
+    M(ReportDiskState, REPORT_DISK_STATE, NOP, report_disk_state) \
+    M(ReportOlapTable, REPORT_OLAP_TABLE, NOP, report_tablet)     \
+    M(ReportWorkgroup, REPORT_WORKGROUP, NOP, report_workgroup)
 
 template <TaskWorkerType type>
 struct TaskWorkerTypeTraits {};

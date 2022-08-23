@@ -282,7 +282,7 @@ void TaskWorkerPoolBase::_spawn_callback_worker_thread(CALLBACK_FUNCTION callbac
     Thread::set_thread_name(_worker_threads.back(), "task_worker");
 }
 
-void* TaskWorkerPoolThreadCallback::_create_tablet_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::create_tablet(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::CREATE_TABLE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -338,7 +338,7 @@ void* TaskWorkerPoolThreadCallback::_create_tablet_worker_thread_callback(void* 
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_drop_tablet_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::drop_tablet(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::DROP_TABLE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -383,7 +383,7 @@ void* TaskWorkerPoolThreadCallback::_drop_tablet_worker_thread_callback(void* ar
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_alter_tablet_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::alter_tablet(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::ALTER_TABLE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -503,7 +503,7 @@ void TaskWorkerPoolThreadCallback::_alter_tablet(const TAlterTabletReqV2& alter_
     finish_task_request->__set_task_status(task_status);
 }
 
-void* TaskWorkerPoolThreadCallback::_push_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::push(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::PUSH>;
     static uint32_t s_worker_count = 0;
 
@@ -593,7 +593,7 @@ void* TaskWorkerPoolThreadCallback::_push_worker_thread_callback(void* arg_this)
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_delete_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::delete_tablet(void* arg_this) {
     static uint32_t s_worker_count = 0;
     using WorkerPool = TaskWorkerPool<TaskWorkerType::DELETE>;
 
@@ -714,7 +714,7 @@ void* TaskWorkerPoolThreadCallback::_delete_worker_thread_callback(void* arg_thi
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_publish_version_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::publish_version(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::PUBLISH_VERSION>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
     auto* agent_server = worker_pool_this->_env->agent_server();
@@ -788,7 +788,7 @@ void* TaskWorkerPoolThreadCallback::_publish_version_worker_thread_callback(void
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_clear_transaction_task_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::clear_transaction_task(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::CLEAR_TRANSACTION_TASK>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
     while (true) {
@@ -837,7 +837,7 @@ void* TaskWorkerPoolThreadCallback::_clear_transaction_task_worker_thread_callba
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_update_tablet_meta_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::update_tablet_meta(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::UPDATE_TABLET_META_INFO>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
     while (true) {
@@ -906,7 +906,7 @@ void* TaskWorkerPoolThreadCallback::_update_tablet_meta_worker_thread_callback(v
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_clone_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::clone(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::CLONE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
     auto* agent_server = worker_pool_this->_env->agent_server();
@@ -928,7 +928,7 @@ void* TaskWorkerPoolThreadCallback::_clone_worker_thread_callback(void* arg_this
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_storage_medium_migrate_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::storage_medium_migrate(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::STORAGE_MEDIUM_MIGRATE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1017,7 +1017,7 @@ void* TaskWorkerPoolThreadCallback::_storage_medium_migrate_worker_thread_callba
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_check_consistency_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::check_consistency(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::CHECK_CONSISTENCY>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1068,7 +1068,7 @@ void* TaskWorkerPoolThreadCallback::_check_consistency_worker_thread_callback(vo
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_report_task_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::report_task(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_TASK>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1094,7 +1094,7 @@ void* TaskWorkerPoolThreadCallback::_report_task_worker_thread_callback(void* ar
 
         StarRocksMetrics::instance()->report_task_requests_total.increment(1);
         TMasterResult result;
-        AgentStatus status = report_task(request, &result);
+        AgentStatus status = ::starrocks::report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_task_requests_failed.increment(1);
@@ -1108,7 +1108,7 @@ void* TaskWorkerPoolThreadCallback::_report_task_worker_thread_callback(void* ar
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_report_disk_state_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::report_disk_state(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_DISK_STATE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1150,7 +1150,7 @@ void* TaskWorkerPoolThreadCallback::_report_disk_state_worker_thread_callback(vo
 
         StarRocksMetrics::instance()->report_disk_requests_total.increment(1);
         TMasterResult result;
-        AgentStatus status = report_task(request, &result);
+        AgentStatus status = ::starrocks::report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_disk_requests_failed.increment(1);
@@ -1165,7 +1165,7 @@ void* TaskWorkerPoolThreadCallback::_report_disk_state_worker_thread_callback(vo
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_report_tablet_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::report_tablet(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_OLAP_TABLE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1198,7 +1198,7 @@ void* TaskWorkerPoolThreadCallback::_report_tablet_worker_thread_callback(void* 
         request.__set_backend(BackendOptions::get_localBackend());
 
         TMasterResult result;
-        status = report_task(request, &result);
+        status = ::starrocks::report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
@@ -1213,7 +1213,7 @@ void* TaskWorkerPoolThreadCallback::_report_tablet_worker_thread_callback(void* 
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_report_workgroup_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::report_workgroup(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::REPORT_WORKGROUP>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1235,7 +1235,7 @@ void* TaskWorkerPoolThreadCallback::_report_workgroup_thread_callback(void* arg_
         request.__set_active_workgroups(std::move(workgroups));
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
-        status = report_task(request, &result);
+        status = ::starrocks::report_task(request, &result);
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_workgroup_requests_failed.increment(1);
@@ -1251,7 +1251,7 @@ void* TaskWorkerPoolThreadCallback::_report_workgroup_thread_callback(void* arg_
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_upload_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::upload(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::UPLOAD>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1295,7 +1295,7 @@ void* TaskWorkerPoolThreadCallback::_upload_worker_thread_callback(void* arg_thi
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_download_worker_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::download(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::DOWNLOAD>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1341,7 +1341,7 @@ void* TaskWorkerPoolThreadCallback::_download_worker_thread_callback(void* arg_t
     return nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_make_snapshot_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::make_snapshot(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::MAKE_SNAPSHOT>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1405,7 +1405,7 @@ void* TaskWorkerPoolThreadCallback::_make_snapshot_thread_callback(void* arg_thi
     return (void*)nullptr;
 }
 
-void* TaskWorkerPoolThreadCallback::_release_snapshot_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::release_snapshot(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::RELEASE_SNAPSHOT>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
@@ -1462,7 +1462,7 @@ AgentStatus TaskWorkerPoolBase::get_tablet_info(TTabletId tablet_id, TSchemaHash
     return status;
 }
 
-void* TaskWorkerPoolThreadCallback::_move_dir_thread_callback(void* arg_this) {
+void* TaskWorkerPoolThreadCallback::move_dir(void* arg_this) {
     using WorkerPool = TaskWorkerPool<TaskWorkerType::MOVE>;
     auto* worker_pool_this = (WorkerPool*)arg_this;
 
