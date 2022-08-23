@@ -50,11 +50,18 @@ public class Tablet {
     private static AtomicInteger totalReadSucceed = new AtomicInteger(0);
     private static AtomicInteger totalVersionGCed = new AtomicInteger(0);
 
+    private static AtomicInteger totalIncrementalClone = new AtomicInteger(0);
+    private static AtomicInteger totalFullClone = new AtomicInteger(0);
+    private static AtomicInteger totalClone = new AtomicInteger(0);
+
     public static void clearStats() {
         totalReadExecuted.set(0);
         totalReadFailed.set(0);
         totalReadSucceed.set(0);
         totalVersionGCed.set(0);
+        totalFullClone.set(0);
+        totalIncrementalClone.set(0);
+        totalClone.set(0);
     }
 
     public void setRunning(boolean running) {
@@ -217,6 +224,18 @@ public class Tablet {
         return totalVersionGCed.get();
     }
 
+    public static int getTotalIncrementalClone() {
+        return totalIncrementalClone.get();
+    }
+
+    public static int getTotalFullClone() {
+        return totalFullClone.get();
+    }
+
+    public static int getTotalClone() {
+        return totalClone.get();
+    }
+
     private void tryCommitPendingRowsets() {
         while (!pendingRowsets.isEmpty()) {
             EditVersion lastVersion = versions.get(versions.size() - 1);
@@ -316,30 +335,32 @@ public class Tablet {
         return String.format("[%d-%d #pending:%d]", versions.get(0).major, maxContinuousVersion(), pendingRowsets.size());
     }
 
-    public synchronized void cloneFrom(Tablet src) throws Exception {
+    public synchronized void cloneFrom(Tablet src, long srcBackendId) throws Exception {
         if (maxContinuousVersion() >= src.maxContinuousVersion()) {
             LOG.warn("tablet {} clone, nothing to copy src:{} dest:{}", id, src.versionInfo(),
                     versionInfo());
             return;
         }
-        String oldInfo = versionInfo();
         List<Long> missingVersions = getMissingVersions();
         if (missingVersions.get(0) < src.minVersion()) {
-            LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", src.id,
+            LOG.warn(String.format("incremental clone failed src:%d versions:[%d,%d] dest:%d missing::%s", srcBackendId,
                     src.minVersion(), src.maxContinuousVersion(), id, missingVersions));
-            fullCloneFrom(src);
+            fullCloneFrom(src, srcBackendId);
         } else {
+            String oldInfo = versionInfo();
             List<Pair<Long, Rowset>> versionAndRowsets = src.getRowsetsByMissingVersionList(missingVersions);
             for (Pair<Long, Rowset> p : versionAndRowsets) {
                 commitRowset(p.second.copy(), p.first);
             }
-            LOG.info("tablet:{} incremental clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo,
-                    versionInfo());
+            totalIncrementalClone.incrementAndGet();
+            totalClone.incrementAndGet();
+            cloneExecuted.incrementAndGet();
+            LOG.info("tablet:{} incremental clone src:{} {} before:{} after:{}", id, srcBackendId, src.versionInfo(),
+                    oldInfo, versionInfo());
         }
-        cloneExecuted.incrementAndGet();
     }
 
-    private void fullCloneFrom(Tablet src) throws Exception {
+    public synchronized void fullCloneFrom(Tablet src, long srcBackendId) throws Exception {
         String oldInfo = versionInfo();
         // only copy the maxContinuousVersion, not pendingRowsets, to be same as current BE's behavior
         EditVersion srcVersion = src.getMaxContinuousEditVersion();
@@ -348,7 +369,11 @@ public class Tablet {
         versions = Lists.newArrayList(destVersion);
         nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);
         tryCommitPendingRowsets();
-        LOG.info("tablet:{} full clone src:{} before:{} after:{}", id, src.id, oldInfo, versionInfo());
+        totalFullClone.incrementAndGet();
+        totalClone.incrementAndGet();
+        cloneExecuted.incrementAndGet();
+        LOG.info("tablet:{} full clone src:{} {} before:{} after:{}", id, srcBackendId, src.versionInfo(), oldInfo,
+                versionInfo());
     }
 
     public synchronized void versionGC() {
