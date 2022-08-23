@@ -9,6 +9,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
@@ -133,9 +135,17 @@ public class CachedStatisticStorage implements StatisticStorage {
     public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
         Preconditions.checkState(table != null);
 
+        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
+        for (ColumnRefOperator columnRefOperator : columns) {
+            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
+                    .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
+                columnHasHistogram.add(columnRefOperator);
+            }
+        }
+
         List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
         long tableId = table.getId();
-        for (ColumnRefOperator column : columns) {
+        for (ColumnRefOperator column : columnHasHistogram) {
             cacheKeys.add(new ColumnStatsCacheKey(tableId, column.getName()));
         }
 
@@ -150,7 +160,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             }
 
             Map<ColumnRefOperator, Histogram> histogramStats = new HashMap<>();
-            for (ColumnRefOperator column : columns) {
+            for (ColumnRefOperator column : columnHasHistogram) {
                 Optional<Histogram> histogramStatistics =
                         realResult.getOrDefault(new ColumnStatsCacheKey(tableId, column.getName()), Optional.empty());
                 histogramStatistics.ifPresent(histogram -> histogramStats.put(column, histogram));

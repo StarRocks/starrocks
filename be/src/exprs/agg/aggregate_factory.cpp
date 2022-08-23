@@ -785,7 +785,7 @@ public:
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
         } else if (name == "histogram") {
-            return AggregateFactory::MakeHistogramAggregationFunction<ImmediateHistogramResultPT<ArgPT>>();
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -1052,6 +1052,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("histogram");
 
     ADD_ALL_TYPE("first_value", true);
     ADD_ALL_TYPE("last_value", true);
