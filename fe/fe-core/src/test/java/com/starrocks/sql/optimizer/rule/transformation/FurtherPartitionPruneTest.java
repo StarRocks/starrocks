@@ -150,11 +150,11 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
     private static Stream<Arguments> onePartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add(
-                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') " +
-                        "and d2 < '2020-04-01'");
+                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' " +
+                        "and '2020-08-01') and d2 < '2020-04-01'");
         sqlList.add(
-                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' and '2020-08-01') " +
-                        "and s1 not like '' and d2 < '2020-04-01' and s1 like 'a'");
+                "select * from ptest where (d2 between '1999-01-01' and '1999-12-01' or d2 between '2020-07-01' " +
+                        "and '2020-08-01') and s1 not like '' and d2 < '2020-04-01' and s1 like 'a'");
 
         sqlList.add("select * from tbl_int where (k1 in (200,201,202,203,204) or k1 > 400) and k1 <= 300");
         sqlList.add("select * from tbl_int where not not (k1 in (200,201,202,203,204) or k1 > 400) and k1 <= 300");
@@ -173,7 +173,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add(
                 "select * from tbl_int where ((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) and k1 >=100) and s1 > s2");
         sqlList.add(
-                "select * from tbl_int where not not (((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) and k1 >=100) and s1 > s2)");
+                "select * from tbl_int where not not (((k1 = 1 or k1 between 300 and 400 and abs(k1) = 1) " +
+                        "and k1 >=100) and s1 > s2)");
 
         sqlList.add("select * from tbl_int where (k1 = 1 or k1 not between 50 and 400) and k1 <300");
         sqlList.add("select * from tbl_int where not not (k1 = 1 or k1 not between 50 and 400) and k1 <300");
@@ -297,7 +298,8 @@ public class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add(
                 "select * from tbl_int where (s1 like 'a' and k1 > floor(k1) or s2 like 'b') or k1 in (1,100,400) and k1 > 0");
         sqlList.add(
-                "select * from tbl_int where not (s1 like 'a' and k1 > floor(k1) or s2 like 'b') or k1 in (1,100,400) and k1 > 0");
+                "select * from tbl_int where not (s1 like 'a' and k1 > floor(k1) or s2 like 'b') " +
+                        "or k1 in (1,100,400) and k1 > 0");
 
         sqlList.add("select * from tbl_int where k1 in (1,'a',200,300)");
         sqlList.add("select * from tbl_int where (k1 in (1,'a') and k1 != s1) or k1 > 150");
