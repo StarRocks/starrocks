@@ -63,13 +63,11 @@ namespace starrocks {
 
 const size_t PUBLISH_VERSION_BATCH_SIZE = 10;
 
-std::atomic<int64_t> TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
-std::mutex TaskWorkerPool::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
-std::set<int64_t> TaskWorkerPool::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
+std::atomic<int64_t> TaskWorkerPoolBase::_s_report_version(time(nullptr) * 10000);
+std::mutex TaskWorkerPoolBase::_s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
+std::set<int64_t> TaskWorkerPoolBase::_s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
 
-using std::swap;
-
-TaskWorkerPool::TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_count)
+TaskWorkerPoolBase::TaskWorkerPoolBase(TaskWorkerType task_worker_type, ExecEnv* env, int worker_count)
         : _env(env),
           _worker_thread_condition_variable(new std::condition_variable()),
           _worker_count(worker_count),
@@ -79,12 +77,12 @@ TaskWorkerPool::TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, in
     _backend.__set_http_port(config::webserver_port);
 }
 
-TaskWorkerPool::~TaskWorkerPool() {
+TaskWorkerPoolBase::~TaskWorkerPoolBase() {
     stop();
     delete _worker_thread_condition_variable;
 }
 
-void TaskWorkerPool::start() {
+void TaskWorkerPoolBase::start() {
     // Init task pool and task workers
     switch (_task_worker_type) {
     case TaskWorkerType::CREATE_TABLE:
@@ -158,7 +156,7 @@ void TaskWorkerPool::start() {
     }
 }
 
-void TaskWorkerPool::stop() {
+void TaskWorkerPoolBase::stop() {
     if (_stopped) {
         return;
     }
@@ -292,18 +290,18 @@ size_t TaskWorkerPool::num_queued_tasks() const {
     return _tasks.size();
 }
 
-bool TaskWorkerPool::_register_task_info(TTaskType::type task_type, int64_t signature) {
+bool TaskWorkerPoolBase::_register_task_info(TTaskType::type task_type, int64_t signature) {
     std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
     std::set<int64_t>& signature_set = _s_task_signatures[task_type];
     return signature_set.insert(signature).second;
 }
 
-void TaskWorkerPool::remove_task_info(TTaskType::type task_type, int64_t signature) {
+void TaskWorkerPoolBase::remove_task_info(TTaskType::type task_type, int64_t signature) {
     std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
     _s_task_signatures[task_type].erase(signature);
 }
 
-void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
+void TaskWorkerPoolBase::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
     std::thread worker_thread(callback_func, this);
     _worker_threads.emplace_back(std::move(worker_thread));
     Thread::set_thread_name(_worker_threads.back(), "task_worker");
@@ -505,7 +503,7 @@ void TaskWorkerPoolThreadCallback::_alter_tablet(const TAlterTabletReqV2& alter_
     }
 
     if (status == STARROCKS_SUCCESS) {
-        swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
+        std::swap(finish_tablet_infos, finish_task_request->finish_tablet_infos);
         finish_task_request->__isset.finish_tablet_infos = true;
         LOG(INFO) << process_name << " success. signature: " << signature;
         error_msgs.push_back(process_name + " success");
@@ -1458,7 +1456,7 @@ void* TaskWorkerPoolThreadCallback::_release_snapshot_thread_callback(void* arg_
     return nullptr;
 }
 
-AgentStatus TaskWorkerPool::get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
+AgentStatus TaskWorkerPoolBase::get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                             TTabletInfo* tablet_info) {
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -1516,7 +1514,7 @@ void* TaskWorkerPoolThreadCallback::_move_dir_thread_callback(void* arg_this) {
     return nullptr;
 }
 
-AgentStatus TaskWorkerPool::_move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src,
+AgentStatus TaskWorkerPoolBase::_move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src,
                                       int64_t job_id, bool overwrite, std::vector<std::string>* error_msgs) {
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     if (tablet == nullptr) {

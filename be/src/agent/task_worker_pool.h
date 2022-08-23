@@ -41,9 +41,7 @@ namespace starrocks {
 
 class ExecEnv;
 
-class TaskWorkerPool {
-    friend class TaskWorkerPoolThreadCallback;
-
+class TaskWorkerPoolBase {
 public:
     enum TaskWorkerType {
         CREATE_TABLE,
@@ -72,10 +70,12 @@ public:
         UPDATE_TABLET_META_INFO
     };
 
+    using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
+
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
-    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
-    ~TaskWorkerPool();
+    TaskWorkerPoolBase(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
+    ~TaskWorkerPoolBase();
 
     // start the task worker callback thread
     void start();
@@ -83,32 +83,17 @@ public:
     // stop the task worker callback thread
     void stop();
 
-    // Submit task to task pool
-    //
-    // Input parameters:
-    // * task: the task need callback thread to do
-    void submit_task(const TAgentTaskRequest& task);
-    void submit_tasks(std::vector<TAgentTaskRequest>* task);
-
     static void remove_task_info(TTaskType::type task_type, int64_t signature);
 
-    size_t num_queued_tasks() const;
-
-    TaskWorkerPool(const TaskWorkerPool&) = delete;
-    const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
+    TaskWorkerPoolBase(const TaskWorkerPoolBase&) = delete;
+    const TaskWorkerPoolBase& operator=(const TaskWorkerPoolBase&) = delete;
 
     static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                        TTabletInfo* tablet_info);
 
-private:
+protected:
     bool _register_task_info(TTaskType::type task_type, int64_t signature);
     void _spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func);
-
-    using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
-
-    size_t _push_task(TAgentTaskRequestPtr task);
-    TAgentTaskRequestPtr _pop_task();
-    TAgentTaskRequestPtr _pop_task(TPriority::type pri);
 
     AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
                           bool overwrite, std::vector<std::string>* error_msgs);
@@ -119,7 +104,6 @@ private:
     // Protect task queue
     mutable std::mutex _worker_thread_lock;
     std::condition_variable* _worker_thread_condition_variable;
-    std::deque<TAgentTaskRequestPtr> _tasks;
 
     uint32_t _worker_count = 0;
     TaskWorkerType _task_worker_type;
@@ -132,7 +116,31 @@ private:
 
     std::atomic<bool> _stopped{false};
     std::vector<std::thread> _worker_threads;
-}; // class TaskWorkerPool
+};
+
+class TaskWorkerPool : public TaskWorkerPoolBase {
+    friend class TaskWorkerPoolThreadCallback;
+
+public:
+    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num)
+            : TaskWorkerPoolBase(task_worker_type, env, worker_num) {}
+
+    // Submit task to task pool
+    //
+    // Input parameters:
+    // * task: the task need callback thread to do
+    void submit_task(const TAgentTaskRequest& task);
+    void submit_tasks(std::vector<TAgentTaskRequest>* task);
+
+    size_t num_queued_tasks() const;
+
+private:
+    size_t _push_task(TAgentTaskRequestPtr task);
+    TAgentTaskRequestPtr _pop_task();
+    TAgentTaskRequestPtr _pop_task(TPriority::type pri);
+
+    std::deque<TAgentTaskRequestPtr> _tasks;
+};
 
 class TaskWorkerPoolThreadCallback {
 public:
