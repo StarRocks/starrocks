@@ -50,6 +50,5 @@ private:
     std::vector<SlotId> captured_slot_ids;
     std::vector<SlotId> arguments_ids;
     std::vector<SlotId> unused_arguments_index;
-
 };
 } // namespace starrocks::vectorized
