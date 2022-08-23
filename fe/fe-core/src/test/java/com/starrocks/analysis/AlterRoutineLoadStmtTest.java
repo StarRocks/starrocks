@@ -26,6 +26,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AlterRoutineLoadAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -151,7 +152,7 @@ public class AlterRoutineLoadStmtTest {
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (RuntimeException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("format is invalid property"));
             }
         }
@@ -170,7 +171,7 @@ public class AlterRoutineLoadStmtTest {
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (RuntimeException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("kafka_topic is invalid kafka custom property"));
             }
         }
@@ -188,7 +189,7 @@ public class AlterRoutineLoadStmtTest {
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (RuntimeException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("Partition and offset must be specified at the same time"));
             }
         }
@@ -207,7 +208,7 @@ public class AlterRoutineLoadStmtTest {
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (RuntimeException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("Partitions number should be equals to offsets number"));
             }
         }
@@ -225,7 +226,7 @@ public class AlterRoutineLoadStmtTest {
             try {
                 AlterRoutineLoadAnalyzer.analyze(stmt, connectContext);
                 Assert.fail();
-            } catch (RuntimeException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("Missing kafka partition info"));
             }
         }
