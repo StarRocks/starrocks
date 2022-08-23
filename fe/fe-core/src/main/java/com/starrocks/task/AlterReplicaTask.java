@@ -38,6 +38,7 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,6 +62,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private long version;
     private long jobId;
     private AlterJobV2.JobType jobType;
+    private TTabletType tabletType;
+    private long txnId;
 
     private Map<String, Expr> defineExprs;
 
@@ -79,6 +82,17 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                             long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
                             long version, long jobId, AlterJobV2.JobType jobType,
                             Map<String, Expr> defineExprs) {
+        this(backendId, dbId, tableId, partitionId, rollupIndexId, baseIndexId, rollupTabletId, baseTabletId, newReplicaId,
+                newSchemaHash, baseSchemaHash, version, jobId, jobType, defineExprs, TTabletType.TABLET_TYPE_DISK, 0);
+    }
+
+    public AlterReplicaTask(long backendId, long dbId, long tableId,
+                            long partitionId, long rollupIndexId, long baseIndexId, long rollupTabletId,
+                            long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
+                            long version, long jobId, AlterJobV2.JobType jobType,
+                            Map<String, Expr> defineExprs,
+                            TTabletType tabletType,
+                            long txnId) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -92,6 +106,9 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         this.jobType = jobType;
         this.defineExprs = defineExprs;
+
+        this.tabletType = tabletType;
+        this.txnId = txnId;
     }
 
     public long getBaseTabletId() {
@@ -135,6 +152,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 req.addToMaterialized_view_params(mvParam);
             }
         }
+        req.setTablet_type(tabletType);
+        req.setTxn_id(txnId);
         return req;
     }
 
@@ -178,6 +197,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             }
             Tablet tablet = index.getTablet(getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
+            if (tbl.isLakeTable()) {
+                setFinished(getFailedTimes() == 0);
+                return;
+            }
+
             Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
             if (replica == null) {
                 throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
