@@ -47,6 +47,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private String version = "";
     @SerializedName(value = "cpuCores")
     private int cpuCores;
+    @SerializedName(value = "firstHeartbeat")
+    private boolean firstHeartbeat;
+    @SerializedName(value = "isSetFirstHeartbeat")
+    private boolean isSetFirstHeartbeat;
 
     public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
@@ -71,6 +75,22 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.status = HbStatus.BAD;
         this.beId = beId;
         this.msg = errMsg;
+    }
+
+    public void setFirstHeartbeat(boolean firstHeartbeat) {
+        this.firstHeartbeat = firstHeartbeat;
+    }
+
+    public void setIsSetFirstHeartbeat(boolean isFirstHeartbeatSet) {
+        this.isSetFirstHeartbeat = isFirstHeartbeatSet;
+    }
+
+    public boolean isFirstHeartbeat() {
+        return firstHeartbeat;
+    }
+
+    public boolean isSetFirstHeartbeat() {
+        return isSetFirstHeartbeat;
     }
 
     public long getBeId() {

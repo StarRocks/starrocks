@@ -47,6 +47,8 @@ using apache::thrift::transport::TProcessor;
 namespace starrocks {
 extern std::atomic<bool> k_starrocks_exit;
 
+static bool first_heartbeat = true;
+
 HeartbeatServer::HeartbeatServer() : _olap_engine(StorageEngine::instance()) {}
 
 void HeartbeatServer::init_cluster_id_or_die() {
@@ -104,6 +106,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
+        heartbeat_result.backend_info.__set_is_first_heartbeat(first_heartbeat);
+        if (first_heartbeat) {
+            first_heartbeat = false;
+        }
     }
 }
 
