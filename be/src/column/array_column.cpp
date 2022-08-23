@@ -512,4 +512,28 @@ StatusOr<ColumnPtr> ArrayColumn::downgrade() {
     return downgrade_helper_func(&_elements);
 }
 
+bool ArrayColumn::empty_null_array(NullColumnPtr null_map) {
+    DCHECK(null_map->size() == this->size());
+    bool need_empty = false;
+    auto size = this->size();
+    for (auto i = 0; i < size && !need_empty; ++i) {
+        if (null_map->get_data()[i] && _offsets->get_data()[i + 1] != _offsets->get_data()[i]) {
+            need_empty = true;
+        }
+    }
+    // TODO: copy too much may result in worse performance.
+    if (need_empty) {
+        auto new_array_column = clone_empty();
+        for (size_t i = 0; i < size; ++i) {
+            if (null_map->get_data()[i]) {
+                new_array_column->append_default();
+            } else {
+                new_array_column->append(*this, i, 1);
+            }
+        }
+        swap_column(*new_array_column.get());
+    }
+    return need_empty;
+}
+
 } // namespace starrocks::vectorized

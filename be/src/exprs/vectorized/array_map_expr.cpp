@@ -29,6 +29,24 @@ bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
     return std::equal(data1.begin(), data1.end(), data2.begin());
 }
 
+Status ArrayMapExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+    // remove unused input arrays, which are in _children[1]...
+    auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
+    std::vector<SlotId> unused_arguments_index;
+    auto num = lambda_func->get_unused_arguments_index(&unused_arguments_index);
+    int index = -1, u = 0;
+    for (auto it = _children.begin(); it != _children.end() && u < num; index++) {
+        if (index == unused_arguments_index[u]) {
+            it = _children.erase(it);
+            u++;
+        } else {
+            it++;
+        }
+    }
+    return Status::OK();
+}
+
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions does not change the offsets of the current array and the null map.
 ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
@@ -36,7 +54,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
     NullColumnPtr input_null_map = nullptr;
     std::shared_ptr<ArrayColumn> input_array = nullptr;
     // for many valid arguments:
-    // if one of them is a null literal, the result is null;
+    // if one of them is a null literal, the result is a null literal;
     // if one of them is only null, then results are null;
     // unfold const columns.
     // make sure all inputs have the same offsets.
@@ -58,6 +76,8 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
             auto nullable = std::dynamic_pointer_cast<NullableColumn>(child_col);
             DCHECK(nullable != nullptr);
             column = nullable->data_column();
+            // empty null array with non-zero elements
+            std::dynamic_pointer_cast<ArrayColumn>(column)->empty_null_array(nullable->null_column());
             if (input_null_map) {
                 input_null_map =
                         FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
@@ -67,6 +87,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* ptr) {
         }
         DCHECK(column->is_array());
         auto cur_array = std::dynamic_pointer_cast<ArrayColumn>(column);
+
         if (input_array == nullptr) {
             input_array = cur_array;
         } else {

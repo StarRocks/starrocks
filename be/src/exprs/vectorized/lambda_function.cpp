@@ -49,6 +49,7 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     it++; // children[0] is the lambda expression.
     for (int i = 0; it != _children.end(); i++) {
         if (!argument_mask[arguments_ids[i]]) {
+            unused_arguments_index.push_back(i);
             it = _children.erase(it);
         } else {
             it++;

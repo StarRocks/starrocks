@@ -13,11 +13,15 @@
 
 namespace starrocks::vectorized {
 
+// array_map(lambda function, array0, array1...)
+
 class ArrayMapExpr final : public Expr {
 public:
     ArrayMapExpr(const TExprNode& node);
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
+
+    Status prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) override;
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 };
