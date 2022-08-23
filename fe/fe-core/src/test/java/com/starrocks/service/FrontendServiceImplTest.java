@@ -2,16 +2,6 @@
 
 package com.starrocks.service;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.thrift.TException;
-import org.junit.Assert;
-import org.junit.Test;
-
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -25,11 +15,19 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
-
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.thrift.TException;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class FrontendServiceImplTest {
 
@@ -85,7 +83,8 @@ public class FrontendServiceImplTest {
         tableDUP.setColocateGroup("test_group");
 
         // UNI
-        OlapTable tableUNI = new OlapTable(4, "test_table_uni", keyColumns, KeysType.UNIQUE_KEYS, partitionInfo, distributionInfo);
+        OlapTable tableUNI = new OlapTable(4, "test_table_uni", keyColumns, 
+                KeysType.UNIQUE_KEYS, partitionInfo, distributionInfo);
         tableUNI.setTableProperty(tProperties);
         tableUNI.setColocateGroup("test_group");
 
@@ -111,7 +110,7 @@ public class FrontendServiceImplTest {
                 return keyColumns;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 globalStateMgr.getDbNames();
                 result = Arrays.asList("test_db");
@@ -123,19 +122,21 @@ public class FrontendServiceImplTest {
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         response.tables_config_infos.forEach(info -> {
             if (info.getTable_name().equals("test_table_pk") || 
-                info.getTable_name().equals("test_table_uni")) {
+                    info.getTable_name().equals("test_table_uni")) {
                 Assert.assertEquals("`key_c1`, `key_c2`", info.getPrimary_key());
                 Assert.assertEquals("NULL", info.getSort_key());
-                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", info.getProperties());
+                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", 
+                        info.getProperties());
                 Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
                 Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
                 Assert.assertEquals("10", info.getDistribute_bucket());
                 Assert.assertEquals("HASH", info.getDistribute_type());
             } else if (info.getTable_name().equals("test_table_agg") || 
-                    info.getTable_name().equals("test_table_dup") ) {
+                    info.getTable_name().equals("test_table_dup")) {
                 Assert.assertEquals("`key_c1`, `key_c2`", info.getSort_key());
                 Assert.assertEquals("NULL", info.getPrimary_key());
-                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", info.getProperties());
+                Assert.assertEquals("{storage_type=test_type, colocate_with=test_group, replication_num=3}", 
+                        info.getProperties());
                 Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
                 Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
                 Assert.assertEquals("10", info.getDistribute_bucket());
