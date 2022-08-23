@@ -36,14 +36,14 @@ public class SplitTopNRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator src = (LogicalTopNOperator) input.getOp();
-        src.setSplit();
 
         long limit = src.getLimit() + src.getOffset();
         LogicalTopNOperator partialSort = new LogicalTopNOperator(
                 src.getOrderByElements(), limit, Operator.DEFAULT_OFFSET, SortPhase.PARTIAL);
 
+        LogicalTopNOperator finalSort = LogicalTopNOperator.builder().withOperator(src).setIsSplit(true).build();
         OptExpression partialSortExpression = OptExpression.create(partialSort, input.getInputs());
-        OptExpression finalSortExpression = OptExpression.create(src, partialSortExpression);
+        OptExpression finalSortExpression = OptExpression.create(finalSort, partialSortExpression);
         return Lists.newArrayList(finalSortExpression);
     }
 }
