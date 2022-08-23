@@ -34,6 +34,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 
 #include "agent/status.h"
 #include "common/status.h"
@@ -61,6 +62,30 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+
+struct PipeLineReportTaskKey {
+    PipeLineReportTaskKey(const TUniqueId& query_id, const TUniqueId& fragment_instance_id): 
+        query_id(query_id), fragment_instance_id(fragment_instance_id) {}
+
+    TUniqueId query_id;
+    TUniqueId fragment_instance_id;
+};
+
+struct PipeLineReportTaskKeyEqual {
+    bool operator()(const PipeLineReportTaskKey& k1, const PipeLineReportTaskKey& k2) const {
+        return k1.query_id == k2.query_id && k1.fragment_instance_id == k2.fragment_instance_id;
+    }
+
+};
+
+struct PipeLineReportTaskKeyHasher {
+    std::size_t operator()(const PipeLineReportTaskKey& key) const {
+        return (((std::hash<int64_t>()(key.query_id.lo)
+               + (std::hash<int64_t>()(key.query_id.hi) >> 4))
+               + (std::hash<int64_t>()(key.fragment_instance_id.hi) >> 8))
+               + (std::hash<int64_t>()(key.fragment_instance_id.hi) >> 12));
+    }
+};
 
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.
@@ -185,6 +210,13 @@ public:
 
     // submit repair compaction tasks
     void submit_repair_compaction_tasks(const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks);
+    
+    Status register_non_pipeline_load(const TUniqueId& fragment_instance_id);
+    Status unregister_non_pipeline_load(const TUniqueId& fragment_instance_id);
+    
+    Status register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
+    Status unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
+    
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
@@ -238,6 +270,9 @@ private:
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
 
+    // report profile at intervals
+    void* _profile_report_thread_callback(void* arg);
+
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
 
@@ -254,6 +289,7 @@ private:
     Status _perform_update_compaction(DataDir* data_dir);
     Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
+    void _start_report_profile();
 
     size_t _compaction_check_one_round();
 
@@ -264,6 +300,20 @@ private:
         uint32_t nice;
         int64_t tablet_id;
         uint32_t disk_index = -1;
+    };
+
+    struct NonPipelineReportTask {
+        NonPipelineReportTask(int64_t last_report_time, TQueryType::type task_type): last_report_time(last_report_time), task_type(task_type) {}
+
+        int64_t last_report_time;
+        TQueryType::type task_type;
+    };
+
+    struct PipelineReportTask {
+        PipelineReportTask(int64_t last_report_time, TQueryType::type task_type): last_report_time(last_report_time), task_type(task_type) {}
+        
+        int64_t last_report_time;
+        TQueryType::type task_type;
     };
 
     // In descending order
@@ -300,6 +350,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to report profile
+    std::thread _profile_report_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -345,6 +397,12 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
+
+    std::unordered_map<PipeLineReportTaskKey, PipelineReportTask, PipeLineReportTaskKeyHasher, PipeLineReportTaskKeyEqual> _pipeline_report_tasks;
+    std::mutex _pipeline_report_mutex;
+
+    std::unordered_map<TUniqueId, NonPipelineReportTask> _non_pipeline_report_tasks;
+    std::mutex _non_pipeline_report_mutex;
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

@@ -19,6 +19,7 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+#include "storage/storage_engine.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -78,6 +79,9 @@ public:
     void cancel(const Status& status) {
         _runtime_state->set_is_cancelled(true);
         set_final_status(status);
+        if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
+            starrocks::StorageEngine::instance()->unregister_pipeline_load(_query_id, _fragment_instance_id);
+        }
     }
 
     void finish() { cancel(Status::OK()); }
@@ -161,7 +165,7 @@ public:
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
 
-    void register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
+    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
 
     void cancel(const Status& status);

@@ -29,6 +29,7 @@
 #include <unordered_set>
 
 #include "common/status.h"
+#include "gen_cpp/Types_types.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_scheduler.h"
@@ -43,6 +44,8 @@
 using std::string;
 
 namespace starrocks {
+
+class TUniqueId;
 
 // TODO(yingchun): should be more graceful in the future refactor.
 #define SLEEP_IN_BG_WORKER(seconds)                                                   \
@@ -72,6 +75,10 @@ Status StorageEngine::start_bg_threads() {
     // start thread for monitoring the tablet with io error
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
+
+     // start thread for reporting profile
+    _profile_report_thread = std::thread([this] { _profile_report_thread_callback(nullptr); });
+    Thread::set_thread_name(_profile_report_thread, "report profile");
 
     // convert store map to vector
     std::vector<DataDir*> data_dirs;
@@ -340,6 +347,48 @@ void StorageEngine::submit_repair_compaction_tasks(
     }
 }
 
+Status StorageEngine::register_non_pipeline_load(const TUniqueId& fragment_instance_id) {
+    LOG(INFO) << "register_non_pipeline_load fragment_instance_id" << fragment_instance_id;
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    if (_non_pipeline_report_tasks.find(fragment_instance_id) != _non_pipeline_report_tasks.end()) {
+        std::stringstream msg;
+        msg << "Fragment instance " << fragment_instance_id << " has been registered";
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());   
+    }
+    _non_pipeline_report_tasks.emplace(fragment_instance_id, NonPipelineReportTask(UnixMillis(), TQueryType::LOAD));
+    return Status::OK();
+}
+
+Status StorageEngine::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
+    LOG(INFO) << "unregister_non_pipeline_load fragment_instance_id" << fragment_instance_id;
+    std::lock_guard lg(_non_pipeline_report_mutex);
+    _non_pipeline_report_tasks.erase(fragment_instance_id);
+    return Status::OK();
+}
+
+Status StorageEngine::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+    LOG(INFO) << "register_pipeline_load query_id" << query_id << ", fragment_instance_id" << fragment_instance_id;
+    std::lock_guard lg(_pipeline_report_mutex);
+    PipeLineReportTaskKey key(query_id, fragment_instance_id);
+    if (_pipeline_report_tasks.find(key) != _pipeline_report_tasks.end()) {
+        std::stringstream msg;
+        msg << "Query id " << query_id << ", Fragment instance " << fragment_instance_id << " has been registered";
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());
+    }
+    _pipeline_report_tasks.emplace(std::move(key), PipelineReportTask(UnixMillis(), TQueryType::LOAD));
+    return Status::OK();
+}
+
+Status StorageEngine::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
+    LOG(INFO) << "unregister_pipeline_load query_id" << query_id << ",fragment_instance_id" << fragment_instance_id;
+    std::lock_guard lg(_pipeline_report_mutex);
+    _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
+    return Status::OK();
+}
+ 
+
 std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
 StorageEngine::get_executed_repair_compaction_tasks() {
     std::lock_guard lg(_repair_compaction_tasks_lock);
@@ -399,6 +448,24 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
         int32_t interval = config::disk_stat_monitor_interval;
         if (interval <= 0) {
             LOG(WARNING) << "disk_stat_monitor_interval config is illegal: " << interval << ", force set to 1";
+            interval = 1;
+        }
+        SLEEP_IN_BG_WORKER(interval);
+    }
+
+    return nullptr;
+}
+
+void* StorageEngine::_profile_report_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        _start_report_profile();
+
+        int32_t interval = config::profile_report_interval;
+        if (interval <= 0) {
+            LOG(WARNING) << "profile_report_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         SLEEP_IN_BG_WORKER(interval);

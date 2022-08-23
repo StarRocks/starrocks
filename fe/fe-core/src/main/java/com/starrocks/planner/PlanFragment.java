@@ -39,6 +39,8 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -137,6 +139,8 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private final Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
 
+    private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -171,6 +175,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     }
 
     public boolean canUsePipeline() {
+        LOG.warn("can use pipeline {}: {}", getPlanRoot().canUsePipeLine(), getSink().canUsePipeLine());
         return getPlanRoot().canUsePipeLine() && getSink().canUsePipeLine();
     }
 

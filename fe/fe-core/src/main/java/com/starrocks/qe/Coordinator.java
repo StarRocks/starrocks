@@ -89,6 +89,7 @@ import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TPlanFragmentDestination;
@@ -271,13 +272,45 @@ public class Coordinator {
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
     }
 
-    // Used for broker load task/export task coordinator
+    // Used for broker export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
                        List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
-        this.connectContext = null;
+        this.connectContext = ConnectContext.get();
+        this.descTable = descTable.toThrift();
+        this.fragments = fragments;
+        this.scanNodes = scanNodes;
+        this.queryOptions = new TQueryOptions();
+        if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            final TCompressionType loadCompressionType = CompressionUtils
+                    .findTCompressionByName(
+                            sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+            if (loadCompressionType != null) {
+                this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+            }
+        }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
+        this.queryGlobals.setTime_zone(timezone);
+        this.needReport = true;
+        this.preferComputeNode = false;
+        this.useComputeNodeNumber = -1;
+        this.nextInstanceId = new TUniqueId();
+        nextInstanceId.setHi(queryId.hi);
+        nextInstanceId.setLo(queryId.lo + 1);
+    }
+
+    // Used for broker load task coordinator
+    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
+                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables, 
+                       ConnectContext context) {
+        this.isBlockQuery = true;
+        this.jobId = jobId;
+        this.queryId = queryId;
+        this.connectContext = context;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
@@ -316,6 +349,10 @@ public class Coordinator {
 
     public void setQueryType(TQueryType type) {
         this.queryOptions.setQuery_type(type);
+    }
+
+    public void setLoadJobType(TLoadJobType type) {
+        this.queryOptions.setLoad_job_type(type);
     }
 
     public Status getExecStatus() {
@@ -1592,6 +1629,10 @@ public class Coordinator {
             boolean enablePipeline = connectContext != null &&
                     connectContext.getSessionVariable().isEnablePipelineEngine() &&
                     fragment.getPlanRoot().canUsePipeLine();
+            LOG.warn("start print");
+            // LOG.warn("enable pipeline {}", connectContext.getSessionVariable().isEnablePipelineEngine());
+            LOG.warn("can use pipeline1 {}", fragment.getPlanRoot().canUsePipeLine());
+            LOG.warn("can use pipeline2 {}", enablePipeline);
             boolean dopAdaptionEnabled = enablePipeline &&
                     connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
 
@@ -2154,10 +2195,10 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows()) {
+        if (params.isSetLoaded_rows() && params.isSetLoaded_bytes()) {
             GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                    params.done);
+                    params.done, params.loaded_bytes);
         }
     }
 

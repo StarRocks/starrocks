@@ -35,10 +35,12 @@
 
 #include "common/status.h"
 #include "cumulative_compaction.h"
+#include "exec/pipeline/query_context.h"
 #include "fs/fd_cache.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/fragment_mgr.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -326,6 +328,50 @@ void StorageEngine::_start_disk_stat_monitor() {
     }
 }
 
+void StorageEngine::_start_report_profile() {
+    int64_t cur_ms = UnixMillis();
+
+    // report non pipeline load task
+    std::vector<TUniqueId> non_pipeline_need_report_fragment_ids;
+    {
+        std::lock_guard lg(_non_pipeline_report_mutex);
+
+        for (const auto& iter: _non_pipeline_report_tasks) {
+            if (iter.second.task_type != TQueryType::LOAD) {
+                continue;
+            }
+            const int64_t last_report_ms = iter.second.last_report_time;
+            if (cur_ms - last_report_ms >= config::load_report_interval * 1000) {
+                non_pipeline_need_report_fragment_ids.push_back(iter.first);
+            }
+        }
+    }
+
+    FragmentMgr* fragment_mgr = ExecEnv::GetInstance()->fragment_mgr();
+    DCHECK(fragment_mgr != nullptr);
+    fragment_mgr->report_fragments(non_pipeline_need_report_fragment_ids);
+
+    // report pipeline load task
+    std::vector<PipeLineReportTaskKey> pipeline_need_report_query_fragment_ids;
+    {
+        std::lock_guard lg(_pipeline_report_mutex);
+
+        for (const auto& iter: _pipeline_report_tasks) {
+            if (iter.second.task_type != TQueryType::LOAD) {
+                continue;
+            }
+            const int64_t last_report_ms = iter.second.last_report_time;
+            if (cur_ms - last_report_ms >= config::load_report_interval * 1000) {
+                pipeline_need_report_query_fragment_ids.push_back(iter.first);
+            }
+        }
+    }
+
+    pipeline::QueryContextManager* query_context_manager = ExecEnv::GetInstance()->query_context_mgr();
+    DCHECK(query_context_manager != nullptr);
+    query_context_manager->report_fragments(pipeline_need_report_query_fragment_ids);
+}
+
 // TODO(lingbin): Should be in EnvPosix?
 Status StorageEngine::_check_file_descriptor_number() {
     struct rlimit l;
@@ -478,6 +524,9 @@ void StorageEngine::stop() {
     }
     if (_disk_stat_monitor_thread.joinable()) {
         _disk_stat_monitor_thread.join();
+    }
+    if (_profile_report_thread.joinable()) {
+        _profile_report_thread.join();
     }
     for (auto& thread : _base_compaction_threads) {
         if (thread.joinable()) {

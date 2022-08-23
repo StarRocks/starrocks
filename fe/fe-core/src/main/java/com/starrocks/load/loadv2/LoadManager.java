@@ -43,6 +43,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -95,7 +96,7 @@ public class LoadManager implements Writable {
      * @param stmt
      * @throws DdlException
      */
-    public void createLoadJobFromStmt(LoadStmt stmt) throws DdlException {
+    public void createLoadJobFromStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         Database database = checkDb(stmt.getLabel().getDbName());
         long dbId = database.getId();
         LoadJob loadJob = null;
@@ -110,7 +111,7 @@ public class LoadManager implements Writable {
                         "There are more than " + Config.desired_max_waiting_jobs + " load jobs in waiting queue, "
                                 + "please retry later.");
             }
-            loadJob = BulkLoadJob.fromLoadStmt(stmt);
+            loadJob = BulkLoadJob.fromLoadStmt(stmt, context);
             createLoadJob(loadJob);
         } finally {
             writeUnlock();
@@ -576,10 +577,10 @@ public class LoadManager implements Writable {
     }
 
     public void updateJobPrgress(Long jobId, Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                                 long scannedRows, boolean isDone) {
+                                 long scannedRows, boolean isDone, long scannedBytes) {
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
-            job.updateProgess(beId, loadId, fragmentId, scannedRows, isDone);
+            job.updateProgess(beId, loadId, fragmentId, scannedRows, isDone, scannedBytes);
         }
     }
 

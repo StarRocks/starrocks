@@ -50,6 +50,13 @@ enum TQueryType {
     EXTERNAL
 }
 
+enum TLoadJobType {
+    Broker,
+    Spark,
+    INSERT_QUERY,
+    INSERT_VALUES
+}
+
 enum TErrorHubType {
     MYSQL,
     BROKER,
@@ -173,6 +180,8 @@ struct TQueryOptions {
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
+
+  63: optional TLoadJobType load_job_type
 }
 
 
