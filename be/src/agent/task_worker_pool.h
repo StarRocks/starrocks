@@ -42,6 +42,8 @@ namespace starrocks {
 class ExecEnv;
 
 class TaskWorkerPool {
+    friend class TaskWorkerPoolThreadCallback;
+
 public:
     enum TaskWorkerType {
         CREATE_TABLE,
@@ -88,16 +90,52 @@ public:
     void submit_task(const TAgentTaskRequest& task);
     void submit_tasks(std::vector<TAgentTaskRequest>* task);
 
-    AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
-                                TTabletInfo* tablet_info);
-    void remove_task_info(TTaskType::type task_type, int64_t signature);
+    static void remove_task_info(TTaskType::type task_type, int64_t signature);
 
     size_t num_queued_tasks() const;
 
     TaskWorkerPool(const TaskWorkerPool&) = delete;
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
 
+    static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
+                                       TTabletInfo* tablet_info);
+
 private:
+    bool _register_task_info(TTaskType::type task_type, int64_t signature);
+    void _spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func);
+
+    using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
+
+    size_t _push_task(TAgentTaskRequestPtr task);
+    TAgentTaskRequestPtr _pop_task();
+    TAgentTaskRequestPtr _pop_task(TPriority::type pri);
+
+    AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
+                          bool overwrite, std::vector<std::string>* error_msgs);
+
+    TBackend _backend;
+    ExecEnv* _env;
+
+    // Protect task queue
+    mutable std::mutex _worker_thread_lock;
+    std::condition_variable* _worker_thread_condition_variable;
+    std::deque<TAgentTaskRequestPtr> _tasks;
+
+    uint32_t _worker_count = 0;
+    TaskWorkerType _task_worker_type;
+    CALLBACK_FUNCTION _callback_function = nullptr;
+
+    static std::atomic<int64_t> _s_report_version;
+
+    static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
+    static std::set<int64_t> _s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
+
+    std::atomic<bool> _stopped{false};
+    std::vector<std::thread> _worker_threads;
+}; // class TaskWorkerPool
+
+class TaskWorkerPoolThreadCallback {
+public:
     static void* _create_tablet_worker_thread_callback(void* arg_this);
     static void* _drop_tablet_worker_thread_callback(void* arg_this);
     static void* _push_worker_thread_callback(void* arg_this);
@@ -119,41 +157,9 @@ private:
     static void* _move_dir_thread_callback(void* arg_this);
     static void* _update_tablet_meta_worker_thread_callback(void* arg_this);
 
-    bool _register_task_info(TTaskType::type task_type, int64_t signature);
-    void _spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func);
-
-    using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
-
-    size_t _push_task(TAgentTaskRequestPtr task);
-    TAgentTaskRequestPtr _pop_task();
-    TAgentTaskRequestPtr _pop_task(TPriority::type pri);
-
-    void _alter_tablet(const TAlterTabletReqV2& alter_tablet_request, int64_t signature, TTaskType::type task_type,
-                       TFinishTaskRequest* finish_task_request);
-
-    AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
-                          bool overwrite, std::vector<std::string>* error_msgs);
-
-    TBackend _backend;
-    ExecEnv* _env;
-
-    // Protect task queue
-    mutable std::mutex _worker_thread_lock;
-    std::condition_variable* _worker_thread_condition_variable;
-    std::deque<TAgentTaskRequestPtr> _tasks;
-
-    uint32_t _worker_count = 0;
-    TaskWorkerType _task_worker_type;
-    CALLBACK_FUNCTION _callback_function;
-
-    static std::atomic<int64_t> _s_report_version;
-
-    static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
-    static std::set<int64_t> _s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
-
-    std::atomic<bool> _stopped{false};
-    std::vector<std::thread> _worker_threads;
-}; // class TaskWorkerPool
+    static void _alter_tablet(const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
+                              TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
+};
 
 template <TaskWorkerPool::TaskWorkerType type>
 struct TaskWorkerTypeTraits {};
