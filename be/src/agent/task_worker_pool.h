@@ -78,7 +78,6 @@ protected:
     std::condition_variable* _worker_thread_condition_variable;
 
     uint32_t _worker_count = 0;
-    TaskWorkerType _task_worker_type;
     CALLBACK_FUNCTION _callback_function = nullptr;
 
     static std::atomic<int64_t> _s_report_version;
@@ -89,7 +88,6 @@ protected:
     std::atomic<bool> _stopped{false};
     std::vector<std::thread> _worker_threads;
 };
-
 
 template <TaskWorkerType TaskType>
 class TaskWorkerPool : public TaskWorkerPoolBase {
@@ -118,7 +116,7 @@ private:
     std::deque<AgentTaskRequestPtr> _tasks;
 };
 
-#define M(WORKER_POOL_NAME, WORKER_TYPE, T_ITEM_NAME, CALLBACK) \
+#define M(WORKER_POOL_NAME, WORKER_TYPE, T_ITEM_TYPE, T_ITEM_NAME, CALLBACK) \
     using WORKER_POOL_NAME##WorkerPool = TaskWorkerPool<TaskWorkerType::WORKER_TYPE>;
 APPLY_FOR_TASK_WORKER_WITH_BODY_VARIANTS(M)
 APPLY_FOR_TASK_WORKER_WITHOUT_BODY_VARIANTS(M)
@@ -151,6 +149,5 @@ private:
     static void _alter_tablet(const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
                               TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
 };
-
 
 } // namespace starrocks
