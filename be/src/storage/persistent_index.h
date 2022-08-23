@@ -66,34 +66,7 @@ struct KVRef {
 };
 
 class PersistentIndex;
-
-class ImmutableIndexWriter {
-public:
-    ~ImmutableIndexWriter();
-
-    Status init(const string& dir, const EditVersion& version);
-
-    // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
-    Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
-
-    Status finish();
-
-private:
-    EditVersion _version;
-    string _idx_file_path_tmp;
-    string _idx_file_path;
-    std::shared_ptr<FileSystem> _fs;
-    std::unique_ptr<WritableFile> _wb;
-    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
-    size_t _nshard = 0;
-    size_t _cur_key_size = -1;
-    size_t _cur_value_size = 0;
-    size_t _total = 0;
-    size_t _total_moved = 0;
-    size_t _total_kv_size = 0;
-    size_t _total_bytes = 0;
-    ImmutableIndexMetaPB _meta;
-};
+class ImmutableIndexWriter;
 
 class MutableIndex {
 public:
@@ -218,8 +191,9 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array for return values
     // |num_found|: add the number of keys found to this argument
+    // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status get(size_t n, const Slice* keys, IndexValue* values, size_t* num_found,
-               std::map<size_t, KeysInfo>& keys_info_by_key_size);
+               std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size);
 
     // batch upsert and get old value
     // |n|: size of key/value array
@@ -227,21 +201,24 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |num_found|: add the number of keys found to this argument
+    // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, size_t* num_found,
-                  std::map<size_t, KeysInfo>& keys_info_by_key_size);
+                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size);
 
     // batch upsert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |num_found|: add the number of keys found(or already exist) to this argument
+    // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
-                  std::map<size_t, KeysInfo>& keys_info_by_key_size);
+                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size);
 
     // batch insert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
+    // |check_l1_key_sizes|: a set of key size need to be checked in l1.
     Status insert(size_t n, const Slice* keys, const IndexValue* values, std::set<size_t>& check_l1_key_sizes);
 
     // batch erase(delete)
@@ -249,14 +226,15 @@ public:
     // |keys|: key array as raw buffer
     // |old_values|: return old values for updates, or set to NullValue if not exists
     // |num_found|: add the number of keys found to this argument
+    // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, size_t* num_found,
-                 std::map<size_t, KeysInfo>& keys_info_by_key_size);
+                 std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size);
 
     // batch replace
     // |keys|: key array as raw buffer
     // |values|: new value array
-    // |replace_idxes|: the idx array of the kv needed to be replaced
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes);
+    // |idxes|: the idx array of the kv needed to be replaced
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     Status append_wal(size_t n, const Slice* keys, const IndexValue* values);
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
@@ -351,6 +329,7 @@ public:
 
 private:
     friend class PersistentIndex;
+    friend class ImmutableIndexWriter;
 
     Status _get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx,
                                      uint32_t shard_bits, std::unique_ptr<ImmutableIndexShard>* shard) const;
@@ -403,10 +382,39 @@ private:
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
 };
 
+class ImmutableIndexWriter {
+public:
+    ~ImmutableIndexWriter();
+
+    Status init(const string& dir, const EditVersion& version);
+
+    // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
+    Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
+
+    Status write_shard_by_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info, ImmutableIndex* immutable_index);
+
+    Status finish();
+
+private:
+    EditVersion _version;
+    string _idx_file_path_tmp;
+    string _idx_file_path;
+    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<WritableFile> _wb;
+    std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
+    size_t _nshard = 0;
+    size_t _cur_key_size = -1;
+    size_t _cur_value_size = 0;
+    size_t _total = 0;
+    size_t _total_moved = 0;
+    size_t _total_kv_size = 0;
+    size_t _total_bytes = 0;
+    ImmutableIndexMetaPB _meta;
+};
+
 // A persistent primary index contains an in-memory L0 and an on-SSD/NVMe L1,
 // this saves memory usage comparing to the orig all-in-memory implementation.
 // This is a internal class and is intended to be used by PrimaryIndex internally.
-// TODO: code skeleton currently, implementation in future PRs
 //
 // Currently primary index is only modified in TabletUpdates::apply process, it's
 // typical use pattern in apply:
@@ -429,7 +437,6 @@ public:
     std::string path() const { return _path; }
 
     size_t key_size() const { return _key_size; }
-    size_t kv_pair_size() const { return _kv_pair_size; }
 
     size_t size() const { return _size; }
     size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
@@ -538,7 +545,6 @@ private:
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
-    size_t _kv_pair_size = 0;
     size_t _size = 0;
     EditVersion _version;
     // _l1_version is used to get l1 file name, update in on_committed

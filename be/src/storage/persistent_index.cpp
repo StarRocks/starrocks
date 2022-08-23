@@ -338,9 +338,9 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
     std::vector<std::pair<uint32_t, std::vector<uint16_t>>> bucket_data_size(total_bucket);
     std::vector<std::pair<std::vector<KVPairPtr>, std::vector<uint8_t>>> bucket_kv_ptrs_tags(total_bucket);
     size_t estimated_entry_per_bucket = npad(kv_refs.size() * 100 / 85, total_bucket);
-    for (auto& p : bucket_kv_ptrs_tags) {
-        p.first.reserve(estimated_entry_per_bucket);
-        p.second.reserve(estimated_entry_per_bucket);
+    for (auto& [kv_ptrs, tags] : bucket_kv_ptrs_tags) {
+        kv_ptrs.reserve(estimated_entry_per_bucket);
+        tags.reserve(estimated_entry_per_bucket);
     }
     for (size_t i = 0; i < kv_refs.size(); i++) {
         auto h = IndexHash(kv_refs[i].hash);
@@ -500,6 +500,50 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
                 std::accumulate(kvs.begin(), kvs.end(), 0, [](size_t s, const auto& e) { return s + e.size; });
     }
     _total_bytes += pos_after - pos_before;
+    auto iter = _shard_info_by_length.find(_cur_key_size);
+    if (iter == _shard_info_by_length.end()) {
+        if (auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}}); !inserted) {
+            LOG(WARNING) << "insert shard info failed, key_size: " << _cur_key_size;
+            return Status::InternalError("insert shard info failed");
+        }
+    } else {
+        iter->second.second++;
+    }
+    _nshard++;
+    return Status::OK();
+}
+
+Status ImmutableIndexWriter::write_shard_by_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info,
+                                                    ImmutableIndex* immutable_index) {
+    const auto key_size = old_shard_info.key_size;
+    bool new_key_length = (_nshard == 0 || _cur_key_size != key_size);
+    if (_nshard == 0) {
+        _cur_key_size = key_size;
+        _cur_value_size = kIndexValueSize;
+    } else {
+        if (new_key_length) {
+            CHECK(key_size > _cur_key_size) << "key size is smaller than before";
+        }
+        _cur_key_size = key_size;
+    }
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, old_shard_info.bytes);
+    RETURN_IF_ERROR(immutable_index->_file->read_at_fully(old_shard_info.offset, buff.data(), buff.size()));
+    _wb->append(Slice(buff.data(), buff.size()));
+    auto shard_info = _meta.add_shards();
+    shard_info->set_size(old_shard_info.size);
+    shard_info->set_npage(old_shard_info.npage);
+    shard_info->set_key_size(old_shard_info.key_size);
+    shard_info->set_value_size(old_shard_info.value_size);
+    shard_info->set_nbucket(old_shard_info.nbucket);
+    auto page_pointer = shard_info->mutable_data();
+    page_pointer->set_offset(old_shard_info.offset);
+    page_pointer->set_size(old_shard_info.bytes);
+    _total += old_shard_info.bytes;
+    // copy data directly, no move happened
+    _total_moved += 0;
+    _total_kv_size += old_shard_info.bytes;
+    _total_bytes += old_shard_info.bytes;
     auto iter = _shard_info_by_length.find(_cur_key_size);
     if (iter == _shard_info_by_length.end()) {
         if (auto [it, inserted] = _shard_info_by_length.insert({_cur_key_size, {_nshard, 1}}); !inserted) {
@@ -1363,12 +1407,12 @@ std::vector<std::vector<size_t>> ShardByLengthMutableIndex::split_keys_by_shard(
 }
 
 Status ShardByLengthMutableIndex::get(size_t n, const Slice* keys, IndexValue* values, size_t* num_found,
-                                      std::map<size_t, KeysInfo>& keys_info_by_key_size) {
+                                      std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
-        auto& keys_info = keys_info_by_key_size[_fixed_key_size];
+        auto& keys_info = not_found_keys_info_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->get(keys, values, &keys_info, num_found, idxes_by_shard[i]));
         }
@@ -1387,7 +1431,7 @@ Status ShardByLengthMutableIndex::get(size_t n, const Slice* keys, IndexValue* v
                 RETURN_IF_ERROR(
                         _shards[shard_offset + i]->get(keys, values, &one_keys_info, num_found, idxes_by_shard[i]));
                 if (one_keys_info.size() > 0) {
-                    auto& keys_info = keys_info_by_key_size[shard_offset];
+                    auto& keys_info = not_found_keys_info_by_key_size[shard_offset];
                     keys_info.key_idxes.insert(keys_info.key_idxes.end(), one_keys_info.key_idxes.begin(),
                                                one_keys_info.key_idxes.end());
                     keys_info.hashes.insert(keys_info.hashes.end(), one_keys_info.hashes.begin(),
@@ -1400,12 +1444,13 @@ Status ShardByLengthMutableIndex::get(size_t n, const Slice* keys, IndexValue* v
 }
 
 Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                         size_t* num_found, std::map<size_t, KeysInfo>& keys_info_by_key_size) {
+                                         size_t* num_found,
+                                         std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
-        auto& keys_info = keys_info_by_key_size[_fixed_key_size];
+        auto& keys_info = not_found_keys_info_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &keys_info, num_found,
                                                               idxes_by_shard[i]));
@@ -1425,7 +1470,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
                 RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &one_keys_info, num_found,
                                                                   idxes_by_shard[i]));
                 if (one_keys_info.size() > 0) {
-                    auto& keys_info = keys_info_by_key_size[shard_offset];
+                    auto& keys_info = not_found_keys_info_by_key_size[shard_offset];
                     keys_info.key_idxes.insert(keys_info.key_idxes.end(), one_keys_info.key_idxes.begin(),
                                                one_keys_info.key_idxes.end());
                     keys_info.hashes.insert(keys_info.hashes.end(), one_keys_info.hashes.begin(),
@@ -1438,12 +1483,12 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
 }
 
 Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
-                                         std::map<size_t, KeysInfo>& keys_info_by_key_size) {
+                                         std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
-        auto& keys_info = keys_info_by_key_size[_fixed_key_size];
+        auto& keys_info = not_found_keys_info_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i]));
         }
@@ -1462,7 +1507,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
                 RETURN_IF_ERROR(
                         _shards[shard_offset + i]->upsert(keys, values, &one_keys_info, num_found, idxes_by_shard[i]));
                 if (one_keys_info.size() > 0) {
-                    auto& keys_info = keys_info_by_key_size[shard_offset];
+                    auto& keys_info = not_found_keys_info_by_key_size[shard_offset];
                     keys_info.key_idxes.insert(keys_info.key_idxes.end(), one_keys_info.key_idxes.begin(),
                                                one_keys_info.key_idxes.end());
                     keys_info.hashes.insert(keys_info.hashes.end(), one_keys_info.hashes.begin(),
@@ -1531,12 +1576,12 @@ Status ShardByLengthMutableIndex::replace(const Slice* keys, const IndexValue* v
 }
 
 Status ShardByLengthMutableIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, size_t* num_found,
-                                        std::map<size_t, KeysInfo>& keys_info_by_key_size) {
+                                        std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
-        auto& keys_info = keys_info_by_key_size[_fixed_key_size];
+        auto& keys_info = not_found_keys_info_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(
                     _shards[shard_offset + i]->erase(keys, old_values, &keys_info, num_found, idxes_by_shard[i]));
@@ -1556,7 +1601,7 @@ Status ShardByLengthMutableIndex::erase(size_t n, const Slice* keys, IndexValue*
                 RETURN_IF_ERROR(_shards[shard_offset + i]->erase(keys, old_values, &one_keys_info, num_found,
                                                                  idxes_by_shard[i]));
                 if (one_keys_info.size() > 0) {
-                    auto& keys_info = keys_info_by_key_size[shard_offset];
+                    auto& keys_info = not_found_keys_info_by_key_size[shard_offset];
                     keys_info.key_idxes.insert(keys_info.key_idxes.end(), one_keys_info.key_idxes.begin(),
                                                one_keys_info.key_idxes.end());
                     keys_info.hashes.insert(keys_info.hashes.end(), one_keys_info.hashes.begin(),
@@ -2206,7 +2251,6 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
     }
 
     _key_size = key_size;
-    _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = version;
     auto st = ShardByLengthMutableIndex::create(key_size, _path);
@@ -2220,7 +2264,6 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
 
 Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     _key_size = index_meta.key_size();
-    _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = index_meta.version();
     auto st = ShardByLengthMutableIndex::create(_key_size, _path);
@@ -2420,7 +2463,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
 
     // Init PersistentIndex
     _key_size = fix_size;
-    _kv_pair_size = _key_size + kIndexValueSize;
     _size = 0;
     _version = lastest_applied_version;
     auto st = ShardByLengthMutableIndex::create(_key_size, _path);
@@ -2551,11 +2593,11 @@ Status PersistentIndex::on_commited() {
 }
 
 Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
-    std::map<size_t, KeysInfo> keys_info_by_key_size;
+    std::map<size_t, KeysInfo> not_found_keys_info_by_key_size;
     size_t num_found = 0;
-    RETURN_IF_ERROR(_l0->get(n, keys, values, &num_found, keys_info_by_key_size));
+    RETURN_IF_ERROR(_l0->get(n, keys, values, &num_found, not_found_keys_info_by_key_size));
     if (_l1) {
-        for (const auto& [key_size, keys_info] : keys_info_by_key_size) {
+        for (const auto& [key_size, keys_info] : not_found_keys_info_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, values, &num_found, key_size));
         }
     }
@@ -2563,12 +2605,12 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values) {
-    std::map<size_t, KeysInfo> keys_info_by_key_size;
+    std::map<size_t, KeysInfo> not_found_keys_info_by_key_size;
     size_t num_found = 0;
-    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, keys_info_by_key_size));
+    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_found_keys_info_by_key_size));
     _dump_snapshot |= _can_dump_directly();
     if (_l1) {
-        for (const auto& [key_size, keys_info] : keys_info_by_key_size) {
+        for (const auto& [key_size, keys_info] : not_found_keys_info_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_found, key_size));
         }
     }
@@ -2596,12 +2638,12 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
 }
 
 Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
-    std::map<size_t, KeysInfo> keys_info_by_key_size;
+    std::map<size_t, KeysInfo> not_found_keys_info_by_key_size;
     size_t num_erased = 0;
-    RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, keys_info_by_key_size));
+    RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_found_keys_info_by_key_size));
     _dump_snapshot |= _can_dump_directly();
     if (_l1) {
-        for (const auto& [key_size, keys_info] : keys_info_by_key_size) {
+        for (const auto& [key_size, keys_info] : not_found_keys_info_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_erased, key_size));
         }
     }
@@ -2897,11 +2939,13 @@ Status PersistentIndex::_merge_compaction() {
         size_t l1_kv_pairs_size = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                   std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size), 0,
                                                   [](size_t s, const auto& e) { return s + e.size; });
-        size_t l1_kv_pairs_usage =
-                std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
-                                std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size), 0,
-                                [](size_t s, const auto& e) { return s + e.key_size + e.value_size; });
+        size_t l1_kv_pairs_usage = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
+                                                   std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size), 0,
+                                                   [](size_t s, const auto& e) { return s + e.bytes; });
         if (l0_kv_pairs_size == 0 && l1_kv_pairs_size != 0) {
+            for (auto i = 0; i < l1_shard_size; i++) {
+                RETURN_IF_ERROR(writer->write_shard_by_rawbuff(_l1->_shards[l1_shard_offset + i], _l1.get()));
+            }
             continue;
         }
         const auto total_kv_pairs_size = l0_kv_pairs_size + l1_kv_pairs_size;
@@ -2933,7 +2977,7 @@ Status PersistentIndex::_merge_compaction() {
         //         cur_shard_idx:    0     1     2     3
         size_t cur_shard_idx = 0;
         std::vector<std::unique_ptr<ImmutableIndexShard>> index_shards((nshard_l1 / nshard) + 1);
-        size_t index_shards_idx = 0;
+        auto index_shards_idx = 0;
         uint32_t shard_bits = log2(nshard);
         for (size_t l1_shard_idx = 0; l1_shard_idx < nshard_l1; l1_shard_idx++) {
             RETURN_IF_ERROR(_l1->_get_kvs_for_shard(l1_kvs_by_shard, l1_shard_offset + l1_shard_idx, shard_bits,
