@@ -1,8 +1,8 @@
 # 使用窗口函数组织过滤数据
 
-本文介绍如何使用 StarRocks 中的窗口函数。
+本文介绍如何使用 StarRocks 窗口函数。
 
-窗口函数是 StarRocks 内置的特殊函数。和聚合函数类似，窗口函数通过对多个输入行进行计算得到一个数据值。不同的是，窗口函数使用 Over() 从句对**当前窗口**内的数据进行排序和分组，并会**对结果集的每一行**计算出一个单独的值，而不是对每个 Group By 分组计算一个值。这种灵活的方式允许您在 SELECT 从句中增加额外的列，给您提供了更多的机会来对结果集进行重新组织和过滤。
+窗口函数是 StarRocks 内置的特殊函数。和聚合函数类似，窗口函数通过对多行数据进行计算得到一个数据值。不同的是，窗口函数使用 Over() 子句对**当前窗口**内的数据进行排序和分组，同时**对结果集的每一行**计算出一个单独的值，而不是对每个 Group By 分组计算一个值。这种灵活的方式允许您在 SELECT 子句中增加额外的列，对结果集进行重新组织和过滤。
 
 窗口函数在金融和科学计算领域较为常用，常被用来分析趋势、计算离群值以及对大量数据进行分桶分析等。
 
@@ -11,6 +11,7 @@
 * `MIN()`, `MAX()`, `COUNT()`, `SUM()`, `AVG()`
 * `FIRST_VALUE()`, `LAST_VALUE()`, `LEAD()`, `LAG()`
 * `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`
+* `NTILE()`
 
 ## 窗口函数语法及参数
 
@@ -22,13 +23,12 @@ partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ~~~
 
-> 注意
-> 窗口函数只能出现在 SELECT 列表和最外层的 Order By 从句中。在查询过程中，窗口函数会在最后生效，也即是在执行完 Join，Where 和 Group By 等操作之后生效。
+> 注意：窗口函数只能出现在 SELECT 列表和最外层的 Order By 子句中。在查询过程中，窗口函数会在最后生效，也就是在执行完 Join，Where 和 Group By 等操作之后生效。
 
 参数：
 
-* **partition_by_clause**：Partition By 从句。该从句将输入行按照指定的一列或多列分组，相同值的行会被分到一组。
-* **order_by_clause**：Order By 从句。与外层的 Order By 类似，Order By 从句定义了输入行的排列顺序，如果指定了 Partition By，则 Order By 定义了每个 Partition 分组内的顺序。与外层 Order By 的唯一不同在于，OVER() 从句中的 `Order By n`（n是正整数）相当于不做任何操作，而外层的 `Order By n` 表示按照第 `n` 列排序。
+* **partition_by_clause**：Partition By 子句。该子句将输入行按照指定的一列或多列分组，相同值的行会被分到一组。
+* **order_by_clause**：Order By 子句。与外层的 Order By 类似，Order By 子句定义了输入行的排列顺序，如果指定了 Partition By，则 Order By 定义了每个 Partition 分组内的顺序。与外层 Order By 的唯一不同在于，OVER() 子句中的 `Order By n`（n是正整数）相当于不做任何操作，而外层的 `Order By n` 表示按照第 `n` 列排序。
 
     以下示例展示了在 SELECT 列表中增加一个 `id` 列，它的值是 `1`，`2`，`3` 等，顺序按照 `events` 表中的 `date_and_time` 列排序。
 
@@ -38,16 +38,15 @@ order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
     FROM events;
     ~~~
 
-* **window_clause**：Window 从句，可以用来为窗口函数指定一个运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。Window 从句支持的方法有：`AVG()`、`COUNT()`、`FIRST_VALUE()`、`LAST_VALUE()` 和 `SUM()`。对于 `MAX()` 和 `MIN()`，Window 从句可以通过 UNBOUNDED、PRECEDING 关键词指定开始范围。
+* **window_clause**：Window 子句，可以用来为窗口函数指定一个运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。Window 子句支持的函数有：`AVG()`、`COUNT()`、`FIRST_VALUE()`、`LAST_VALUE()` 和 `SUM()`。对于 `MAX()` 和 `MIN()`，Window 子句可以通过 UNBOUNDED、PRECEDING 关键词指定开始范围。
 
-    Window 从句语法：
+    Window 子句语法：
 
     ~~~SQL
     ROWS BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | { UNBOUNDED | n } FOLLOWING] ]
     ~~~
 
-    > 注意
-    > Window 从句必须位于 Order By 从句之下。
+    > 注意：Window 子句必须在 Order By 子句之内。
 
 ## 使用 AVG() 窗口函数
 
@@ -481,7 +480,7 @@ NTILE (num_buckets) OVER (partition_by_clause order_by_clause)
 其中，`num_buckets` 是要划分桶的数量，必须是一个常量正整数，最大值为 BIGINT 的最大值，即 `2^63 - 1`。
 
 > 注意
-> `NTILE()` 函数不能使用 Window 从句。
+> `NTILE()` 函数不能使用 Window 子句。
 
 以下示例使用 `NTILE()` 函数当前窗口中的数据划分至 `2` 个桶中，划分结果见 `bucket_id` 列。
 

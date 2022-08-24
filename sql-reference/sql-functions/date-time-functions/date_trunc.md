@@ -4,7 +4,7 @@
 
 根据指定的精度级别，将一个日期时间截断。
 
-StarRocks 同时提供 year、quarter、month、week、day、hour 等函数进行指定部分的提取。
+StarRocks 同时提供 `year()`、`quarter()`、`month()`、`week()`、`day()`、`hour()` 等函数进行指定部分的提取。
 
 ## 语法
 

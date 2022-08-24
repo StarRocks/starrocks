@@ -141,7 +141,7 @@ Order by 通过比较一列或者多列的大小来对结果集进行排序。
 
 order by 是比较耗时耗资源的操作，因为所有数据都需要发送到 1 个节点后才能排序，排序操作相比不排序操作需要更多的内存。
 
-如果需要返回前 N 个排序结果，需要使用 LIMIT 从句；为了限制内存的使用，如果用户没有指定 LIMIT 从句，则默认返回前 65535 个排序结果。
+如果需要返回前 N 个排序结果，需要使用 LIMIT 子句；为了限制内存的使用，如果用户没有指定 LIMIT 子句，则默认返回前 65535 个排序结果。
 
 Order by 语法定义如下：
 
@@ -157,9 +157,9 @@ select * from big_table order by tiny_column, short_column desc;
 
 ### Group by
 
-Group by 从句通常和聚合函数（例如 COUNT(), SUM(), AVG(), MIN()和 MAX()）一起使用。
+Group by 子句通常和聚合函数（例如 COUNT(), SUM(), AVG(), MIN()和 MAX()）一起使用。
 
-Group by 指定的列不会参加聚合操作。Group by 从句可以加入 Having 从句来过滤聚合函数产出的结果。例如：
+Group by 指定的列不会参加聚合操作。Group by 子句可以加入 Having 子句来过滤聚合函数产出的结果。例如：
 
 ```sql
 select tiny_column, sum(short_column)
@@ -180,9 +180,9 @@ group by tiny_column;
 
 ### Having
 
-Having 从句不是过滤表中的行数据，而是过滤聚合函数产出的结果。
+Having 子句不是过滤表中的行数据，而是过滤聚合函数产出的结果。
 
-通常来说 having 要和聚合函数（例如 COUNT(), SUM(), AVG(), MIN(), MAX()）以及 group by 从句一起使用。
+通常来说 having 要和聚合函数（例如 COUNT(), SUM(), AVG(), MIN(), MAX()）以及 group by 子句一起使用。
 
 示例：
 
@@ -222,17 +222,17 @@ having tiny_column > 1;
 
 ### Limit
 
-Limit 从句用于限制返回结果的最大行数。设置返回结果的最大行数可以帮助 StarRocks 优化内存的使用。
+Limit 子句用于限制返回结果的最大行数。设置返回结果的最大行数可以帮助 StarRocks 优化内存的使用。
 
-该从句主要应用如下场景：
+该子句主要应用如下场景：
 
 1.返回 top-N 的查询结果。
 
 2.简单查看表中包含的内容。
 
-3.表中数据量大，或者 where 从句没有过滤太多的数据，需要限制查询结果集的大小。
+3.表中数据量大，或者 where 子句没有过滤太多的数据，需要限制查询结果集的大小。
 
-使用说明：limit 从句的值必须是数字型字面常量。
+使用说明：limit 子句的值必须是数字型字面常量。
 
 举例：
 
@@ -263,11 +263,11 @@ mysql> select tiny_column from small_table limit 10000;
 
 #### Offset
 
-Offset 从句使得结果集跳过前若干行结果后直接返回后续的结果。
+Offset 子句使得结果集跳过前若干行结果后直接返回后续的结果。
 
 结果集默认起始行为第 0 行，因此 offset 0 和不带 offset 返回相同的结果。
 
-通常来说，offset 从句需要与 order by 从句和 limit 从句一起使用才有效。
+通常来说，offset 子句需要与 order by 子句和 limit 子句一起使用才有效。
 
 示例：
 
@@ -329,7 +329,7 @@ offset 超过结果集的最大行数依然是有结果的。建议用户使用 
 
 ### Union
 
-Union 从句用于合并多个查询的结果集。语法定义如下：
+Union 子句用于合并多个查询的结果集。语法定义如下：
 
 ```sql
 query_1 UNION [DISTINCT | ALL] query_2
@@ -514,7 +514,7 @@ select * from t2) union all select * from t1;
 
 ### Where 与操作符
 
-SQL 操作符是一系列用于比较的函数，这些操作符广泛地用于 select 语句的 where 从句中。
+SQL 操作符是一系列用于比较的函数，这些操作符广泛地用于 select 语句的 where 子句中。
 
 #### 算数操作符
 
@@ -550,7 +550,7 @@ SQL 操作符是一系列用于比较的函数，这些操作符广泛地用于 
 
 #### Between 操作符
 
-在 where 从句中，表达式可能同时与上界和下界比较。如果表达式大于等于下界，同时小于等于上界，比较的结果是 true。语法定义如下：
+在 where 子句中，表达式可能同时与上界和下界比较。如果表达式大于等于下界，同时小于等于上界，比较的结果是 true。语法定义如下：
 
 ```sql
 expression BETWEEN lower_bound AND upper_bound
@@ -716,7 +716,7 @@ mysql> select varchar_column from small_table where varchar_column regexp 'm.*';
 
 当在查询中书写表、列，或者包含列的表达式的名字时，可以同时给它们分配一个别名。
 
-当需要使用表名、列名时，可以使用别名来访问。别名通常相对原名来说更简短更好记。当需要新建一个别名时，只需在 select list 或者 from list 中的表、列、表达式名称后面加上 AS alias 从句即可。
+当需要使用表名、列名时，可以使用别名来访问。别名通常相对原名来说更简短更好记。当需要新建一个别名时，只需在 select list 或者 from list 中的表、列、表达式名称后面加上 AS alias 子句即可。
 
 AS 关键词是可选的，用户可以直接在原名后面指定别名。如果别名或者其他标志符和内部关键词同名时，需要在该名称加上``符号。别名对大小写是敏感的。
 
