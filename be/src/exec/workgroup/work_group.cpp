@@ -21,8 +21,8 @@ int64_t WorkGroupSchedEntity<Q>::cpu_limit() const {
 }
 
 template <typename Q>
-bool WorkGroupSchedEntity<Q>::is_rt_wg() const {
-    return _workgroup->is_rt_wg();
+bool WorkGroupSchedEntity<Q>::is_sq_wg() const {
+    return _workgroup->is_sq_wg();
 }
 
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
@@ -128,8 +128,8 @@ void WorkGroup::incr_num_running_drivers() {
     ++_num_running_drivers;
     ++_acc_num_drivers;
 
-    if (is_rt_wg()) {
-        WorkGroupManager::instance()->incr_num_running_rt_drivers();
+    if (is_sq_wg()) {
+        WorkGroupManager::instance()->incr_num_running_sq_drivers();
     }
 }
 
@@ -137,8 +137,8 @@ void WorkGroup::decr_num_running_drivers() {
     int64_t old = _num_running_drivers.fetch_sub(1);
     DCHECK_GT(old, 0);
 
-    if (is_rt_wg()) {
-        WorkGroupManager::instance()->decr_num_running_rt_drivers();
+    if (is_sq_wg()) {
+        WorkGroupManager::instance()->decr_num_running_sq_drivers();
     }
 }
 
@@ -385,7 +385,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
     _workgroups[unique_id] = wg;
 
     _sum_cpu_limit += wg->cpu_limit();
-    if (wg->is_rt_wg()) {
+    if (wg->is_sq_wg()) {
         _rt_cpu_limit = wg->cpu_limit();
     }
 

@@ -265,7 +265,7 @@ void WorkGroupDriverQueue::update_statistics(const DriverRawPtr driver) {
 
     // Update bandwidth control information.
     _update_bandwidth_control_period();
-    if (!wg_entity->is_rt_wg()) {
+    if (!wg_entity->is_sq_wg()) {
         _bandwidth_usage_ns += runtime_ns;
     }
 
@@ -309,10 +309,10 @@ bool WorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64_t unacc
 
 bool WorkGroupDriverQueue::_throttled(const workgroup::WorkGroupDriverSchedEntity* wg_entity,
                                       int64_t unaccounted_runtime_ns) const {
-    if (wg_entity->is_rt_wg()) {
+    if (wg_entity->is_sq_wg()) {
         return false;
     }
-    if (!workgroup::WorkGroupManager::instance()->is_rt_wg_running()) {
+    if (!workgroup::WorkGroupManager::instance()->is_sq_wg_running()) {
         return false;
     }
 
