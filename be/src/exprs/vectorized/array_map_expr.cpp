@@ -20,31 +20,13 @@
 namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
-bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
+inline bool offsets_equal(UInt32Column::Ptr array1, UInt32Column::Ptr array2) {
     if (array1->size() != array2->size()) {
         return false;
     }
     auto data1 = array1->get_data();
     auto data2 = array2->get_data();
     return std::equal(data1.begin(), data1.end(), data2.begin());
-}
-
-Status ArrayMapExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
-    RETURN_IF_ERROR(Expr::prepare(state, context));
-    // remove unused input arrays, which are in _children[1]...
-    auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
-    std::vector<SlotId> unused_arguments_index;
-    auto num = lambda_func->get_unused_arguments_index(&unused_arguments_index);
-    int index = -1, u = 0;
-    for (auto it = _children.begin(); it != _children.end() && u < num; index++) {
-        if (index == unused_arguments_index[u]) {
-            it = _children.erase(it);
-            u++;
-        } else {
-            it++;
-        }
-    }
-    return Status::OK();
 }
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.

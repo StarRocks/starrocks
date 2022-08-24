@@ -28,7 +28,5 @@ public class LambdaFunctionOperatorTest {
         Assert.assertTrue(lambda.isNullable());
         Assert.assertEquals("([1: x]->1: x = 1)", lambda.toString());
         Assert.assertTrue(lambda.equals(lambda.clone()));
-        Assert.assertEquals(lambda.hashCode(), -1830948578);
-
     }
 }

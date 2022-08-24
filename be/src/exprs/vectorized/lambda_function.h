@@ -39,16 +39,10 @@ public:
         return arguments_ids.size();
     }
 
-    int get_unused_arguments_index(std::vector<SlotId>* ids) {
-        ids->assign(unused_arguments_index.begin(), unused_arguments_index.end());
-        return unused_arguments_index.size();
-    }
-
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
 private:
     std::vector<SlotId> captured_slot_ids;
     std::vector<SlotId> arguments_ids;
-    std::vector<SlotId> unused_arguments_index;
 };
 } // namespace starrocks::vectorized

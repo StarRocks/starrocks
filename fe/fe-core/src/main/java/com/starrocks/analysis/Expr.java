@@ -1357,7 +1357,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             throw new SemanticException("A high-order function can have one lambda function.");
         } else if (pos > 0 && pos < children.size() - 1) {
             throw new SemanticException(
-                    "Lambda functions can only be the first or last argument of any high-order function.");
+                    "Lambda functions can only be the first or last argument of any high-order function, " +
+                            "or lambda arguments should be in ().");
         }
         return false;
     }
