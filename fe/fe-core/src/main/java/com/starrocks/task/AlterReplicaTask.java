@@ -55,44 +55,38 @@ import java.util.Map;
 public class AlterReplicaTask extends AgentTask implements Runnable {
     private static final Logger LOG = LogManager.getLogger(AlterReplicaTask.class);
 
-    private long baseTabletId;
-    private long newReplicaId;
-    private int baseSchemaHash;
-    private int newSchemaHash;
-    private long version;
-    private long jobId;
-    private AlterJobV2.JobType jobType;
-    private TTabletType tabletType;
-    private long txnId;
+    private final long baseTabletId;
+    private final long newReplicaId;
+    private final int baseSchemaHash;
+    private final int newSchemaHash;
+    private final long version;
+    private final long jobId;
+    private final AlterJobV2.JobType jobType;
+    private final TTabletType tabletType;
+    private final long txnId;
+    private final Map<String, Expr> defineExprs;
 
-    private Map<String, Expr> defineExprs;
-
-    public AlterReplicaTask(long backendId, long dbId, long tableId,
-                            long partitionId, long rollupIndexId, long baseIndexId, long rollupTabletId,
-                            long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
-                            long version, long jobId, AlterJobV2.JobType jobType) {
-        this(backendId, dbId, tableId, partitionId,
-                rollupIndexId, baseIndexId, rollupTabletId,
-                baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash,
-                version, jobId, jobType, null);
+    public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
+                                                    long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
+                                                    int baseSchemaHash, long version, long jobId) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
+                null, TTabletType.TABLET_TYPE_DISK, 0);
     }
 
-    public AlterReplicaTask(long backendId, long dbId, long tableId,
-                            long partitionId, long rollupIndexId, long baseIndexId, long rollupTabletId,
-                            long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
-                            long version, long jobId, AlterJobV2.JobType jobType,
-                            Map<String, Expr> defineExprs) {
-        this(backendId, dbId, tableId, partitionId, rollupIndexId, baseIndexId, rollupTabletId, baseTabletId, newReplicaId,
-                newSchemaHash, baseSchemaHash, version, jobId, jobType, defineExprs, TTabletType.TABLET_TYPE_DISK, 0);
+    public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
+                                                     long rollupIndexId, long rollupTabletId, long baseTabletId,
+                                                     long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
+                                                     long jobId, Map<String, Expr> defineExprs) {
+        return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
+                baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
+                defineExprs, TTabletType.TABLET_TYPE_DISK, 0);
     }
 
-    public AlterReplicaTask(long backendId, long dbId, long tableId,
-                            long partitionId, long rollupIndexId, long baseIndexId, long rollupTabletId,
-                            long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash,
-                            long version, long jobId, AlterJobV2.JobType jobType,
-                            Map<String, Expr> defineExprs,
-                            TTabletType tabletType,
-                            long txnId) {
+    private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
+                             long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
+                             long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
+                             long txnId) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -197,47 +191,42 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             }
             Tablet tablet = index.getTablet(getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
-            if (tbl.isLakeTable()) {
-                setFinished(getFailedTimes() == 0);
-                return;
-            }
-
-            Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
-            if (replica == null) {
-                throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
-            }
-
-            LOG.info("before handle alter task tablet {}, replica: {}, task version: {}-{}",
-                    getSignature(), replica, getVersion());
-            boolean versionChanged = false;
-            if (replica.getVersion() > getVersion()) {
-                // Case 2.2, do nothing
-            } else {
-                if (replica.getLastFailedVersion() > getVersion()) {
-                    // Case 2.1
-                    replica.updateRowCount(getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
-                } else {
-                    // Case 1
-                    Preconditions.checkState(replica.getLastFailedVersion() == -1, replica.getLastFailedVersion());
-                    replica.updateRowCount(getVersion(), replica.getDataSize(),
-                            replica.getRowCount());
-                    versionChanged = true;
+            if (!tbl.isLakeTable()) {
+                Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
+                if (replica == null) {
+                    throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
                 }
-            }
 
-            if (versionChanged) {
-                ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(getDbId(), getTableId(),
-                        getPartitionId(), getIndexId(), getTabletId(), getBackendId(),
-                        replica.getId(), replica.getVersion(), -1,
-                        replica.getDataSize(), replica.getRowCount(),
-                        replica.getLastFailedVersion(),
-                        replica.getLastSuccessVersion());
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
-            }
+                LOG.info("before handle alter task tablet {}, replica: {}, task version: {}", getSignature(), replica,
+                        getVersion());
+                boolean versionChanged = false;
+                if (replica.getVersion() <= getVersion()) {
+                    if (replica.getLastFailedVersion() > getVersion()) {
+                        // Case 2.1
+                        replica.updateRowCount(getVersion(), replica.getDataSize(),
+                                replica.getRowCount());
+                        versionChanged = true;
+                    } else {
+                        // Case 1
+                        Preconditions.checkState(replica.getLastFailedVersion() == -1, replica.getLastFailedVersion());
+                        replica.updateRowCount(getVersion(), replica.getDataSize(),
+                                replica.getRowCount());
+                        versionChanged = true;
+                    }
+                }
 
-            LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
+                if (versionChanged) {
+                    ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(getDbId(), getTableId(),
+                            getPartitionId(), getIndexId(), getTabletId(), getBackendId(),
+                            replica.getId(), replica.getVersion(), -1,
+                            replica.getDataSize(), replica.getRowCount(),
+                            replica.getLastFailedVersion(),
+                            replica.getLastSuccessVersion());
+                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateReplica(info);
+                }
+
+                LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
+            }
         } finally {
             db.writeUnlock();
         }
