@@ -318,10 +318,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         auto all_tasks = task_item.second;
         switch (task_type) {
         case TTaskType::CREATE:
-            _create_tablet_workers->submit_tasks(&all_tasks);
+            _create_tablet_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::DROP:
-            _drop_tablet_workers->submit_tasks(&all_tasks);
+            _drop_tablet_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::PUBLISH_VERSION: {
             for (const auto& task : all_tasks) {
@@ -330,34 +330,34 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         }
         case TTaskType::CLEAR_TRANSACTION_TASK:
-            _clear_transaction_task_workers->submit_tasks(&all_tasks);
+            _clear_transaction_task_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::CLONE:
-            _clone_workers->submit_tasks(&all_tasks);
+            _clone_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::STORAGE_MEDIUM_MIGRATE:
-            _storage_medium_migrate_workers->submit_tasks(&all_tasks);
+            _storage_medium_migrate_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::CHECK_CONSISTENCY:
-            _check_consistency_workers->submit_tasks(&all_tasks);
+            _check_consistency_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::UPLOAD:
-            _upload_workers->submit_tasks(&all_tasks);
+            _upload_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::DOWNLOAD:
-            _download_workers->submit_tasks(&all_tasks);
+            _download_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::MAKE_SNAPSHOT:
-            _make_snapshot_workers->submit_tasks(&all_tasks);
+            _make_snapshot_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::RELEASE_SNAPSHOT:
-            _release_snapshot_workers->submit_tasks(&all_tasks);
+            _release_snapshot_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::MOVE:
-            _move_dir_workers->submit_tasks(&all_tasks);
+            _move_dir_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::UPDATE_TABLET_META_INFO:
-            _update_tablet_meta_info_workers->submit_tasks(&all_tasks);
+            _update_tablet_meta_info_workers->submit_tasks(all_tasks);
             break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
@@ -365,7 +365,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         }
         case TTaskType::ALTER:
-            _alter_tablet_workers->submit_tasks(&all_tasks);
+            _alter_tablet_workers->submit_tasks(all_tasks);
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
@@ -381,11 +381,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             auto all_push_tasks = push_item.second;
             switch (push_type) {
             case TPushType::LOAD_V2:
-                _push_workers->submit_tasks(&all_push_tasks);
+                _push_workers->submit_tasks(all_push_tasks);
                 break;
             case TPushType::DELETE:
             case TPushType::CANCEL_DELETE:
-                _delete_workers->submit_tasks(&all_push_tasks);
+                _delete_workers->submit_tasks(all_push_tasks);
                 break;
             default:
                 ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
