@@ -9,7 +9,6 @@ import com.starrocks.pseudocluster.Tablet;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Test;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -216,7 +215,6 @@ public class ConcurrentTxnTest {
         Config.enable_new_publish_mechanism = false;
     }
 
-    @Test
     public void testConcurrentLoad() throws Exception {
         setup();
         for (int i = 0; i < runTime; i++) {
