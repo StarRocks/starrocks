@@ -303,9 +303,9 @@ public class ScalarOperatorToExpr {
         }
 
         static Function isNullFN = new Function(new FunctionName("is_null_pred"),
-                new Type[]{Type.INVALID}, Type.BOOLEAN, false);
+                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
         static Function isNotNullFN = new Function(new FunctionName("is_not_null_pred"),
-                new Type[]{Type.INVALID}, Type.BOOLEAN, false);
+                new Type[] {Type.INVALID}, Type.BOOLEAN, false);
 
         {
             isNullFN.setBinaryType(TFunctionBinaryType.BUILTIN);
@@ -339,7 +339,7 @@ public class ScalarOperatorToExpr {
                 expr = new LikePredicate(LikePredicate.Operator.LIKE, child1, child2);
             }
 
-            expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(), new Type[]{child1.getType(), child2.getType()},
+            expr.setFn(Expr.getBuiltinFunction(expr.getOp().name(), new Type[] {child1.getType(), child2.getType()},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF));
 
             expr.setType(Type.BOOLEAN);

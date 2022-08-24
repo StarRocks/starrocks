@@ -37,6 +37,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -1351,13 +1352,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             }
         }
         if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
-            Preconditions.checkState(children.size() > 1,
-                    "Lambda functions should work with inputs in high-order functions.");
+            if (children.size() <= 1) {
+                throw new SemanticException("Lambda functions should work with inputs in high-order functions.");
+            }
             return true;
         } else if (num > 1) {
-            Preconditions.checkState(false, "A high-order function can have one lambda function.");
+            throw new SemanticException("A high-order function can have one lambda function.");
         } else if (pos > 0 && pos < children.size() - 1) {
-            Preconditions.checkState(false,
+            throw new SemanticException(
                     "Lambda functions can only be the first or last argument of any high-order function.");
         }
         return false;

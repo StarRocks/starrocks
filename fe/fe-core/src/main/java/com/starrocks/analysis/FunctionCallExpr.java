@@ -36,7 +36,6 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import kotlin.jvm.functions.FunctionN;
 
 import java.io.DataInput;
 import java.io.DataOutput;

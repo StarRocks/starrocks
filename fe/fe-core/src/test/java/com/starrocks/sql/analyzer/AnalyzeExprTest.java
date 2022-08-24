@@ -93,10 +93,10 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map(x -> x is null,[null]),array_map(x -> x is null,null)");
         analyzeSuccess("select array_map((x,y) -> x + y, [], [])");
         analyzeSuccess("select array_map((x,y) -> x, [], [])");
+        analyzeSuccess("select array_map([1], x -> x)");
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
-        analyzeFail("select array_map([1], x -> x)");
         analyzeFail("select array_map(x -> z,[1])");
         analyzeFail("select array_map(x -> x,[1],null)");
     }

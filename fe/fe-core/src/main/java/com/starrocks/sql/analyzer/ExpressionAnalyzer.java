@@ -116,8 +116,9 @@ public class ExpressionAnalyzer {
 
     // only high-order functions can use lambda functions.
     void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
-        Preconditions.checkState(isHighOrderFunction(expression),
-                "Lambda Functions can only be used in supported high-order functions.");
+        if (!isHighOrderFunction(expression)) {
+            throw new SemanticException("Lambda Functions can only be used in supported high-order functions.");
+        }
         int childSize = expression.getChildren().size();
         // move the lambda function to the first if it is at the last.
         if (expression.getChild(childSize - 1) instanceof LambdaFunction) {
@@ -134,8 +135,9 @@ public class ExpressionAnalyzer {
             if (expr instanceof NullLiteral) {
                 expr.setType(Type.ARRAY_INT); // Since Type.NULL cannot be pushed to to BE, hack it here.
             }
-            Preconditions.checkArgument(expr.getType().isArrayType(),
-                    "Lambda inputs should be arrays.");
+            if (!expr.getType().isArrayType()) {
+                throw new SemanticException("Lambda inputs should be arrays.");
+            }
             Type itemType = ((ArrayType) expr.getType()).getItemType();
             if (itemType == Type.NULL) { // Since Type.NULL cannot be pushed to to BE, hack it here.
                 itemType = Type.INT;
@@ -295,18 +297,21 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitLambdaArguments(LambdaArguments node, Scope scope) {
-            Preconditions.checkArgument(scope.getLambdaInputs().size() > 0,
-                    "Lambda Functions can only be used in high-order functions.");
-            // lambda arguments should be unique and less than input arrays.
+            if (scope.getLambdaInputs().size() == 0) {
+                throw new SemanticException("Lambda Functions can only be used in high-order functions.");
+            }
             List<String> names = node.getNames();
             Set<String> set = new HashSet<>();
             for (String name : names) {
-                Preconditions.checkArgument(!set.contains(name), "Lambda argument: " + name + " is duplicated.");
+                if (set.contains(name)) {
+                    throw new SemanticException("Lambda argument: " + name + " is duplicated.");
+                }
                 set.add(name);
             }
-            Preconditions.checkArgument(scope.getLambdaInputs().size() == names.size(),
-                    "Lambda arguments should equal to lambda input arrays.");
-            // bind argument names with its type
+            if (scope.getLambdaInputs().size() != names.size()) {
+                throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
+            }
+            // bind argument names with lambda inputs
             for (int i = 0; i < names.size(); ++i) {
                 scope.getLambdaInputs().get(i).setName(names.get(i));
             }
