@@ -37,9 +37,6 @@ public final class ColumnRefOperator extends ScalarOperator {
         this.isLambdaArgument = isLambdaArgument;
     }
 
-    public boolean isLambdaArgument() {
-        return isLambdaArgument;
-    }
     public int getId() {
         return id;
     }

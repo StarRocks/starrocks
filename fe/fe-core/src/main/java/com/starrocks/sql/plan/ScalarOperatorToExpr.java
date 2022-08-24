@@ -476,7 +476,7 @@ public class ScalarOperatorToExpr {
             return result;
         }
 
-        // reverse (x,y) -> x op y to x op y <- (x,y), i.e., putting the lambda expression at the first
+        // reverse {(x,y) -> x op y} to {x op y <- (x,y)}, i.e., putting the lambda expression at the first
         @Override
         public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
             // lambda arguments
