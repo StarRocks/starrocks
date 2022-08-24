@@ -283,6 +283,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                throw new DdlException("Not found database " + dbName);
+            }
             fullSchema.clear();
             nameToColumn.clear();
             dataColumnNames.clear();

@@ -164,6 +164,10 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                throw new MetaNotFoundException("database " + getDbId() + " does not exist");
+            }
             OlapTable tbl = (OlapTable) db.getTable(getTableId());
             if (tbl == null) {
                 throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");

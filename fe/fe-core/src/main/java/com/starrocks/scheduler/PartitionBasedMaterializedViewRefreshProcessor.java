@@ -32,6 +32,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.UUIDUtil;
@@ -53,6 +54,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import scala.xml.dtd.impl.Base;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -146,10 +148,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         updateMeta(execPlan);
     }
 
-    private void updateMeta(ExecPlan execPlan) {
+    private void updateMeta(ExecPlan execPlan) throws MetaNotFoundException {
         // update the meta if succeed
         database.writeLock();
         try {
+            // DCheck db exists
+            if (database.isDropped()) {
+                throw new MetaNotFoundException("db " + database.getFullName() + " has been dropped");
+            }
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentlVersionMap =
@@ -210,7 +216,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         mvContext = new MvTaskRunContext(context);
     }
 
-    private void syncPartitions() {
+    private void syncPartitions() throws MetaNotFoundException {
         snapshotBaseTables = collectBaseTables(materializedView, database);
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
@@ -241,7 +247,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return Pair.create(null, null);
     }
 
-    private void syncPartitionsForExpr() {
+    private void syncPartitionsForExpr() throws MetaNotFoundException {
         Expr partitionExpr = getPartitionExpr();
         Pair<OlapTable, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
         OlapTable partitionBaseTable = partitionTableAndColumn.first;
@@ -534,10 +540,15 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
     }
 
-    private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName) {
+    private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName)
+            throws MetaNotFoundException {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
         database.writeLock();
         try {
+            // DCheck db exists
+            if (database.isDropped()) {
+                throw new MetaNotFoundException("db " + database.getFullName() + " has been dropped");
+            }
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));

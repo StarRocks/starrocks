@@ -274,6 +274,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
     private void executeDynamicPartition() {
         Iterator<Pair<Long, Long>> iterator = dynamicPartitionTableInfo.iterator();
+        OUTER_LOOP:
         while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
@@ -340,6 +341,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
                 db.writeLock();
                 try {
+                    // DCheck db exists
+                    if (db.isDropped()) {
+                        iterator.remove();
+                        continue OUTER_LOOP;
+                    }
                     GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {

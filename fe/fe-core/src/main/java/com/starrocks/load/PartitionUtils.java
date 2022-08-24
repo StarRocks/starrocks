@@ -11,9 +11,11 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.hudi.exception.MetadataNotFoundException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -21,12 +23,16 @@ import java.util.stream.Collectors;
 public class PartitionUtils {
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
-                                                          List<Long> tmpPartitionIds) {
+                                                          List<Long> tmpPartitionIds) throws MetaNotFoundException {
         try {
             List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
                     db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds);
             db.writeLock();
             try {
+                // DCheck db exists
+                if (db.isDropped()) {
+                    throw new MetaNotFoundException("db " + db.getFullName() + " has been dropped");
+                }
                 List<Partition> sourcePartitions = sourcePartitionIds.stream()
                         .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
                 PartitionInfo partitionInfo = targetTable.getPartitionInfo();

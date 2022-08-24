@@ -906,6 +906,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
+            }
             OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tblId);
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");

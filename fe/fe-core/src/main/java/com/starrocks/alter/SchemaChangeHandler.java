@@ -1201,6 +1201,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                throw new DdlException("db " + db.getFullName() + " has been dropped");
+            }
             GlobalStateMgr.getCurrentState().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
             db.writeUnlock();

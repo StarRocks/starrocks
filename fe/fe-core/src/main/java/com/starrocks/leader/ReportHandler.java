@@ -933,6 +933,10 @@ public class ReportHandler extends Daemon {
             }
             db.writeLock();
             try {
+                // DCheck db exists
+                if (db.isDropped()) {
+                    continue;
+                }
                 List<Long> tabletIds = tabletRecoveryMap.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
@@ -1014,6 +1018,7 @@ public class ReportHandler extends Daemon {
 
         if (!backendTabletsInfo.isEmpty()) {
             // need to write edit log the sync the bad info to other FEs
+            //
             GlobalStateMgr.getCurrentState().getEditLog().logBackendTabletsInfo(backendTabletsInfo);
         }
     }

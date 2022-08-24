@@ -282,6 +282,10 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                throw new MetaNotFoundException("Database " + dbId + " already has been deleted");
+            }
             LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                     .add("txn_id", transactionId)
                     .add("msg", "Load job try to commit txn")

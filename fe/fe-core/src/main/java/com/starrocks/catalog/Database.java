@@ -99,6 +99,8 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
+    private boolean dropped = false;
+
     public Database() {
         this(0, null);
     }
@@ -760,5 +762,13 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isInfoSchemaDb() {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
+    }
+
+    public void setDropped() {
+        dropped = true;
+    }
+
+    public boolean isDropped() {
+        return dropped;
     }
 }

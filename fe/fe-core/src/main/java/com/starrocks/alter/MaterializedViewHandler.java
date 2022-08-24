@@ -719,6 +719,10 @@ public class MaterializedViewHandler extends AlterHandler {
             throws DdlException, MetaNotFoundException {
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                throw new MetaNotFoundException("db: " + db.getFullName() + " has been dropped");
+            }
             // check drop rollup index operation
             for (AlterClause alterClause : dropRollupClauses) {
                 DropRollupClause dropRollupClause = (DropRollupClause) alterClause;

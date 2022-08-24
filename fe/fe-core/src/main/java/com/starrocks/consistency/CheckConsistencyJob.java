@@ -252,6 +252,11 @@ public class CheckConsistencyJob {
         boolean isConsistent = true;
         db.writeLock();
         try {
+            // DCheck db exists
+            if (db.isDropped()) {
+                LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
+                return -1;
+            }
             Table table = db.getTable(tabletMeta.getTableId());
             if (table == null) {
                 LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
