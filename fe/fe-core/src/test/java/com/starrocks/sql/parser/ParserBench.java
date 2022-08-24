@@ -82,7 +82,7 @@ public class ParserBench {
         parser.addErrorListener(new BaseErrorListener());
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT)
+        return (StatementBase) new AstBuilder(SqlModeHelper.MODE_DEFAULT, false)
                 .visitSingleStatement(sqlStatements.singleStatement(0));
     }
 
