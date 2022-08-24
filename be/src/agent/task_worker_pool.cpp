@@ -198,18 +198,17 @@ typename TaskWorkerPool<TaskType>::AgentTaskRequestPtr TaskWorkerPool<TaskType>:
 }
 
 template <TaskWorkerType TaskType>
-void TaskWorkerPool<TaskType>::submit_tasks(const std::vector<TAgentTaskRequest>& tasks) {
+void TaskWorkerPool<TaskType>::submit_tasks(const std::vector<const TAgentTaskRequest*>& tasks) {
     DCHECK(!tasks.empty());
     std::string type_str;
-    const TTaskType::type task_type = tasks[0].task_type;
+    const TTaskType::type task_type = tasks[0]->task_type;
     std::vector<uint8_t> failed_task_vec;
     EnumToString(TTaskType, task_type, type_str);
 
     {
         std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
         for (size_t i = 0; i < tasks.size(); i++) {
-            const TAgentTaskRequest& task_req = tasks[i];
-            int64_t signature = task_req.signature;
+            int64_t signature = tasks[i]->signature;
 
             // batch register task info
             std::set<int64_t>& signature_set = _s_task_signatures[task_type];
@@ -233,7 +232,7 @@ void TaskWorkerPool<TaskType>::submit_tasks(const std::vector<TAgentTaskRequest>
                 break;
             }
             if (failed_task_vec[i] != 0) {
-                ss << tasks[i].signature;
+                ss << tasks[i]->signature;
                 count++;
             }
         }
@@ -244,16 +243,16 @@ void TaskWorkerPool<TaskType>::submit_tasks(const std::vector<TAgentTaskRequest>
     {
         std::unique_lock l(_worker_thread_lock);
         if (UNLIKELY(task_type == TTaskType::REALTIME_PUSH &&
-                     tasks[0].push_req.push_type == TPushType::CANCEL_DELETE)) {
+                     tasks[0]->push_req.push_type == TPushType::CANCEL_DELETE)) {
             for (size_t i = 0; i < tasks.size(); i++) {
                 if (failed_task_vec[i] == 0) {
-                    _tasks.emplace_front(_convert_task(tasks[i]));
+                    _tasks.emplace_front(_convert_task(*tasks[i]));
                 }
             }
         } else {
             for (size_t i = 0; i < tasks.size(); i++) {
                 if (failed_task_vec[i] == 0) {
-                    _tasks.emplace_back(_convert_task(tasks[i]));
+                    _tasks.emplace_back(_convert_task(*tasks[i]));
                 }
             }
         }
@@ -265,7 +264,7 @@ void TaskWorkerPool<TaskType>::submit_tasks(const std::vector<TAgentTaskRequest>
         if (i != 0) {
             ss << ",";
         }
-        ss << tasks[i].signature;
+        ss << tasks[i]->signature;
     }
     LOG(INFO) << "success to submit task. type=" << type_str << ", signature=[" << ss.str()
               << "], task_count_in_queue=" << queue_size;

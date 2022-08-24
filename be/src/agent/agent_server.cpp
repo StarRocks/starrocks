@@ -232,8 +232,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         return;
     }
 
-    phmap::flat_hash_map<TTaskType::type, std::vector<TAgentTaskRequest>> task_divider;
-    phmap::flat_hash_map<TPushType::type, std::vector<TAgentTaskRequest>> push_divider;
+    phmap::flat_hash_map<TTaskType::type, std::vector<const TAgentTaskRequest*>> task_divider;
+    phmap::flat_hash_map<TPushType::type, std::vector<const TAgentTaskRequest*>> push_divider;
 
     for (const auto& task : tasks) {
         VLOG_RPC << "submit one task: " << apache::thrift::ThriftDebugString(task).c_str();
@@ -243,7 +243,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 #define HANDLE_TYPE(t_task_type, work_pool, req_member)                                             \
     case t_task_type:                                                                               \
         if (task.__isset.req_member) {                                                              \
-            task_divider[t_task_type].push_back(task);                                              \
+            task_divider[t_task_type].push_back(&task);                                              \
         } else {                                                                                    \
             ret_st = Status::InvalidArgument(                                                       \
                     strings::Substitute("task(signature=$0) has wrong request member", signature)); \
@@ -275,7 +275,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             }
             if (task.push_req.push_type == TPushType::LOAD_V2 || task.push_req.push_type == TPushType::DELETE ||
                 task.push_req.push_type == TPushType::CANCEL_DELETE) {
-                push_divider[task.push_req.push_type].push_back(task);
+                push_divider[task.push_req.push_type].push_back(&task);
             } else {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0, type=$1, push_type=$2) has wrong push_type", signature,
@@ -284,7 +284,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         case TTaskType::ALTER:
             if (task.__isset.alter_tablet_req || task.__isset.alter_tablet_req_v2) {
-                task_divider[TTaskType::ALTER].push_back(task);
+                task_divider[TTaskType::ALTER].push_back(&task);
             } else {
                 ret_st = Status::InvalidArgument(
                         strings::Substitute("task(signature=$0) has wrong request member", signature));
@@ -315,7 +315,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
     // batch submit tasks
     for (const auto& task_item : task_divider) {
         const auto& task_type = task_item.first;
-        auto all_tasks = task_item.second;
+        const auto& all_tasks = task_item.second;
         switch (task_type) {
         case TTaskType::CREATE:
             _create_tablet_workers->submit_tasks(all_tasks);
@@ -325,7 +325,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         case TTaskType::PUBLISH_VERSION: {
             for (const auto& task : all_tasks) {
-                _publish_version_workers->submit_task(task);
+                _publish_version_workers->submit_task(*task);
             }
             break;
         }
