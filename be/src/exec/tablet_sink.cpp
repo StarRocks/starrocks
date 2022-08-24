@@ -111,7 +111,7 @@ Status NodeChannel::init(RuntimeState* state) {
     }
     _rpc_request.set_allocated_id(&_parent->_load_id);
 
-    _rpc_timeout_ms = state->query_options().query_timeout * 1000;
+    _rpc_timeout_ms = state->query_options().query_timeout * 1000 / 2;
 
     if (state->query_options().__isset.load_transmission_compression_type) {
         _compress_type = CompressionUtils::to_compression_pb(state->query_options().load_transmission_compression_type);
