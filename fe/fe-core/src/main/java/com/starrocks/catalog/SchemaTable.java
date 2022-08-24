@@ -471,7 +471,7 @@ public class SchemaTable extends Table {
                                             .column("PARTITION_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("DISTRIBUTE_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("DISTRIBUTE_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
-                                            .column("DISTRIBUTE_BUCKET", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                            .column("DISTRIBUTE_BUCKET", ScalarType.INT)
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))    

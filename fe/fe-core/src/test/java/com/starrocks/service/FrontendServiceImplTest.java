@@ -129,7 +129,7 @@ public class FrontendServiceImplTest {
                         info.getProperties());
                 Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
                 Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
-                Assert.assertEquals("10", info.getDistribute_bucket());
+                Assert.assertTrue(distributionInfo.getBucketNum() == 10);
                 Assert.assertEquals("HASH", info.getDistribute_type());
             } else if (info.getTable_name().equals("test_table_agg") || 
                     info.getTable_name().equals("test_table_dup")) {
@@ -139,7 +139,7 @@ public class FrontendServiceImplTest {
                         info.getProperties());
                 Assert.assertEquals("`d_c1`, `d_c2`", info.getDistribute_key());
                 Assert.assertEquals("`p_c1`, `p_c2`", info.getPartition_key());
-                Assert.assertEquals("10", info.getDistribute_bucket());
+                Assert.assertTrue(distributionInfo.getBucketNum() == 10);
                 Assert.assertEquals("HASH", info.getDistribute_type());
             }
         });

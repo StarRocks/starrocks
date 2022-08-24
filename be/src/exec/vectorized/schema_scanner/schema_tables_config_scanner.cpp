@@ -17,7 +17,7 @@ SchemaScanner::ColumnDesc SchemaTablesConfigScanner::_s_table_tables_config_colu
         {"PARTITION_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DISTRIBUTE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRIBUTE_BUCKET", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DISTRIBUTE_BUCKET", TYPE_INT, sizeof(int32_t), false},
         {"SORT_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
 };
@@ -126,9 +126,7 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
             // distribute_bucket
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                const std::string* str = &info.distribute_bucket;
-                Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.distribute_bucket);
             }
             break;
         }

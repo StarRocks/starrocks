@@ -1386,7 +1386,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         String distributeKey = distributionInfo.getDistributionKey();
-        String distributeNum = String.valueOf(distributionInfo.getBucketNum());
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
@@ -1420,7 +1419,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         tableConfigInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? "NULL" : keysSb.toString());
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
-        tableConfigInfo.setDistribute_bucket(distributeNum);
+        tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
         tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : "NULL");
@@ -1451,7 +1450,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
         tableConfigInfo.setPrimary_key("def");
         tableConfigInfo.setPartition_key("def");
-        tableConfigInfo.setDistribute_bucket("def");
+        tableConfigInfo.setDistribute_bucket(0);
         tableConfigInfo.setDistribute_type("def");
         tableConfigInfo.setDistribute_key("def");
         tableConfigInfo.setSort_key("def");

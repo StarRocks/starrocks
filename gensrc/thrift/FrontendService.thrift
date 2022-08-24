@@ -970,7 +970,7 @@ struct TTableConfigInfo {
     4: optional string partition_key
     5: optional string distribute_key
     6: optional string distribute_type
-    7: optional string distribute_bucket
+    7: optional i32 distribute_bucket
     8: optional string sort_key
     9: optional string properties
 }
