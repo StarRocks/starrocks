@@ -378,7 +378,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         LOG(INFO) << "begin batch submit task: " << tasks[0].task_type;
         for (const auto& push_item : push_divider) {
             const auto& push_type = push_item.first;
-            auto all_push_tasks = push_item.second;
+            const auto& all_push_tasks = push_item.second;
             switch (push_type) {
             case TPushType::LOAD_V2:
                 _push_workers->submit_tasks(all_push_tasks);
