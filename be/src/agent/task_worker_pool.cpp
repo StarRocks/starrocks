@@ -269,7 +269,9 @@ void TaskWorkerPool::submit_tasks(const std::vector<const TAgentTaskRequest*>& t
             }
         }
     }
-    LOG(INFO) << "fail to register task. type=" << type_str << ", signatures=[" << fail_ss.str() << "]";
+    if (fail_ss.str().length() > 0) {
+        LOG(INFO) << "fail to register task. type=" << type_str << ", signatures=[" << fail_ss.str() << "]";
+    }
 
     size_t queue_size = 0;
     {
@@ -296,8 +298,10 @@ void TaskWorkerPool::submit_tasks(const std::vector<const TAgentTaskRequest*>& t
         _worker_thread_condition_variable->notify_all();
     }
 
-    LOG(INFO) << "success to submit task. type=" << type_str << ", signature=[" << succ_ss.str()
-              << "], task_count_in_queue=" << queue_size;
+    if (succ_ss.str().length() > 0) {
+        LOG(INFO) << "success to submit task. type=" << type_str << ", signature=[" << succ_ss.str()
+                  << "], task_count_in_queue=" << queue_size;
+    }
 }
 
 size_t TaskWorkerPool::num_queued_tasks() const {
