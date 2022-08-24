@@ -1598,6 +1598,7 @@ public class DatabaseTransactionMgr {
         }
         Span finishSpan = TraceManager.startSpan("finishTransaction", transactionState.getTxnSpan());
         db.writeLock();
+        finishSpan.addEvent("db_lock");
         try {
             boolean txnOperated = false;
             writeLock();

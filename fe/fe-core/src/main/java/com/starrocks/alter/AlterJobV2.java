@@ -215,10 +215,6 @@ public abstract class AlterJobV2 implements Writable {
 
         db.writeLock();
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new AlterCancelException("Database " + dbId + " does not exist");
-            }
             if (!isStable) {
                 errMsg = "table is unstable";
                 LOG.warn("wait table {} to be stable before doing {} job", tableId, type);
