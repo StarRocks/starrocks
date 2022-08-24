@@ -121,6 +121,17 @@ class HDFSConfigurationWrap extends HdfsConfiguration {
     }
 
     public void convertHDFSConfToProperties(THdfsProperties tProperties) {
+        Properties props =  this.getProps();
+        Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
+        while (enums.hasMoreElements()) {
+            String key = enums.nextElement();
+            String value = props.getProperty(key);
+            switch (key) {
+                case HdfsFsManager.FS_HDFS_IMPL_DISABLE_CACHE:
+                    tProperties.setDisable_cache(Boolean.parseBoolean(value));
+                    break;
+            }
+        }
         return;
     }
 }
@@ -143,6 +154,7 @@ public class HdfsFsManager {
     // arguments for ha hdfs
     private static final String DFS_NAMESERVICES_KEY = "dfs.nameservices";
     private static final String FS_DEFAULTFS_KEY = "fs.defaultFS";
+    public static final String FS_HDFS_IMPL_DISABLE_CACHE = "fs.hdfs.impl.disable.cache";
     // If this property is not set to "true", FileSystem instance will be returned
     // from cache
     // which is not thread-safe and may cause 'Filesystem closed' exception when it
@@ -289,6 +301,12 @@ public class HdfsFsManager {
         String dfsNameServices = loadProperties.getOrDefault(DFS_NAMESERVICES_KEY, "");
         String authentication = loadProperties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                 "");
+        String disableCache = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+        String disableCacheLowerCase = disableCache.toLowerCase();
+        if (!(disableCacheLowerCase.equals("true") || disableCacheLowerCase.equals("false"))) {
+            LOG.warn("invalid disable cache: " + disableCache);
+            throw new UserException("invalid disable cache: " + disableCache);
+        }
         if (!dfsNameServices.equals("")) {
             LOG.warn("Invalid load_properties, namenode HA should be set in hdfs/core-site.xml for" +
                     "broker load without broke. For broker load with broker, you can set namenode HA in the load_properties");
@@ -324,11 +342,12 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new HDFSConfigurationWrap();
+                conf.set(FS_HDFS_IMPL_DISABLE_CACHE, disableCache);
                 UserGroupInformation ugi = null;
                 if (!Strings.isNullOrEmpty(username) && conf.get("hadoop.security.authentication").equals("simple")) {
                     ugi = UserGroupInformation.createRemoteUser(username);
                 }
-                FileSystem dfsFileSystem;
+                FileSystem dfsFileSystem = null;
                 if (ugi != null) {
                     dfsFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
                         @Override

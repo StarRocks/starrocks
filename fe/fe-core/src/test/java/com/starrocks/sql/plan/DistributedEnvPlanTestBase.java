@@ -1,9 +1,10 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -119,15 +120,15 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
         OlapTable t8 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
         setTableStatistics(t8, 6000000 * scale);
 
-        OlapTable test_all_type = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
-        setTableStatistics(test_all_type, 6000000);
+        OlapTable testAllType = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+        setTableStatistics(testAllType, 6000000);
 
-        OlapTable lineorder_new_l =
+        OlapTable lineorderNewL =
                 (OlapTable) globalStateMgr.getDb("test").getTable("lineorder_new_l");
-        setTableStatistics(lineorder_new_l, 1200018434);
+        setTableStatistics(lineorderNewL, 1200018434);
 
-        OlapTable dates_n = (OlapTable) globalStateMgr.getDb("test").getTable("dates_n");
-        setTableStatistics(dates_n, 2556);
+        OlapTable datesN = (OlapTable) globalStateMgr.getDb("test").getTable("dates_n");
+        setTableStatistics(datesN, 2556);
 
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);

@@ -65,7 +65,7 @@ OutPut Exchange Id: 30
 |
 27:NESTLOOP JOIN
 |  join op: CROSS JOIN
-|  other predicates: cast([18: sum, DECIMAL128(38,2), true] as DOUBLE) > cast([37: expr, DECIMAL128(38,12), true] as DOUBLE)
+|  other join predicates: cast([18: sum, DECIMAL128(38,2), true] as DOUBLE) > cast([37: expr, DECIMAL128(38,12), true] as DOUBLE)
 |  cardinality: 1600000
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE

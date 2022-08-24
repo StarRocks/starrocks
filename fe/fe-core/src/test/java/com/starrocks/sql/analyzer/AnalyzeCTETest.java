@@ -35,8 +35,8 @@ public class AnalyzeCTETest {
                 "with c1(a,b,c) as (select * from t0) select t.* from c1 t")).getQueryRelation();
         Assert.assertEquals("a,b,c", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess(
-                "with c1(a,b,c) as (select * from t0), c2 as (select * from t1) select c2.*,t.* from c1 t,c2")).getQueryRelation();
+        query = ((QueryStatement) analyzeSuccess("with c1(a,b,c) as (select * from t0), c2 as " +
+                "(select * from t1) select c2.*,t.* from c1 t,c2")).getQueryRelation();
         Assert.assertEquals("v4,v5,v6,a,b,c", String.join(",", query.getColumnOutputNames()));
     }
 

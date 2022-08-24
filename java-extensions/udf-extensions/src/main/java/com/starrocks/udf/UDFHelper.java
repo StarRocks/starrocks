@@ -7,10 +7,17 @@ import com.starrocks.utils.Platform;
 import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 
 import static com.starrocks.utils.NativeMethodHelper.getAddrs;
@@ -29,6 +36,10 @@ public class UDFHelper {
     public static final int TYPE_ARRAY = 15;
 
     private static final byte[] emptyBytes = new byte[0];
+
+    private static final ThreadLocal<DateFormat> formatter =
+            ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+    private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
@@ -158,6 +169,49 @@ public class UDFHelper {
         Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
+    private static void getStringDateResult(int numRows, Date[] column, long columnAddr) {
+        // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = formatter.get().format(column[i]);
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    private static void getStringTimeStampResult(int numRows, Timestamp[] column, long columnAddr) {
+        // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    public static void getStringDateTimeResult(int numRows, LocalDateTime[] column, long columnAddr) {
+        // TODO:
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    public static void getStringDecimalResult(int numRows, BigDecimal[] column, long columnAddr) {
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
     private static void getStringBoxedResult(int numRows, String[] column, long columnAddr) {
         byte[] nulls = new byte[numRows];
         int[] offsets = new int[numRows];
@@ -220,7 +274,19 @@ public class UDFHelper {
                 break;
             }
             case TYPE_VARCHAR: {
-                getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                if (boxedResult instanceof Date[]) {
+                    getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof LocalDateTime[]) {
+                    getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Timestamp[]) {
+                    getStringTimeStampResult(numRows, (Timestamp[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof BigDecimal[]) {
+                    getStringDecimalResult(numRows, (BigDecimal[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof String[]) {
+                    getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                } else {
+                    throw new UnsupportedOperationException("unsupported type:" + boxedResult);
+                }
                 break;
             }
             default:

@@ -206,8 +206,8 @@ public class ScanTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
 
         // check multi tables only one agg table can pre-aggregation
-        sql =
-                "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
+        sql = "select t1.k2, sum(t1.k9) from baseall t1 " +
+                "join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
                 "  |       TABLE: baseall\n" +
@@ -216,8 +216,9 @@ public class ScanTest extends PlanTestBase {
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: ON"));
 
-        sql =
-                "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
+        sql = "select t3.k2, sum(t3.k9) from baseall t1 " +
+                "join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 " +
+                "on t1.k1 = t3.k1 group by t3.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
@@ -234,7 +235,8 @@ public class ScanTest extends PlanTestBase {
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column"));
 
         sql =
-                "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
+                "select t1.k2, sum(t1.k9) from baseall t1 " +
+                        "join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
@@ -249,7 +251,8 @@ public class ScanTest extends PlanTestBase {
 
         // check aggregate two table columns
         sql =
-                "select t1.k2, t2.k2, sum(t1.k9), sum(t2.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2, t2.k2";
+                "select t1.k2, t2.k2, sum(t1.k9), sum(t2.k9) from baseall t1 " +
+                        "join baseall t2 on t1.k1 = t2.k1 group by t1.k2, t2.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +

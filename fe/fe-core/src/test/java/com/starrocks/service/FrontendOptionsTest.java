@@ -2,13 +2,14 @@
 
 package com.starrocks.service;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
+import com.starrocks.common.Config;
+import com.starrocks.common.util.NetUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -22,8 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.util.NetUtils;
 
 
 public class FrontendOptionsTest {
@@ -40,7 +39,7 @@ public class FrontendOptionsTest {
     }
 
     @Test
-    public void CIDRTest() {
+    public void cidrTest() {
 
         List<String> priorityCidrs = FrontendOptions.priorityCidrs;
         priorityCidrs.add("192.168.5.136/32");
@@ -250,7 +249,8 @@ public class FrontendOptionsTest {
     }
 
     @Test
-    public void testInitAddrUseFqdn() throws UnknownHostException, NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
+    public void testInitAddrUseFqdn() throws UnknownHostException, NoSuchFieldException, SecurityException,
+            IllegalArgumentException, IllegalAccessException {
         testInitAddrUseFqdnCommonMock();
         new MockUp<InetAddress>() {
             @Mock

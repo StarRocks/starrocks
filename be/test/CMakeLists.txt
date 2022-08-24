@@ -162,6 +162,7 @@ set(EXEC_FILES
         ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
+        ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp

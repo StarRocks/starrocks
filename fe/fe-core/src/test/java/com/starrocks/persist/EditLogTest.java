@@ -32,9 +32,9 @@ public class EditLogTest {
     @Test
     public void testtNormal() throws Exception {
         BlockingQueue<JournalTask> logQueue = new ArrayBlockingQueue<>(100);
-        short THREAD_NUM = 20;
+        short threadNum = 20;
         List<Thread> allThreads = new ArrayList<>();
-        for (short i = 0; i != THREAD_NUM; i++) {
+        for (short i = 0; i != threadNum; i++) {
             final short n = i;
             allThreads.add(new Thread(new Runnable() {
                 @Override
@@ -48,7 +48,7 @@ public class EditLogTest {
         Thread consumer = new Thread(new Runnable() {
             @Override
             public void run() {
-                for (int i = 0; i != THREAD_NUM; i++) {
+                for (int i = 0; i != threadNum; i++) {
                     try {
                         JournalTask task = logQueue.take();
                         task.markSucceed();
@@ -59,11 +59,11 @@ public class EditLogTest {
             }
         });
         consumer.start();
-        for(Thread producer: allThreads) {
+        for (Thread producer : allThreads) {
             producer.start();
         }
 
-        for(Thread producer: allThreads) {
+        for (Thread producer : allThreads) {
             producer.join();
         }
         consumer.join();
@@ -100,13 +100,13 @@ public class EditLogTest {
         t2.start();
 
         // t1 got interrupt exception while blocking in task.get()
-        for (int i = 0; i != 3; i ++) {
+        for (int i = 0; i != 3; i++) {
             t1.interrupt();
             Thread.sleep(100);
         }
 
         // t2 got interrupt exception while blocking in queue.put()
-        for (int i = 0; i != 3; i ++) {
+        for (int i = 0; i != 3; i++) {
             t2.interrupt();
             Thread.sleep(100);
         }

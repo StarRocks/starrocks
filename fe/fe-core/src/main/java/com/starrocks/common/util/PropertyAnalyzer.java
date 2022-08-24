@@ -98,6 +98,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
+    public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {

@@ -58,7 +58,7 @@ public class GrantRevokeRoleStmtTest {
         // suppose current user exists
         new Expectations(userPrivTable) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                userPrivTable.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }
@@ -67,7 +67,7 @@ public class GrantRevokeRoleStmtTest {
         // suppose current role exists and has GRANT privilege
         new Expectations(auth) {
             {
-                auth.doesRoleExist((String)any);
+                auth.doesRoleExist((String) any);
                 minTimes = 0;
                 result = true;
             }
@@ -92,7 +92,8 @@ public class GrantRevokeRoleStmtTest {
         RevokeRoleStmt stmt2 = (RevokeRoleStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "revoke 'test_role' from 'test_user'@['starrocks.com']", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt2, ctx);
-        Assert.assertEquals("REVOKE 'default_cluster:test_role' FROM 'default_cluster:test_user'@['starrocks.com']", stmt2.toString());
+        Assert.assertEquals("REVOKE 'default_cluster:test_role' " +
+                "FROM 'default_cluster:test_user'@['starrocks.com']", stmt2.toString());
     }
 
     @Test(expected = SemanticException.class)
@@ -100,7 +101,7 @@ public class GrantRevokeRoleStmtTest {
         // suppose current user doesn't exist, check for exception
         new Expectations(userPrivTable) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                userPrivTable.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = false;
             }
@@ -108,7 +109,7 @@ public class GrantRevokeRoleStmtTest {
         // suppose current role exists
         new Expectations(auth) {
             {
-                auth.doesRoleExist((String)any);
+                auth.doesRoleExist((String) any);
                 minTimes = 0;
                 result = true;
             }
@@ -123,7 +124,7 @@ public class GrantRevokeRoleStmtTest {
         // suppose current exists
         new Expectations(userPrivTable) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                userPrivTable.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }
@@ -131,7 +132,7 @@ public class GrantRevokeRoleStmtTest {
         // suppose current role doesn't exist, check for exception
         new Expectations(auth) {
             {
-                auth.doesRoleExist((String)any);
+                auth.doesRoleExist((String) any);
                 minTimes = 0;
                 result = false;
             }
@@ -140,4 +141,4 @@ public class GrantRevokeRoleStmtTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No exception throws.");
     }
- }
+}

@@ -30,7 +30,6 @@ import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
@@ -44,7 +43,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ResourceMgrTest {

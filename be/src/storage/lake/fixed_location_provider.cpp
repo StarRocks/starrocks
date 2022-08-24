@@ -30,6 +30,11 @@ std::string FixedLocationProvider::segment_location(int64_t /*tablet_id*/, std::
     return fmt::format("{}/{}", _root, segment_name);
 }
 
+std::string FixedLocationProvider::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
+                                                                 int64_t expire_time) const {
+    return fmt::format("{}/{}", _root, tablet_metadata_lock_filename(tablet_id, version, expire_time));
+}
+
 Status FixedLocationProvider::list_root_locations(std::set<std::string>* roots) const {
     roots->insert(_root);
     return Status::OK();
