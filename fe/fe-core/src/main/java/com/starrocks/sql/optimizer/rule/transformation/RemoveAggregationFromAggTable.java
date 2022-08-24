@@ -32,6 +32,7 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
             ImmutableList.of(FunctionSet.BITMAP_UNION,
                     FunctionSet.BITMAP_UNION_COUNT,
                     FunctionSet.HLL_UNION,
+                    FunctionSet.HLL_UNION_AGG,
                     FunctionSet.PERCENTILE_UNION);
 
     public RemoveAggregationFromAggTable() {
