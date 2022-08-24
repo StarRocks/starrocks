@@ -22,7 +22,9 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -30,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.EliminateInExistPredicateRule;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,33 +48,32 @@ public class SubqueryTransformer {
 
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
                                            CTETransformerContext cteContext) {
-        if (subOpt.getExpressionMapping().hasExpression(expression)) {
-            return subOpt;
-        }
-
-        FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
-        subOpt = expression.accept(handler, new SubqueryContext(subOpt, true, cteContext));
-
-        return subOpt;
+        return doHandleSubqueries(columnRefFactory, subOpt, expression, cteContext, true);
     }
 
-    // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
                                                  Expr expression, CTETransformerContext cteContext) {
+        return doHandleSubqueries(columnRefFactory, subOpt, expression, cteContext, false);
+    }
+
+    private OptExprBuilder doHandleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression,
+                                              CTETransformerContext cteContext, boolean useSemiAnti) {
         if (subOpt.getExpressionMapping().hasExpression(expression)) {
             return subOpt;
         }
 
         FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, session);
-        subOpt = expression.accept(handler, new SubqueryContext(subOpt, false, cteContext));
+        subOpt = expression.accept(handler, new SubqueryContext(subOpt, useSemiAnti, cteContext));
 
         return subOpt;
     }
 
     public ScalarOperator rewriteSubqueryScalarOperator(Expr predicate, OptExprBuilder subOpt,
-                                                        List<ColumnRefOperator> correlation, ColumnRefFactory columnRefFactory) {
+                                                        List<ColumnRefOperator> correlation,
+                                                        ColumnRefFactory columnRefFactory) {
         ScalarOperator scalarPredicate =
-                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation, columnRefFactory);
+                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation,
+                        columnRefFactory);
 
         List<InPredicate> inPredicates = Lists.newArrayList();
         predicate.collect(InPredicate.class, inPredicates);
@@ -98,42 +100,45 @@ public class SubqueryTransformer {
             }
         }
 
-        scalarPredicate = Utils.compoundAnd(s);
-
-        return scalarPredicate;
+        return Utils.compoundAnd(s);
     }
 
-    public Expr rewriteJoinOnPredicate(Expr predicate) {
-        List<Expr> conjuncts = Expr.extractConjuncts(predicate);
-        List<Expr> newConjuncts = Lists.newArrayListWithCapacity(conjuncts.size());
-        for (Expr conjunct : conjuncts) {
-            List<InPredicate> inPredicates = Lists.newArrayList();
-            conjunct.collect(InPredicate.class, inPredicates);
-            List<ExistsPredicate> existsSubquerys = Lists.newArrayList();
-            conjunct.collect(ExistsPredicate.class, existsSubquerys);
+    /**
+     * Eliminate all the unused subqueries from the tree with subOpt as root node
+     */
+    public OptExprBuilder eliminateUnusedApplyNodesFrom(OptExprBuilder subOpt, ScalarOperator scalarPredicate) {
+        List<ColumnRefOperator> allColumnRefs = Utils.extractColumnRef(scalarPredicate);
 
-            boolean skip = false;
-            for (InPredicate e : inPredicates) {
-                if (!(e.getChild(1) instanceof Subquery)) {
-                    continue;
-                }
+        OptExprBuilder rootOpt = subOpt;
+        OptExprBuilder preOpt = null;
+        OptExprBuilder curOpt = subOpt;
 
-                if (((Subquery) e.getChild(1)).isUseSemiAnti()) {
-                    skip = true;
+        while (curOpt.getRoot().getOp() instanceof LogicalApplyOperator) {
+            LogicalApplyOperator applyOp = curOpt.getRoot().getOp().cast();
+            Operator rightChild = curOpt.getInputs().get(1).getRoot().getOp();
+            if (rightChild instanceof LogicalTableFunctionOperator || allColumnRefs.contains(applyOp.getOutput())) {
+                preOpt = curOpt;
+            } else {
+                if (preOpt != null) {
+                    preOpt.getInputs().set(0, curOpt.getInputs().get(0));
+                } else {
+                    rootOpt = curOpt.getInputs().get(0);
                 }
             }
-            for (ExistsPredicate e : existsSubquerys) {
-                Preconditions.checkState(e.getChild(0) instanceof Subquery);
-                if (((Subquery) e.getChild(0)).isUseSemiAnti()) {
-                    skip = true;
-                }
-            }
-            if (!skip) {
-                newConjuncts.add(conjunct);
-            }
+            curOpt = curOpt.getInputs().get(0);
         }
 
-        return Expr.compoundAnd(newConjuncts);
+        return rootOpt;
+    }
+
+    /**
+     * The in and exists can be removed from the original predicate if useSemiAnti = true
+     */
+    public ScalarOperator eliminateInOrExistsPredicateFrom(ScalarOperator scalarPredicate, Expr predicate,
+                                                           ExpressionMapping expressionMapping) {
+        ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
+        EliminateInExistPredicateRule rule = new EliminateInExistPredicateRule(predicate, expressionMapping);
+        return scalarOperatorRewriter.rewrite(scalarPredicate, Collections.singletonList(rule));
     }
 
     private static class SubqueryContext {

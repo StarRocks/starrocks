@@ -49,12 +49,14 @@ class QueryTransformer {
     private final ConnectContext session;
     private final List<ColumnRefOperator> correlation = new ArrayList<>();
     private final CTETransformerContext cteContext;
+    private final SubqueryTransformer subqueryTransformer;
 
     public QueryTransformer(ColumnRefFactory columnRefFactory, ConnectContext session,
                             CTETransformerContext cteContext) {
         this.columnRefFactory = columnRefFactory;
         this.session = session;
         this.cteContext = cteContext;
+        this.subqueryTransformer = new SubqueryTransformer(session);
     }
 
     public LogicalPlan plan(SelectRelation queryBlock, ExpressionMapping outer) {
@@ -127,7 +129,6 @@ class QueryTransformer {
 
         List<ColumnRefOperator> fieldMappings = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
@@ -157,7 +158,6 @@ class QueryTransformer {
         ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
         for (Expr expression : expressions) {
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
@@ -175,18 +175,32 @@ class QueryTransformer {
             return subOpt;
         }
 
-        SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
+        // Step1: Transform subquery to apply operator
+        // In this step, all the subqueries will be preserved, such as `1 < 2 or exists(select * from t2)`
         subOpt = subqueryTransformer.handleSubqueries(columnRefFactory, subOpt, predicate, cteContext);
 
+        // Step2: Transform predicate Expr to predicate ScalarOperator
+        // In this step, subquery Expr will be directly mapped to the column ref according the expressionMapping, created in the step1
+        // And, the constant part of predicate will be evaluated during transformation, for example,
+        // `1 < 2 or exists(select * from t2)` will be transformed to `true`
         ScalarOperator scalarPredicate =
-                subqueryTransformer.rewriteSubqueryScalarOperator(predicate, subOpt, correlation, columnRefFactory);
+                SqlToScalarOperatorTranslator.translate(predicate, subOpt.getExpressionMapping(), correlation);
 
-        if (scalarPredicate != null) {
-            LogicalFilterOperator filterOperator = new LogicalFilterOperator(scalarPredicate);
-            return subOpt.withNewRoot(filterOperator);
-        } else {
+        // Step3: Since the predicate may be simplified during the step2, so the subTree created by step1
+        // can also be eliminated according the output predicate of step2
+        subOpt = subqueryTransformer.eliminateUnusedApplyNodesFrom(subOpt, scalarPredicate);
+
+        // Step4: For exists and in subquery of semi or anti mode, the in and exists predicate itself should be removed
+        // from the predicate
+        scalarPredicate = subqueryTransformer.eliminateInOrExistsPredicateFrom(scalarPredicate, predicate,
+                subOpt.getExpressionMapping());
+
+        if (scalarPredicate == null) {
             return subOpt;
         }
+
+        LogicalFilterOperator filterOperator = new LogicalFilterOperator(scalarPredicate);
+        return subOpt.withNewRoot(filterOperator);
     }
 
     private OptExprBuilder window(OptExprBuilder subOpt, List<AnalyticExpr> window) {
@@ -312,7 +326,8 @@ class QueryTransformer {
         if (!Iterables.isEmpty(inputs)) {
             subOpt = project(subOpt, inputs);
         }
-        ExpressionMapping groupingTranslations = new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
+        ExpressionMapping groupingTranslations =
+                new ExpressionMapping(subOpt.getScope(), subOpt.getFieldMappings());
 
         List<ColumnRefOperator> groupByColumnRefs = new ArrayList<>();
 
@@ -450,7 +465,8 @@ class QueryTransformer {
             subOpt = new OptExprBuilder(repeatOperator, Lists.newArrayList(subOpt), groupingTranslations);
         }
 
-        return new OptExprBuilder(new LogicalAggregationOperator(AggType.GLOBAL, groupByColumnRefs, aggregationsMap),
+        return new OptExprBuilder(
+                new LogicalAggregationOperator(AggType.GLOBAL, groupByColumnRefs, aggregationsMap),
                 Lists.newArrayList(subOpt), groupingTranslations);
     }
 
@@ -503,7 +519,8 @@ class QueryTransformer {
                     groupByColumns.add(column);
                 }
             }
-            return subOpt.withNewRoot(new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, new HashMap<>()));
+            return subOpt.withNewRoot(
+                    new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, new HashMap<>()));
         } else {
             return subOpt;
         }

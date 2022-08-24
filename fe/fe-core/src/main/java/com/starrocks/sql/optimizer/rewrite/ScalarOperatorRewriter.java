@@ -87,6 +87,8 @@ public class ScalarOperatorRewriter {
                 changeNums = context.changeNum();
                 result = applyRuleTopDown(result, rule);
             } while (changeNums != context.changeNum());
+        } else if (rule.isOneShot()) {
+            result = applyRuleOneShot(result, rule);
         }
 
         return result;
@@ -114,5 +116,9 @@ public class ScalarOperatorRewriter {
             op.setChild(i, applyRuleTopDown(op.getChild(i), rule));
         }
         return op;
+    }
+
+    private ScalarOperator applyRuleOneShot(ScalarOperator operator, ScalarOperatorRewriteRule rule) {
+        return rule.apply(operator, context);
     }
 }
