@@ -15,7 +15,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.hudi.exception.MetadataNotFoundException;
 
 import java.util.List;
 import java.util.stream.Collectors;

@@ -10,6 +10,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -193,15 +194,15 @@ public class InsertOverwriteJobRunner {
         }
     }
 
-    private void createTempPartitions() {
+    private void createTempPartitions() throws MetaNotFoundException {
         try {
             long createPartitionStartTimestamp = System.currentTimeMillis();
             PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                     job.getSourcePartitionIds(), job.getTmpPartitionIds());
             createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
-        } catch (Throwable t) {
-            LOG.warn("create temp partitions failed", t);
-            throw t;
+        } catch (MetaNotFoundException e) {
+            LOG.warn("create temp partitions failed", e);
+            throw e;
         }
     }
 
