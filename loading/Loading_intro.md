@@ -96,7 +96,7 @@ StarRocks 提供 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/
 
 - 如果要导入 MySQL 数据，除了可以使用 [starrockswriter](/loading/DataX-starrocks-writer.md) 以外，推荐通过 [MySQL 外部表](/using_starrocks/External_table.md)的方式，使用 INSERT INTO SELECT 语句实现导入。
 
-- 对于 Oracle、PostgreSQL 等数据源，推荐使用 [starrockswriter](/loading/DataX-starrocks-writer.md) 实现导入。如果要导入的数据源可以通过 Broker 或 Spark 程序读取，也可以采用 [Spark Load](/loading/SparkLoad.md) 或 [Broker Load](/loading/BrokerLoad.md) 实现导入。
+- 对于 Oracle、PostgreSQL 等数据源，推荐使用 [starrockswriter](/loading/DataX-starrocks-writer.md) 实现导入。
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 
