@@ -33,9 +33,11 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PseudoCluster {
     private static final Logger LOG = LogManager.getLogger(PseudoCluster.class);
@@ -184,8 +186,8 @@ public class PseudoCluster {
         }
     }
 
-    public void runSqlList(String db, String... sqls) throws SQLException {
-        runSqlList(db, sqls);
+    public void runSqls(String db, String... sqls) throws SQLException {
+        runSqlList(db, Arrays.stream(sqls).collect(Collectors.toList()));
     }
 
     public String getRunDir() {
@@ -237,7 +239,7 @@ public class PseudoCluster {
         Map<String, String> feConfMap = Maps.newHashMap();
         feConfMap.put("tablet_create_timeout_second", "10");
         feConfMap.put("query_port", Integer.toString(queryPort));
-        cluster.frontend.init(fakeJournal, runDir + "/fe", feConfMap);
+        cluster.frontend.init(fakeJournal, runDir, feConfMap);
         cluster.frontend.start(new String[0]);
 
         if (logToConsole) {
@@ -254,7 +256,7 @@ public class PseudoCluster {
             long beId = backendIdStart + i;
             String beRunPath = runDir + "/be" + beId;
             PseudoBackend backend = new PseudoBackend(cluster, beRunPath, beId, host, port++, port++, port++, port++,
-                    cluster.frontend.getFrontendService());
+                                                      cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
@@ -299,8 +301,52 @@ public class PseudoCluster {
         return instance;
     }
 
+    public static class CreateTableSqlBuilder {
+        private String tableName = "test_table";
+        private int buckets = 3;
+        private int replication = 3;
+
+        private boolean ssd = true;
+
+        public CreateTableSqlBuilder setTableName(String tableName) {
+            this.tableName = tableName;
+            return this;
+        }
+
+        public CreateTableSqlBuilder setBuckets(int buckets) {
+            this.buckets = buckets;
+            return this;
+        }
+
+        public CreateTableSqlBuilder setReplication(int replication) {
+            this.replication = replication;
+            return this;
+        }
+
+        public CreateTableSqlBuilder setSsd(boolean ssd) {
+            this.ssd = ssd;
+            return this;
+        }
+
+        public String build() {
+            return String.format("create table %s (id bigint not null, name varchar(64) not null, age int null) " +
+                                         "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
+                                         "PROPERTIES(\"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")", tableName,
+                                 buckets, replication,
+                                 ssd ? "SSD" : "HDD");
+        }
+    }
+
+    public static CreateTableSqlBuilder newCreateTableSqlBuilder() {
+        return new CreateTableSqlBuilder();
+    }
+
+    public static String buildInsertSql(String db, String table) {
+        return "insert into " + (db == null ? "" : db + ".") + table + " values (1,\"1\", 1), (2,\"2\", 2), (3,\"3\", 3)";
+    }
+
     public static void main(String[] args) throws Exception {
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
+        PseudoCluster.getOrCreateWithRandomPort(false, 3);
         for (int i = 0; i < 3; i++) {
             System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
         }

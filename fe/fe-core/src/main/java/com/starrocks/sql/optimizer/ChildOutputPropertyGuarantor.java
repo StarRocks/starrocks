@@ -301,7 +301,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
 
         // 1. Distribution is broadcast
-        if (rightChildOutputProperty.getDistributionProperty().isBroadcast()) {
+        DistributionProperty rightDistribute = rightChildOutputProperty.getDistributionProperty();
+        if (rightDistribute.isBroadcast() || rightDistribute.isGather()) {
             return visitOperator(node, context);
         }
         // 2. Distribution is shuffle

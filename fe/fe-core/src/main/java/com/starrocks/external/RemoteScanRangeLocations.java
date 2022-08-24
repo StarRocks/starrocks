@@ -22,6 +22,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -115,7 +116,8 @@ public class RemoteScanRangeLocations {
 
     private void createHudiScanRangeLocations(long partitionId,
                                               HivePartition partition,
-                                              HdfsFileDesc fileDesc) {
+                                              HdfsFileDesc fileDesc,
+                                              boolean useJNIReader) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -129,7 +131,7 @@ public class RemoteScanRangeLocations {
         for (String log : fileDesc.getHudiDeltaLogs()) {
             hdfsScanRange.addToHudi_logs(log);
         }
-        hdfsScanRange.setHudi_mor_table((fileDesc.isHudiMORTable()));
+        hdfsScanRange.setUse_hudi_jni_reader(useJNIReader);
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
@@ -175,6 +177,13 @@ public class RemoteScanRangeLocations {
                 }
             }
         } else if (table instanceof HudiTable) {
+            HudiTable hudiTable = (HudiTable) table;
+            String tableInputFormat = hudiTable.getHudiInputFormat();
+            boolean morTable = hudiTable.getTableType() == HoodieTableType.MERGE_ON_READ;
+            boolean readOptimized = tableInputFormat.equals(HudiTable.MOR_RO_INPUT_FORMAT)
+                    || tableInputFormat.equals(HudiTable.MOR_RO_INPUT_FORMAT_LEGACY);
+            boolean snapshot = tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT)
+                    || tableInputFormat.equals(HudiTable.MOR_RT_INPUT_FORMAT_LEGACY);
             for (int i = 0; i < partitions.size(); i++) {
                 descTbl.addReferencedPartitions(table, partitionInfos.get(i));
                 for (HdfsFileDesc fileDesc : partitions.get(i).getFiles()) {
@@ -182,7 +191,12 @@ public class RemoteScanRangeLocations {
                         String message = "Error: get a empty hudi fileSlice";
                         throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
                     }
-                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc);
+                    // ignore the scan range when read optimized mode and file slices contain logs only
+                    if (morTable && readOptimized && fileDesc.getLength() == -1 && fileDesc.getFileName().equals("")) {
+                        continue;
+                    }
+                    boolean useJNIReader = (morTable && snapshot && !fileDesc.getHudiDeltaLogs().isEmpty());
+                    createHudiScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, useJNIReader);
                 }
             }
         } else {

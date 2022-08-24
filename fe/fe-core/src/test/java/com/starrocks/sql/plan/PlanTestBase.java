@@ -15,7 +15,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1293,7 +1292,7 @@ public class PlanTestBase {
     }
 
     public void runFileUnitTest(String filename) {
-        runFileUnitTest(filename, true);
+        runFileUnitTest(filename, false);
     }
 
     public static String format(String result) {

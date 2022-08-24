@@ -18,7 +18,7 @@ import static java.lang.Double.POSITIVE_INFINITY;
 public class HiveColumnStats {
     private static final Logger LOG = LogManager.getLogger(HiveColumnStats.class);
 
-    private enum StatisticType {
+    public enum StatisticType {
         UNKNOWN,
         ESTIMATE
     }
@@ -249,5 +249,9 @@ public class HiveColumnStats {
 
     public void setMaxValue(double maxValue) {
         this.maxValue = maxValue;
+    }
+
+    public void setType(StatisticType type) {
+        this.type = type;
     }
 }

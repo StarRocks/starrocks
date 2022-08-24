@@ -5,7 +5,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;

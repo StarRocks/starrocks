@@ -36,6 +36,8 @@ public class Tablet {
     @SerializedName(value = "enablePersistentIndex")
     boolean enablePersistentIndex;
 
+    boolean running = true;
+
     private AtomicInteger cloneExecuted = new AtomicInteger(0);
 
     private int readExecuted = 0;
@@ -53,6 +55,14 @@ public class Tablet {
         totalReadFailed.set(0);
         totalReadSucceed.set(0);
         totalVersionGCed.set(0);
+    }
+
+    public void setRunning(boolean running) {
+        this.running = running;
+    }
+
+    public boolean isRunning() {
+        return running;
     }
 
     public synchronized TTabletInfo toThrift() {
@@ -207,22 +217,29 @@ public class Tablet {
         return totalVersionGCed.get();
     }
 
+    private void tryCommitPendingRowsets() {
+        while (!pendingRowsets.isEmpty()) {
+            EditVersion lastVersion = versions.get(versions.size() - 1);
+            Map.Entry<Long, Rowset> e = pendingRowsets.firstEntry();
+            if (e.getKey() <= lastVersion.major) {
+                LOG.info("tablet: {} ignore pendingRowset version: {}", id, e.getKey());
+                pendingRowsets.remove(e.getKey());
+            } else if (e.getKey() == lastVersion.major + 1) {
+                commitNextRowset(e.getValue(), e.getKey(), lastVersion);
+                pendingRowsets.remove(e.getKey());
+            } else {
+                break;
+            }
+        }
+    }
+
     public synchronized void commitRowset(Rowset rowset, long version) throws Exception {
         EditVersion lastVersion = versions.get(versions.size() - 1);
         if (version <= lastVersion.major) {
             LOG.info("tablet:{} ignore rowset commit, version {} <= {}", id, version, lastVersion.major);
         } else if (version == lastVersion.major + 1) {
             commitNextRowset(rowset, version, lastVersion);
-            while (!pendingRowsets.isEmpty()) {
-                lastVersion = versions.get(versions.size() - 1);
-                Map.Entry<Long, Rowset> e = pendingRowsets.firstEntry();
-                if (e.getKey() == lastVersion.major + 1) {
-                    commitNextRowset(e.getValue(), e.getKey(), lastVersion);
-                    pendingRowsets.remove(e.getKey());
-                } else {
-                    break;
-                }
-            }
+            tryCommitPendingRowsets();
         } else {
             if (pendingRowsets.size() >= maxPendingVersions) {
                 throw new Exception(String.format("tablet:%d commit version:%d failed pendingRowsets size:%d >= %d", id, version,
@@ -257,7 +274,7 @@ public class Tablet {
         return info;
     }
 
-    private Rowset getRowsetByVersion(long version) {
+    private Rowset getDeltaRowsetByVersion(long version) {
         for (EditVersion ev : versions) {
             if (ev.major == version && ev.delta != null) {
                 return ev.delta;
@@ -266,17 +283,26 @@ public class Tablet {
         return pendingRowsets.get(version);
     }
 
+    private synchronized EditVersion getEditVersion(long version) {
+        for (EditVersion ev : versions) {
+            if (ev.major == version) {
+                return ev;
+            }
+        }
+        return null;
+    }
+
     public synchronized List<Pair<Long, Rowset>> getRowsetsByMissingVersionList(List<Long> missingVersions) {
         List<Pair<Long, Rowset>> ret = Lists.newArrayList();
         for (int i = 0; i < missingVersions.size() - 1; i++) {
             long version = missingVersions.get(i);
-            Rowset rowset = getRowsetByVersion(version);
+            Rowset rowset = getDeltaRowsetByVersion(version);
             if (rowset != null) {
                 ret.add(new Pair<>(version, rowset));
             }
         }
         for (long v = missingVersions.get(missingVersions.size() - 1); v <= maxContinuousVersion(); v++) {
-            Rowset rowset = getRowsetByVersion(v);
+            Rowset rowset = getDeltaRowsetByVersion(v);
             if (rowset != null) {
                 ret.add(new Pair<>(v, rowset));
             } else {
@@ -307,7 +333,8 @@ public class Tablet {
             for (Pair<Long, Rowset> p : versionAndRowsets) {
                 commitRowset(p.second.copy(), p.first);
             }
-            LOG.info("tablet:{} incremental clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo, versionInfo());
+            LOG.info("tablet:{} incremental clone src:{} before:{} after:{}", id, src.versionInfo(), oldInfo,
+                    versionInfo());
         }
         cloneExecuted.incrementAndGet();
     }
@@ -319,8 +346,8 @@ public class Tablet {
         EditVersion destVersion = new EditVersion(srcVersion.major, srcVersion.minor, System.currentTimeMillis());
         destVersion.rowsets = srcVersion.rowsets.stream().map(Rowset::copy).collect(Collectors.toList());
         versions = Lists.newArrayList(destVersion);
-        pendingRowsets.clear();
         nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);
+        tryCommitPendingRowsets();
         LOG.info("tablet:{} full clone src:{} before:{} after:{}", id, src.id, oldInfo, versionInfo());
     }
 
@@ -345,6 +372,25 @@ public class Tablet {
         }
         versions = newVersions;
         totalVersionGCed.addAndGet(i);
+    }
+
+    public synchronized void convertFrom(Tablet baseTablet, long alterVersion) throws Exception {
+        EditVersion baseEditVersion = baseTablet.getEditVersion(alterVersion);
+        if (baseEditVersion == null) {
+            String msg = String.format("convertFrom failed: version %d compacted base %s new %s", alterVersion,
+                    baseTablet.versionInfo(), versionInfo());
+            LOG.warn(msg);
+            throw new Exception(msg);
+        }
+        String oldInfo = versionInfo();
+        EditVersion destVersion = new EditVersion(baseEditVersion.major, baseEditVersion.minor, System.currentTimeMillis());
+        destVersion.rowsets = baseEditVersion.rowsets.stream().map(Rowset::copy).collect(Collectors.toList());
+        versions = Lists.newArrayList(destVersion);
+        nextRssId = destVersion.rowsets.stream().map(Rowset::getId).reduce(Integer::max).orElse(0);
+        tryCommitPendingRowsets();
+        LOG.info("tablet:{} convertFrom {} {} version:{} before:{} after:{}", id, baseTablet.id, baseTablet.versionInfo(),
+                alterVersion, oldInfo,
+                versionInfo());
     }
 
     public static void main(String[] args) {

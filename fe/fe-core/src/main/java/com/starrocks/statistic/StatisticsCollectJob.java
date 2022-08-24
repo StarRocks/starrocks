@@ -82,10 +82,10 @@ public abstract class StatisticsCollectJob {
 
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
-        context.setQueryId(UUIDUtil.genUUID());
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
+        context.setQueryId(UUIDUtil.genUUID());
         executor.execute();
 
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {

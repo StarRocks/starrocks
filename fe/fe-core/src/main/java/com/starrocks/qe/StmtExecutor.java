@@ -27,7 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.DelSqlBlackListStmt;
 import com.starrocks.analysis.DeleteStmt;
@@ -100,6 +99,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
@@ -864,7 +864,7 @@ public class StmtExecutor {
 
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
-        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(killAnalyzeStmt.getAnalyzeId());
+        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(killAnalyzeStmt.getAnalyzeId(), true);
     }
 
     private void handleAddSqlBlackListStmt() {

@@ -37,11 +37,10 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
                     .addColumn(new Column("EndTime", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
-                    .addColumn(new Column("ConnectionID", ScalarType.createVarchar(60)))
                     .build();
 
     public static List<String> showAnalyzeStatus(AnalyzeStatus analyzeStatus) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "", "ALL", "", "", "", "", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "", "ALL", "", "", "", "", "", "", "");
         long dbId = analyzeStatus.getDbId();
         long tableId = analyzeStatus.getTableId();
         List<String> columns = analyzeStatus.getColumns();

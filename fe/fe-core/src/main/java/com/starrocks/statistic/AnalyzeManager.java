@@ -19,6 +19,7 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -45,7 +46,7 @@ public class AnalyzeManager implements Writable {
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
-
+    //ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
 
     public AnalyzeManager() {
@@ -267,10 +268,14 @@ public class AnalyzeManager implements Writable {
         connectionMap.put(analyzeID, ctx);
     }
 
-    public void unregisterConnection(long analyzeID) {
+    public void unregisterConnection(long analyzeID, boolean killExecutor) {
         ConnectContext context = connectionMap.remove(analyzeID);
-        if (context != null) {
-            context.kill(false);
+        if (killExecutor) {
+            if (context != null) {
+                context.kill(false);
+            } else {
+                throw new SemanticException("There is no running task with analyzeId " + analyzeID);
+            }
         }
     }
 

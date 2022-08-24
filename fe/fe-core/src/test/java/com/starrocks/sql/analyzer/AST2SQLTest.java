@@ -2,10 +2,10 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.StatementBase;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.Assert;
 import org.junit.BeforeClass;
