@@ -170,7 +170,7 @@ public class DecimalV3FunctionAnalyzer {
             returnScale = originalScale;
             returnType = ScalarType.createType(returnPrimitiveType, -1, returnPrecision, returnScale);
         } else {
-            return Expr.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[]{Type.DOUBLE, Type.INT},
+            return Expr.getBuiltinFunction(fn.getFunctionName().getFunction(), new Type[] {Type.DOUBLE, Type.INT},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
 
@@ -231,7 +231,7 @@ public class DecimalV3FunctionAnalyzer {
     // without decimal type rectification.
     public static Function convertSumToMultiDistinctSum(Function sumFn, Type argType) {
         AggregateFunction fn = (AggregateFunction) Expr.getBuiltinFunction(FunctionSet.MULTI_DISTINCT_SUM,
-                new Type[]{argType},
+                new Type[] {argType},
                 IS_NONSTRICT_SUPERTYPE_OF);
         Preconditions.checkArgument(fn != null);
         // Only rectify decimal typed functions.

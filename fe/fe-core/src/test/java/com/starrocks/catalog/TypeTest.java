@@ -139,7 +139,7 @@ public class TypeTest {
 
     @Test
     public void testCanonicalName() {
-        Object[][] testCases = new Object[][]{
+        Object[][] testCases = new Object[][] {
                 {ScalarType.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
                 {ScalarType.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
                 {ScalarType.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},
