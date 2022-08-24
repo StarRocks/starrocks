@@ -11,7 +11,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -486,8 +485,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testReplicatedJoin() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
-                "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
-                "( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
+                "( select ps_suppkey from partsupp where ps_partkey " +
+                "in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
+                "( select 0.5 * sum(l_quantity) from lineitem " +
+                "where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
@@ -684,8 +685,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 1000000000L);
 
-        String sql =
-                "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
+        String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
+                "join [broadcast] t0 where t0.v1 = t1x.v4";
         String planFragment = getVerboseExplain(sql);
 
         Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +
@@ -729,8 +730,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        String sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 union select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        String sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 union " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         String plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -738,8 +739,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t2, 200000);
         setTableStatistics(t0, 800000);
         setTableStatistics(t1, 400000);
-        sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 except select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 except " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -748,8 +749,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t0, 400000);
         setTableStatistics(t1, 400000);
 
-        sql =
-                "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
+        sql = "select * from (select v1+1 as v1 ,v2,v3 from t0 intersect " +
+                "select v4 +2  as v1, v5 as v2, v6 as v3 from t1) as tx join [shuffle] t2 on tx.v1 = t2.v7;";
         plan = getVerboseExplain(sql);
         plans.add(plan);
 
@@ -763,10 +764,24 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
-            assertContains(unionPlan, "     cardinality: 360000\n" +
+            assertContains(unionPlan, "  4:OlapScanNode\n" +
+                    "     table: t1, rollup: t1\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10015,10017,10019\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
-                    "     - filter_id = 0, probe_expr = (5: v4 + 2)\n");
-            assertContains(unionPlan, "     cardinality: 360000\n" +
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
+            assertContains(unionPlan, "  1:OlapScanNode\n" +
+                    "     table: t0, rollup: t0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=10006,10008,10010\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
         }
@@ -876,10 +891,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "    select * from cte union all\n" +
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
+        assertContains(plan, "  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
-                "     partitionsRatio=1/1, tabletsRatio=3/3\n"));
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=10015,10017,10019\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     cardinality: 400000");
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
@@ -1140,6 +1158,37 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  group by: 2: v2, 1: v1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+    }
+
+    @Test
+    public void testExpressionWithCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                "   select * from t0" +
+                ") " +
+                "select sum(k2) from (" +
+                "   SELECT * " +
+                "   from x1 join[bucket] " +
+                "   (SELECT v1 + 1 as k1, v2 + 2 as k2, v3 + 3 as k3 from x1) as y1 on x1.v1 = y1.k1" +
+                ") d group by v3, k3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v1 = 10: expr\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0");
+        assertContains(plan, "    BUCKET_SHUFFLE_HASH_PARTITIONED: 10: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 10> : 7: v1 + 1\n" +
+                "  |  <slot 11> : 8: v2 + 2\n" +
+                "  |  <slot 12> : 9: v3 + 3\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
                 "     TABLE: t0");
     }
 }

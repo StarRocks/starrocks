@@ -23,7 +23,7 @@ public class LoadExecutor implements DataDefinitionExecutor {
                     + " Try using broker load. See 'help broker load;'");
         }
 
-        context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(loadStmt);
+        context.getGlobalStateMgr().getLoadManager().createLoadJobFromStmt(loadStmt, context);
         return null;
     }
 }

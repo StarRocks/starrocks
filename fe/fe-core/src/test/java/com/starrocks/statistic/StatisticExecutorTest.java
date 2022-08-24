@@ -19,7 +19,7 @@ public class StatisticExecutorTest extends PlanTestBase {
         Database db = GlobalStateMgr.getCurrentState().getDb(10002);
         OlapTable olapTable = (OlapTable) db.getTable("t0");
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(10002, olapTable.getId(),null,
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(10002, olapTable.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));

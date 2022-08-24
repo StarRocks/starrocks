@@ -115,8 +115,8 @@ class QueryTransformer {
         // and the internal cte with the same name will overwrite the original mapping
         CTETransformerContext newCteContext = new CTETransformerContext(cteContext);
         return new RelationTransformer(columnRefFactory, session,
-                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext).visit(
-                node).getRootBuilder();
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())), newCteContext)
+                .visit(node).getRootBuilder();
     }
 
     private OptExprBuilder projectForOrder(OptExprBuilder subOpt, Iterable<Expr> expressions,

@@ -532,4 +532,18 @@ public class ExpressionStatisticsCalculatorTest {
                 .calculate(caseWhenOperator, Statistics.builder().setOutputRowCount(100).build());
         Assert.assertEquals(columnStatistic.getDistinctValuesCount(), 3, 0.001);
     }
+
+    @Test
+    public void testFromDays() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, Type.INT, "", true);
+        CallOperator callOperator = new CallOperator(FunctionSet.FROM_DAYS, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.addColumnStatistic(columnRefOperator, new ColumnStatistic(Double.NEGATIVE_INFINITY,
+                Double.POSITIVE_INFINITY, 0, 0, 100));
+
+        ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(columnStatistic.getMaxValue(), 2.534021856E11, 0.001);
+        Assert.assertEquals(columnStatistic.getMinValue(), -28800.0, 0.001);
+    }
 }

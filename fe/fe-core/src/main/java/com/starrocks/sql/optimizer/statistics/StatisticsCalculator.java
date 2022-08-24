@@ -368,16 +368,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
         Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
 
-        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
-        for (ColumnRefOperator columnRefOperator : requiredColumnRefs) {
-            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
-                    .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
-                columnHasHistogram.add(columnRefOperator);
-            }
-        }
-
         Map<ColumnRefOperator, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columnHasHistogram);
+                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, requiredColumnRefs);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
@@ -1376,7 +1368,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (!context.getChildrenStatistics().isEmpty()) {
             //  use the statistics of children first
             context.setStatistics(context.getChildStatistics(0));
-            return visitOperator(node, context);
+            Projection projection = node.getProjection();
+            if (projection != null) {
+                Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
+                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
+                for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
+                    ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
+                    statisticsBuilder.addColumnStatistic(columnRefOperator,
+                            ExpressionStatisticCalculator.calculate(mapOperator, context.getStatistics()));
+                }
+                context.setStatistics(statisticsBuilder.build());
+            }
+            return null;
         }
 
         // None children, may force CTE, use the statistics of producer

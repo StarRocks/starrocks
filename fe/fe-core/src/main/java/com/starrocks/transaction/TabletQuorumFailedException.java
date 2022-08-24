@@ -29,16 +29,19 @@ import java.util.List;
 public class TabletQuorumFailedException extends TransactionException {
 
     private static final String TABLET_QUORUM_FAILED_MSG = "Fail to load files. tablet_id: %s"
-            + ", txn_id: %s, backends: %s";
+            + ", txn_id: %s, backends: %s, replicas: %s";
 
     private long tabletId;
     private List<String> errorBackends = new ArrayList<String>();
 
+    private String replicaInfos;
+
     public TabletQuorumFailedException(long tabletId, long transactionId,
-                                       List<String> errorBackends) {
+                                       List<String> errorBackends, String replicaInfos) {
         super(String.format(TABLET_QUORUM_FAILED_MSG, tabletId, transactionId,
-                Joiner.on(",").join(errorBackends)));
+                Joiner.on(",").join(errorBackends), replicaInfos));
         this.tabletId = tabletId;
         this.errorBackends = errorBackends;
+        this.replicaInfos = replicaInfos;
     }
 }

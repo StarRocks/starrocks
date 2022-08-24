@@ -20,7 +20,7 @@ public class AnalyzerAlterDbQuotaTest {
 
     private void testAlterDatabaseDataQuotaStmt(String dbName, String quotaQuantity, long quotaSize) {
         String sql = "ALTER DATABASE " + dbName + " SET DATA QUOTA " + quotaQuantity;
-        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt)analyzeSuccess(sql);
+        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt) analyzeSuccess(sql);
         Assert.assertEquals(quotaSize, stmt.getQuota());
     }
 

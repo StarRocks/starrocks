@@ -44,6 +44,16 @@ public:
                              ::starrocks::lake::PublishLogVersionResponse* response,
                              ::google::protobuf::Closure* done) override;
 
+    void lock_tablet_metadata(::google::protobuf::RpcController* controller,
+                              const ::starrocks::lake::LockTabletMetadataRequest* request,
+                              ::starrocks::lake::LockTabletMetadataResponse* response,
+                              ::google::protobuf::Closure* done) override;
+
+    void unlock_tablet_metadata(::google::protobuf::RpcController* controller,
+                                const ::starrocks::lake::UnlockTabletMetadataRequest* request,
+                                ::starrocks::lake::UnlockTabletMetadataResponse* response,
+                                ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
 };

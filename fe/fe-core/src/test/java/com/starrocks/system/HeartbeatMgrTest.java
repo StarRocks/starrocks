@@ -75,7 +75,8 @@ public class HeartbeatMgrTest {
             public String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
                                           int readTimeoutMs) {
                 if (urlStr.contains("192.168.1.1")) {
-                    return "{\"replayedJournalId\":191224,\"queryPort\":9131,\"rpcPort\":9121,\"status\":\"OK\",\"msg\":\"Success\",\"feStartTime\":1637288321250,\"feVersion\":\"2.0-ac45651a\"}";
+                    return "{\"replayedJournalId\":191224,\"queryPort\":9131,\"rpcPort\":9121,\"status\":\"OK\"," +
+                            "\"msg\":\"Success\",\"feStartTime\":1637288321250,\"feVersion\":\"2.0-ac45651a\"}";
                 } else {
                     return "{\"replayedJournalId\":0,\"queryPort\":0,\"rpcPort\":0,\"status\":\"FAILED\",\"msg\":\"not ready\"}";
                 }

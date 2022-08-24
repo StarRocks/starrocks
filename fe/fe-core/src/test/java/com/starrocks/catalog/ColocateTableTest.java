@@ -22,19 +22,17 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Multimap;
-import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-
 import mockit.Mock;
 import mockit.MockUp;
-
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
