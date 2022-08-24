@@ -409,4 +409,242 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  2:AGGREGATE (update finalize)\n");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCTEExchangePruneColumn() throws Exception {
+        String sql = "WITH w_t0 as (SELECT * FROM t0) \n" +
+                "SELECT x0.v1, x1.v2 FROM  w_t0 x0, w_t0 x1";
+
+        String thrift = getThriftPlan(sql);
+        assertContains(thrift, "TMultiCastDataStreamSink");
+        assertContains(thrift, "dest_dop:0, output_columns:[1]");
+        assertContains(thrift, "dest_dop:0, output_columns:[2]");
+    }
+
+    @Test
+    public void testMultiNestCTE() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(10000);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (SELECT * FROM t0)" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from x1 " +
+                "UNION ALL " +
+                "SELECT * from x1 ";
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        Assert.assertEquals(4, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(2, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiNestCTE2() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(10000);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (" +
+                "       WITH x3 as (SELECT * FROM t0)" +
+                "       SELECT * FROM x3 " +
+                "       UNION ALL " +
+                "       SELECT * FROM x3 " +
+                "   )" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from x1 " +
+                "UNION ALL " +
+                "SELECT * from x1 ";
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        Assert.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiNestCTE3() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(10000000);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (SELECT * FROM t0)" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from (" +
+                "   with x3 as (" +
+                "       SELECT * from x1 " +
+                "       UNION ALL " +
+                "       SELECT * from x1 " +
+                "   )" +
+                "   select * from x3" +
+                "   union all " +
+                "   select * from x3" +
+                ") x4 ";
+        String plan = getFragmentPlan(sql);
+        defaultCTEReuse();
+        Assert.assertEquals(8, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(3, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiNestCTE4() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(Double.MAX_VALUE);
+        String sql = "WITH x1 as (" +
+                "   WITH x2 as (SELECT * FROM t0)" +
+                "   SELECT * from x2 " +
+                "   UNION ALL " +
+                "   SELECT * from x2 " +
+                ") \n" +
+                "SELECT * from (" +
+                "   with x3 as (" +
+                "       SELECT * from x1 " +
+                "       UNION ALL " +
+                "       SELECT * from x1 " +
+                "   )" +
+                "   select * from x3" +
+                "   union all " +
+                "   select * from x3" +
+                ") x4 join (" +
+                "   with x5 as (" +
+                "       SELECT * from x1 " +
+                "       UNION ALL " +
+                "       SELECT * from x1 " +
+                "   )" +
+                "   select * from x5" +
+                "   union all " +
+                "   select * from x5" +
+                ") x7";
+        String plan = getFragmentPlan(sql);
+        defaultCTEReuse();
+        Assert.assertEquals(16, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(0, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+
+        alwaysCTEReuse();
+        plan = getFragmentPlan(sql);
+        Assert.assertEquals(1, StringUtils.countMatches(plan, "TABLE: t0"));
+        Assert.assertEquals(4, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testMultiRefCTE() throws Exception {
+        String sql = "WITH x1 as (" +
+                " select * from t0" +
+                "), " +
+                " x2 as (" +
+                " select * from x1" +
+                " union all" +
+                " select * from x1" +
+                ")" +
+                "SELECT * from x1 " +
+                "UNION ALL " +
+                "SELECT * from x2 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 09\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testCTELimitNumInline() throws Exception {
+        connectContext.getSessionVariable().setCboCTEMaxLimit(4);
+        defaultCTEReuse();
+        String sql = "with x1 as (select * from t0),\n" +
+                "     x2 as (select * from t0),\n" +
+                "     x3 as (select * from t0),\n" +
+                "     x4 as (select * from t0),\n" +
+                "     x5 as (select * from t0)\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTEMaxLimit(10);
+        System.out.println(plan);
+        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testCTELimitNumReuse() throws Exception {
+        connectContext.getSessionVariable().setCboCTEMaxLimit(4);
+        connectContext.getSessionVariable().setCboCTERuseRatio(100000);
+        String sql = "with x1 as (select * from t0),\n" +
+                "     x2 as (select * from t0),\n" +
+                "     x3 as (select * from t0),\n" +
+                "     x4 as (select * from t0),\n" +
+                "     x5 as (select * from t0),\n" +
+                "     x6 as (select * from t0)\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x6 union all\n" +
+                "select * from x6;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTEMaxLimit(10);
+        Assert.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testAllCTEConsumePruned() throws Exception {
+        String sql = "select * from t0 where (abs(2) = 1 or v1 in (select v4 from t1)) and v1 = 2 and v1 = 5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:EMPTYSET\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:EMPTYSET");
+    }
+>>>>>>> 7a7227561 ([BugFix] Fix in-subquery rewrite to cte bug (#10397))
 }
