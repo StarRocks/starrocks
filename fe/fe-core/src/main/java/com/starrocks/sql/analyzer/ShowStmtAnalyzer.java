@@ -191,8 +191,7 @@ public class ShowStmtAnalyzer {
             try {
                 node.checkJobNameExpr();
             } catch (AnalysisException e) {
-                logger.error("analysis show routine load task error:", e);
-                throw new SemanticException(e.getMessage());
+                throw new SemanticException("analysis show routine load task error:", e);
             }
             return null;
         }
