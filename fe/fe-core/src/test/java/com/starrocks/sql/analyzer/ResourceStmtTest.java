@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.AlterResourceStmt;
@@ -24,8 +25,9 @@ public class ResourceStmtTest {
 
     @Test
     public void testCreateResource() {
-        CreateResourceStmt stmt = (CreateResourceStmt) analyzeSuccess("create external resource 'spark0' PROPERTIES(\"type\"  =  \"spark\")");
-        Assert.assertTrue( stmt.isSupportNewPlanner());
+        CreateResourceStmt stmt = (CreateResourceStmt) analyzeSuccess(
+                "create external resource 'spark0' PROPERTIES(\"type\"  =  \"spark\")");
+        Assert.assertTrue(stmt.isSupportNewPlanner());
         // spark resource
         Assert.assertEquals("spark0", stmt.getResourceName());
         Assert.assertEquals(Resource.ResourceType.SPARK, stmt.getResourceType());
@@ -41,8 +43,7 @@ public class ResourceStmtTest {
         stmt = (CreateResourceStmt) analyzeSuccess("create external resource jdbc0 properties (\n" +
                 "    \"type\"=\"jdbc\",\n" +
                 "    \"user\"=\"postgres\",\n" +
-                "    \"password\"=\"changeme\"\n"+
-                ");");
+                "    \"password\"=\"changeme\");");
         Assert.assertEquals("jdbc0", stmt.getResourceName());
         Assert.assertEquals("postgres", stmt.getProperties().get("user"));
         Assert.assertEquals(Resource.ResourceType.JDBC, stmt.getResourceType());
@@ -61,7 +62,7 @@ public class ResourceStmtTest {
     @Test
     public void testShowResourcesTest() {
         ShowResourcesStmt stmt = (ShowResourcesStmt) analyzeSuccess("Show Resources");
-        Assert.assertTrue( stmt.isSupportNewPlanner());
+        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertEquals("SHOW RESOURCES", stmt.toString());
         Assert.assertNotNull(stmt.getMetaData());
         Assert.assertNotNull(stmt.getRedirectStatus());
@@ -71,7 +72,7 @@ public class ResourceStmtTest {
     @Test
     public void testAlterResourceTest() {
         AlterResourceStmt stmt = (AlterResourceStmt) analyzeSuccess("alter RESOURCE hive0 SET PROPERTIES (\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\")");
-        Assert.assertTrue( stmt.isSupportNewPlanner());
+        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertEquals("ALTER RESOURCE 'hive0' SET PROPERTIES(\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\")", stmt.toString());
         Assert.assertEquals("hive0", stmt.getResourceName());
         Assert.assertEquals("thrift://10.10.44.91:9083", stmt.getProperties().get("hive.metastore.uris"));
@@ -83,7 +84,7 @@ public class ResourceStmtTest {
 
     @Test
     public void testDropResourceTest() {
-        DropResourceStmt stmt = (DropResourceStmt)  analyzeSuccess("Drop Resource 'hive0'");
+        DropResourceStmt stmt = (DropResourceStmt) analyzeSuccess("Drop Resource 'hive0'");
         Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertEquals("DROP RESOURCE 'hive0'", stmt.toString());
         Assert.assertEquals("hive0", stmt.getResourceName());

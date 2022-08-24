@@ -799,9 +799,12 @@ public class PrivilegeCheckerTest {
         String createResourceStmt = "CREATE EXTERNAL RESOURCE 'spark0' PROPERTIES(\"type\"  =  \"spark\");";
         String alterResourceStmt = "alter RESOURCE hive0 SET PROPERTIES (\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\");";
         String dropResourceStmt = "drop resource hive01;";
-        StatementBase statementBase1 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(createResourceStmt, starRocksAssert.getCtx());
-        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(alterResourceStmt, starRocksAssert.getCtx());
-        StatementBase statementBase3 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(dropResourceStmt, starRocksAssert.getCtx());
+        StatementBase statementBase1 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                createResourceStmt, starRocksAssert.getCtx());
+        StatementBase statementBase2 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                alterResourceStmt, starRocksAssert.getCtx());
+        StatementBase statementBase3 = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                dropResourceStmt, starRocksAssert.getCtx());
 
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.ADMIN_PRIV), true);
         PrivilegeChecker.check(statementBase1, starRocksAssert.getCtx());

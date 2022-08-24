@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.AlterSystemStmt;
 import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.AlterResourceStmt;
 import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -11,8 +11,8 @@ import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.DropFunctionStmt;
 import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.DropResourceStmt;
+import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.PauseRoutineLoadStmt;
 import com.starrocks.analysis.ResumeRoutineLoadStmt;
