@@ -19,7 +19,9 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
@@ -50,6 +52,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -284,6 +287,20 @@ public class QueryAnalyzer {
             String dbName = node.getName().getDb();
 
             session.getDumpInfo().addTable(dbName, table);
+            if (table.isHiveTable()) {
+                HiveTable hiveTable = (HiveTable) table;
+                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                        getResource(hiveTable.getResourceName());
+                if (resource != null) {
+                    session.getDumpInfo().addResource(resource);
+                }
+                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                        hiveTable.getTableName());
+                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
+            }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
             node.setScope(scope);

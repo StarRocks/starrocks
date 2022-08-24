@@ -118,7 +118,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         initHmsTableInfo();
     }
 
-    public String getDb() {
+    public String getDbName() {
         return db;
     }
 
