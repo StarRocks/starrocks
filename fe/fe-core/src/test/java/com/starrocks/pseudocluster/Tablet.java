@@ -363,7 +363,7 @@ public class Tablet {
         if (i == 0) {
             return;
         }
-        LOG.info("tablet:{} versionGC [{},{}]{} -> [{},{}]{} remove {} versions",
+        LOG.info("tablet:{} versionssssGC [{},{}]{} -> [{},{}]{} remove {} versions",
                 id, versions.get(0).major, versions.get(versions.size() - 1).major, versions.size(), versions.get(i).major,
                 versions.get(versions.size() - 1).major, versions.size() - i, i);
         List<EditVersion> newVersions = new ArrayList<>(i);
