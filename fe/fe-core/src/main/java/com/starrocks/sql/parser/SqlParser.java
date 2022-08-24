@@ -17,7 +17,12 @@ import java.io.StringReader;
 import java.util.List;
 
 public class SqlParser {
+
     public static List<StatementBase> parse(String originSql, long sqlMode) {
+        return parse(originSql, sqlMode, false);
+    }
+
+    public static List<StatementBase> parse(String originSql, long sqlMode, boolean isReplay) {
         List<String> splitSql = splitSQL(originSql);
         List<StatementBase> statements = Lists.newArrayList();
 
@@ -31,7 +36,7 @@ public class SqlParser {
                 parser.removeErrorListeners();
                 parser.addErrorListener(new ErrorHandler());
                 StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
-                StatementBase statement = (StatementBase) new AstBuilder(sqlMode)
+                StatementBase statement = (StatementBase) new AstBuilder(sqlMode, isReplay)
                         .visitSingleStatement(sqlStatements.singleStatement(0));
                 statement.setOrigStmt(new OriginStatement(sql, idx));
                 statements.add(statement);
@@ -62,7 +67,7 @@ public class SqlParser {
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         StarRocksParser.ExpressionContext expressionContext = parser.expression();
-        return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
+        return ((Expr) new AstBuilder(sqlMode, false).visit(expressionContext));
     }
 
     public static StatementBase parseFirstStatement(String originSql, long sqlMode) {

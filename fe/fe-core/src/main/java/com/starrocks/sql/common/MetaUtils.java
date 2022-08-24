@@ -104,7 +104,7 @@ public class MetaUtils {
         CreateMaterializedViewStmt stmt;
 
         try {
-            List<StatementBase> stmts = SqlParser.parse(originStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
+            List<StatementBase> stmts = SqlParser.parse(originStmt.originStmt, SqlModeHelper.MODE_DEFAULT, true);
             stmt = (CreateMaterializedViewStmt) stmts.get(originStmt.idx);
             stmt.setIsReplay(true);
             return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);

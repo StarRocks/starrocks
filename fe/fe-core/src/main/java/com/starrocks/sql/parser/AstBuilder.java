@@ -295,9 +295,11 @@ import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
+    private final boolean isReplay;
 
-    public AstBuilder(long sqlMode) {
+    public AstBuilder(long sqlMode, boolean isReplay) {
         this.sqlMode = sqlMode;
+        this.isReplay = isReplay;
     }
 
     @Override
@@ -1181,6 +1183,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String comment =
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+
+        if (!isReplay && queryStatement.isExplain()) {
+            throw new IllegalArgumentException("Materialized view does not support explain query");
+        }
+
         // process properties
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -1189,7 +1196,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 properties.put(property.getKey(), property.getValue());
             }
         }
-        //process refresh
+        // process refresh
         RefreshSchemeDesc refreshSchemeDesc = null;
         if (context.refreshSchemeDesc() == null) {
             refreshSchemeDesc = new SyncRefreshSchemeDesc();
