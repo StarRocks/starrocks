@@ -80,7 +80,7 @@ void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delet
                       << ", is_creation_time_ordered:" << is_creation_time_ordered;
             break;
         }
-        rowsets->emplace_back(std::move(rowset->shared_from_this()));
+        rowsets->emplace_back(rowset->shared_from_this());
         *rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
         if (*rowsets_compaction_score >= config::max_cumulative_compaction_num_singleton_deltas) {
             LOG(INFO) << "cumulative compaction rowsets_compaction_score:" << *rowsets_compaction_score
