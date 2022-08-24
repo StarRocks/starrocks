@@ -818,4 +818,6 @@ CONF_Int32(cardinality_of_inject, "100");
  * Split by "," strictly.
  */
 CONF_String(directory_of_inject, "/src/exec,/src/exprs");
+
+CONF_Bool(enable_replicated_storage, "true");
 } // namespace starrocks::config
