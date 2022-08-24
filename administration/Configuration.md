@@ -71,10 +71,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |配置项|默认值|描述|
 |---|---|---|
 |load_straggler_wait_second|300|控制 BE 副本最大容忍的导入落后时长，超过这个时长就进行克隆，单位为秒。|
-|desired_max_waiting_jobs|100|最多等待的任务数，适用于所有的任务，建表、导入、schema change。|
-|max_running_txn_num_per_db|100|并发导入的任务数。|
+|desired_max_waiting_jobs|100|最多等待的任务数，适用于所有的任务，建表、导入、schema change。如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。|
 |max_load_timeout_second|259200|最大超时，适用于所有导入，单位为秒。|
 |min_load_timeout_second|1|最小超时，适用于所有导入，单位为秒。|
+|max_running_txn_num_per_db|100|StarRocks 集群每个数据库中正在运行的导入作业的最大个数，默认值为 100。当数据库中正在运行的导入作业超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业，作业会被拒绝；如果是异步的导入作业，作业会在队列中等待。|
 |load_parallel_instance_num|1|单个 BE 上并发实例数。|
 |vectorized_load_enable|TRUE|是否开启向量化 Broker 导出和导入。|
 |enable_vectorized_file_load|TRUE|是否开启向量化导入 CSV/JSON/Parquet 和 Spark 导入。|
@@ -84,7 +84,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |db_used_data_quota_update_interval_secs|300|更新数据库使用配额的时间周期，单位为秒。|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
 |label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。|
-|label_keep_max_second|259200|label 保留时长，单位为秒。设定过大将会消耗大量内存。|
+|label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
 |max_routine_load_job_num|100|最大的 routine load 作业数。|
 |max_routine_load_task_concurrent_num|5|每个 routine load 作业最大并发执行的 task 数。|
 |max_routine_load_task_num_per_be|5|每个 BE 最大并发执行的 routine load task 数，需要小于等于 BE 的配置项 routine_load_thread_pool_size 的值。|
@@ -424,7 +424,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_data_reserve_hours|4|小批量导入生成的文件保留的时间|
 |number_tablet_writer_threads|16|流式导入的线程数|
 |streaming_load_rpc_max_alive_time_sec|1200|流式导入 RPC 的超时时间|
-|tablet_writer_rpc_timeout_sec|600|TabletWriter 的超时时长|
 |fragment_pool_thread_num_min|64|最小查询线程数，默认启动 64 个线程。|
 |fragment_pool_thread_num_max|4096|最大查询线程数。|
 |fragment_pool_queue_size|2048|单节点上能够处理的查询请求上限|
