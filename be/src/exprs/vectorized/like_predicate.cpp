@@ -248,15 +248,15 @@ ColumnPtr LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* co
             continue;
         }
 
+        bool v = false;
         if constexpr (like) {
-            auto v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
-                                    *(state->re2));
-            result.append(v);
+            v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
+                               *(state->re2));
         } else {
-            auto v = RE2::PartialMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
-                                       *(state->re2));
-            result.append(v);
+            v = RE2::PartialMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
+                                  *(state->re2));
         }
+        result.append(v);
     }
 
     return result.build(all_const);

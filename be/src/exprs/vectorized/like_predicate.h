@@ -155,7 +155,7 @@ private:
     // to avoid crash with hs_scan.
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
-    class LikePredicateState;
+    struct LikePredicateState;
     static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
                                                const Slice& slice);
 
