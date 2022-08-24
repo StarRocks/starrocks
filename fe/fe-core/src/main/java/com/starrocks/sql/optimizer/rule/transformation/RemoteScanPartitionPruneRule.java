@@ -92,6 +92,10 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         // 2. partitionKeys size = 1
         // 3. key.getKeys() is empty
         Map<PartitionKey, Long> partitionKeys = hiveMetaStoreTable.getPartitionKeys();
+        // record partition keys for query dump
+        context.getDumpInfo().getHMSTable(hiveMetaStoreTable.getResourceName(), hiveMetaStoreTable.getDbName(),
+                hiveMetaStoreTable.getTableName()).setPartitionKeys(partitionKeys);
+
         for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
             PartitionKey key = entry.getKey();
             long partitionId = entry.getValue();

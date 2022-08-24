@@ -148,7 +148,7 @@ public class HudiTableTest {
         }
 
         Assert.assertEquals(hudiTable, table.getTable());
-        Assert.assertEquals(hudiDb, table.getDb());
+        Assert.assertEquals(hudiDb, table.getDbName());
         Assert.assertEquals(hdfsPath, table.getHudiBasePath());
         Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table.getPartitionColumns());
     }
