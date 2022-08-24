@@ -693,8 +693,8 @@ public class InsertPlanTest extends PlanTestBase {
                     "  |  <slot 7> : 7: k10\n" +
                     "  |  <slot 8> : 8: k11\n" +
                     "  |  <slot 9> : 9: k7\n" +
-                    "  |  <slot 12> : min(10: k8)\n" +
-                    "  |  <slot 13> : max(11: k9)\n" +
+                    "  |  <slot 12> : 10: k8\n" +
+                    "  |  <slot 13> : 11: k9\n" +
                     "  |  \n" +
                     "  0:OlapScanNode\n" +
                     "     TABLE: baseall\n" +

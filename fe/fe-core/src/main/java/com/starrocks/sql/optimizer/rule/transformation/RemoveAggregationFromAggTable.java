@@ -92,7 +92,10 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
             projectMap.putAll(aggregationOperator.getProjection().getColumnRefMap());
         } else {
             aggregationOperator.getGroupingKeys().forEach(g -> projectMap.put(g, g));
-            projectMap.putAll(aggregationOperator.getAggregations());
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
+                // in this case, CallOperator must have only one child ColumnRefOperator
+                projectMap.put(entry.getKey(), entry.getValue().getChild(0));
+            }
         }
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
         return Lists.newArrayList(OptExpression.create(projectOperator, input.getInputs().get(0)));

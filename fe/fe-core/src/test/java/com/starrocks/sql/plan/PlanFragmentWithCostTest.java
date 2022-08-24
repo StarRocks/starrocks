@@ -1197,7 +1197,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW agg_mv as select" +
                 " LO_ORDERDATE," +
                 " LO_ORDERKEY," +
-                " sum(LO_REVENUE)" +
+                " sum(LO_REVENUE)," +
+                " count(C_NAME)" +
                 " from lineorder_flat_for_mv" +
                 " group by LO_ORDERDATE, LO_ORDERKEY");
 
@@ -1225,7 +1226,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
         String plan2 = getFragmentPlan(sql2);
         assertContains(plan2, "PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 40: sum\n" +
+                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum\n" +
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  RESULT SINK\n" +
@@ -1243,7 +1244,39 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 1> : 1: LO_ORDERDATE\n" +
                 "  |  <slot 2> : 2: LO_ORDERKEY\n" +
-                "  |  <slot 40> : sum(13: LO_REVENUE)\n" +
+                "  |  <slot 41> : 13: LO_REVENUE\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineorder_flat_for_mv\n" +
+                "     PREAGGREGATION: OFF. Reason: None aggregate function\n" +
+                "     partitions=7/7\n" +
+                "     rollup: agg_mv\n" +
+                "     tabletRatio=1050/1050");
+
+        String sql3 = "select LO_ORDERDATE, LO_ORDERKEY, sum(LO_REVENUE), count(C_NAME)" +
+                " from lineorder_flat_for_mv group by LO_ORDERDATE, LO_ORDERKEY";
+        String plan3 = getFragmentPlan(sql3);
+        assertContains(plan3, "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: LO_ORDERDATE | 2: LO_ORDERKEY | 41: sum | 42: count\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 2: LO_ORDERKEY\n" +
+                "  |  <slot 41> : 13: LO_REVENUE\n" +
+                "  |  <slot 42> : 39: mv_count_c_name\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: lineorder_flat_for_mv\n" +
