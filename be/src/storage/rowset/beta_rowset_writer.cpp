@@ -329,8 +329,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         RETURN_IF_ERROR(flush_del_file(deletes));
         return _flush_chunk(upserts);
     } else {
-        /// There is impossible that both upserts and deletes are empty when flush memtable
-        __builtin_unreachable();
+        return Status::OK();
     }
 }
 
