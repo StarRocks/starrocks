@@ -1153,7 +1153,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
 
-    LOG(INFO) << "Start to drop tablet" << tablet_id;
+    LOG(INFO) << "Start to drop tablet " << tablet_id;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
@@ -1196,7 +1196,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
-    LOG(INFO) << "Succeed to drop tablet" << tablet_id;
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
     return Status::OK();
 }
 

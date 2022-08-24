@@ -86,7 +86,7 @@ public:
     // Input parameters:
     // * task: the task need callback thread to do
     void submit_task(const TAgentTaskRequest& task);
-    void submit_tasks(std::vector<TAgentTaskRequest>* task);
+    void submit_tasks(const std::vector<const TAgentTaskRequest*>& task);
 
     AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                 TTabletInfo* tablet_info);
