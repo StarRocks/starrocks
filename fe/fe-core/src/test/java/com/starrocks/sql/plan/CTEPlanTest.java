@@ -566,4 +566,83 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  0:OlapScanNode");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCTELimitNumInline() throws Exception {
+        connectContext.getSessionVariable().setCboCTEMaxLimit(4);
+        defaultCTEReuse();
+        String sql = "with x1 as (select * from t0),\n" +
+                "     x2 as (select * from t0),\n" +
+                "     x3 as (select * from t0),\n" +
+                "     x4 as (select * from t0),\n" +
+                "     x5 as (select * from t0)\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTEMaxLimit(10);
+        System.out.println(plan);
+        Assert.assertFalse(plan.contains("MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testCTELimitNumReuse() throws Exception {
+        connectContext.getSessionVariable().setCboCTEMaxLimit(4);
+        connectContext.getSessionVariable().setCboCTERuseRatio(100000);
+        String sql = "with x1 as (select * from t0),\n" +
+                "     x2 as (select * from t0),\n" +
+                "     x3 as (select * from t0),\n" +
+                "     x4 as (select * from t0),\n" +
+                "     x5 as (select * from t0),\n" +
+                "     x6 as (select * from t0)\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x1 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x2 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x3 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x4 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x5 union all\n" +
+                "select * from x6 union all\n" +
+                "select * from x6;";
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setCboCTEMaxLimit(10);
+        Assert.assertEquals(5, StringUtils.countMatches(plan, "MultiCastDataSinks"));
+    }
+
+    @Test
+    public void testAllCTEConsumePruned() throws Exception {
+        String sql = "select * from t0 where (abs(2) = 1 or v1 in (select v4 from t1)) and v1 = 2 and v1 = 5";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |----2:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:EMPTYSET\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:EMPTYSET");
+    }
+>>>>>>> 7a7227561 ([BugFix] Fix in-subquery rewrite to cte bug (#10397))
 }
