@@ -821,8 +821,8 @@ public class StmtExecutor {
                             analyzeStmt.getProperties()));
 
             //Could populate column statistic cache after Analyze table manually
-            GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), analyzeStatus.getColumns());
-            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, analyzeStatus.getColumns());
+            GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(db.getId(), table.getId(),
+                    analyzeStmt.getColumnNames(), false);
         } else {
             analyzeStatus = statisticExecutor.collectStatistics(
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
@@ -832,8 +832,8 @@ public class StmtExecutor {
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()));
 
             //Could populate column statistic cache after Analyze table manually
-            GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, analyzeStatus.getColumns());
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, analyzeStatus.getColumns());
+            GlobalStateMgr.getCurrentAnalyzeMgr()
+                    .refreshBasicStatisticsCache(db.getId(), table.getId(), analyzeStatus.getColumns(), false);
         }
         ShowResultSet resultSet = analyzeStatus.toShowResult();
         if (isProxy) {

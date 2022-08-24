@@ -13,8 +13,16 @@ public interface StatisticStorage {
 
     List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns);
 
+    default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
+        return getColumnStatistics(table, columns);
+    }
+
     default Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         return Maps.newHashMap();
+    }
+
+    default Map<String, Histogram> getHistogramStatisticsSync(Table table, List<String> columns) {
+        return getHistogramStatistics(table, columns);
     }
 
     default void expireHistogramStatistics(Long tableId, List<String> columns) {

@@ -216,13 +216,16 @@ public class StatisticExecutor {
                         table.getId(), columnName, statsJob.getType(), analyzeStatus.getEndTime(),
                         statsJob.getProperties());
                 GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(histogramStatsMeta);
-                GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(histogramStatsMeta);
+                GlobalStateMgr.getCurrentAnalyzeMgr().refreshHistogramStatisticsCache(
+                        histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                        Lists.newArrayList(histogramStatsMeta.getColumn()), true);
             }
         } else {
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
                     statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
-            GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(basicStatsMeta);
+            GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
+                    basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
         }
         return analyzeStatus;
     }
