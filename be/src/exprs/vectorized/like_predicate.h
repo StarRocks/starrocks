@@ -136,7 +136,6 @@ private:
 
     static ColumnPtr regex_match_partial(FunctionContext* context, const Columns& columns);
 
-    static const size_t MAX_PATTERN_OF_HYPERSCAN = 16000;
     template <bool like>
     static ColumnPtr match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns);
 

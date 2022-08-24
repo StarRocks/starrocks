@@ -30,6 +30,9 @@ static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))", re2
 static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
 static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
 
+// pattern's max length used in hyperscan.
+static const size_t MAX_PATTERN_OF_HYPERSCAN = 16000;
+
 Status LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
                                                    starrocks_udf::FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
