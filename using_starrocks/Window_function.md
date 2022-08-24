@@ -11,6 +11,7 @@
 * `MIN()`, `MAX()`, `COUNT()`, `SUM()`, `AVG()`
 * `FIRST_VALUE()`, `LAST_VALUE()`, `LEAD()`, `LAG()`
 * `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`
+* `NTILE()`
 
 ## 窗口函数语法及参数
 
