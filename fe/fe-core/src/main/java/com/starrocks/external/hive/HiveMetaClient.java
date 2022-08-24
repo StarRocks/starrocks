@@ -684,6 +684,8 @@ public class HiveMetaClient {
                 LocatedFileStatus locatedFileStatus = blockIterator.next();
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
+                } else if (locatedFileStatus.isDirectory() && Config.recursive_dir_search_enabled) {
+                    fileDescs.addAll(getHdfsFileDescs(locatedFileStatus.getPath().toString(), isSplittable, sd));
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
@@ -718,7 +720,7 @@ public class HiveMetaClient {
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
-        if (fileStatus.isDirectory()) {
+        if (fileStatus.isDirectory() && !Config.recursive_dir_search_enabled) {
             return false;
         }
 
