@@ -17,6 +17,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -198,20 +199,15 @@ public class InsertOverwriteJobRunner {
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());
-            throw new RuntimeException("execute insert failed");
+            throw new DmlException(context.getState().getErrorMessage());
         }
     }
 
     private void createTempPartitions() throws DdlException {
-        try {
-            long createPartitionStartTimestamp = System.currentTimeMillis();
-            PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                    job.getSourcePartitionIds(), job.getTmpPartitionIds());
-            createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
-        } catch (Throwable t) {
-            LOG.warn("create temp partitions failed", t);
-            throw t;
-        }
+        long createPartitionStartTimestamp = System.currentTimeMillis();
+        PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
+                job.getSourcePartitionIds(), job.getTmpPartitionIds());
+        createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 
     private void gc() {
@@ -255,7 +251,7 @@ public class InsertOverwriteJobRunner {
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}," +
                     " sourcePartitionNames:{}, newPartitionNames:{}", job.getTargetDbId(), job.getTargetTableId(), e);
-            throw new RuntimeException("replace partitions failed", e);
+            throw new DmlException("replace partitions failed", e);
         } finally {
             db.writeUnlock();
         }
@@ -264,22 +260,21 @@ public class InsertOverwriteJobRunner {
     private void prepareInsert() {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
+
+        db.readLock();
         try {
-            db.readLock();
-            try {
-                List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
-                        .map(partitionId -> targetTable.getPartition(partitionId).getName())
-                        .collect(Collectors.toList());
-                PartitionNames partitionNames = new PartitionNames(true, tmpPartitionNames);
-                // change the TargetPartitionNames from source partitions to new tmp partitions
-                // should replan when load data
-                insertStmt.setTargetPartitionNames(partitionNames);
-                insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
-            } finally {
-                db.readUnlock();
-            }
+            List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
+                    .map(partitionId -> targetTable.getPartition(partitionId).getName())
+                    .collect(Collectors.toList());
+            PartitionNames partitionNames = new PartitionNames(true, tmpPartitionNames);
+            // change the TargetPartitionNames from source partitions to new tmp partitions
+            // should replan when load data
+            insertStmt.setTargetPartitionNames(partitionNames);
+            insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
         } catch (Exception e) {
-            throw new RuntimeException("prepareInsert exception", e);
+            throw new DmlException("prepareInsert exception", e);
+        } finally {
+            db.readUnlock();
         }
     }
 }
