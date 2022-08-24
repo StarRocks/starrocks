@@ -161,7 +161,6 @@ void TaskWorkerPool<TaskType>::submit_task(const TAgentTaskRequest& task) {
     EnumToString(TTaskType, task_type, type_str);
 
     if (_register_task_info(task_type, signature)) {
-        (const_cast<TAgentTaskRequest&>(task)).__set_recv_time(time(nullptr));
         size_t task_count = _push_task(_convert_task(task));
         LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
                   << ", task_count_in_queue=" << task_count;
@@ -178,10 +177,13 @@ typename TaskWorkerPool<TaskType>::AgentTaskRequestPtr TaskWorkerPool<TaskType>:
     convert_task->task_type = task.task_type;
     convert_task->signature = task.signature;
     convert_task->priority = task.priority;
+    convert_task->isset = task.__isset;
     if (task.__isset.recv_time) {
         convert_task->recv_time = task.recv_time;
+    } else {
+        convert_task->recv_time = time(nullptr);
+        convert_task->isset.recv_time = 1;
     }
-    convert_task->isset = task.__isset;
 
     if constexpr (false) {
     }
@@ -205,7 +207,6 @@ void TaskWorkerPool<TaskType>::submit_tasks(std::vector<TAgentTaskRequest>* task
 
     {
         std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
-        const auto recv_time = time(nullptr);
         for (size_t i = 0; i < (*tasks).size(); i++) {
             TAgentTaskRequest& task_req = (*tasks)[i];
             int64_t signature = task_req.signature;
@@ -213,7 +214,6 @@ void TaskWorkerPool<TaskType>::submit_tasks(std::vector<TAgentTaskRequest>* task
             // batch register task info
             std::set<int64_t>& signature_set = _s_task_signatures[task_type];
             if (signature_set.insert(signature).second) {
-                task_req.__set_recv_time(recv_time);
                 failed_task_vec[i] = 0;
             } else {
                 failed_task_vec[i] = 1;
