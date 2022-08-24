@@ -259,7 +259,13 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
-    if (dynamic_cast<const HudiTableDescriptor*>(_tuple_desc->table_desc()) && scan_range.hudi_mor_table) {
+
+    bool use_hudi_jni_reader = false;
+    if (scan_range.__isset.use_hudi_jni_reader) {
+        use_hudi_jni_reader = scan_range.use_hudi_jni_reader;
+    }
+
+    if (use_hudi_jni_reader) {
         const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
         auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
         std::string partition_full_path = partition_desc->location();

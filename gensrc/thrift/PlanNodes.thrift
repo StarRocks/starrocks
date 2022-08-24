@@ -266,8 +266,8 @@ struct THdfsScanRange {
     // delta logs of hudi MOR table
     9: optional list<string> hudi_logs
 
-    // hudi table type
-    10: optional bool hudi_mor_table
+    // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
+    10: optional bool use_hudi_jni_reader;
 }
 
 // Specification of an individual data range which is held in its entirety
