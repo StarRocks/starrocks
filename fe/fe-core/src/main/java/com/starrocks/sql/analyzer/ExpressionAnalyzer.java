@@ -70,7 +70,6 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
 
 import java.math.BigInteger;
-// import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -106,6 +105,10 @@ public class ExpressionAnalyzer {
             // expand this in the future.
             if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.ARRAY_MAP)) {
                 return true;
+            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+                // transform just a alias of array_map
+                ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
+                return true;
             }
         }
         return false;
@@ -115,8 +118,16 @@ public class ExpressionAnalyzer {
     void analyzeHighOrderFunction(Visitor visitor, Expr expression, Scope scope) {
         Preconditions.checkState(isHighOrderFunction(expression),
                 "Lambda Functions can only be used in supported high-order functions.");
-        // the first child is lambdaFunction
         int childSize = expression.getChildren().size();
+        // move the lambda function to the first if it is at the last.
+        if (expression.getChild(childSize - 1) instanceof LambdaFunction) {
+            Expr last = expression.getChild(childSize - 1);
+            for (int i = childSize - 1; i > 0; i--) {
+                expression.setChild(i, expression.getChild(i - 1));
+            }
+            expression.setChild(0, last);
+        }
+        // the first child is lambdaFunction, following lambda arguments
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
             bottomUpAnalyze(visitor, expr, scope);
@@ -134,6 +145,7 @@ public class ExpressionAnalyzer {
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
     }
+
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
         if (expression.hasLambdaFunction()) {
             analyzeHighOrderFunction(visitor, expression, scope);
@@ -432,7 +444,7 @@ public class ExpressionAnalyzer {
                                     + " is invalid.");
                 }
 
-                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[]{commonType, commonType},
+                Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {commonType, commonType},
                         Function.CompareMode.IS_SUPERTYPE_OF);
 
                 /*
@@ -445,7 +457,7 @@ public class ExpressionAnalyzer {
             } else if (node.getOp().getPos() == ArithmeticExpr.OperatorPosition.UNARY_PREFIX) {
 
                 Function fn = Expr.getBuiltinFunction(
-                        node.getOp().getName(), new Type[]{Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
+                        node.getOp().getName(), new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF);
 
                 node.setType(Type.BIGINT);
                 node.setFn(fn);
@@ -631,7 +643,7 @@ public class ExpressionAnalyzer {
             if (fnName.equals(FunctionSet.COUNT) && node.getParams().isDistinct()) {
                 //Compatible with the logic of the original search function "count distinct"
                 //TODO: fix how we equal count distinct.
-                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[]{argumentTypes[0]},
+                fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {

@@ -1341,7 +1341,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.fn = fn;
     }
 
-    // only the first one can be lambda functions.
+    // only the first/last one can be lambda functions.
     public boolean hasLambdaFunction() {
         int pos = -1, num = 0;
         for (int i = 0; i < children.size(); ++i) {
@@ -1350,15 +1350,15 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 pos = i;
             }
         }
-        if (num == 1 && pos == 0 ) {
+        if (num == 1 && (pos == 0 || pos == children.size() - 1)) {
             Preconditions.checkState(children.size() > 1,
-                    "Lambda functions can only occur in high-order functions.");
+                    "Lambda functions should work with inputs in high-order functions.");
             return true;
         } else if (num > 1) {
             Preconditions.checkState(false, "A high-order function can have one lambda function.");
-        } else if (pos > 0) {
+        } else if (pos > 0 && pos < children.size() - 1) {
             Preconditions.checkState(false,
-                    "Lambda functions can only be the first argument of any high-order function.");
+                    "Lambda functions can only be the first or last argument of any high-order function.");
         }
         return false;
     }

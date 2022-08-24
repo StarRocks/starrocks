@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import kotlin.jvm.functions.FunctionN;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -85,6 +86,10 @@ public class FunctionCallExpr extends Expr {
 
     public FunctionName getFnName() {
         return fnName;
+    }
+
+    public void resetFnName(String db, String name) {
+        this.fnName = new FunctionName(db, name);
     }
 
     // only used restore from readFields.

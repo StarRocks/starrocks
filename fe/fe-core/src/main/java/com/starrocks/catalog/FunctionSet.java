@@ -373,6 +373,8 @@ public class FunctionSet {
 
     // high-order functions related lambda functions
     public static final String ARRAY_MAP = "array_map";
+    public static final String TRANSFORM = "transform";
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
