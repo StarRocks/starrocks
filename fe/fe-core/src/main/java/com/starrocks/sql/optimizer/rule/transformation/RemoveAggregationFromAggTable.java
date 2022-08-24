@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -51,8 +52,12 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
             return false;
         }
-        int keyCount = materializedIndexMeta.getSchema().stream()
-                .map(column -> column.isKey() ? 1 : 0).reduce((a, b) -> a + b).get();
+        int keyCount = 0;
+        for (Column column : materializedIndexMeta.getSchema()) {
+            if (column.isKey()) {
+                keyCount++;
+            }
+        }
 
         // group by keys contain partition columns and distribution columns
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -64,7 +69,7 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         }
 
         List<String> distributionColumnNames = olapTable.getDistributionColumnNames().stream()
-                .map(name -> name.toLowerCase()).collect(Collectors.toList());
+                .map(String::toLowerCase).collect(Collectors.toList());
 
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
@@ -74,12 +79,9 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         }
         List<String> keyColumns = aggregationOperator.getGroupingKeys().stream()
                 .map(columnRefOperator -> columnRefOperator.getName().toLowerCase()).collect(Collectors.toList());
-        if (keyCount == keyColumns.size()
+        return keyCount == keyColumns.size()
                 && keyColumns.containsAll(partitionColumnNames)
-                && keyColumns.containsAll(distributionColumnNames)) {
-            return true;
-        }
-        return false;
+                && keyColumns.containsAll(distributionColumnNames);
     }
 
     @Override
