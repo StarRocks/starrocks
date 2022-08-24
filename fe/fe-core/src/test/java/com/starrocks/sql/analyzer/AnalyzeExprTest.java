@@ -94,10 +94,17 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map((x,y) -> x + y, [], [])");
         analyzeSuccess("select array_map((x,y) -> x, [], [])");
         analyzeSuccess("select array_map([1], x -> x)");
+        analyzeSuccess("select array_map([1], x -> x + v1) from t0");
+        analyzeSuccess("select transform([1], x -> x)");
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
         analyzeFail("select array_map(x -> z,[1])");
         analyzeFail("select array_map(x -> x,[1],null)");
+        analyzeFail("select arrayMap(x -> x,[1])");
+        analyzeFail("select array_map(x -> x+1, 1)");
+        analyzeFail("select array_map((x,x) -> x+1, [1],[1])");
+        analyzeFail("select array_map((x,y) -> x+1)");
+        analyzeFail("select array_map((x,x) -> x+1, [1], x ->x+1)");
     }
 }
