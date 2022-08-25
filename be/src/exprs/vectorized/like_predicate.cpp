@@ -232,7 +232,7 @@ ColumnPtr LikePredicate::regex_fn_with_long_constant_pattern(FunctionContext* co
     return match_fn_with_long_constant_pattern<false>(context, columns);
 }
 
-template <bool like>
+template <bool full_match>
 ColumnPtr LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
@@ -249,7 +249,7 @@ ColumnPtr LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* co
         }
 
         bool v = false;
-        if constexpr (like) {
+        if constexpr (full_match) {
             v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
                                *(state->re2));
         } else {

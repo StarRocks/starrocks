@@ -136,7 +136,7 @@ private:
 
     static ColumnPtr regex_match_partial(FunctionContext* context, const Columns& columns);
 
-    template <bool like>
+    template <bool full_match>
     static ColumnPtr match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns);
 
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
