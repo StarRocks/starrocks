@@ -10,14 +10,14 @@ import com.starrocks.analysis.TableName;
  * 2.Support for modifying the name of a materialized view;
  * 3.SYNC is not supported and ASYNC is not allow changed to SYNC
  */
-public class AlterMaterializedViewStatement extends DdlStmt {
+public class AlterMaterializedViewStmt extends DdlStmt {
 
-    private TableName mvName;
-    private String newMvName;
-    private RefreshSchemeDesc refreshSchemeDesc;
+    private final TableName mvName;
+    private final String newMvName;
+    private final RefreshSchemeDesc refreshSchemeDesc;
 
-    public AlterMaterializedViewStatement(TableName mvName, String newMvName,
-                                          RefreshSchemeDesc refreshSchemeDesc) {
+    public AlterMaterializedViewStmt(TableName mvName, String newMvName,
+                                     RefreshSchemeDesc refreshSchemeDesc) {
         this.mvName = mvName;
         this.newMvName = newMvName;
         this.refreshSchemeDesc = refreshSchemeDesc;

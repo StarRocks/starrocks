@@ -249,7 +249,7 @@ terminal String KW_ADD, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_AND, KW_ANT
     KW_KEY,
     KW_LABEL, KW_LARGEINT, KW_LAST, KW_LEFT, KW_LESS, KW_LEVEL, KW_LIKE, KW_LIMIT, KW_LINK, KW_LIST, KW_LOAD,
     KW_LOCAL, KW_LOCATION, KW_LATERAL, KW_LOGICAL,
-    KW_MATERIALIZED, KW_MAX, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MODIFY, KW_MONTH,
+    KW_MAX, KW_MERGE, KW_MIN, KW_MINUTE, KW_MINUS, KW_MODIFY, KW_MONTH,
     KW_NAME, KW_NAMES, KW_NEGATIVE, KW_NO, KW_NOT, KW_NULL, KW_NULLS,
     KW_OBSERVER, KW_OFFSET, KW_ON, KW_ONLY, KW_OPEN, KW_OR, KW_ORDER, KW_OUTER, KW_OUTFILE, KW_OVER,
     KW_PARTITION, KW_PARTITIONS, KW_PASSWORD, KW_PATH, KW_PAUSE, KW_PIPE, KW_PRECEDING,
@@ -890,10 +890,6 @@ create_stmt ::=
     {:
         RESULT = new CreateFileStmt(fileName, db, properties);
     :}
-    | KW_CREATE KW_MATERIALIZED KW_VIEW ident:mvName KW_AS select_stmt:selectStmt opt_properties:properties
-    {:
-        RESULT = new CreateMaterializedViewStmt(mvName, selectStmt, properties);
-    :}
     | KW_CREATE KW_INDEX ident:indexName KW_ON table_name:tableName LPAREN ident_list:cols RPAREN opt_index_type:indexType opt_comment:comment
     {:
         RESULT = new AlterTableStmt(tableName, Lists.newArrayList(new CreateIndexClause(tableName, new IndexDef(indexName, cols, indexType, comment), false)));
@@ -1259,10 +1255,6 @@ drop_stmt ::=
     {:
         RESULT = new AlterTableStmt(tableName, Lists.newArrayList(new DropIndexClause(indexName, tableName, false)));
     :}
-    | KW_DROP KW_MATERIALIZED KW_VIEW opt_if_exists:ifExists table_name:dbMvName opt_table_name:dbTblName
-    {:
-        RESULT = new DropMaterializedViewStmt(ifExists, dbMvName, dbTblName);
-    :}
     | KW_DROP KW_RESOURCE ident_or_text:resourceName
     {:
         RESULT = new DropResourceStmt(resourceName);
@@ -1398,11 +1390,6 @@ show_param ::=
     | opt_var_type:type KW_VARIABLES opt_wild_where
     {:
         RESULT = new ShowVariablesStmt(type, parser.wild, parser.where);
-    :}
-    /* show materialized view */
-    | KW_MATERIALIZED KW_VIEW opt_db:db
-    {:
-        RESULT = new ShowMaterializedViewStmt(db);
     :}
     /* triggers */
     | opt_full KW_TRIGGERS opt_db:db opt_wild_where
@@ -3775,8 +3762,6 @@ keyword ::=
     | KW_LOCATION:id
     {: RESULT = id; :}
     | KW_LOGICAL:id
-    {: RESULT = id; :}
-    | KW_MATERIALIZED:id
     {: RESULT = id; :}
     | KW_MERGE:id
     {: RESULT = id; :}

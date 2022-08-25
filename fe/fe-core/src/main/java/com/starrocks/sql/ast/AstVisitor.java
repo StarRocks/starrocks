@@ -226,7 +226,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement, C context) {
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 
@@ -234,7 +234,7 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
-    public R visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement, C context) {
+    public R visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

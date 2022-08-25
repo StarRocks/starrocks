@@ -76,8 +76,8 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterDatabaseRename;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
-import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -227,10 +227,10 @@ public class AlterTest {
     }
 
     private static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
-        AlterMaterializedViewStatement alterMaterializedViewStatement =
-                (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AlterMaterializedViewStmt alterMaterializedViewStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -262,8 +262,8 @@ public class AlterTest {
     }
 
     private static void cancelRefreshMaterializedView(String sql, boolean expectedException) throws Exception {
-        CancelRefreshMaterializedViewStatement cancelRefresh =
-                (CancelRefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        CancelRefreshMaterializedViewStmt cancelRefresh =
+                (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .cancelRefreshMaterializedView(cancelRefresh.getMvName().getDb(),

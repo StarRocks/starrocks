@@ -17,7 +17,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -115,7 +115,7 @@ public interface ConnectorMetadata {
     default void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
     }
 
-    default void alterMaterializedView(AlterMaterializedViewStatement stmt)
+    default void alterMaterializedView(AlterMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 

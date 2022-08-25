@@ -21,7 +21,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -53,11 +52,11 @@ public class ShowPartitionsStmt extends ShowStmt {
             .add(FILTER_LAST_CONSISTENCY_CHECK_TIME).build();
 
     private String dbName;
-    private String tableName;
-    private Expr whereClause;
-    private List<OrderByElement> orderByElements;
-    private LimitElement limitElement;
-    private boolean isTempPartition = false;
+    private final String tableName;
+    private final Expr whereClause;
+    private final List<OrderByElement> orderByElements;
+    private final LimitElement limitElement;
+    private boolean isTempPartition;
 
     private List<OrderByPair> orderByPairs;
     private Map<String, Expr> filterMap;
@@ -108,34 +107,6 @@ public class ShowPartitionsStmt extends ShowStmt {
             builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
         }
         return builder.build();
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW PARTITIONS FROM ");
-        if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("`").append(dbName).append("`");
-        }
-        if (!Strings.isNullOrEmpty(tableName)) {
-            sb.append(".`").append(tableName).append("`");
-        }
-        if (whereClause != null) {
-            sb.append(" WHERE ").append(whereClause.toSql());
-        }
-        // Order By clause
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            sb.append(" ORDER BY ");
-            for (int i = 0; i < orderByElements.size(); ++i) {
-                sb.append(orderByElements.get(i).toSql());
-                sb.append((i + 1 != orderByElements.size()) ? ", " : "");
-            }
-        }
-
-        if (limitElement != null) {
-            sb.append(limitElement.toSql());
-        }
-        return sb.toString();
     }
 
     @Override

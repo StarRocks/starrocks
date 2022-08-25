@@ -4,10 +4,10 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 
-public class CancelRefreshMaterializedViewStatement extends DdlStmt {
-    private TableName mvName;
+public class CancelRefreshMaterializedViewStmt extends DdlStmt {
+    private final TableName mvName;
 
-    public CancelRefreshMaterializedViewStatement(TableName mvName) {
+    public CancelRefreshMaterializedViewStmt(TableName mvName) {
         this.mvName = mvName;
     }
 

@@ -51,11 +51,11 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
-import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -93,9 +93,9 @@ public class DataDefinitionExecutorFactory {
                     .put(CreateMaterializedViewStmt.class, new CreateMaterializedViewExecutor())
                     .put(CreateMaterializedViewStatement.class, new CreateMaterializedViewStatementExecutor())
                     .put(DropMaterializedViewStmt.class, new DropMaterializedViewExecutor())
-                    .put(AlterMaterializedViewStatement.class, new AlterMaterializedViewExecutor())
+                    .put(AlterMaterializedViewStmt.class, new AlterMaterializedViewExecutor())
                     .put(RefreshMaterializedViewStatement.class, new RefreshMaterializedViewExecutor())
-                    .put(CancelRefreshMaterializedViewStatement.class, new CancelRefreshMaterializedViewExecutor())
+                    .put(CancelRefreshMaterializedViewStmt.class, new CancelRefreshMaterializedViewExecutor())
                     .put(AlterTableStmt.class, new AlterTableExecutor())
                     .put(AlterViewStmt.class, new AlterViewExecutor())
                     .put(CancelAlterTableStmt.class, new CancelAlterTableExecutor())

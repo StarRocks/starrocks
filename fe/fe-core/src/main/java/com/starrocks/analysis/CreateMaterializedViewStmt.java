@@ -175,10 +175,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         this.mvKeysType = mvKeysType;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-    }
-
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
         Map<String, Expr> result = Maps.newHashMap();
         SelectList selectList = null;

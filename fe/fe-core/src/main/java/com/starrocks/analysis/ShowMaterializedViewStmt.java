@@ -85,10 +85,6 @@ public class ShowMaterializedViewStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-    }
-
-    @Override
     public QueryStatement toSelectStmt() throws AnalysisException {
         if (where == null) {
             return null;
@@ -119,24 +115,6 @@ public class ShowMaterializedViewStmt extends ShowStmt {
         where = where.substitute(aliasMap);
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null));
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("SHOW MATERIALIZED VIEW");
-        if (!Strings.isNullOrEmpty(db)) {
-            sb.append(" FROM ").append(db);
-        }
-        if (pattern != null) {
-            sb.append(" LIKE '").append(pattern).append("'");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

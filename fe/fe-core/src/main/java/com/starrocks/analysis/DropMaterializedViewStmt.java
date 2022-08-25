@@ -21,21 +21,7 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
-
-import java.util.List;
 
 /**
  * DROP MATERIALIZED VIEW [ IF EXISTS ] <mv_name> IN|FROM [db_name].<table_name>
@@ -50,19 +36,10 @@ public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
     private final TableName dbMvName;
-    @Deprecated
-    private final TableName dbTblName;
-
-    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, TableName dbTblName) {
-        this.ifExists = ifExists;
-        this.dbMvName = dbMvName;
-        this.dbTblName = dbTblName;
-    }
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
         this.ifExists = ifExists;
         this.dbMvName = dbMvName;
-        this.dbTblName = null;
     }
 
     public boolean isSetIfExists() {
@@ -73,102 +50,12 @@ public class DropMaterializedViewStmt extends DdlStmt {
         return dbMvName.getTbl();
     }
 
-    @Deprecated
-    public String getTblName() {
-        if (dbTblName != null) {
-            return dbTblName.getTbl();
-        } else {
-            return null;
-        }
-    }
-
     public String getDbName() {
         return dbMvName.getDb();
     }
 
     public TableName getDbMvName() {
         return dbMvName;
-    }
-
-    @Deprecated
-    public TableName getDbTblName() {
-        return dbTblName;
-    }
-
-    @Override
-    @Deprecated
-    public void analyze(Analyzer analyzer) throws UserException {
-        if (dbTblName != null && !Strings.isNullOrEmpty(dbMvName.getDb())) {
-            throw new AnalysisException(
-                    "Syntax drop materialized view [mv-name] from db.name mush specify database name explicitly in `from`");
-        }
-        if (dbTblName != null) {
-            if (!Strings.isNullOrEmpty(dbMvName.getDb())) {
-                throw new AnalysisException("If the database appears after the from statement, " +
-                        "the materialized view should not include the database name prefix");
-            }
-
-            if (Strings.isNullOrEmpty(dbTblName.getDb())) {
-                throw new AnalysisException(
-                        "Syntax drop materialized view [mv-name] from db.name mush specify database name explicitly in `from`");
-            }
-            dbTblName.analyze(analyzer);
-        }
-
-        if (Strings.isNullOrEmpty(dbMvName.getDb())) {
-            dbMvName.setDb(analyzer.getDefaultDb());
-        }
-
-        if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkDbPriv(ConnectContext.get(), getDbName(), PrivPredicate.DROP)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
-        }
-
-        dbMvName.analyze(analyzer);
-
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbMvName.getDb());
-        if (dbTblName == null) {
-            boolean hasMv = false;
-            for (Table table : db.getTables()) {
-                if (table.getType() == Table.TableType.OLAP) {
-                    OlapTable olapTable = (OlapTable) table;
-                    List<MaterializedIndex> visibleMaterializedViews = olapTable.getVisibleIndex();
-                    long baseIdx = olapTable.getBaseIndexId();
-
-                    for (MaterializedIndex mvIdx : visibleMaterializedViews) {
-                        if (baseIdx == mvIdx.getId()) {
-                            continue;
-                        }
-                        if (olapTable.getIndexNameById(mvIdx.getId()).equals(dbMvName.getTbl())) {
-                            if (hasMv) {
-                                throw new AnalysisException(
-                                        "There are multiple materialized views called " + dbMvName.getTbl() +
-                                                ". Use the syntax [drop materialized view db.mv_name on table] to drop materialized view");
-                            }
-                            hasMv = true;
-                        }
-                    }
-                }
-            }
-            if (!hasMv && !isSetIfExists()) {
-                throw new AnalysisException("The materialized " + dbMvName.getTbl() + " is not exist");
-            }
-        }
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("DROP MATERIALIZED VIEW ");
-        if (ifExists) {
-            stringBuilder.append("IF EXISTS ");
-        }
-        stringBuilder.append("`").append(dbMvName).append("`");
-
-        if (dbTblName != null) {
-            stringBuilder.append(" IN `").append(dbTblName).append("`");
-        }
-        return stringBuilder.toString();
     }
 
     @Override

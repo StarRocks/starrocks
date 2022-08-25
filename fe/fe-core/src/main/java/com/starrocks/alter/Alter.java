@@ -80,7 +80,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -164,23 +164,19 @@ public class Alter {
         db.writeLock();
         try {
             Table table = null;
-            if (stmt.getTblName() != null) {
-                table = db.getTable(stmt.getTblName());
-            } else {
-                boolean hasfindTable = false;
-                for (Table t : db.getTables()) {
-                    if (t instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) t;
-                        for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                            if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
-                                table = olapTable;
-                                hasfindTable = true;
-                                break;
-                            }
-                        }
-                        if (hasfindTable) {
+            boolean hasfindTable = false;
+            for (Table t : db.getTables()) {
+                if (t instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) t;
+                    for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
+                        if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
+                            table = olapTable;
+                            hasfindTable = true;
                             break;
                         }
+                    }
+                    if (hasfindTable) {
+                        break;
                     }
                 }
             }
@@ -212,7 +208,7 @@ public class Alter {
         }
     }
 
-    public void processAlterMaterializedView(AlterMaterializedViewStatement stmt)
+    public void processAlterMaterializedView(AlterMaterializedViewStmt stmt)
             throws DdlException, MetaNotFoundException {
         // check db
         final TableName mvName = stmt.getMvName();
