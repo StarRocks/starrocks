@@ -827,6 +827,26 @@ public class Auth implements Writable {
     private void grantInternal(UserIdentity userIdent, String role, TablePattern tblPattern,
                                PrivBitSet privs, boolean errOnNonExist, boolean isReplay)
             throws DdlException {
+
+        // check privilege
+        switch (tblPattern.getPrivLevel()) {
+            case DATABASE:
+                if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                    throw new DdlException(
+                            "Db privilege can not contains global or resource or impersonate privileges: " + privs);
+                }
+                break;
+
+            case TABLE:
+                if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                    throw new DdlException(
+                            "Table privilege can not contains global or resource or impersonate privileges: " + privs);
+                }
+                break;
+
+            default:
+                break;
+        }
         writeLock();
         try {
             if (role != null) {
@@ -857,6 +877,18 @@ public class Auth implements Writable {
 
     private void grantInternal(UserIdentity userIdent, String role, ResourcePattern resourcePattern, PrivBitSet privs,
                                boolean errOnNonExist, boolean isReplay) throws DdlException {
+        // check privilege
+        switch (resourcePattern.getPrivLevel()) {
+            case RESOURCE:
+                if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
+                    throw new DdlException(
+                            "Resource privilege can not contains node or db or table or impersonate privileges: " + privs);
+                }
+                break;
+            default:
+                break;
+        }
+
         writeLock();
         try {
             if (role != null) {
