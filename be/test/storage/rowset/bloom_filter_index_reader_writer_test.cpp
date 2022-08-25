@@ -94,7 +94,8 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        ASSIGN_OR_ABORT(auto r, (*reader)->load(_block_mgr, fname, meta.bloom_filter_index(), true, false));
+        ASSIGN_OR_ABORT(auto r,
+                        (*reader)->load(_block_mgr, fname, meta.bloom_filter_index(), true, false, _mem_tracker.get()));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(iter));
     }
