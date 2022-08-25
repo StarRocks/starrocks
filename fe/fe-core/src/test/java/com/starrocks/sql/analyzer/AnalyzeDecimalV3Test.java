@@ -794,7 +794,6 @@ public class AnalyzeDecimalV3Test {
                 Assert.assertEquals(((FunctionCallExpr) expr).getFn().getReturnType(), Type.DOUBLE);
                 Assert.assertEquals(((AggregateFunction) ((FunctionCallExpr) expr).getFn()).getIntermediateType(),
                         Type.VARCHAR);
-                Assert.assertEquals(expr.getChild(0).getType(), Type.DOUBLE);
             }
         }
     }
