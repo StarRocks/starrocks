@@ -296,7 +296,13 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
+<<<<<<< HEAD
 CONF_Bool(enable_event_based_compaction_framework, "false");
+=======
+CONF_Bool(enable_event_based_compaction_framework, "true");
+
+CONF_Bool(enable_check_string_lengths, "true");
+>>>>>>> ae3066fb6 ([BugFix] string column writer will check data's length even it is null (#10350))
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
