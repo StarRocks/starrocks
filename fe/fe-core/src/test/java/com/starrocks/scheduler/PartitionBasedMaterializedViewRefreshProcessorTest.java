@@ -252,6 +252,33 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         }
     }
 
+    @Test
+    public void testMvWithoutPartitionRefreshTwice() {
+        final AtomicInteger taskRunCounter = new AtomicInteger();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                taskRunCounter.incrementAndGet();
+            }
+        };
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        try {
+            for (int i = 0; i < 2; i++) {
+                taskRun.executeTaskRun();
+            }
+            Assert.assertEquals(1, taskRunCounter.get());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail("refresh failed");
+        }
+    }
+
     private void testBaseTablePartitionInsertData(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
