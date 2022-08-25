@@ -2,7 +2,9 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
@@ -12,7 +14,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 
@@ -32,7 +33,6 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        StarOSAgent starOSAgent = globalStateMgr.getStarOSAgent();
 
         long tableId = table.getId();
         LakeTableSchemaChangeJob schemaChangeJob = new LakeTableSchemaChangeJob(jobId, dbId, tableId, table.getName(), timeoutMs);
@@ -53,7 +53,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
 
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
-                List<Long> shadowTabletIds = starOSAgent.createShards(originTablets.size(), table.getShardStorageInfo());
+                List<Long> shadowTabletIds = createShards(originTablets.size(), table.getShardStorageInfo());
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partitionId, shadowIndexId, 0, medium);
@@ -70,5 +70,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                     entry.getValue());
         } // end for index
         return schemaChangeJob;
+    }
+
+    @VisibleForTesting
+    public static List<Long> createShards(int shardCount, ShardStorageInfo storageInfo) throws DdlException {
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, storageInfo);
     }
 }

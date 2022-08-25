@@ -2,6 +2,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
@@ -181,6 +182,55 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         table.rebuildFullSchema();
     }
 
+    @VisibleForTesting
+    public long getWatershedTxnId() {
+        return watershedTxnId;
+    }
+
+    @VisibleForTesting
+    public static void sendAgentTask(AgentBatchTask batchTask) {
+        AgentTaskQueue.addBatchTask(batchTask);
+        AgentTaskExecutor.submit(batchTask);
+    }
+
+    @VisibleForTesting
+    public static void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
+                                            long timeoutSeconds) throws AlterCancelException {
+        AgentTaskQueue.addBatchTask(batchTask);
+        AgentTaskExecutor.submit(batchTask);
+        long timeout = 1000L * Math.min(timeoutSeconds, Config.max_create_table_timeout_second);
+        boolean ok = false;
+        try {
+            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
+        } catch (InterruptedException e) {
+            LOG.warn("InterruptedException: ", e);
+        }
+
+        if (!ok) {
+            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+            String errMsg;
+            if (!countDownLatch.getStatus().ok()) {
+                errMsg = countDownLatch.getStatus().getErrorMsg();
+            } else {
+                // only show at most 3 results
+                List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                errMsg = "Error tablets:" + Joiner.on(", ").join(subList);
+            }
+            throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
+        }
+    }
+
+    @VisibleForTesting
+    public static void writeEditLog(LakeTableSchemaChangeJob job) {
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(job);
+    }
+
+    @VisibleForTesting
+    public static long getNextTransactionId() {
+        return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+    }
+
     @Override
     protected void runPendingJob() throws AlterCancelException {
         long numTablets = 0;
@@ -247,36 +297,13 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             throw new AlterCancelException(e.getMessage());
         }
 
-        AgentTaskQueue.addBatchTask(batchTask);
-        AgentTaskExecutor.submit(batchTask);
-        long timeout = 1000L * Math.min(Config.tablet_create_timeout_second * numTablets, Config.max_create_table_timeout_second);
-        boolean ok = false;
-        try {
-            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
-        } catch (InterruptedException e) {
-            LOG.warn("InterruptedException: ", e);
-        }
-
-        if (!ok) {
-            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-            String errMsg;
-            if (!countDownLatch.getStatus().ok()) {
-                errMsg = countDownLatch.getStatus().getErrorMsg();
-            } else {
-                // only show at most 3 results
-                List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-                List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                errMsg = "Error tablets:" + Joiner.on(", ").join(subList);
-            }
-            LOG.warn("Fail to create tablets: {}. jobId={}", errMsg, jobId);
-            throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
-        }
+        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets);
 
         // Add shadow indexes to table.
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            watershedTxnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            watershedTxnId = getNextTransactionId();
             addShadowIndexToCatalog(table);
         }
 
@@ -286,8 +313,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             span.addEvent("setWaitingTxn");
         }
 
-        // write edit log
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        writeEditLog(this);
+
         LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
     }
 
@@ -296,7 +323,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         Preconditions.checkState(jobState == JobState.WAITING_TXN, jobState);
 
         try {
-            if (!isPreviousLoadFinished()) {
+            if (!isPreviousLoadFinished(dbId, tableId, watershedTxnId)) {
                 LOG.info("wait transactions before {} to be finished, schema change job: {}", watershedTxnId, jobId);
                 return;
             }
@@ -335,15 +362,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             } // end for partitions
         }
 
-        AgentTaskQueue.addBatchTask(getOrCreateSchemaChangeBatchTask());
-        AgentTaskExecutor.submit(getOrCreateSchemaChangeBatchTask());
+        sendAgentTask(getOrCreateSchemaChangeBatchTask());
 
         this.jobState = JobState.RUNNING;
         if (span != null) {
             span.addEvent("setRunning");
         }
 
-        // DO NOT write edit log here, tasks will be send again if FE restart or master changed.
+        // DO NOT write edit log here, will send AlterReplicaTask again if FE restarted or master changed.
         LOG.info("transfer schema change job {} state to {}", jobId, this.jobState);
     }
 
@@ -355,7 +381,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         // or if table is dropped, the tasks will never be finished,
         // and the job will be in RUNNING state forever.
         if (tableHasBeenDropped()) {
-            throw new AlterCancelException("Table " + tableId + " does not exist");
+            throw new AlterCancelException("Table or database does not exist");
         }
 
         if (!getOrCreateSchemaChangeBatchTask().isFinished()) {
@@ -381,7 +407,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
             this.jobState = JobState.FINISHED_REWRITING;
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            writeEditLog(this);
 
             // NOTE: !!! below this point, this schema change job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -391,8 +417,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             span.addEvent("finishedRewriting");
         }
         LOG.info("schema change job finished rewriting historical data: {}", jobId);
-
-        runFinishedRewritingJob();
     }
 
     // Note: The only allowed situation to cancel the schema change job is the table has been dropped.
@@ -412,7 +436,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+
+        writeEditLog(this);
 
         // Replace the current index with shadow index.
         List<MaterializedIndex> droppedIndexes;
@@ -701,7 +726,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             span.end();
         }
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        writeEditLog(this);
+
         return true;
     }
 
@@ -761,9 +787,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
-    boolean isPreviousLoadFinished() throws AnalysisException {
+    @VisibleForTesting
+    public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
         GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-        return globalTxnMgr.isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
+        return globalTxnMgr.isPreviousTransactionsFinished(txnId, dbId, Lists.newArrayList(tableId));
     }
 
     private abstract static class LockedDatabase implements AutoCloseable {
