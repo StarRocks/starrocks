@@ -828,24 +828,27 @@ public class Auth implements Writable {
                                PrivBitSet privs, boolean errOnNonExist, boolean isReplay)
             throws DdlException {
 
-        // check privilege
-        switch (tblPattern.getPrivLevel()) {
-            case DATABASE:
-                if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
-                    throw new DdlException(
-                            "Db privilege can not contains global or resource or impersonate privileges: " + privs);
-                }
-                break;
+        if (! isReplay) {
+            // check privilege only on leader, in case of replaying old journal
+            switch (tblPattern.getPrivLevel()) {
+                case DATABASE:
+                    if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException(
+                                "Db privilege can not contains global or resource or impersonate privileges: " + privs);
+                    }
+                    break;
 
-            case TABLE:
-                if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
-                    throw new DdlException(
-                            "Table privilege can not contains global or resource or impersonate privileges: " + privs);
-                }
-                break;
+                case TABLE:
+                    if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException(
+                                "Table privilege can not contains global or resource or impersonate privileges: " +
+                                        privs);
+                    }
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
+            }
         }
         writeLock();
         try {
@@ -877,16 +880,19 @@ public class Auth implements Writable {
 
     private void grantInternal(UserIdentity userIdent, String role, ResourcePattern resourcePattern, PrivBitSet privs,
                                boolean errOnNonExist, boolean isReplay) throws DdlException {
-        // check privilege
-        switch (resourcePattern.getPrivLevel()) {
-            case RESOURCE:
-                if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
-                    throw new DdlException(
-                            "Resource privilege can not contains node or db or table or impersonate privileges: " + privs);
-                }
-                break;
-            default:
-                break;
+        if (! isReplay) {
+            // check privilege only on leader, in case of replaying old journal
+            switch (resourcePattern.getPrivLevel()) {
+                case RESOURCE:
+                    if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
+                        throw new DdlException(
+                                "Resource privilege can not contains node or db or table or impersonate privileges: " +
+                                        privs);
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
 
         writeLock();
