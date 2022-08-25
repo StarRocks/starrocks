@@ -119,6 +119,7 @@ void CompactionTask::_success_callback() {
     // for compatible, update compaction time
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_success_time(UnixMillis());
+        _tablet->set_cumulative_layer_point(_input_rowsets.back()->end_version() + 1);
     } else {
         _tablet->set_last_base_compaction_success_time(UnixMillis());
     }
