@@ -21,7 +21,6 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
