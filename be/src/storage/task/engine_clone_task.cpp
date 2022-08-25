@@ -65,7 +65,7 @@ const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
-void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorkerPool* clone_task_worker_pool) {
+void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req) {
     const TCloneReq& clone_req = agent_task_req->clone_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -95,8 +95,8 @@ void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorke
                 LOG(INFO) << "storage migrate success. status:" << res << ", signature:" << agent_task_req->signature;
 
                 TTabletInfo tablet_info;
-                AgentStatus status = clone_task_worker_pool->get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
-                                                                             agent_task_req->signature, &tablet_info);
+                AgentStatus status = TaskWorkerPoolBase::get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
+                                                                         agent_task_req->signature, &tablet_info);
                 if (status != STARROCKS_SUCCESS) {
                     LOG(WARNING) << "storage migrate success, but get tablet info failed"
                                  << ". status:" << status << ", signature:" << agent_task_req->signature;
@@ -133,7 +133,7 @@ void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req, TaskWorke
     finish_task_request.__set_task_status(task_status);
 
     finish_task(finish_task_request);
-    clone_task_worker_pool->remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    TaskWorkerPoolBase::remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
 EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, int64_t signature,
