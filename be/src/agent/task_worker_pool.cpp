@@ -215,8 +215,9 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
 
     if (_register_task_info(task_type, signature)) {
         // Set the receiving time of task so that we can determine whether it is timed out later
-        (const_cast<TAgentTaskRequest&>(task)).__set_recv_time(time(nullptr));
-        size_t task_count = _push_task(std::make_shared<TAgentTaskRequest>(task));
+        auto new_task = std::make_shared<TAgentTaskRequest>(task);
+        new_task->__set_recv_time(time(nullptr));
+        size_t task_count = _push_task(std::move(new_task));
         LOG(INFO) << "Submit task success. type=" << type_str << ", signature=" << signature
                   << ", task_count_in_queue=" << task_count;
     } else {
@@ -224,67 +225,83 @@ void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
     }
 }
 
-void TaskWorkerPool::submit_tasks(std::vector<TAgentTaskRequest>* tasks) {
-    DCHECK(!tasks->empty());
+void TaskWorkerPool::submit_tasks(const std::vector<const TAgentTaskRequest*>& tasks) {
+    DCHECK(!tasks.empty());
     std::string type_str;
-    const TTaskType::type task_type = (*tasks)[0].task_type;
-    std::vector<TAgentTaskRequest> failed_task_vec;
+    size_t task_count = tasks.size();
+    const TTaskType::type task_type = tasks[0]->task_type;
+    std::vector<uint8_t> failed_task(task_count);
     EnumToString(TTaskType, task_type, type_str);
+    const auto recv_time = time(nullptr);
     {
         std::lock_guard task_signatures_lock(_s_task_signatures_locks[task_type]);
-        const auto recv_time = time(nullptr);
-        for (auto it = tasks->begin(); it != tasks->end();) {
-            TAgentTaskRequest& task_req = *it;
-            int64_t signature = task_req.signature;
+        for (size_t i = 0; i < tasks.size(); i++) {
+            int64_t signature = tasks[i]->signature;
 
             // batch register task info
             std::set<int64_t>& signature_set = _s_task_signatures[task_type];
             if (signature_set.insert(signature).second) {
-                task_req.__set_recv_time(recv_time);
-                ++it;
+                failed_task[i] = 0;
             } else {
-                failed_task_vec.push_back(*it);
-                it = tasks->erase(it);
+                failed_task[i] = 1;
             }
         }
     }
 
-    if (!failed_task_vec.empty()) {
-        std::stringstream ss;
-        for (int i = 0; i < failed_task_vec.size(); ++i) {
-            if (i != 0) {
-                ss << ",";
+    size_t non_zeros = SIMD::count_nonzero(failed_task);
+
+    std::stringstream fail_ss;
+    std::stringstream succ_ss;
+    size_t fail_counter = non_zeros;
+    size_t succ_counter = task_count - non_zeros;
+    for (int i = 0; i < failed_task.size(); ++i) {
+        if (failed_task[i] == 1) {
+            fail_ss << tasks[i]->signature;
+            fail_counter--;
+            if (fail_counter > 0) {
+                fail_ss << ",";
             }
-            ss << failed_task_vec[i].signature;
+        } else {
+            succ_ss << tasks[i]->signature;
+            succ_counter--;
+            if (succ_counter > 0) {
+                succ_ss << ",";
+            }
         }
-        LOG(INFO) << "fail to register task. type=" << type_str << ", signatures=[" << ss.str() << "]";
+    }
+    if (fail_ss.str().length() > 0) {
+        LOG(INFO) << "fail to register task. type=" << type_str << ", signatures=[" << fail_ss.str() << "]";
     }
 
     size_t queue_size = 0;
     {
         std::unique_lock l(_worker_thread_lock);
         if (UNLIKELY(task_type == TTaskType::REALTIME_PUSH &&
-                     (*tasks)[0].push_req.push_type == TPushType::CANCEL_DELETE)) {
-            for (auto const& task : *tasks) {
-                _tasks.emplace_front(std::make_shared<TAgentTaskRequest>(task));
+                     tasks[0]->push_req.push_type == TPushType::CANCEL_DELETE)) {
+            for (size_t i = 0; i < task_count; i++) {
+                if (failed_task[i] == 0) {
+                    auto new_task = std::make_shared<TAgentTaskRequest>(*tasks[i]);
+                    new_task->__set_recv_time(recv_time);
+                    _tasks.emplace_front(std::move(new_task));
+                }
             }
         } else {
-            for (auto const& task : *tasks) {
-                _tasks.emplace_back(std::make_shared<TAgentTaskRequest>(task));
+            for (size_t i = 0; i < task_count; i++) {
+                if (failed_task[i] == 0) {
+                    auto new_task = std::make_shared<TAgentTaskRequest>(*tasks[i]);
+                    new_task->__set_recv_time(recv_time);
+                    _tasks.emplace_back(std::move(new_task));
+                }
             }
         }
         queue_size = _tasks.size();
         _worker_thread_condition_variable->notify_all();
     }
-    std::stringstream ss;
-    for (int i = 0; i < (*tasks).size(); ++i) {
-        if (i != 0) {
-            ss << ",";
-        }
-        ss << (*tasks)[i].signature;
+
+    if (succ_ss.str().length() > 0) {
+        LOG(INFO) << "success to submit task. type=" << type_str << ", signature=[" << succ_ss.str()
+                  << "], task_count_in_queue=" << queue_size;
     }
-    LOG(INFO) << "success to submit task. type=" << type_str << ", signature=[" << ss.str()
-              << "], task_count_in_queue=" << queue_size;
 }
 
 size_t TaskWorkerPool::num_queued_tasks() const {
