@@ -1263,9 +1263,8 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Tablet
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
         }
-
-        dropped_tablet->save_meta();
 
         std::unique_lock l(_shutdown_tablets_lock);
         _shutdown_tablets.emplace(dropped_tablet->tablet_id(), std::move(drop_info));
