@@ -110,7 +110,8 @@ public class MetaUtils {
             stmt.setIsReplay(true);
             return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
         } catch (Exception e) {
-            LOG.warn("error happens when parsing create materialized view use new parser:" + originStmt, e);
+            LOG.warn("error happens when parsing create materialized view stmt [{}] use new parser",
+                    originStmt, e);
         }
 
         // compatibility old parser can work but new parser failed
@@ -122,7 +123,7 @@ public class MetaUtils {
             stmt.setIsReplay(true);
             return stmt.parseDefineExprWithoutAnalyze(originStmt.originStmt);
         } catch (Exception e) {
-            LOG.warn("error happens when parsing create materialized view stmt use old parser:" +
+            LOG.warn("error happens when parsing create materialized view stmt [{}] use old parser:",
                     originStmt, e);
         }
         // suggestion
