@@ -317,13 +317,24 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return false;
     }
 
+    private boolean needToRefreshNonPartitionTable() {
+        for (OlapTable olapTable : snapshotBaseTables.values()) {
+            if (needToRefreshTable(olapTable)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Set<String> getPartitionsToRefreshForMaterializedView() {
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
 
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
-            needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            if (needToRefreshNonPartitionTable()) {
+                needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = getPartitionExpr();
             Pair<OlapTable, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
