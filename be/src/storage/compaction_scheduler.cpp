@@ -102,8 +102,8 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
         if (config::cumulative_compaction_num_threads_per_disk >= 0 &&
             num >= config::cumulative_compaction_num_threads_per_disk) {
             VLOG(2) << "skip tablet:" << tablet->tablet_id()
-                      << " for limit of cumulative compaction task per disk. disk path:" << data_dir->path()
-                      << ", running num:" << num;
+                    << " for limit of cumulative compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
             return false;
         }
         last_failure_ts = tablet->last_cumu_compaction_failure_time();
@@ -116,17 +116,17 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
         uint16_t num = StorageEngine::instance()->compaction_manager()->running_base_tasks_num_for_dir(data_dir);
         if (config::base_compaction_num_threads_per_disk >= 0 && num >= config::base_compaction_num_threads_per_disk) {
             VLOG(2) << "skip tablet:" << tablet->tablet_id()
-                      << " for limit of base compaction task per disk. disk path:" << data_dir->path()
-                      << ", running num:" << num;
+                    << " for limit of base compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
             return false;
         }
         last_failure_ts = tablet->last_base_compaction_failure_time();
     }
     if (UnixMillis() - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
         VLOG(2) << "Too often to schedule failure compaction, skip it."
-                  << "compaction_type=" << compaction_task->compaction_type()
-                  << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
-                  << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
+                << "compaction_type=" << compaction_task->compaction_type()
+                << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
         return false;
     }
 
@@ -151,7 +151,7 @@ bool CompactionScheduler::_check_precondition(const CompactionCandidate& candida
 
     if (tablet->tablet_state() != TABLET_RUNNING) {
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
-                  << ", not RUNNING";
+                << ", not RUNNING";
         return false;
     }
 
@@ -159,7 +159,7 @@ bool CompactionScheduler::_check_precondition(const CompactionCandidate& candida
     if (compaction_task) {
         // tablet already has a running compaction task, skip it
         VLOG(2) << "skip tablet:" << tablet->tablet_id()
-                  << " because there is another running compaction task:" << compaction_task->task_id();
+                << " because there is another running compaction task:" << compaction_task->task_id();
         return false;
     }
     return true;
