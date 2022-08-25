@@ -79,7 +79,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    p_partkey limit 100;\n" +
                 "\n";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(768, planCount);
+        Assert.assertEquals(32, planCount);
     }
 
     @Test
@@ -119,7 +119,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    revenue desc ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(88, planCount);
+        Assert.assertEquals(77, planCount);
     }
 
     @Test
@@ -167,7 +167,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(136, planCount);
+        Assert.assertEquals(53, planCount);
     }
 
     @Test
@@ -210,7 +210,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(136, planCount);
+        Assert.assertEquals(53, planCount);
     }
 
     @Test
@@ -293,7 +293,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    o_totalprice desc,\n" +
                 "    o_orderdate limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(22, planCount);
+        Assert.assertEquals(10, planCount);
     }
 
     @Test
@@ -341,7 +341,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    s_name ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(28, planCount);
+        Assert.assertEquals(12, planCount);
     }
 
     @Test
@@ -387,7 +387,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    s_name limit 100;";
         connectContext.getSessionVariable().setJoinImplementationMode("hash");
         int planCount = getPlanCount(sql);
-        Assert.assertEquals("planCount is " + planCount, 86, planCount);
+        Assert.assertEquals("planCount is " + planCount, 21, planCount);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
     }
 
