@@ -880,7 +880,9 @@ StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, std::uni
         : ColumnWriter(std::move(field), opts.meta->is_nullable()), _scalar_column_writer(std::move(column_writer)) {}
 
 Status StringColumnWriter::append(const vectorized::Column& column) {
-    RETURN_IF_ERROR(check_string_lengths(column));
+    if (config::enable_check_string_lengths) {
+        RETURN_IF_ERROR(check_string_lengths(column));
+    }
     if (_is_speculated) {
         return _scalar_column_writer->append(column);
     }
@@ -964,9 +966,16 @@ Status StringColumnWriter::finish() {
 Status StringColumnWriter::check_string_lengths(const vectorized::Column& column) {
     size_t limit = get_field()->length();
     const Slice* slices = (const Slice*)column.raw_data();
+    const uint8_t* null =
+            is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
     for (size_t i = 0; i < column.size(); i++) {
+        // skip string length check if it is null
+        if (null != nullptr && null[i] == starrocks::vectorized::DATUM_NULL) {
+            continue;
+        }
         if (slices[i].get_size() > limit) {
-            return Status::InvalidArgument(fmt::format("string length({}) > limit({})", slices[i].get_size(), limit));
+            return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}",
+                                                       slices[i].get_size(), limit, slices[i].get_data()));
         }
     }
     return Status::OK();
