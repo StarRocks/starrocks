@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -551,7 +552,13 @@ public class ExpressionAnalyzer {
                 // return decimal version even if the input parameters are not decimal, such as (INT, INT),
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
-                fn = getDecimalV3Function(node, argumentTypes);
+                if (FunctionSet.varianceFunctions.contains(fnName)) {
+                    Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
+                    fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                } else {
+                    fn = getDecimalV3Function(node, argumentTypes);
+                }
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (fn instanceof AggregateFunction) {
