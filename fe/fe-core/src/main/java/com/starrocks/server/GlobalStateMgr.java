@@ -1814,7 +1814,7 @@ public class GlobalStateMgr {
         localMetastore.replayRecoverPartition(info);
     }
 
-    public static String getMaterializedViewDdtStmt(MaterializedView mv) {
+    public static String getMaterializedViewDdlStmt(MaterializedView mv) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(mv.getName()).append("`");
         if (!Strings.isNullOrEmpty(mv.getComment())) {
@@ -1891,7 +1891,7 @@ public class GlobalStateMgr {
         // 1.1 materialized view
         if (table.getType() == TableType.MATERIALIZED_VIEW) {
             MaterializedView mv = (MaterializedView) table;
-            createTableStmt.add(getMaterializedViewDdtStmt(mv));
+            createTableStmt.add(getMaterializedViewDdlStmt(mv));
             return;
         }
 
