@@ -12,9 +12,6 @@ import java.util.Map;
 public interface BackendSelector {
     void computeScanRangeAssignment() throws Exception;
 
-    // TODO(yan): to get which compute nodes have been used during assignment.
-    // public List<ComputeNode> getUsedNodes();
-
     static <K, V> V findOrInsert(HashMap<K, V> m, final K key, final V defaultVal) {
         V value = m.get(key);
         if (value == null) {

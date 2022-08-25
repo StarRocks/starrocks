@@ -39,18 +39,19 @@ public class HDFSBackendSelector implements BackendSelector {
     // be -> assigned scans
     Map<ComputeNode, Long> assignedScansPerComputeNode = Maps.newHashMap();
     // be host -> bes
-    Multimap<String, ComputeNode> hostToBes = HashMultimap.create();
+    Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
     private final Coordinator.FragmentScanRangeAssignment assignment;
+    private final Map<TNetworkAddress, Long> addressToBackendId;
     private final List<Long> scanRangesBytes;
     private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
     private final ImmutableCollection<ComputeNode> computeNodes;
-    private final List<ComputeNode> usedNodes = Lists.newArrayList();
     private boolean forceScheduleLocal;
 
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
                                Coordinator.FragmentScanRangeAssignment assignment,
+                               Map<TNetworkAddress, Long> addressToBackendId,
                                ImmutableCollection<ComputeNode> computeNodes,
                                boolean forceScheduleLocal) {
         this.scanNode = scanNode;
@@ -58,12 +59,9 @@ public class HDFSBackendSelector implements BackendSelector {
         this.assignment = assignment;
         this.computeNodes = computeNodes;
         this.forceScheduleLocal = forceScheduleLocal;
+        this.addressToBackendId = addressToBackendId;
         this.scanRangesBytes =
                 locations.stream().map(x -> x.scan_range.hdfs_scan_range.length).collect(Collectors.toList());
-    }
-
-    public List<ComputeNode> getUsedNodes() {
-        return usedNodes;
     }
 
     @Override
@@ -75,51 +73,51 @@ public class HDFSBackendSelector implements BackendSelector {
             }
 
             assignedScansPerComputeNode.put(computeNode, 0L);
-            hostToBes.put(computeNode.getHost(), computeNode);
+            hostToBackends.put(computeNode.getHost(), computeNode);
         }
-        if (hostToBes.isEmpty()) {
+        if (hostToBackends.isEmpty()) {
             throw new UserException("Backend not found. Check if any backend is down or not");
         }
 
         // total scans / alive bes
-        long avgScansPerBe = -1;
+        long avgScanBytes = -1;
         if (!forceScheduleLocal) {
             int numBes = assignedScansPerComputeNode.size();
             long totalBytes = 0L;
             for (long scanRangeBytes : scanRangesBytes) {
                 totalBytes += scanRangeBytes;
             }
-            avgScansPerBe = totalBytes / numBes + (totalBytes % numBes == 0 ? 0 : 1);
+            avgScanBytes = totalBytes / numBes + (totalBytes % numBes == 0 ? 0 : 1);
         }
 
         List<TScanRangeLocations> remoteScanRangeLocations = Lists.newArrayList();
         for (int i = 0; i < locations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = locations.get(i);
             long minAssignedScanRanges = Long.MAX_VALUE;
-            ComputeNode minBe = null;
+            ComputeNode node = null;
             for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                Collection<ComputeNode> bes = hostToBes.get(location.getServer().getHostname());
-                if (bes == null || bes.isEmpty()) {
+                Collection<ComputeNode> backends = hostToBackends.get(location.getServer().getHostname());
+                if (backends == null || backends.isEmpty()) {
                     continue;
                 }
-                for (ComputeNode backend : bes) {
+                for (ComputeNode backend : backends) {
                     long assignedScanRanges = assignedScansPerComputeNode.get(backend);
-                    if (!forceScheduleLocal && assignedScanRanges >= avgScansPerBe) {
+                    if (!forceScheduleLocal && assignedScanRanges >= avgScanBytes) {
                         continue;
                     }
                     if (assignedScanRanges < minAssignedScanRanges) {
                         minAssignedScanRanges = assignedScanRanges;
-                        minBe = backend;
+                        node = backend;
                     }
                 }
             }
-            if (minBe == null) {
+            if (node == null) {
                 remoteScanRangeLocations.add(scanRangeLocations);
                 remoteScanRangesBytes.add(scanRangesBytes.get(i));
                 continue;
             }
             long scansToAdd = scanRangesBytes.get(i);
-            recordScanRangeAssignment(minBe, scanRangeLocations, scansToAdd);
+            recordScanRangeAssignment(node, scanRangeLocations, scansToAdd);
         }
 
         if (remoteScanRangeLocations.isEmpty()) {
@@ -130,31 +128,34 @@ public class HDFSBackendSelector implements BackendSelector {
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
             long minAssignedScanRanges = Long.MAX_VALUE;
-            ComputeNode minBe = null;
+            ComputeNode node = null;
             for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
                 ComputeNode backend = entry.getKey();
                 long assignedScanRanges = entry.getValue();
                 if (assignedScanRanges < minAssignedScanRanges) {
                     minAssignedScanRanges = assignedScanRanges;
-                    minBe = backend;
+                    node = backend;
                 }
             }
+            if (node == null) {
+                throw new RuntimeException("Failed to find backend to execute");
+            }
             long scansToAdd = remoteScanRangesBytes.get(i);
-            recordScanRangeAssignment(minBe, scanRangeLocations, scansToAdd);
+            recordScanRangeAssignment(node, scanRangeLocations, scansToAdd);
         }
     }
 
-    private void recordScanRangeAssignment(ComputeNode minBe, TScanRangeLocations scanRangeLocations,
+    private void recordScanRangeAssignment(ComputeNode node, TScanRangeLocations scanRangeLocations,
                                            long addedScans) {
-        usedNodes.add(minBe);
+        TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBePort());
+        addressToBackendId.put(address, node.getId());
 
         // update statistic
-        assignedScansPerComputeNode.put(minBe, assignedScansPerComputeNode.get(minBe) + addedScans);
+        assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
 
         // add in assignment
-        TNetworkAddress minBeAddress = new TNetworkAddress(minBe.getHost(), minBe.getBePort());
         Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
-                assignment, minBeAddress, new HashMap<>());
+                assignment, address, new HashMap<>());
         List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
                 scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
         // add scan range params

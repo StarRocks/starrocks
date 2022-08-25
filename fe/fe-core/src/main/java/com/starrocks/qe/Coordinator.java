@@ -154,14 +154,14 @@ public class Coordinator {
     Status queryStatus = new Status();
     // save of related backends of this query
     Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
-    //backends which this query will use
+    // backends which this query will use
     private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
-    //compute node which this query will use
+    // compute node which this query will use
     private ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.of();
-    //if it has compute node, hasComputeNode is true
+    // if it has compute node, hasComputeNode is true
     private boolean hasComputeNode = false;
-    //when use compute node, usedComputeNode is true,
-    //if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
+    // when use compute node, usedComputeNode is true,
+    // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
     private boolean usedComputeNode = false;
     // copied from TQueryExecRequest; constant across all fragments
     private final TDescriptorTable descTable;
@@ -2093,18 +2093,11 @@ public class Coordinator {
         }
     }
 
-    public ImmutableCollection<ComputeNode> getSelectorComputeNodes() {
-        if (usedComputeNode) {
+    public ImmutableCollection<ComputeNode> getSelectorComputeNodes(boolean whenUseComputeNode) {
+        if (whenUseComputeNode) {
             return idToComputeNode.values();
         } else {
             return ImmutableList.copyOf(idToBackend.values());
-        }
-    }
-
-    public void updateUsedComputeNodes(List<ComputeNode> nodes) {
-        for (ComputeNode node : nodes) {
-            TNetworkAddress addr = new TNetworkAddress(node.getHost(), node.getBePort());
-            addressToBackendID.put(addr, node.getId());
         }
     }
 
@@ -2125,10 +2118,10 @@ public class Coordinator {
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode) {
                 HDFSBackendSelector selector =
-                        new HDFSBackendSelector(scanNode, locations, assignment, getSelectorComputeNodes(),
+                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID,
+                                getSelectorComputeNodes(hasComputeNode),
                                 forceScheduleLocal);
                 selector.computeScanRangeAssignment();
-                updateUsedComputeNodes(selector.getUsedNodes());
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
                 boolean hasBucket =
