@@ -52,6 +52,11 @@ public class BeTabletManager {
         return tablet;
     }
 
+    public synchronized void addClonedTablet(Tablet tablet) {
+        tablets.put(tablet.id, tablet);
+        tabletIdsByPartition.computeIfAbsent(tablet.partitionId, k -> Sets.newHashSet()).add(tablet.id);
+    }
+
     public synchronized void dropTablet(long tabletId, boolean force) {
         Tablet removed = tablets.remove(tabletId);
         if (removed != null) {
@@ -70,12 +75,20 @@ public class BeTabletManager {
         return tablets.get(tabletId);
     }
 
+    public synchronized List<Tablet> getTabletsByTable(long tableId) {
+        return tablets.values().stream().filter(t -> t.tableId == tableId).collect(Collectors.toList());
+    }
+
     public synchronized List<Tablet> getTablets(long partitionId) {
         Set<Long> tabletIds = tabletIdsByPartition.get(partitionId);
         if (tabletIds == null) {
             return Collections.emptyList();
         }
         return tabletIds.stream().map(tablets::get).filter(t -> t != null).collect(Collectors.toList());
+    }
+
+    public synchronized int getNumTablet() {
+        return tablets.size();
     }
 
     void getTabletStat(TTabletStatResult result) {
