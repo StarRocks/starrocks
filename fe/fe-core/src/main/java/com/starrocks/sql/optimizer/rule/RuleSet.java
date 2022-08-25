@@ -194,6 +194,9 @@ public class RuleSet {
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
                 RemoteScanPartitionPruneRule.ICEBERG_SCAN,
+                PushDownMinMaxConjunctsRule.HIVE_SCAN,
+                PushDownMinMaxConjunctsRule.HUDI_SCAN,
+                PushDownMinMaxConjunctsRule.ICEBERG_SCAN,
                 new EsScanPartitionPruneRule(),
                 new CastToEmptyRule(),
                 new PartitionPredicatePrune()
@@ -246,10 +249,7 @@ public class RuleSet {
                 PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
                 new MergeTwoFiltersRule(),
-                new PushDownPredicateCTEConsumeRule(),
-                PushDownMinMaxConjunctsRule.HIVE_SCAN,
-                PushDownMinMaxConjunctsRule.HUDI_SCAN,
-                PushDownMinMaxConjunctsRule.ICEBERG_SCAN
+                new PushDownPredicateCTEConsumeRule()
         ));
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_SUBQUERY, ImmutableList.of(
