@@ -17,7 +17,7 @@ public abstract class AlterTableColumnClause extends AlterTableClause{
     // for AddColumnClause and ModifyColumnClause
     private Column column;
     // for AddColumnsClause
-    private List<Column> columns = new ArrayList<>();
+    private final List<Column> columns = new ArrayList<>();
 
     public AlterTableColumnClause(AlterOpType opType, String rollupName, Map<String, String> properties) {
         super(opType);

@@ -9,13 +9,8 @@ import com.starrocks.sql.ast.AstVisitor;
 
 
 public class ModifyBackendAddressClause extends BackendClause {
-
     protected String srcHost;
     protected String destHost;
-    
-    protected ModifyBackendAddressClause(List<String> hostPorts) {
-        super(new ArrayList<String>());
-    }
 
     public ModifyBackendAddressClause(String srcHost, String destHost) {
         super(new ArrayList<String>());

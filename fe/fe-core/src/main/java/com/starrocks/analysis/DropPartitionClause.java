@@ -28,11 +28,11 @@ import java.util.Map;
 
 // clause which is used to add one column to
 public class DropPartitionClause extends AlterTableClause {
-    private boolean ifExists;
-    private String partitionName;
+    private final boolean ifExists;
+    private final String partitionName;
     // true if this is to drop a temp partition
-    private boolean isTempPartition;
-    private boolean forceDrop;
+    private final boolean isTempPartition;
+    private final boolean forceDrop;
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
         super(AlterOpType.DROP_PARTITION);
@@ -62,18 +62,6 @@ public class DropPartitionClause extends AlterTableClause {
     @Override
     public Map<String, String> getProperties() {
         return null;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("DROP PARTITION " + partitionName);
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

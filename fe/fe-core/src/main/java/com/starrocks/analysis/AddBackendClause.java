@@ -20,24 +20,7 @@ package com.starrocks.analysis;
 import java.util.List;
 
 public class AddBackendClause extends BackendClause {
-
     public AddBackendClause(List<String> hostPorts) {
         super(hostPorts);
     }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ADD ");
-        sb.append("BACKEND ");
-
-        for (int i = 0; i < hostPorts.size(); i++) {
-            sb.append("\"").append(hostPorts.get(i)).append("\"");
-            if (i != hostPorts.size() - 1) {
-                sb.append(", ");
-            }
-        }
-        return sb.toString();
-    }
-
 }

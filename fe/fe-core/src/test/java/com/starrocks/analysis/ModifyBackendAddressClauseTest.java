@@ -19,7 +19,7 @@ public class ModifyBackendAddressClauseTest {
 
     @Test
     public void testNormal() throws AnalysisException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(null);
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("", "");
         Assert.assertTrue(clause.getHostPortPairs().size() == 0);
     }
 }

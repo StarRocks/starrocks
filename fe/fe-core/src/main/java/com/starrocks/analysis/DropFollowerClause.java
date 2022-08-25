@@ -23,12 +23,4 @@ public class DropFollowerClause extends FrontendClause {
     public DropFollowerClause(String hostPort) {
         super(hostPort, FrontendNodeType.FOLLOWER);
     }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER CLUSTER DROP FOLLOWER \"");
-        sb.append(hostPort).append("\"");
-        return sb.toString();
-    }
 }

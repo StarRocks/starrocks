@@ -23,12 +23,4 @@ public class AddFollowerClause extends FrontendClause {
     public AddFollowerClause(String hostPort) {
         super(hostPort, FrontendNodeType.FOLLOWER);
     }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER CLUSTER ADD FOLLOWER \"");
-        sb.append(hostPort).append("\"");
-        return sb.toString();
-    }
 }

@@ -14,7 +14,7 @@ import java.util.Map;
 public class ComputeNodeClause extends AlterClause {
 
     protected List<String> hostPorts;
-    private List<Pair<String, Integer>> hostPortPairs;
+    private final List<Pair<String, Integer>> hostPortPairs;
 
     public ComputeNodeClause(List<String> hostPorts) {
         super(AlterOpType.ALTER_OTHER);
@@ -34,5 +34,4 @@ public class ComputeNodeClause extends AlterClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitComputeNodeClause(this, context);
     }
-
 }

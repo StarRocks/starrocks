@@ -303,7 +303,7 @@ public class SystemInfoService {
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
-        boolean needCheckUnforce = !dropBackendClause.isOldStyle() && !dropBackendClause.isForce();
+        boolean needCheckUnforce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist

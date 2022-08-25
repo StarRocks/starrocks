@@ -37,29 +37,6 @@ public class ReorderColumnsClause extends AlterTableColumnClause {
     }
 
     @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ORDER BY ");
-        int idx = 0;
-        for (String col : columnsByPos) {
-            if (idx != 0) {
-                sb.append(", ");
-            }
-            sb.append("`").append(col).append('`');
-            idx++;
-        }
-        if (rollupName != null) {
-            sb.append(" IN `").append(rollupName).append("`");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitReorderColumnsClause(this, context);
     }

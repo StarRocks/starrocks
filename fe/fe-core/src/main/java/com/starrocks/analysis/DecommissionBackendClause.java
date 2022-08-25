@@ -30,19 +30,6 @@ public class DecommissionBackendClause extends BackendClause {
         type = DecommissionType.SystemDecommission;
     }
 
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("DECOMMISSION BACKEND ");
-        for (int i = 0; i < hostPorts.size(); i++) {
-            sb.append("\"").append(hostPorts.get(i)).append("\"");
-            if (i != hostPorts.size() - 1) {
-                sb.append(", ");
-            }
-        }
-        return sb.toString();
-    }
-
     public void setType(DecommissionType type) {
         this.type = type;
     }

@@ -21,12 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.LinkedList;
@@ -41,7 +38,7 @@ public class BackendClause extends AlterClause {
     protected BackendClause(List<String> hostPorts) {
         super(AlterOpType.ALTER_OTHER);
         this.hostPorts = hostPorts;
-        this.hostPortPairs = new LinkedList<Pair<String, Integer>>();
+        this.hostPortPairs = new LinkedList<>();
     }
 
     public List<Pair<String, Integer>> getHostPortPairs() {
@@ -50,21 +47,6 @@ public class BackendClause extends AlterClause {
 
     public List<String> getHostPorts() {
         return hostPorts;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        for (String hostPort : hostPorts) {
-            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
-            hostPortPairs.add(pair);
-        }
-
-        Preconditions.checkState(!hostPortPairs.isEmpty());
-    }
-
-    @Override
-    public String toSql() {
-        throw new NotImplementedException();
     }
 
     @Override

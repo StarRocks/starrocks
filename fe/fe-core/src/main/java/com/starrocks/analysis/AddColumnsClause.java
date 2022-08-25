@@ -29,7 +29,7 @@ import java.util.Map;
 
 // add some columns to one index.
 public class AddColumnsClause extends AlterTableColumnClause {
-    private List<ColumnDef> columnDefs;
+    private final List<ColumnDef> columnDefs;
 
     public List<ColumnDef> getColumnDefs() {
         return columnDefs;
@@ -38,30 +38,6 @@ public class AddColumnsClause extends AlterTableColumnClause {
     public AddColumnsClause(List<ColumnDef> columnDefs, String rollupName, Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE, rollupName, properties);
         this.columnDefs = columnDefs;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ADD COLUMN (");
-        int idx = 0;
-        for (ColumnDef columnDef : columnDefs) {
-            if (idx != 0) {
-                sb.append(", ");
-            }
-            sb.append(columnDef.toSql());
-            idx++;
-        }
-        sb.append(")");
-        if (rollupName != null) {
-            sb.append(" IN `").append(rollupName).append("`");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

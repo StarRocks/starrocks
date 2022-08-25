@@ -29,12 +29,11 @@ import java.util.Map;
 // clause which is used to add partition
 public class AddPartitionClause extends AlterTableClause {
 
-    private PartitionDesc partitionDesc;
-    private DistributionDesc distributionDesc;
-    private Map<String, String> properties;
+    private final PartitionDesc partitionDesc;
+    private final DistributionDesc distributionDesc;
+    private final Map<String, String> properties;
     // true if this is to add a temporary partition
-    private boolean isTempPartition;
-    private boolean isMultiAlter;
+    private final boolean isTempPartition;
 
     public PartitionDesc getPartitionDesc() {
         return partitionDesc;
@@ -64,22 +63,6 @@ public class AddPartitionClause extends AlterTableClause {
     @Override
     public Map<String, String> getProperties() {
         return this.properties;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ADD ");
-        sb.append(partitionDesc.toSql() + "\n");
-        if (distributionDesc != null) {
-            sb.append(distributionDesc.toSql());
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

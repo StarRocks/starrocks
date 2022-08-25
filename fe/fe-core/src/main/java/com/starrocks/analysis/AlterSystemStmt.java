@@ -49,32 +49,8 @@ public class AlterSystemStmt extends DdlStmt {
                     "NODE");
         }
 
-        Preconditions.checkState( (alterClause instanceof DropBackendClause)
-                || (alterClause instanceof AddComputeNodeClause)
-                || (alterClause instanceof AddBackendClause)
-                || (alterClause instanceof DropBackendClause)
-                || (alterClause instanceof ModifyBackendAddressClause)
-                || (alterClause instanceof DecommissionBackendClause)
-                || (alterClause instanceof AddObserverClause)
-                || (alterClause instanceof DropObserverClause)
-                || (alterClause instanceof AddFollowerClause)
-                || (alterClause instanceof DropFollowerClause)
-                || (alterClause instanceof ModifyFrontendAddressClause)
-                || (alterClause instanceof AlterLoadErrorUrlClause));
-
+        Preconditions.checkState(alterClause instanceof AlterLoadErrorUrlClause);
         alterClause.analyze(analyzer);
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER SYSTEM ").append(alterClause.toSql());
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override
@@ -88,13 +64,6 @@ public class AlterSystemStmt extends DdlStmt {
     }
 
     private static boolean isNewAlterSystemClause(AlterClause clause) {
-        return clause instanceof DropComputeNodeClause
-                || clause instanceof AddComputeNodeClause
-                || clause instanceof AddBackendClause
-                || clause instanceof DropBackendClause
-                || clause instanceof ModifyBackendAddressClause
-                || clause instanceof ModifyFrontendAddressClause
-                || clause instanceof ModifyBrokerClause;
-
+        return !(clause instanceof AlterLoadErrorUrlClause);
     }
 }

@@ -23,13 +23,6 @@ public class SwapTableClause extends AlterTableClause {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(tblName)) {
-            throw new AnalysisException("No table specified");
-        }
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSwapTableClause(this, context);
     }
@@ -37,15 +30,5 @@ public class SwapTableClause extends AlterTableClause {
     @Override
     public boolean isSupportNewPlanner() {
         return true;
-    }
-
-    @Override
-    public String toSql() {
-        return "SWAP WITH TABLE " + tblName;
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 }

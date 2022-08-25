@@ -28,9 +28,9 @@ import java.util.Map;
 
 // clause which is used to add one column to
 public class AddColumnClause extends AlterTableColumnClause {
-    private ColumnDef columnDef;
+    private final ColumnDef columnDef;
     // Column position
-    private ColumnPosition colPos;
+    private final ColumnPosition colPos;
 
     public ColumnPosition getColPos() {
         return colPos;
@@ -45,24 +45,6 @@ public class AddColumnClause extends AlterTableColumnClause {
         super(AlterOpType.SCHEMA_CHANGE, rollupName, properties);
         this.columnDef = columnDef;
         this.colPos = colPos;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ADD COLUMN ").append(columnDef.toSql());
-        if (colPos != null) {
-            sb.append(" ").append(colPos.toSql());
-        }
-        if (rollupName != null) {
-            sb.append(" IN `").append(rollupName).append("`");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

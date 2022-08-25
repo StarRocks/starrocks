@@ -502,35 +502,85 @@ showCatalogsStatement
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause
-    : createIndexClause
-    | dropIndexClause
-    | tableRenameClause
-    | addBackendClause
-    | dropBackendClause
-    | modifyBackendHostClause
-    | addFrontendClause
+    //Alter system clause
+    : addFrontendClause
     | dropFrontendClause
     | modifyFrontendHostClause
+    | addBackendClause
+    | dropBackendClause
+    | decommissionBackendClause
+    | modifyBackendHostClause
     | addComputeNodeClause
     | dropComputeNodeClause
+    | modifyBrokerClause
+
+    //Alter table clause
+    | createIndexClause
+    | dropIndexClause
+    | tableRenameClause
     | swapTableClause
-    | dropPartitionClause
-    | truncatePartitionClause
     | modifyTablePropertiesClause
-    | addPartitionClause
-    | modifyPartitionClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
     | modifyColumnClause
     | columnRenameClause
     | reorderColumnsClause
-    | modifyBrokerClause
+
+    //Alter partition clause
+    | addPartitionClause
+    | dropPartitionClause
+    | truncatePartitionClause
+    | modifyPartitionClause
+    | replacePartitionClause
+    | renamePartitionClause
     ;
 
-addPartitionClause
-    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
+// ---------Alter system clause---------
+
+addFrontendClause
+   : ADD (FOLLOWER | OBSERVER) string
+   ;
+
+dropFrontendClause
+   : DROP (FOLLOWER | OBSERVER) string
+   ;
+
+modifyFrontendHostClause
+  : MODIFY FRONTEND HOST string TO string
+  ;
+
+addBackendClause
+   : ADD BACKEND string (',' string)*
+   ;
+
+dropBackendClause
+   : DROP BACKEND string (',' string)* FORCE?
+   ;
+
+decommissionBackendClause
+   : DECOMMISSION BACKEND string (',' string)*
+   ;
+
+modifyBackendHostClause
+   : MODIFY BACKEND HOST string TO string
+   ;
+
+addComputeNodeClause
+   : ADD COMPUTE NODE string (',' string)*
+   ;
+
+dropComputeNodeClause
+   : DROP COMPUTE NODE string (',' string)*
+   ;
+
+modifyBrokerClause
+    : ADD BROKER identifierOrString string (',' string)*
+    | DROP BROKER identifierOrString string (',' string)*
+    | DROP ALL BROKER identifierOrString
     ;
+
+// ---------Alter table clause---------
 
 createIndexClause
     : ADD INDEX indexName=identifier identifierList indexType? comment?
@@ -538,14 +588,6 @@ createIndexClause
 
 dropIndexClause
     : DROP INDEX indexName=identifier
-    ;
-
-dropPartitionClause
-    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
-    ;
-
-truncatePartitionClause
-    : TRUNCATE partitionNames
     ;
 
 tableRenameClause
@@ -558,42 +600,6 @@ swapTableClause
 
 modifyTablePropertiesClause
     : SET propertyList
-    ;
-
-addBackendClause
-   : ADD BACKEND string (',' string)*
-   ;
-
-dropBackendClause
-   : DROP BACKEND string (',' string)* FORCE?
-   ;
-
-modifyBackendHostClause
-   : MODIFY BACKEND HOST string TO string
-   ;
-
-addFrontendClause
-   : ADD (FOLLOWER | OBSERVER) string
-   ;
-
-dropFrontendClause
-   : DROP (FOLLOWER | OBSERVER) string
-   ;
-
-modifyFrontendHostClause
-   : MODIFY FRONTEND HOST string TO string
-   ;
-
-addComputeNodeClause
-   : ADD COMPUTE NODE string (',' string)*
-   ;
-
-dropComputeNodeClause
-   : DROP COMPUTE NODE string (',' string)*
-   ;
-
-modifyPartitionClause
-    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
     ;
 
 addColumnClause
@@ -620,10 +626,29 @@ reorderColumnsClause
     : ORDER BY identifierList (FROM rollupName=identifier)? properties?
     ;
 
-modifyBrokerClause
-    : ADD BROKER identifierOrString string (',' string)*
-    | DROP BROKER identifierOrString string (',' string)*
-    | DROP ALL BROKER identifierOrString
+// ---------Alter partition clause---------
+
+addPartitionClause
+    : ADD TEMPORARY? (singleRangePartition | PARTITIONS multiRangePartition) distributionDesc? properties?
+    ;
+dropPartitionClause
+    : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    ;
+
+truncatePartitionClause
+    : TRUNCATE partitionNames
+    ;
+
+modifyPartitionClause
+    : MODIFY PARTITION (identifier | identifierList | '(' ASTERISK_SYMBOL ')') SET propertyList
+    ;
+
+replacePartitionClause
+    : REPLACE parName=partitionNames WITH tempParName=partitionNames properties?
+    ;
+
+renamePartitionClause
+    : RENAME PARTITION parName=identifier newParName=identifier
     ;
 
 // ------------------------------------------- DML Statement -----------------------------------------------------------
@@ -1499,7 +1524,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
-    | DATA | DATE | DATETIME | DAY | DISTRIBUTION | DUPLICATE | DYNAMIC
+    | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS

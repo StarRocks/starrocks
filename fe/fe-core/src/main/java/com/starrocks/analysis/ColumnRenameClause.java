@@ -24,8 +24,8 @@ import java.util.Map;
 
 // rename column
 public class ColumnRenameClause extends AlterTableClause {
-    private String colName;
-    private String newColName;
+    private final String colName;
+    private final String newColName;
 
     public ColumnRenameClause(String colName, String newColName) {
         super(AlterOpType.SCHEMA_CHANGE);
@@ -45,16 +45,6 @@ public class ColumnRenameClause extends AlterTableClause {
     @Override
     public Map<String, String> getProperties() {
         return null;
-    }
-
-    @Override
-    public String toSql() {
-        return "RENAME COLUMN " + colName + " " + newColName;
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

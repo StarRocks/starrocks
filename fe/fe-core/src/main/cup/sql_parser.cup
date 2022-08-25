@@ -793,63 +793,15 @@ opt_dup_keys ::=
     ;
 
 alter_table_clause ::=
-    KW_REPLACE opt_partition_names:partitions KW_WITH opt_partition_names:tempPartitions opt_properties:properties
-    {:
-        RESULT = new ReplacePartitionClause(partitions, tempPartitions, properties);
-    :}
-    | KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
+    KW_RENAME KW_ROLLUP ident:rollupName ident:newRollupName
     {:
         RESULT = new RollupRenameClause(rollupName, newRollupName);
-    :}
-    | KW_RENAME KW_PARTITION ident:partitionName ident:newPartitionName
-    {:
-        RESULT = new PartitionRenameClause(partitionName, newPartitionName);
-    :}
-    | KW_ADD index_definition:indexDef
-    {:
-        RESULT = new CreateIndexClause(null, indexDef, true);
-    :}
-    | KW_DROP KW_INDEX ident:indexName
-    {:
-        RESULT = new DropIndexClause(indexName, null, true);
     :}
     ;
 
 alter_system_clause ::=
-    KW_ADD KW_BACKEND string_list:hostPorts
-    {:
-        RESULT = new AddBackendClause(hostPorts);
-    :}
-    | KW_DROP KW_BACKEND string_list:hostPorts opt_force:force
-    {:
-        RESULT = new DropBackendClause(hostPorts, force);
-    :}
-    | KW_DROPP KW_BACKEND string_list:hostPorts
-    {:
-        RESULT = new DropBackendClause(hostPorts, true, true);
-    :}
-    | KW_DECOMMISSION KW_BACKEND string_list:hostPorts
-    {:
-        RESULT = new DecommissionBackendClause(hostPorts);
-    :}
-    | KW_ADD KW_OBSERVER STRING_LITERAL:hostPort
-    {:
-        RESULT = new AddObserverClause(hostPort);
-    :}
-    | KW_DROP KW_OBSERVER STRING_LITERAL:hostPort
-    {:
-        RESULT = new DropObserverClause(hostPort);
-    :}
-    | KW_ADD KW_FOLLOWER STRING_LITERAL:hostPort
-    {:
-        RESULT = new AddFollowerClause(hostPort);
-    :}
-    | KW_DROP KW_FOLLOWER STRING_LITERAL:hostPort
-    {:
-        RESULT = new DropFollowerClause(hostPort);
-    :}
     // set load errors hub
-    | KW_SET KW_LOAD KW_ERRORS KW_HUB opt_properties:properties
+    KW_SET KW_LOAD KW_ERRORS KW_HUB opt_properties:properties
     {:
         RESULT = new AlterLoadErrorUrlClause(properties);
     :}
@@ -893,10 +845,6 @@ create_stmt ::=
     | KW_CREATE KW_MATERIALIZED KW_VIEW ident:mvName KW_AS select_stmt:selectStmt opt_properties:properties
     {:
         RESULT = new CreateMaterializedViewStmt(mvName, selectStmt, properties);
-    :}
-    | KW_CREATE KW_INDEX ident:indexName KW_ON table_name:tableName LPAREN ident_list:cols RPAREN opt_index_type:indexType opt_comment:comment
-    {:
-        RESULT = new AlterTableStmt(tableName, Lists.newArrayList(new CreateIndexClause(tableName, new IndexDef(indexName, cols, indexType, comment), false)));
     :}
     /* resource */
     | KW_CREATE externalable_resource:isExternal ident_or_text:resourceName opt_properties:properties
@@ -1254,10 +1202,6 @@ drop_stmt ::=
     | KW_DROP KW_FILE STRING_LITERAL:fileName opt_db:dbName KW_PROPERTIES LPAREN key_value_map:properties RPAREN
     {:
         RESULT = new DropFileStmt(fileName, dbName, properties);
-    :}
-    | KW_DROP KW_INDEX ident:indexName KW_ON table_name:tableName
-    {:
-        RESULT = new AlterTableStmt(tableName, Lists.newArrayList(new DropIndexClause(indexName, tableName, false)));
     :}
     | KW_DROP KW_MATERIALIZED KW_VIEW opt_if_exists:ifExists table_name:dbMvName opt_table_name:dbTblName
     {:

@@ -23,12 +23,4 @@ public class AddObserverClause extends FrontendClause {
     public AddObserverClause(String hostPort) {
         super(hostPort, FrontendNodeType.OBSERVER);
     }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("ALTER CLUSTER ADD OBSERVER \"");
-        sb.append(hostPort).append("\"");
-        return sb.toString();
-    }
 }

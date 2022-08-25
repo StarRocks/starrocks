@@ -24,11 +24,7 @@ package com.starrocks.analysis;
 import java.util.List;
 
 public class DropBackendClause extends BackendClause {
-    private boolean force;
-
-    // [DROPP backend] syntax is the old style, we will remove the [DROPP] in a future version.
-    @Deprecated
-    private boolean oldStyle;
+    private final boolean force;
 
     public DropBackendClause(List<String> hostPorts) {
         super(hostPorts);
@@ -42,27 +38,9 @@ public class DropBackendClause extends BackendClause {
     public DropBackendClause(List<String> hostPorts, boolean force, boolean oldStyle) {
         super(hostPorts);
         this.force = force;
-        this.oldStyle = oldStyle;
     }
 
     public boolean isForce() {
         return force;
-    }
-
-    public boolean isOldStyle() {
-        return oldStyle;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("DROP BACKEND ");
-        for (int i = 0; i < hostPorts.size(); i++) {
-            sb.append("\"").append(hostPorts.get(i)).append("\"");
-            if (i != hostPorts.size() - 1) {
-                sb.append(", ");
-            }
-        }
-        return sb.toString();
     }
 }

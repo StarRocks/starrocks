@@ -24,7 +24,7 @@ import java.util.Map;
 
 // Drop one column
 public class DropColumnClause extends AlterTableColumnClause {
-    private String colName;
+    private final String colName;
 
     public String getColName() {
         return colName;
@@ -33,21 +33,6 @@ public class DropColumnClause extends AlterTableColumnClause {
     public DropColumnClause(String colName, String rollupName, Map<String, String> properties) {
         super(AlterOpType.SCHEMA_CHANGE, rollupName, properties);
         this.colName = colName;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("DROP COLUMN `").append(colName).append("`");
-        if (rollupName != null) {
-            sb.append(" IN `").append(rollupName).append("`");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override
