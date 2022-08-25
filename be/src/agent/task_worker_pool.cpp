@@ -429,14 +429,9 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
         if (!is_task_timeout) {
             TFinishTaskRequest finish_task_request;
             TTaskType::type task_type = agent_task_req->task_type;
-            switch (task_type) {
-            case TTaskType::ALTER:
+            if (task_type == TTaskType::ALTER) {
                 worker_pool_this->_alter_tablet(worker_pool_this, *agent_task_req, signatrue, task_type,
                                                 &finish_task_request);
-                break;
-            default:
-                // pass
-                break;
             }
             finish_task(finish_task_request);
         }
@@ -498,13 +493,23 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     std::vector<TTabletInfo> finish_tablet_infos;
     if (status == STARROCKS_SUCCESS) {
         TTabletInfo& tablet_info = finish_tablet_infos.emplace_back();
-        status = get_tablet_info(new_tablet_id, new_schema_hash, signature, &tablet_info);
-
-        if (status != STARROCKS_SUCCESS) {
-            LOG(WARNING) << process_name << " success, but get new tablet info failed."
-                         << "tablet_id: " << new_tablet_id << ", schema_hash: " << new_schema_hash
-                         << ", signature: " << signature;
+        if (agent_task_req.alter_tablet_req_v2.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
+            status = get_tablet_info(new_tablet_id, new_schema_hash, signature, &tablet_info);
+        } else {
+            tablet_info.__set_tablet_id(new_tablet_id);
+            // Following are unused for LakeTablet but they are defined as required thrift fields, have to init them.
+            tablet_info.__set_schema_hash(0);
+            tablet_info.__set_version(0);
+            tablet_info.__set_version_hash(0);
+            tablet_info.__set_row_count(0);
+            tablet_info.__set_data_size(0);
+            tablet_info.__set_version_count(1);
         }
+
+        LOG_IF(WARNING, status != STARROCKS_SUCCESS)
+                << process_name << " success, but get new tablet info failed."
+                << "tablet_id: " << new_tablet_id << ", schema_hash: " << new_schema_hash
+                << ", signature: " << signature;
     }
 
     if (status == STARROCKS_SUCCESS) {
@@ -792,7 +797,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
             batch_publish_latency > config::max_batch_publish_latency_ms) {
             int64_t t0 = MonotonicMillis();
-            TxnManager::flush_dirs(affected_dirs);
+            StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
             int64_t t1 = MonotonicMillis();
             // notify FE when all tasks of group have been finished.
             for (auto& finish_task_request : finish_task_requests) {

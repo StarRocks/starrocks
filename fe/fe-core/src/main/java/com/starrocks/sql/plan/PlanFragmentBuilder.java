@@ -207,7 +207,7 @@ public class PlanFragmentBuilder {
     private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
-            fragment.finalize(resultSinkType);
+            fragment.createDataSink(resultSinkType);
         }
         Collections.reverse(fragments);
         // compute local_rf_waiting_set for each PlanNode.
