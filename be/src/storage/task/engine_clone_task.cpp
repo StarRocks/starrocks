@@ -96,7 +96,7 @@ void run_clone_task(std::shared_ptr<TAgentTaskRequest> agent_task_req) {
 
                 TTabletInfo tablet_info;
                 AgentStatus status = TaskWorkerPoolBase::get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
-                                                                             agent_task_req->signature, &tablet_info);
+                                                                         agent_task_req->signature, &tablet_info);
                 if (status != STARROCKS_SUCCESS) {
                     LOG(WARNING) << "storage migrate success, but get tablet info failed"
                                  << ". status:" << status << ", signature:" << agent_task_req->signature;

@@ -4,16 +4,16 @@
 
 #include <gtest/gtest.h>
 
-#include "column/fixed_length_column.h"
 #include "column/datum_tuple.h"
+#include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
-#include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
