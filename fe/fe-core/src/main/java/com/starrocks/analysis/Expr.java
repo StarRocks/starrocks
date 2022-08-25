@@ -52,10 +52,13 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Root of the expr node hierarchy.
@@ -370,6 +373,102 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         } catch (AnalysisException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    /**
+     * Gather conjuncts from this expr and return them in a list.
+     * A conjunct is an expr that returns a boolean, e.g., Predicates, function calls,
+     * SlotRefs, etc. Hence, this method is placed here and not in Predicate.
+     */
+    public static List<Expr> extractConjuncts(Expr root) {
+        List<Expr> conjuncts = Lists.newArrayList();
+        if (null == root) {
+            return conjuncts;
+        }
+
+        extractConjunctsImpl(root, conjuncts);
+        return conjuncts;
+    }
+
+    private static void extractConjunctsImpl(Expr root, List<Expr> conjuncts) {
+        if (!(root instanceof CompoundPredicate)) {
+            conjuncts.add(root);
+            return;
+        }
+
+        CompoundPredicate cpe = (CompoundPredicate) root;
+        if (!CompoundPredicate.Operator.AND.equals(cpe.getOp())) {
+            conjuncts.add(root);
+            return;
+        }
+
+        extractConjunctsImpl(cpe.getChild(0), conjuncts);
+        extractConjunctsImpl(cpe.getChild(1), conjuncts);
+    }
+
+    public static Expr compoundAnd(Collection<Expr> conjuncts) {
+        return createCompound(CompoundPredicate.Operator.AND, conjuncts);
+    }
+
+    public static Expr compoundOr(Collection<Expr> conjuncts) {
+        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
+    }
+
+    // Build a compound tree by bottom up
+    //
+    // Example: compoundType.OR
+    // Initial state:
+    //  a b c d e
+    //
+    // First iteration:
+    //  or    or
+    //  /\    /\   e
+    // a  b  c  d
+    //
+    // Second iteration:
+    //     or   e
+    //    / \
+    //  or   or
+    //  /\   /\
+    // a  b c  d
+    //
+    // Last iteration:
+    //       or
+    //      / \
+    //     or  e
+    //    / \
+    //  or   or
+    //  /\   /\
+    // a  b c  d
+    public static Expr createCompound(CompoundPredicate.Operator type, Collection<Expr> nodes) {
+        LinkedList<Expr> link =
+                nodes.stream().filter(java.util.Objects::nonNull)
+                        .collect(Collectors.toCollection(Lists::newLinkedList));
+
+        if (link.size() < 1) {
+            return null;
+        }
+        if (link.size() == 1) {
+            return link.get(0);
+        }
+
+        while (link.size() > 1) {
+            LinkedList<Expr> buffer = Lists.newLinkedList();
+
+            // combine pairs of elements
+            while (link.size() >= 2) {
+                buffer.add(new CompoundPredicate(type, link.poll(), link.poll()));
+            }
+
+            // if there's and odd number of elements, just append the last one
+            if (!link.isEmpty()) {
+                buffer.add(link.remove());
+            }
+
+            link = buffer;
+        }
+
+        return link.remove();
     }
 
     /**
