@@ -553,6 +553,13 @@ public class ExpressionAnalyzer {
                 // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
                 // to go through `getDecimalV3Function` here
                 if (FunctionSet.varianceFunctions.contains(fnName)) {
+                    // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
+                    // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
+                    // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
+                    // too small, for an example, 0.000000001 * 0.000000001 produces 0.000000000, so the algorithm
+                    // can not work. Because of this reason, stddev and variance on very small decimal numbers always
+                    // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
+                    // decimal types.
                     Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
                     fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
