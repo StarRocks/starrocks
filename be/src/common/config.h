@@ -314,6 +314,7 @@ CONF_mInt32(update_compaction_trace_threshold, "20");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
+CONF_Bool(enable_check_string_lengths, "true");
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
 // When the row source mask buffer exceeds this, it will be persisted to a temporary file on the disk.
