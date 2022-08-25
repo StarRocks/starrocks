@@ -23,6 +23,9 @@ public:
     static Status list_table_status(const std::string& ip, const int32_t port, const TGetTablesParams& table_params,
                                     TListTableStatusResult* table_result);
 
+    static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
+                                       TGetTablesInfoResponse* response);
+
     static Status describe_table(const std::string& ip, const int32_t port, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 
