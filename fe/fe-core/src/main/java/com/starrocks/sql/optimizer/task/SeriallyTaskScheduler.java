@@ -25,7 +25,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
         long endTime = startTime + timeout;
         while (!tasks.empty()) {
-            if (System.currentTimeMillis() >= endTime && false) {
+            if (System.currentTimeMillis() >= endTime) {
                 // Should have at least one valid plan
                 if (!group.hasBestExpression(context.getRequiredProperty())) {
                     throw new StarRocksPlannerException("StarRocks planner use long time " + timeout +

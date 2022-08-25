@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 /**
@@ -40,11 +41,10 @@ public class DeriveStatsTask extends OptimizerTask {
                 context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext());
         statisticsCalculator.estimatorStats();
 
+        Statistics currentStatistics = groupExpression.getGroup().getStatistics();
         // choose best statistics
-        if (groupExpression.getGroup().getStatistics() == null) {
-            groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
-        } else if (expressionContext.getStatistics().getOutputRowCount() <
-                groupExpression.getGroup().getStatistics().getOutputRowCount()) {
+        if (currentStatistics == null ||
+                (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount())) {
             groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
         }
 
