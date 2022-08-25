@@ -37,9 +37,12 @@ import com.starrocks.analysis.ShowProcedureStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
 import com.starrocks.analysis.ShowUserStmt;
 import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
@@ -50,6 +53,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -85,7 +89,11 @@ import org.junit.rules.ExpectedException;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.thrift.TStorageMedium.SSD;
 
 public class ShowExecutorTest {
 
@@ -186,11 +194,44 @@ public class ShowExecutorTest {
 
                 mv.getViewDefineSql();
                 minTimes = 0;
-                result = "create materialized view testMv select col1, col2 from table1";
+                result = "select col1, col2 from table1";
 
                 mv.getRowCount();
                 minTimes = 0;
                 result = 10L;
+
+                mv.getComment();
+                minTimes = 0;
+                result = "TEST MATERIALIZED VIEW";
+
+                mv.getPartitionInfo();
+                minTimes = 0;
+                result = new ExpressionRangePartitionInfo(
+                        Collections.singletonList(
+                                new SlotRef(
+                                        new TableName("test", "testMv"), column1.getName())),
+                        Collections.singletonList(column1));
+
+                mv.getDefaultDistributionInfo();
+                minTimes = 0;
+                result = new HashDistributionInfo(10, Collections.singletonList(column1));
+
+                mv.getRefreshScheme();
+                minTimes = 0;
+                result = new MaterializedView.MvRefreshScheme();
+
+                mv.getDefaultReplicationNum();
+                minTimes = 0;
+                result = 1;
+
+                mv.getStorageMedium();
+                minTimes = 0;
+                result = SSD.name();
+
+                mv.getTableProperty();
+                minTimes = 0;
+                result = new TableProperty(
+                        Collections.singletonMap(PROPERTIES_STORAGE_COLDOWN_TIME, "100"));
             }
         };
 
@@ -764,14 +805,7 @@ public class ShowExecutorTest {
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("1000", resultSet.getString(0));
-        Assert.assertEquals("testMv", resultSet.getString(1));
-        Assert.assertEquals("testDb", resultSet.getString(2));
-        Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
-        Assert.assertEquals("10", resultSet.getString(4));
-        Assert.assertFalse(resultSet.next());
+        verifyShowMaterializedViewResult(resultSet);
     }
 
     @Test
@@ -793,11 +827,27 @@ public class ShowExecutorTest {
         stmt = new ShowMaterializedViewStmt("testDb", "%test%");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+        verifyShowMaterializedViewResult(resultSet);
+    }
+
+    private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
+        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv`\n" +
+                "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
+                "PARTITION BY (`col1`)\n" +
+                "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"SSD\",\n" +
+                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\"\n" +
+                ")\n" +
+                "AS select col1, col2 from table1;";
+
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1000", resultSet.getString(0));
         Assert.assertEquals("testMv", resultSet.getString(1));
         Assert.assertEquals("testDb", resultSet.getString(2));
-        Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(3));
         Assert.assertEquals("10", resultSet.getString(4));
         Assert.assertFalse(resultSet.next());
     }

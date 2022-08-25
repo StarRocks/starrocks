@@ -331,7 +331,7 @@ public class ShowExecutor {
                 }
                 MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
-                        mvTable.getViewDefineSql(), String.valueOf(mvTable.getRowCount()));
+                        GlobalStateMgr.getMaterializedViewDdlStmt(mvTable), String.valueOf(mvTable.getRowCount()));
                 rowSets.add(resultRow);
             }
             for (Table table : db.getTables()) {
