@@ -1508,6 +1508,6 @@ template class TaskWorkerPool<DownloadAgentTaskRequest>;
 template class TaskWorkerPool<SnapshotAgentTaskRequest>;
 template class TaskWorkerPool<ReleaseSnapshotAgentTaskRequest>;
 template class TaskWorkerPool<MoveDirAgentTaskRequest>;
-template class TaskWorkerPool<UpdateTabletMetaInfoAgentTaskRequest >;
+template class TaskWorkerPool<UpdateTabletMetaInfoAgentTaskRequest>;
 
 } // namespace starrocks

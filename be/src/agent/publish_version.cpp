@@ -35,8 +35,7 @@ struct TabletPublishVersionTask {
     int64_t max_continuous_version{0}; // max continuous version after publish is done
 };
 
-void run_publish_version_task(ThreadPoolToken* token,
-                              const PublishVersionAgentTaskRequest& publish_version_task,
+void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
                               TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs) {
     int64_t start_ts = MonotonicMillis();
     auto& publish_version_req = publish_version_task.task_req;
