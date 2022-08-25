@@ -240,14 +240,14 @@ public:
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes);
 
     // load snapshot
-    bool load_snapshot(phmap::BinaryInputArchive& ar_in, const std::set<uint32_t>& dumped_shard_idxes);
+    bool load_snapshot(phmap::BinaryInputArchive& ar, const std::set<uint32_t>& dumped_shard_idxes);
 
     // load according meta
     Status load(const MutableIndexMetaPB& meta);
 
     size_t dump_bound();
 
-    bool dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes);
+    bool dump(phmap::BinaryOutputArchive& ar, std::set<uint32_t>& dumped_shard_idxes);
 
     Status commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type);
 
@@ -391,7 +391,7 @@ public:
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
     Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
 
-    Status write_shard_by_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info, ImmutableIndex* immutable_index);
+    Status write_shard_as_rawbuff(const ImmutableIndex::ShardInfo& old_shard_info, ImmutableIndex* immutable_index);
 
     Status finish();
 
@@ -431,7 +431,6 @@ public:
     PersistentIndex(const std::string& path);
     ~PersistentIndex();
 
-    // if index is loaded
     bool loaded() const { return (bool)_l0; }
 
     std::string path() const { return _path; }
