@@ -418,7 +418,7 @@ ColumnPtr LikePredicate::_predicate_const_regex(FunctionContext* context, Column
 
         bool v = false;
         auto value_size = value_viewer.value(row).size;
-        auto status = hs_scan(
+        [[maybe_unused]] auto status = hs_scan(
                 // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
                 state->database, (value_size) ? value_viewer.value(row).data : &_DUMMY_STRING_FOR_EMPTY_PATTERN,
                 value_size, 0, scratch,
