@@ -406,8 +406,8 @@ public class ComputeNode implements IComputable, Writable {
                 this.lastStartTime = hbResponse.getHbTime();
             }
 
-            if (hbResponse.isSetFirstHeartbeat() && hbResponse.isFirstHeartbeat()) {
-                this.lastStartTime = hbResponse.getHbTime();
+            if (hbResponse.getRebootTime() > this.lastStartTime) {
+                this.lastStartTime = hbResponse.getRebootTime();
                 isChanged = true;
             }
 

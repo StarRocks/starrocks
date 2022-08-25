@@ -293,10 +293,9 @@ public class HeartbeatMgr extends LeaderDaemon {
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores);
-                    
-                    backendHbResponse.setIsSetFirstHeartbeat(tBackendInfo.isSetIs_first_heartbeat());
-                    backendHbResponse.setFirstHeartbeat(tBackendInfo.is_first_heartbeat);
-                    
+                    if (tBackendInfo.isSetReboot_time()) {
+                        backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
+                    }
                     return backendHbResponse;
                 } else {
                     return new BackendHbResponse(computeNodeId,

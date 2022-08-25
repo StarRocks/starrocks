@@ -23,12 +23,10 @@ public class ComputeNodeTest {
 
         BackendHbResponse hbResponse = new BackendHbResponse();
         hbResponse.status = HbStatus.OK;
-        hbResponse.setFirstHeartbeat(true);
-        hbResponse.setIsSetFirstHeartbeat(true);
-        hbResponse.hbTime = 1001L;
+        hbResponse.setRebootTime(1000L);
         ComputeNode node = new ComputeNode();
         boolean needSync = node.handleHbResponse(hbResponse);
-        Assert.assertTrue(node.getLastStartTime() == 1001L);    
+        Assert.assertTrue(node.getLastStartTime() == 1000000L);    
         Assert.assertTrue(needSync);
     }
 }
