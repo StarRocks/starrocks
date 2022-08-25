@@ -54,7 +54,8 @@ public class OptimizeExpressionTask extends OptimizerTask {
 
     @Override
     public String toString() {
-        return "OptimizeExpressionTask for groupExpression " + groupExpression;
+        return "OptimizeExpressionTask" + (this.isExplore ? "[explore]" : "")
+                + " for groupExpression " + groupExpression;
     }
 
     @Override

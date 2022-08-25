@@ -46,7 +46,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
     @Override
     public String toString() {
-        return "ApplyRuleTask for groupExpression " + groupExpression +
+        return "ApplyRuleTask" + (this.isExplore ? "[explore]" : "") + " for groupExpression " + groupExpression +
                 "\n rule " + rule;
     }
 
