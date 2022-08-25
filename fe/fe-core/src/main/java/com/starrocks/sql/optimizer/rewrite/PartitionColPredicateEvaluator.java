@@ -177,7 +177,7 @@ public class PartitionColPredicateEvaluator {
 
         @Override
         public BitSet visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
-            return new BitSet();
+            return new BitSet(candidateNum);
         }
 
         private BitSet evaluateRangeHitSet(Range<PartitionKey> predicateRange) {
