@@ -931,12 +931,10 @@ public class ReportHandler extends Daemon {
             if (db == null) {
                 continue;
             }
-            db.writeLock();
+            if (!db.writeLockAndExist()) {
+                continue;
+            }
             try {
-                // DCheck db exists
-                if (db.isDropped()) {
-                    continue;
-                }
                 List<Long> tabletIds = tabletRecoveryMap.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {

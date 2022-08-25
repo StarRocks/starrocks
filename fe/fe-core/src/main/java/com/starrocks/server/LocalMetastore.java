@@ -531,12 +531,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         String tableName = recoverStmt.getTableName();
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Table table = db.getTable(tableName);
             if (table != null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
@@ -559,12 +557,10 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         String tableName = recoverStmt.getTableName();
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Table table = db.getTable(tableName);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
@@ -1263,9 +1259,7 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitions(db, copiedTable, partitionList);
 
             // check again
-            db.writeLock();
-            // DCheck db exists
-            if (db.isDropped()) {
+            if (db.writeLockAndExist()) {
                 throw new DdlException("db:" + db.getFullName() + " has been dropped");
             }
             Set<String> existPartitionNameSet = Sets.newHashSet();
@@ -3013,7 +3007,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // use try lock to avoid blocking a long time.
             // if block too long, backend report rpc will timeout.
-            if (!db.tryWriteLock(Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            if (!db.tryWriteLockAndExist(Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 LOG.warn("try get db {} writelock but failed when hecking backend storage medium", dbId);
                 continue;
             }
@@ -4170,11 +4164,10 @@ public class LocalMetastore implements ConnectorMetadata {
         // all partitions are created successfully, try to replace the old partitions.
         // before replacing, we need to check again.
         // Things may be changed outside the database lock.
-        db.writeLock();
+        if (db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbTbl.getDb());
+        }
         try {
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbTbl.getDb());
-            }
             OlapTable olapTable = (OlapTable) db.getTable(copiedTbl.getId());
             if (olapTable == null) {
                 throw new DdlException("Table[" + copiedTbl.getName() + "] is dropped");
@@ -4385,12 +4378,10 @@ public class LocalMetastore implements ConnectorMetadata {
     // Convert table's distribution type from random to hash.
     // random distribution is no longer supported.
     public void convertDistributionType(Database db, OlapTable tbl) throws DdlException {
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new DdlException("db " + db.getFullName() + " has been dropped");
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new DdlException("db " + db.getFullName() + " has been dropped");
-            }
             if (!tbl.convertRandomDistributionToHashDistribution()) {
                 throw new DdlException("Table " + tbl.getName() + " is not random distributed");
             }
@@ -4425,12 +4416,10 @@ public class LocalMetastore implements ConnectorMetadata {
 
         boolean isStrictRange = clause.isStrictRange();
         boolean useTempPartitionName = clause.useTempPartitionName();
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new DdlException("db: " + db.getFullName() + " has been dropped");
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new DdlException("db: " + db.getFullName() + " has been dropped");
-            }
             Table table = db.getTable(tableName);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
@@ -4521,13 +4510,11 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("database {} of tablet {} does not exist", dbId, tabletId);
             return;
         }
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            LOG.info("database {} of tablet {} does not exist", dbId, tabletId);
+            return;
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                LOG.info("database {} of tablet {} does not exist", dbId, tabletId);
-                return;
-            }
             Replica replica = stateMgr.getTabletInvertedIndex().getReplica(tabletId, backendId);
             if (replica == null) {
                 LOG.info("replica of tablet {} does not exist", tabletId);

@@ -129,12 +129,10 @@ public class Alter {
         // check db quota
         db.checkQuota();
 
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Table table = db.getTable(tableName);
             if (table.getType() != TableType.OLAP) {
                 throw new DdlException("Do not support alter non-OLAP table[" + tableName + "]");
@@ -165,12 +163,10 @@ public class Alter {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Table table = null;
             if (stmt.getTblName() != null) {
                 table = db.getTable(stmt.getTblName());
@@ -233,12 +229,10 @@ public class Alter {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         MaterializedView materializedView = null;
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             final Table table = db.getTable(oldMvName);
             if (table instanceof MaterializedView) {
                 materializedView = (MaterializedView) table;
@@ -412,12 +406,10 @@ public class Alter {
         boolean needProcessOutsideDatabaseLock = false;
         String tableName = dbTableName.getTbl();
 
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Table table = db.getTable(tableName);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
@@ -511,12 +503,10 @@ public class Alter {
                 ((SchemaChangeHandler) schemaChangeHandler).updatePartitionsInMemoryMeta(
                         db, tableName, partitionNames, properties);
 
-                db.writeLock();
+                if (!db.writeLockAndExist()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                }
                 try {
-                    // DCheck db exists
-                    if (db.isDropped()) {
-                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-                    }
                     OlapTable olapTable = (OlapTable) db.getTable(tableName);
                     modifyPartitionsProperty(db, olapTable, partitionNames, properties);
                 } finally {
@@ -622,12 +612,10 @@ public class Alter {
         }
 
         String tableName = dbTableName.getTbl();
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
             Table table = db.getTable(tableName);
             if (table == null) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);

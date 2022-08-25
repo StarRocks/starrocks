@@ -1199,12 +1199,10 @@ public class SchemaChangeHandler extends AlterHandler {
             updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
         }
 
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new DdlException("db " + db.getFullName() + " has been dropped");
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new DdlException("db " + db.getFullName() + " has been dropped");
-            }
             GlobalStateMgr.getCurrentState().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
             db.writeUnlock();

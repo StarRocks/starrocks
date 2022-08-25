@@ -717,12 +717,10 @@ public class MaterializedViewHandler extends AlterHandler {
 
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new MetaNotFoundException("db: " + db.getFullName() + " has been dropped");
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new MetaNotFoundException("db: " + db.getFullName() + " has been dropped");
-            }
             // check drop rollup index operation
             for (AlterClause alterClause : dropRollupClauses) {
                 DropRollupClause dropRollupClause = (DropRollupClause) alterClause;

@@ -26,12 +26,10 @@ public class PartitionUtils {
         try {
             List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
                     db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds);
-            db.writeLock();
+            if (!db.writeLockAndExist()) {
+                throw new MetaNotFoundException("db " + db.getFullName() + " has been dropped");
+            }
             try {
-                // DCheck db exists
-                if (db.isDropped()) {
-                    throw new MetaNotFoundException("db " + db.getFullName() + " has been dropped");
-                }
                 List<Partition> sourcePartitions = sourcePartitionIds.stream()
                         .map(id -> targetTable.getPartition(id)).collect(Collectors.toList());
                 PartitionInfo partitionInfo = targetTable.getPartitionInfo();

@@ -339,13 +339,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             }
 
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
-                db.writeLock();
+                if (!db.writeLockAndExist()) {
+                    iterator.remove();
+                    continue OUTER_LOOP;
+                }
                 try {
-                    // DCheck db exists
-                    if (db.isDropped()) {
-                        iterator.remove();
-                        continue OUTER_LOOP;
-                    }
                     GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {

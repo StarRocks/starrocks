@@ -149,12 +149,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private void updateMeta(ExecPlan execPlan) throws MetaNotFoundException {
         // update the meta if succeed
-        database.writeLock();
+        if (!database.writeLockAndExist()) {
+            throw new MetaNotFoundException("db " + database.getFullName() + " has been dropped");
+        }
         try {
-            // DCheck db exists
-            if (database.isDropped()) {
-                throw new MetaNotFoundException("db " + database.getFullName() + " has been dropped");
-            }
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentlVersionMap =
@@ -542,12 +540,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName)
             throws MetaNotFoundException {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
-        database.writeLock();
+        if (!database.writeLockAndExist()) {
+            throw new MetaNotFoundException("db " + database.getFullName() + " has been dropped");
+        }
         try {
-            // DCheck db exists
-            if (database.isDropped()) {
-                throw new MetaNotFoundException("db " + database.getFullName() + " has been dropped");
-            }
             GlobalStateMgr.getCurrentState().dropPartition(
                     database, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));

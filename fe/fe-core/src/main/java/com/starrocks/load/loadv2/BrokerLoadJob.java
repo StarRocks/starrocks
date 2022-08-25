@@ -280,12 +280,16 @@ public class BrokerLoadJob extends BulkLoadJob {
             cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
             return;
         }
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                    .add("database_id", dbId)
+                    .add("error_msg", "db has been deleted when job is loading")
+                    .build());
+            cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL,
+                    "db has been deleted when job is loading"), true, true);
+            return;
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new MetaNotFoundException("Database " + dbId + " already has been deleted");
-            }
             LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                     .add("txn_id", transactionId)
                     .add("msg", "Load job try to commit txn")

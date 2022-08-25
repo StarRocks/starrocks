@@ -33,6 +33,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -153,6 +154,15 @@ public class Database extends MetaObject implements Writable {
         logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
     }
 
+    public boolean readLockAndExist() {
+        readLock();
+        if (dropped) {
+            readUnlock();
+            return false;
+        }
+        return true;
+    }
+
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
@@ -169,6 +179,17 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    public boolean tryReadLockAndExist(long timeout, TimeUnit unit) {
+        if (!tryReadLock(timeout, unit)) {
+            return false;
+        }
+        if (dropped) {
+            readUnlock();
+            return false;
+        }
+        return true;
+    }
+
     public void readUnlock() {
         this.rwLock.readLock().unlock();
     }
@@ -178,6 +199,15 @@ public class Database extends MetaObject implements Writable {
         Thread formerOwner = rwLock.getOwner();
         this.rwLock.writeLock().lock();
         logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
+    }
+
+    public boolean writeLockAndExist() {
+        writeLock();
+        if (dropped) {
+            writeUnlock();
+            return false;
+        }
+        return true;
     }
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
@@ -194,6 +224,17 @@ public class Database extends MetaObject implements Writable {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
             return false;
         }
+    }
+
+    public boolean tryWriteLockAndExist(long timeout, TimeUnit unit) {
+        if (!tryWriteLock(timeout, unit)) {
+            return false;
+        }
+        if (dropped) {
+            writeUnlock();
+            return false;
+        }
+        return true;
     }
 
     public void writeUnlock() {
@@ -767,10 +808,5 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setDropped() {
         dropped = true;
-    }
-
-    // the invoker should hold db's lock(write or read)
-    public boolean isDropped() {
-        return dropped;
     }
 }

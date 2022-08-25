@@ -575,12 +575,10 @@ public class TabletScheduler extends LeaderDaemon {
         }
 
         Pair<TabletStatus, TabletSchedCtx.Priority> statusPair;
-        db.writeLock();
+        if (!db.writeLockAndExist()) {
+            throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
+        }
         try {
-            // DCheck db exists
-            if (db.isDropped()) {
-                throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
-            }
             OlapTable tbl = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tabletCtx.getTblId());
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
