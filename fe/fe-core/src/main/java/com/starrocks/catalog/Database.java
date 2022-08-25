@@ -764,10 +764,12 @@ public class Database extends MetaObject implements Writable {
         return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
     }
 
+    // the invoker should hold db's writeLock
     public void setDropped() {
         dropped = true;
     }
 
+    // the invoker should hold db's lock(write or read)
     public boolean isDropped() {
         return dropped;
     }
