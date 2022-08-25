@@ -101,7 +101,7 @@ public class MetaUtils {
         }
     }
 
-    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) throws IOException {
+    public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
 
         try {
