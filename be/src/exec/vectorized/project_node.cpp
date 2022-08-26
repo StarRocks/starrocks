@@ -303,11 +303,27 @@ pipeline::OpFactories ProjectNode::decompose_to_pipeline(pipeline::PipelineBuild
     operators.emplace_back(std::make_shared<ProjectOperatorFactory>(
             context->next_operator_id(), id(), std::move(_slot_ids), std::move(_expr_ctxs),
             std::move(_type_is_nullable), std::move(_common_sub_slot_ids), std::move(_common_sub_expr_ctxs)));
+    size_t project_cpu_costs = operators.back()->cpu_costs();
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
+
+    // If the cpu operations in the project may be heavier, then we can try to add pass_through_exchange
+    // to hide some of the evaluate latency
+    // eg:
+    // SOURCE -> PROJECT -> AGG_SINK
+    //
+    // SOURCE -> PROJECT -> LOCAL_EXCHANGE_SINK
+    // LOCAL_EXCHANGE_SOURCE -> AGG_SINK
+    //
+    // Higher parallelism after adding local exchange
+    if (project_cpu_costs > config::project_passthrough_threshold) {
+        size_t dop = down_cast<SourceOperatorFactory*>(operators[0].get())->degree_of_parallelism();
+        operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators, dop, true);
+    }
+
     return operators;
 }
 
