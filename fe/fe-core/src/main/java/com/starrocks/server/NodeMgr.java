@@ -696,7 +696,7 @@ public class NodeMgr {
                 // So we should remove those nodes before joining the group,
                 // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
                 // xxx. It conflicts with the socket already used by the member: xxxx)
-                bdbha.removeNodeIfExist(host, editLogPort);
+                bdbha.removeNodeIfExist(host, editLogPort, nodeName);
             }
 
             stateMgr.getEditLog().logAddFrontend(fe);
