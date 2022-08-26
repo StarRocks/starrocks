@@ -68,13 +68,13 @@ cd StarRocks-x.x.x/fe
 > 注意
 > 当一台机器拥有多个 IP 地址时，需要在 FE 配置文件 **conf/fe.conf** 中设置 `priority_networks`，为该节点设定唯一 IP。
 
-添加元数据目录。
+添加元数据目录配置项。
 
 ```Plain Text
 meta_dir = ${STARROCKS_HOME}/meta
 ```
 
-添加 Java 目录。
+添加 Java 目录配置项。
 
 ```Plain Text
 JAVA_HOME = /path/to/your/java
